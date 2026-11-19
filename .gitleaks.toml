@@ -1,0 +1,13 @@
+# Extends the default rules with two narrow exceptions, both for values that are
+# synthetic by construction. Real secrets live in Docker secrets, never in the tree.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Golden vectors carry fixed, public test keys"
+paths = ['''^shared/vectors/fixtures/''']
+
+[[allowlists]]
+description = "Tests plant canary values to prove they never reach a log"
+targetRules = ["generic-api-key"]
+paths = ['''_test\.go$''']
