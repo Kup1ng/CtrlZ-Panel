@@ -1,0 +1,26 @@
+{
+  "comment": "Estimates in seconds, used only to balance the shards and to order them (longest first). They are guesses until a run has measured them: copy the 'Slowest packages' tables of the shard summaries here. internal/lint is 1500 because one full local run of the package took 1494 s, and internal/store/catalogtest is 1200 because a run on a busy machine took 1589 s. The mutant numbers are seconds as if the mutants ran one at a time; with -j 2 the wall time of a shard is shorter than its estimate, so the shard timeouts, which are set from the estimate, are generous on purpose. A wrong value unbalances the shards and breaks nothing.",
+  "test_packages": {
+    "internal/lint": 1500,
+    "internal/store/catalogtest": 1200,
+    "internal/store": 400,
+    "internal/adminapi": 400,
+    "internal/app": 300,
+    "internal/migrate": 200,
+    "internal/mutant": 200,
+    "internal/auth/login": 150,
+    "internal/auth/session": 120,
+    "internal/auth/passkey": 60,
+    "internal/worker/smssend": 120,
+    "internal/worker/sweep": 120,
+    "internal/worker/adminjobs": 120
+  },
+  "default_plain_package": 15,
+  "default_container_package": 90,
+  "api_rest": 3300,
+  "api_split": 150,
+  "package_shard_target": 900,
+  "mutant_shard_target": 1500,
+  "max_package_shards": 6,
+  "max_mutant_shards": 6
+}

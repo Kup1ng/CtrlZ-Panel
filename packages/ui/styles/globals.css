@@ -1,0 +1,31 @@
+/*
+ * Imported once by each app's [locale]/layout.tsx (spec 5.3).
+ *
+ * Order matters. Tailwind first, then HeroUI, then HeroUI Pro, then the rules carried over from
+ * the Glass theme (glass-carryover.css, in the cascade position of the old Glass import). Ours
+ * come last. tokens.css, flat.css and base.css are unlayered, so they beat every layer wherever
+ * they sit. radius.generated.css is in `@layer components` and has to follow the carried-over
+ * rules, as it followed Glass's, so a later rule of equal specificity wins.
+ */
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "@heroui-pro/react/css";
+@import "./glass-carryover.css";
+@import "./tokens.css";
+@import "./flat.css";
+@import "./radius.generated.css";
+@import "./shell.css";
+@import "./base.css";
+
+/* Tailwind scans from the app, not from sibling workspace packages, so each one with class strings needs a line. */
+@source "../src";
+@source "../../icons/src";
+@source "../../../apps/panel/src";
+@source "../../../apps/admin/src";
+
+@theme inline {
+  --font-sans: var(--font-dana), ui-sans-serif, system-ui, "Segoe UI", Tahoma, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --spacing-control-50: var(--size-50);
+  --spacing-control-75: var(--size-75);
+}
