@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "group": "schedule-zones",
+  "cases": [
+    {"id": "zone-001", "why": "Asia/Tehran has had no DST since 2022: a base offset of +03:30 and no transitions across 2026", "op": "build_transitions", "input": "Asia/Tehran", "args": ["2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"], "expect": "base=12600"},
+    {"id": "zone-002", "why": "Europe/London springs forward at 01:00Z on the last Sunday of March (the local hour 01:00 to 01:59 does not exist) and falls back at 01:00Z on the last Sunday of October", "op": "build_transitions", "input": "Europe/London", "args": ["2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"], "expect": "base=0;2026-03-29T01:00:00Z=3600;2026-10-25T01:00:00Z=0"},
+    {"id": "zone-003", "why": "Europe/Berlin changes at the same instants as London but from a +01:00 base", "op": "build_transitions", "input": "Europe/Berlin", "args": ["2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"], "expect": "base=3600;2026-03-29T01:00:00Z=7200;2026-10-25T01:00:00Z=3600"},
+    {"id": "zone-004", "why": "America/New_York: spring forward on the second Sunday of March, fall back on the first Sunday of November", "op": "build_transitions", "input": "America/New_York", "args": ["2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"], "expect": "base=-18000;2026-03-08T07:00:00Z=-14400;2026-11-01T06:00:00Z=-18000"},
+    {"id": "zone-005", "why": "A window that starts inside summer time reports the summer offset as the base", "op": "build_transitions", "input": "Europe/London", "args": ["2026-06-01T00:00:00Z", "2026-12-01T00:00:00Z"], "expect": "base=3600;2026-10-25T01:00:00Z=0"},
+    {"id": "zone-006", "why": "An unknown zone is refused", "op": "build_transitions", "input": "Mars/Olympus", "args": ["2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"], "error": true, "error_contains": "unknown time zone"}
+  ]
+}

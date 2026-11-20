@@ -1,0 +1,32 @@
+{
+  "comment": "Estimates in seconds, used only to balance the shards and to order them (longest first). Measured on GitHub runners (ubuntu-24.04, 4 vCPU) in the runs of 2026-11-19, as the 'ok' seconds of `go test` in the shard logs: internal/lint 121, internal/adminapi 422, internal/store 105, internal/app 85, internal/worker/smssend 61, internal/admincli 45, internal/auth/session 34, internal/auth/login 26, and the oracle shards of internal/api 90 to 134 each (api_split is their mean), internal/api without them 555 to 620. internal/store/catalogtest is NOT measured: both runs stopped it early on the Postgres 18.7 catalogue check (61 s), so its 150 is a guess to replace after a green run. The mutant numbers are seconds as if the mutants ran one at a time and are not measured per mutant; with -j 2 a shard of the first runs took 6 to 9 minutes of wall time against estimates near 4600, so the shard timeouts, which are set from the estimate, stay generous on purpose. A wrong value unbalances the shards and breaks nothing.",
+  "test_packages": {
+    "internal/lint": 121,
+    "internal/store/catalogtest": 150,
+    "internal/store": 105,
+    "internal/adminapi": 422,
+    "internal/app": 85,
+    "internal/admincli": 45,
+    "internal/migrate": 12,
+    "internal/mutant": 3,
+    "internal/auth/login": 26,
+    "internal/auth/session": 34,
+    "internal/auth/phonechange": 19,
+    "internal/auth/otp": 16,
+    "internal/auth/ticket": 15,
+    "internal/auth/audit": 15,
+    "internal/auth/throttle": 11,
+    "internal/auth/passkey": 1,
+    "internal/worker/smssend": 61,
+    "internal/worker/sweep": 7,
+    "internal/worker/adminjobs": 3
+  },
+  "default_plain_package": 5,
+  "default_container_package": 30,
+  "api_rest": 560,
+  "api_split": 112,
+  "package_shard_target": 900,
+  "mutant_shard_target": 1500,
+  "max_package_shards": 6,
+  "max_mutant_shards": 6
+}
