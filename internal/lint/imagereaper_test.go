@@ -219,6 +219,7 @@ func TestReaperPinLintCanFail(t *testing.T) {
 		{"a call made after the start", hdr + "func f(c context.Context) {\n" + start + "\n" + guard + "}\n", true},
 		{"a guard in dead code", hdr + "func f(c context.Context) {\nif false {\n" + guard + "}\n" + start + "\n}\n", true},
 		{"a guard that cannot fire", hdr + "func f(c context.Context) {\nif err := deploy.PinReaper(c); err != nil && false { return }\n" + start + "\n}\n", true},
+		{"a guard that stops when the pin succeeded", hdr + "func f(c context.Context) {\nif err := deploy.PinReaper(c); err == nil { return }\n" + start + "\n}\n", true},
 		{"a guard that does not stop", hdr + "func f(c context.Context) {\nif err := deploy.PinReaper(c); err != nil { _ = err }\n" + start + "\n}\n", true},
 		{"a guard on another error", hdr + "func f(c context.Context, e error) {\nif err := deploy.PinReaper(c); e != nil { return }\n" + start + "\n}\n", true},
 		{"a guard with an else", hdr + "func f(c context.Context) {\nif err := deploy.PinReaper(c); err != nil { return } else { _ = err }\n" + start + "\n}\n", true},

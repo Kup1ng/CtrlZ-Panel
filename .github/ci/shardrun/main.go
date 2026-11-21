@@ -44,6 +44,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -391,10 +392,7 @@ func runTests(sh Shard) []string {
 	if len(wants) == 0 {
 		return []string{"the shard has no packages"}
 	}
-	timeout := sh.TimeoutMinutes - 10
-	if timeout < 20 {
-		timeout = 20
-	}
+	timeout := innerMinutes(sh.TimeoutMinutes, 20)
 	// -count=1: container tests must run, not be replayed from the cache. The timeout stays
 	// under the job's, so a hang ends in a stack dump and a summary and not a killed job.
 	args := []string{"test", "-count=1", "-json", "-timeout", strconv.Itoa(timeout) + "m"}
@@ -712,12 +710,35 @@ func testSummary(sh Shard, wall time.Duration, counts map[string]int, pkgElapsed
 
 // ---- mutants --------------------------------------------------------------------------
 
+// innerMinutes is what the tool inside a shard may take: the bound of the job less five minutes, so that a hang ends with
+// the shard's own message (a stack dump from go test, the line of runMutants) and not with a job that GitHub cancelled. The job
+// bound is a few times the measured wall time of the shard (the planner derives it, ci-r16-1), so this is too. A shard with
+// no bound (the local run, which ci/local-only.sh bounds from outside) gets whenUnset; 0 there means no limit at all.
+func innerMinutes(jobMinutes, whenUnset int) int {
+	if jobMinutes <= 0 {
+		return whenUnset
+	}
+	if jobMinutes-5 < 5 {
+		return 5
+	}
+	return jobMinutes - 5
+}
+
 var (
 	mutantLine  = regexp.MustCompile(`^mutant (\S+)\s+(killed|SURVIVED|INVALID|skipped)\b\s*(.*)$`)
 	mutantTotal = regexp.MustCompile(`^mutants: (\d+) killed, (\d+) skipped, (\d+) total`)
 )
 
 func runMutants(sh Shard) []string {
+	return runMutantsWithin(sh, time.Duration(innerMinutes(sh.TimeoutMinutes, 0))*time.Minute)
+}
+
+// runMutantsWithin runs the shard and stops tools/mutants when limit has passed (0 is no limit). tools/mutants has no
+// bound of its own over a whole run, so a hung mutant (a container that never starts, a test that waits for ever) used to hold
+// the shard until the job's own bound, hours after the shard's usual end, and the run's summary with it (ci-r16-1). The
+// process is killed and the pipe is closed from the timer, so the read loop ends even when a child of go run still holds the
+// other end; that child is left to the end of the job.
+func runMutantsWithin(sh Shard, limit time.Duration) []string {
 	if len(sh.IDs) == 0 {
 		return []string{"the shard has no mutant ids"}
 	}
@@ -735,6 +756,15 @@ func runMutants(sh Shard) []string {
 	}
 	if err := cmd.Start(); err != nil {
 		return []string{"cannot start tools/mutants: " + err.Error()}
+	}
+	var hit atomic.Bool
+	if limit > 0 {
+		timer := time.AfterFunc(limit, func() {
+			hit.Store(true)
+			_ = cmd.Process.Kill()
+			_ = stdout.Close()
+		})
+		defer timer.Stop()
 	}
 	status := map[string][]string{} // id -> statuses seen
 	detail := map[string]string{}
@@ -757,7 +787,9 @@ func runMutants(sh Shard) []string {
 	waitErr := cmd.Wait()
 
 	var problems []string
-	if waitErr != nil {
+	if hit.Load() {
+		problems = append(problems, fmt.Sprintf("tools/mutants did not finish within %s (the bound of the job less five minutes, from the measured wall time of its shards) and was stopped: the last mutant lines above show where it stood", limit))
+	} else if waitErr != nil {
 		problems = append(problems, "tools/mutants failed: "+waitErr.Error())
 	}
 	// The count is the guard against an id the tool ignored: -only drops a name it does not

@@ -107,13 +107,33 @@ type Weights struct {
 	MutantShardSecs  int            `json:"mutant_shard_target"`
 	MaxPackageShards int            `json:"max_package_shards"`
 	MaxMutantShards  int            `json:"max_mutant_shards"`
+	// The job bound of a shard is derived from the measured wall time, not from the serial estimate: TimeoutFactor times
+	// WallPercent[kind] percent of the shard's estimate, at least TimeoutFloorMinutes. The old bound (the estimate over
+	// 20, plus 30 minutes, up to 240) was 8 to 15 times the real wall time, so a shard that hung was found hours late
+	// (CI review round 16, ci-r16-1). It only fails a run: the shard's own timeouts sit five minutes under it.
+	TimeoutFactor       int            `json:"timeout_factor"`
+	TimeoutFloorMinutes int            `json:"timeout_floor_minutes"`
+	WallPercent         map[string]int `json:"wall_percent"`
 }
 
 func defaultWeights() Weights {
 	w := Weights{DefaultPlain: 15, DefaultDocker: 90, APIRestSeconds: 3300, APISplitSeconds: 150,
 		PackageShardSecs: 900, MutantShardSecs: 1500, MaxPackageShards: 6, MaxMutantShards: 6}
 	w.Mutant.PlainBaseline, w.Mutant.PlainRun, w.Mutant.DockerBaseline, w.Mutant.DockerRun = 20, 12, 70, 45
+	// Without a measurement the bound is generous: the wall time of a shard is taken as 1 to 3 times its estimate.
+	w.TimeoutFactor, w.TimeoutFloorMinutes = 3, 20
+	w.WallPercent = map[string]int{"packages": 100, "api-rest": 150, "api-split": 300, "mutants": 100}
 	return w
+}
+
+// timeoutMinutes is the job bound of one shard of a kind (packages, api-rest, api-split, mutants) with the given estimate.
+func (w Weights) timeoutMinutes(kind string, weightSecs int) int {
+	secs := float64(w.TimeoutFactor) * float64(w.WallPercent[kind]) / 100 * float64(weightSecs)
+	m := int(math.Ceil(secs / 60))
+	if m < w.TimeoutFloorMinutes {
+		m = w.TimeoutFloorMinutes
+	}
+	return m
 }
 
 func loadWeights(root string) Weights {
@@ -150,6 +170,13 @@ func loadWeights(root string) Weights {
 	set(&w.MutantShardSecs, f.MutantShardSecs)
 	set(&w.MaxPackageShards, f.MaxPackageShards)
 	set(&w.MaxMutantShards, f.MaxMutantShards)
+	set(&w.TimeoutFactor, f.TimeoutFactor)
+	set(&w.TimeoutFloorMinutes, f.TimeoutFloorMinutes)
+	for k, v := range f.WallPercent {
+		if v > 0 {
+			w.WallPercent[k] = v
+		}
+	}
 	return w
 }
 
@@ -699,19 +726,19 @@ func buildPlan(root string) *Plan {
 				s.NeedsImage = true
 			}
 		}
-		s.TimeoutMinutes = clamp(bin.Weight/60*3+30, 45, 180)
+		s.TimeoutMinutes = w.timeoutMinutes("packages", bin.Weight)
 		p.TestShards = append(p.TestShards, s)
 	}
 	// With every test split out there is no rest to run, and a rest shard with an empty list
 	// would be a shard that judges nothing (shardrun refuses it).
 	if len(p.API.RestTests) > 0 {
 		p.TestShards = append(p.TestShards, TestShard{ID: "api-rest", Kind: "api-rest", Packages: []string{"./" + apiPkg}, Skip: p.API.RestSkip,
-			Tests: p.API.RestTests, Parallel: 1, TimeoutMinutes: 150, Weight: w.APIRestSeconds, NeedsImage: dirMentionsImage(apiDir)})
+			Tests: p.API.RestTests, Parallel: 1, TimeoutMinutes: w.timeoutMinutes("api-rest", w.APIRestSeconds), Weight: w.APIRestSeconds, NeedsImage: dirMentionsImage(apiDir)})
 	}
 	for _, n := range p.API.Split {
 		p.TestShards = append(p.TestShards, TestShard{ID: "api-" + strings.TrimPrefix(n, "Test"), Kind: "api-split",
 			Packages: []string{"./" + apiPkg}, Run: "^" + regexp.QuoteMeta(n) + "$", Tests: []string{n},
-			Parallel: 1, TimeoutMinutes: 45, Weight: w.APISplitSeconds, NeedsImage: dirMentionsImage(apiDir)})
+			Parallel: 1, TimeoutMinutes: w.timeoutMinutes("api-split", w.APISplitSeconds), Weight: w.APISplitSeconds, NeedsImage: dirMentionsImage(apiDir)})
 	}
 	// The longest first: a matrix starts its jobs in order, and max-parallel keeps the rest waiting.
 	sort.SliceStable(p.TestShards, func(i, j int) bool { return p.TestShards[i].Weight > p.TestShards[j].Weight })
@@ -946,7 +973,7 @@ func planMutants(work []mutantEntry, w Weights) []MutantShard {
 		if len(b.Items) == 0 {
 			continue
 		}
-		s := MutantShard{Groups: len(b.Items), Jobs: 2, Weight: b.Weight, TimeoutMinutes: clamp(b.Weight/60*3+30, 45, 240)}
+		s := MutantShard{Groups: len(b.Items), Jobs: 2, Weight: b.Weight, TimeoutMinutes: w.timeoutMinutes("mutants", b.Weight)}
 		for _, it := range b.Items {
 			s.IDs = append(s.IDs, it.Members...)
 		}

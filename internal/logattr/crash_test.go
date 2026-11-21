@@ -19,10 +19,12 @@ func leak(secret [16]byte, n int) int {
 }
 
 // TestCrashChild is the process the test below runs: it dies of an unrecovered panic under a frame
-// that holds the canary. It does nothing unless the parent asked for it.
+// that holds the canary. It does nothing unless the parent asked for it, and it returns without a skip:
+// the CI shard fails a run on any skip that is not on its list of by-design skips (run 44855288724 failed
+// on this one), and this is the body of a child process that the test below starts, not a skipped test.
 func TestCrashChild(t *testing.T) {
 	if os.Getenv("CTRLZ_CRASH_CHILD") != "1" {
-		t.Skip("run by TestGoTracebackNoneKeepsFramesOutOfACrash")
+		return
 	}
 	leak(crashCanary, 0)
 }

@@ -726,6 +726,10 @@ type TotpSetup struct {
 // library untouched, so the schema bounds every member the browser can send and the
 // pipeline refuses anything outside it before the library parses a byte. The
 // members of the two shapes are all here and only the ones that apply are present.
+// Three members name a row and are marked x-ctrlz-rowref true: id and rawId (the
+// library finds the credential by rawId, and requires id to equal it) and userHandle
+// (the route compares it with the user id of the stored credential), so the
+// isolation harness asks for a Cross call that carries another tenant's value in each.
 type WebAuthnResponse = json.RawMessage
 
 // Cursor defines model for Cursor.

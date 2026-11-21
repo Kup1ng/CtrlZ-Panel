@@ -35,6 +35,25 @@ func waitFor(t *testing.T, what string, limit time.Duration, ok func() bool) {
 	}
 }
 
+// backdateBeatOnceInFlightSweepsEnded makes the beat stale after the step that stops the sweeps working, and not in
+// the same command. A sweep that began before that step can finish after it and write a fresh beat, which the
+// healthcheck rightly accepts for its whole window: run 44855288724 backdated the beat in the command that moved
+// the SQL away, a sweep in flight under the runner's load wrote a new one, and the test saw a healthy container.
+// The wait is on the condition, not on a clock (the sleep lint): the beat has not been written for three seconds.
+// The interval of these tests is one second, so no sweep that began before the step is still running then, and a
+// beat that is fresh after the backdating can only come from a sweep that ran without what it needs, which is the
+// defect the steps look for.
+func backdateBeatOnceInFlightSweepsEnded(ctx context.Context, t *testing.T, w *testpg.Wiring) {
+	t.Helper()
+	waitFor(t, "the beat to stop being written", 30*time.Second, func() bool {
+		_, code, err := w.Exec(ctx, "", "sh", "-c", `[ $(( $(date +%s) - $(stat -c %Y /tmp/ctrlz-watchdog.beat) )) -ge 3 ]`)
+		return err == nil && code == 0
+	})
+	if out, code, err := w.Exec(ctx, "", "sh", "-c", "touch -d '10 minutes ago' /tmp/ctrlz-watchdog.beat"); err != nil || code != 0 {
+		t.Fatalf("backdating the beat: %q %d %v", out, code, err)
+	}
+}
+
 func TestTheWatchdogRunsInTheContainerTheComposeFileStarts(t *testing.T) {
 	testpg.Need(t, cluster)
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
@@ -97,9 +116,10 @@ func TestTheWatchdogRunsInTheContainerTheComposeFileStarts(t *testing.T) {
 	// 3. A watchdog that runs and cannot do its job turns the container unhealthy: the SQL it runs is
 	// gone (a mount typo), the beat goes stale, and the healthcheck says so. Nothing in Postgres'
 	// own health shows it.
-	if out, code, err := w.Exec(ctx, "", "sh", "-c", "mv /ctrlz-bootstrap/watchdog.sql /ctrlz-bootstrap/watchdog.sql.away && touch -d '10 minutes ago' /tmp/ctrlz-watchdog.beat"); err != nil || code != 0 {
+	if out, code, err := w.Exec(ctx, "", "sh", "-c", "mv /ctrlz-bootstrap/watchdog.sql /ctrlz-bootstrap/watchdog.sql.away"); err != nil || code != 0 {
 		t.Fatalf("breaking the mount: %q %d %v", out, code, err)
 	}
+	backdateBeatOnceInFlightSweepsEnded(ctx, t, w)
 	time.Sleep(3 * time.Second)
 	if healthy(ctx, w) {
 		t.Error("the healthcheck accepts a watchdog whose sweeps no longer run")
@@ -113,10 +133,11 @@ func TestTheWatchdogRunsInTheContainerTheComposeFileStarts(t *testing.T) {
 	// hung psql is killed and the next sweep is tried (two starts of the fake in about half a minute), and
 	// while it keeps hanging no sweep runs, no beat is written, and the healthcheck turns the container
 	// unhealthy. With the real psql back, the next sweep runs and the container is healthy again.
-	hang := `P=$(command -v psql) && mv "$P" "$P.real" && printf '#!/bin/sh\necho x >> /tmp/psql-calls\nexec sleep 1000\n' > "$P" && chmod +x "$P" && rm -f /tmp/psql-calls && touch -d '10 minutes ago' /tmp/ctrlz-watchdog.beat`
+	hang := `P=$(command -v psql) && mv "$P" "$P.real" && printf '#!/bin/sh\necho x >> /tmp/psql-calls\nexec sleep 1000\n' > "$P" && chmod +x "$P" && rm -f /tmp/psql-calls`
 	if out, code, err := w.Exec(ctx, "", "sh", "-c", hang); err != nil || code != 0 {
 		t.Fatalf("making psql hang: %q %d %v", out, code, err)
 	}
+	backdateBeatOnceInFlightSweepsEnded(ctx, t, w)
 	calls := func() int {
 		out, _, _ := w.Exec(ctx, "", "sh", "-c", "wc -l < /tmp/psql-calls 2>/dev/null || echo 0")
 		n, _ := strconv.Atoi(strings.TrimSpace(out))
