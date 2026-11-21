@@ -1,0 +1,68 @@
+# pg_roles for ctrlz_% (spec section 2). None may be a superuser, bypass RLS,
+# create roles or databases, or replicate. Only ctrlz_auth and ctrlz_backfill
+# cannot log in.
+#
+# conn_limit and settings are the role defaults of bootstrap/15-role-bounds.sql
+# with the values of the TEST profile (testpg psqlVars): the connection limits
+# and the three timeouts come from the Compose profile in a real install, and
+# only the shape is the same. Losing a line of ALTER ROLE ... SET or a
+# CONNECTION LIMIT removes the bound on a stuck transaction or on the pool.
+# settings is exactly pg_roles.rolconfig, so a setting not listed fails too.
+roles:
+  ctrlz_migrator: {login: true, conn_limit: 20, settings: {search_path: "pg_catalog, ctrlz", lock_timeout: "10s"}}
+  ctrlz_tenant: {login: true, conn_limit: 60, settings: {search_path: "pg_catalog, ctrlz", statement_timeout: "60s", lock_timeout: "10s", idle_in_transaction_session_timeout: "120s", transaction_timeout: "120s"}}
+  ctrlz_hub: {login: true, conn_limit: 20, settings: {search_path: "pg_catalog, ctrlz", statement_timeout: "60s", lock_timeout: "10s", idle_in_transaction_session_timeout: "120s", transaction_timeout: "120s"}}
+  ctrlz_compiler: {login: true, conn_limit: 20, settings: {search_path: "pg_catalog, ctrlz", statement_timeout: "60s", lock_timeout: "10s", idle_in_transaction_session_timeout: "120s", transaction_timeout: "120s"}}
+  ctrlz_worker: {login: true, conn_limit: 20, settings: {search_path: "pg_catalog, ctrlz", statement_timeout: "60s", lock_timeout: "10s", idle_in_transaction_session_timeout: "120s", transaction_timeout: "120s"}}
+  ctrlz_admin: {login: true, conn_limit: 20, settings: {search_path: "pg_catalog, ctrlz", statement_timeout: "60s", lock_timeout: "10s", idle_in_transaction_session_timeout: "120s", transaction_timeout: "120s"}}
+  ctrlz_keytool: {login: true, conn_limit: 20, settings: {search_path: "pg_catalog, ctrlz", statement_timeout: "60s", lock_timeout: "10s", idle_in_transaction_session_timeout: "120s", transaction_timeout: "120s"}}
+  ctrlz_auth:     {login: false, conn_limit: -1, settings: {}}
+  ctrlz_backfill: {login: false, conn_limit: -1, settings: {}}
+
+# pg_auth_members: exactly these, and nothing else. The migrator can SET ROLE
+# to them but does not inherit their rights.
+memberships:
+  - {role: ctrlz_auth,     member: ctrlz_migrator, inherit: false, set: true, admin: false}
+  - {role: ctrlz_backfill, member: ctrlz_migrator, inherit: false, set: true, admin: false}
+
+# Owners of schemas.
+schema_owners:
+  ctrlz: ctrlz_migrator
+  ctrlz_fn: ctrlz_auth
+  ctrlz_ext: ctrlz_migrator
+  river: ctrlz_migrator
+
+# Owner of the database (10-cluster.sql: CREATE DATABASE ... OWNER ctrlz_migrator). The objects of a
+# schema belong to the owner of that schema above, every one of them, of every kind (relations,
+# functions, types, operators, operator classes and families, collations, conversions, text search
+# objects, statistics objects, extensions: db-r17-11, db-r17-15; reachcheck.WrongOwners). There is
+# no second map to keep: a schema listed above is asked for everything, and ctrlz_fn, which holds
+# the definer functions, is owned by ctrlz_auth as are they. An owner holds every right on an object
+# whatever its ACL says, so ownership is judged by catalog check 09 and, on every start, by
+# reachcheck.JudgeBootstrapState.
+database_owner: ctrlz_migrator
+
+# Extensions.
+extensions: [btree_gist, plpgsql]
+
+# What Postgres applies BESIDE a role's own defaults (round 11, db-r11-3). pg_roles.rolconfig is
+# only ALTER ROLE ... SET for every database, so it hides ALTER ROLE ... IN DATABASE ... SET (which
+# Postgres applies before the role-wide line: a statement_timeout of 0 there removes the bound the
+# line above promises while rolconfig still reads 60s), and it says nothing of ALTER DATABASE ... SET
+# or ALTER ROLE ALL SET, which every login role gets. Check 08 reads pg_db_role_setting in full:
+# a ctrlz role has the settings above and no row for a single database, and these two maps are the
+# whole of what is set for all roles. Both are empty; a setting added to either needs a line here
+# with its reason, so the day someone sets session_replication_role or row_security for a database
+# it is a diff a reviewer reads.
+#
+# database_defaults: ALTER DATABASE <this database> SET k = v (the same as ALTER ROLE ALL IN
+# DATABASE). cluster_defaults: ALTER ROLE ALL SET k = v, for every database of the cluster.
+database_defaults: {}
+cluster_defaults: {}
+
+# Parameter privileges (GRANT SET|ALTER SYSTEM ON PARAMETER, Postgres 15 and later) are not listed
+# on purpose: no ctrlz role and no group a ctrlz role belongs to may hold one, and PUBLIC may hold
+# none, so check 08 has no allow list for them. A parameter privilege on session_replication_role
+# lets a login role run SET LOCAL session_replication_role = replica, which skips every ordinary
+# trigger (credential_gen_bump, sms_counters_guard, otp_challenges_deliverable, touch_updated_at),
+# and that is the premise every "for every writer" guard of the rules stands on.

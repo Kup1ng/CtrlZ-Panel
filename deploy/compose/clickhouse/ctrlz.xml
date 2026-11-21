@@ -1,0 +1,13 @@
+<clickhouse>
+  <!-- The ceiling comes from the Compose profile (CH_MAX_SERVER_MEMORY_USAGE). -->
+  <max_server_memory_usage from_env="CH_MAX_SERVER_MEMORY_USAGE"/>
+  <listen_host>0.0.0.0</listen_host>
+  <logger>
+    <level>warning</level>
+    <console>1</console>
+  </logger>
+  <!-- Nothing leaves the server: no crash reports, no telemetry (rule 9). -->
+  <send_crash_reports>
+    <enabled>false</enabled>
+  </send_crash_reports>
+</clickhouse>
