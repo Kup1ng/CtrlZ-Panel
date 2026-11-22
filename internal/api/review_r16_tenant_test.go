@@ -147,8 +147,10 @@ func TestADecoyFloodDoesNotRefuseARealOTPRequest(t *testing.T) {
 		wg.Add(1)
 		go send("real", decoys+i, []byte("sealed"))
 	}
+	flooded := time.Now()
 	close(start)
 	wg.Wait()
+	floodTook := time.Since(flooded)
 	close(out)
 	var slowest time.Duration
 	for r := range out {
@@ -164,5 +166,14 @@ func TestADecoyFloodDoesNotRefuseARealOTPRequest(t *testing.T) {
 	if slowest > 10*time.Second {
 		t.Errorf("a real request waited %v behind %d decoys", slowest, decoys)
 	}
-	t.Logf("slowest real request behind %d decoys: %v", decoys, slowest)
+	// The whole flood is bounded too (the first full run of round 18: the mutant that puts every request back
+	// on one row held for 0.1 s survived, because the pool of the test serves a few requests at a time, so no
+	// wait reached lock_timeout, and the five real requests, started in no fixed order among the decoys, were
+	// served early). One row held for 0.1 s by each of 155 requests takes 15.5 s whatever the pool is, a lower
+	// bound that holds on any machine; the sharded rows take a small part of a second each. The limit sits
+	// between the two with room on both sides.
+	if floodTook > 12*time.Second {
+		t.Errorf("%d requests took %v together: the one global row is held long enough by each to serialise them", decoys+reals, floodTook)
+	}
+	t.Logf("slowest real request behind %d decoys: %v; the whole flood: %v", decoys, slowest, floodTook)
 }
