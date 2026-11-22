@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "group": "upload",
+  "cases": [
+    {"id": "up-001", "why": "new_only adds new keys and leaves existing ones alone, even if the payload differs", "op": "merge_upload", "input": "new_only",
+     "args": ["E|a.com|f1|block", "I|a.com|f1|bypass", "I|b.com|f1|block"],
+     "expect": "created=1 updated=0 skipped=1 conflicts=0 merged=a.com:f1:block,b.com:f1:block"},
+    {"id": "up-002", "why": "upsert rewrites a key in the same folder whose payload differs", "op": "merge_upload", "input": "upsert",
+     "args": ["E|a.com|f1|block", "I|a.com|f1|bypass", "I|b.com|f1|block"],
+     "expect": "created=1 updated=1 skipped=0 conflicts=0 merged=a.com:f1:bypass,b.com:f1:block"},
+    {"id": "up-003", "why": "upsert with an identical payload is a skip, not an update", "op": "merge_upload", "input": "upsert",
+     "args": ["E|a.com|f1|block", "I|a.com|f1|block"],
+     "expect": "created=0 updated=0 skipped=1 conflicts=0 merged=a.com:f1:block"},
+    {"id": "up-004", "why": "A key in another folder is a conflict in new_only", "op": "merge_upload", "input": "new_only",
+     "args": ["E|c.com|f2|block", "I|c.com|f1|block"],
+     "expect": "created=0 updated=0 skipped=0 conflicts=1 merged=c.com:f2:block"},
+    {"id": "up-005", "why": "A key in another folder is a conflict in upsert too: a pattern lives in one folder only", "op": "merge_upload", "input": "upsert",
+     "args": ["E|c.com|f2|block", "I|c.com|f1|bypass"],
+     "expect": "created=0 updated=0 skipped=0 conflicts=1 merged=c.com:f2:block"},
+    {"id": "up-006", "why": "Upload never deletes: existing rules absent from the file stay", "op": "merge_upload", "input": "upsert",
+     "args": ["E|a.com|f1|block", "E|b.com|f1|block", "E|c.com|f2|block", "I|d.com|f1|block"],
+     "expect": "created=1 updated=0 skipped=0 conflicts=0 merged=a.com:f1:block,b.com:f1:block,c.com:f2:block,d.com:f1:block"},
+    {"id": "up-007", "why": "A repeated key inside one file behaves like two uploads in a row (upsert: second wins)", "op": "merge_upload", "input": "upsert",
+     "args": ["I|a.com|f1|block", "I|a.com|f1|bypass"],
+     "expect": "created=1 updated=1 skipped=0 conflicts=0 merged=a.com:f1:bypass"},
+    {"id": "up-008", "why": "A repeated key inside one file under new_only: the second is skipped", "op": "merge_upload", "input": "new_only",
+     "args": ["I|a.com|f1|block", "I|a.com|f1|bypass"],
+     "expect": "created=1 updated=0 skipped=1 conflicts=0 merged=a.com:f1:block"}
+  ]
+}
