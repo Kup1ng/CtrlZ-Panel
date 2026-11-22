@@ -1,0 +1,258 @@
+package adminapi
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/Kup1ng/CtrlZ-Panel/internal/authtest/isolation"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
+)
+
+// admIso is the fixture of rule isolation-success-coverage for the admin API. The admin acts on
+// the console and, through three routes, on tenants: POST /users makes one, the re-issue of a
+// one-time password changes one user. Every other route writes rows no tenant owns, so the case
+// for it is that it SUCCEEDS, leaves both tenants' digests as they were, and the write it claims
+// is there. A route that quietly touched a tenant would move a digest, and a call that was
+// refused would fail on its status: either way the label cannot hide it.
+type admIso struct {
+	r    *rig
+	db   *isolation.Tenants
+	b    *browser // the admin signed in by the last Arrange
+	seed secret.Bytes
+	base int // the count Arrange took, for Proof
+	id   string
+	body map[string]any
+}
+
+func (e *admIso) t() *testing.T { return e.r.t }
+
+// prepare puts the console account in a known state and clears what a login would trip on.
+func (e *admIso) prepare(ready bool) secret.Bytes {
+	t := e.t()
+	e.r.env.Exec(t, `DELETE FROM ctrlz.admin_sessions; DELETE FROM ctrlz.auth_throttle;`)
+	return e.r.setupAdmin(t, ready)
+}
+
+// login signs the ready admin in; the login opens the fresh window, so the admin-fresh routes work.
+func (e *admIso) login() {
+	e.seed = e.prepare(true)
+	e.b = e.r.browser()
+	e.b.mustLogin(e.seed)
+}
+
+func (e *admIso) count(sql string) int { return e.r.count(e.t(), sql) }
+
+func aresult(r *aresp) isolation.Result {
+	return isolation.Result{Status: r.Code, Body: r.Body, Cookies: strings.Join(r.H.Values("Set-Cookie"), "; ")}
+}
+
+const (
+	auditRows = `SELECT count(*) FROM ctrlz.audit_log`
+)
+
+// elsewhere builds the fixture of a write that no tenant owns. arrange runs once, for B (the
+// console has one admin, not two), and countSQL is read after it and after the call: the number
+// must have grown, or be exactly want when want is given.
+func (e *admIso) elsewhere(status int, reason, countSQL string, arrange func(), call func() *aresp) isolation.Fixture {
+	return isolation.Fixture{
+		Effect: isolation.Elsewhere, Status: status, Reason: reason,
+		Arrange: func(w isolation.Who) {
+			if w == isolation.B {
+				arrange()
+				e.base = e.count(countSQL)
+			}
+		},
+		Call: func() isolation.Result { return aresult(call()) },
+		Proof: func() error {
+			if n := e.count(countSQL); n <= e.base {
+				return fmt.Errorf("%s: %d before the call, %d after", countSQL, e.base, n)
+			}
+			return nil
+		},
+	}
+}
+
+// reads is the fixture of a GET.
+func (e *admIso) reads(arrange func(), path string, sees func() []string) isolation.Fixture {
+	return isolation.Fixture{
+		Effect: isolation.Shows, Status: 200, Sees: sees,
+		Arrange: func(w isolation.Who) {
+			if w == isolation.B {
+				arrange()
+			}
+		},
+		Call: func() isolation.Result { return aresult(e.b.get(strings.ReplaceAll(path, "{id}", e.id))) },
+	}
+}
+
+func (e *admIso) fixtures() map[string]isolation.Fixture {
+	r := e.r
+	t := r.t
+	login := func() { e.login() }
+	const console = "writes console state that no tenant owns"
+	// gateways gives both SMS providers credentials, the state routing and templates need.
+	gateways := func() {
+		e.login()
+		e.b.put("/sms/gateways/sms_ir", map[string]any{"credentials": map[string]string{"api_key": "key-sms-ir-123456"}, "cost_per_message": "120.5"}).want(200, "")
+		e.b.put("/sms/gateways/melipayamak", map[string]any{"credentials": map[string]string{"username": "userABCD", "password": "hunter2-secret"}}).want(200, "")
+		// What routing and a test send need is ACTIVE credentials, which only the console makes (admin-r18-1).
+		confirmAtConsole(t, r, "sms_ir")
+		confirmAtConsole(t, r, "melipayamak")
+	}
+	tenantB := func() string { return r.env.B.Tenant.String() }
+
+	return map[string]isolation.Fixture{
+		"adminLogin": e.elsewhere(200, "opens a console session, which no tenant owns", `SELECT count(*) FROM ctrlz.admin_sessions`,
+			func() { e.seed = e.prepare(true); e.b = r.browser(); r.freeStep(t) },
+			func() *aresp { return e.b.login(adminPW, totpNow(e.seed)) }),
+		"adminLogout": e.elsewhere(204, "ends a console session", `SELECT count(*) FROM ctrlz.admin_sessions WHERE revoked_at IS NOT NULL`, login,
+			func() *aresp { return e.b.post("/auth/logout", nil) }),
+		"adminTotpFresh": e.elsewhere(200, "opens the fresh window of a console session", `SELECT count(*) FROM ctrlz.admin_sessions WHERE totp_verified_at > now() - interval '1 minute'`,
+			func() {
+				e.login()
+				r.env.Exec(t, `UPDATE ctrlz.admin_sessions SET totp_verified_at = now() - interval '10 minutes'`)
+				r.freeStep(t)
+			},
+			func() *aresp { return e.b.post("/auth/totp/fresh", map[string]any{"code": totpNow(e.seed)}) }),
+		"getAdminMe": e.reads(login, "/me", func() []string { return []string{adminName} }),
+		"ackAdminNotices": func() isolation.Fixture {
+			f := e.elsewhere(204, "dismisses a banner of the console account", `SELECT count(*) FROM ctrlz.admin_users WHERE pending_notice IS NULL`,
+				func() {
+					e.seed = e.prepare(true)
+					r.env.Exec(t, `UPDATE ctrlz.admin_users SET pending_notice = '[{"kind":"password_reset","at":"2020-01-01T00:00:00Z"}]'::jsonb`)
+					e.b = r.browser()
+					e.b.mustLogin(e.seed)
+				},
+				func() *aresp { return e.b.post("/me/notices/ack", map[string]any{}) })
+			return f
+		}(),
+		"changeAdminPassword": e.elsewhere(204, "changes the console account's password", auditRows, login,
+			func() *aresp {
+				r.freeStep(t)
+				return e.b.post("/me/password", map[string]any{"current_password": adminPW, "new_password": adminNewPW, "totp_code": totpNow(e.seed)})
+			}),
+		"adminTotpSetup": e.elsewhere(200, "starts the console account's authenticator enrolment", `SELECT count(*) FROM ctrlz.admin_users WHERE totp_secret_ct IS NOT NULL`,
+			func() {
+				e.prepare(false)
+				e.b = r.browser()
+				e.b.login(adminPW, "").want(200, "")
+				e.b.post("/me/password", map[string]any{"current_password": adminPW, "new_password": adminNewPW}).want(204, "")
+			},
+			func() *aresp { return e.b.post("/me/totp/setup", map[string]any{}) }),
+		"adminTotpConfirm": e.elsewhere(204, "completes the console account's authenticator enrolment", `SELECT count(*) FROM ctrlz.admin_users WHERE totp_enabled_at IS NOT NULL`,
+			func() {
+				e.prepare(false)
+				e.b = r.browser()
+				e.b.login(adminPW, "").want(200, "")
+				e.b.post("/me/password", map[string]any{"current_password": adminPW, "new_password": adminNewPW}).want(204, "")
+				var setup struct {
+					Secret string `json:"secret"`
+				}
+				e.b.post("/me/totp/setup", map[string]any{}).want(200, "").json(&setup)
+				e.seed = seedFromBase32(t, setup.Secret)
+			},
+			func() *aresp { return e.b.post("/me/totp/confirm", map[string]any{"code": totpNow(e.seed)}) }),
+
+		"listUsers": e.reads(login, "/users", nil),
+		"createUser": e.elsewhere(201, "makes a new tenant", `SELECT count(*) FROM ctrlz.tenants`, login,
+			func() *aresp { return e.b.post("/users", map[string]any{"phone": nextPhone()}) }),
+		"reissueOneTimePassword": {
+			Effect: isolation.Changes, Status: 200,
+			Arrange: func(w isolation.Who) {
+				// The state a re-issue acts on: an admin-issued one-time password, no second factor.
+				id := r.env.A
+				if w == isolation.B {
+					id = r.env.B
+				}
+				r.env.Exec(t, `UPDATE ctrlz.users SET must_reset = true, password_expires_at = now() + interval '72 hours' WHERE id = $1`, id.User)
+				if w == isolation.B {
+					e.login()
+				}
+			},
+			Call: func() isolation.Result {
+				return aresult(e.b.post("/tenants/"+tenantB()+"/users/"+r.env.B.User.String()+"/one-time-password", map[string]any{}))
+			}},
+
+		"listInvites": e.reads(login, "/invites", nil),
+		"createInvite": e.elsewhere(201, "makes an invite, which belongs to a phone and no tenant", `SELECT count(*) FROM ctrlz.invites`, login,
+			func() *aresp { return e.b.post("/invites", map[string]any{"phone": "09125559901", "send_sms": false}) }),
+		"revokeInvite": e.elsewhere(204, "revokes an invite", `SELECT count(*) FROM ctrlz.invites WHERE revoked_at IS NOT NULL`,
+			func() {
+				e.login()
+				var inv struct {
+					ID string `json:"id"`
+				}
+				e.b.post("/invites", map[string]any{"phone": "09125559902", "send_sms": false}).want(201, "").json(&inv)
+				e.id = inv.ID
+			},
+			func() *aresp { return e.b.call("DELETE", "/invites/"+e.id, nil) }),
+
+		"getRegistration":       e.reads(login, "/settings/registration", nil),
+		"getRegistrationImpact": e.reads(login, "/settings/registration/impact?to=open", nil),
+		"putRegistration": e.elsewhere(200, console+" (the registration mode)", `SELECT count(*) FROM ctrlz.system_settings WHERE registration_mode = 'open'`,
+			// A registration transition job is seeded by the catalog fixture, and while one is in flight the
+			// route answers 409 conflict; a refusal proves nothing, so the case starts without it.
+			func() {
+				e.login()
+				r.env.Exec(t, `UPDATE ctrlz.system_settings SET registration_mode = 'closed'; DELETE FROM ctrlz.admin_jobs;`)
+			},
+			func() *aresp {
+				return e.b.put("/settings/registration", map[string]any{"mode": "open", "open_grace_days": 21})
+			}),
+		"getWebauthn":       e.reads(login, "/settings/webauthn", nil),
+		"getWebauthnImpact": e.reads(login, "/settings/webauthn/impact?rp_id=other.example.test", nil),
+		"putWebauthn": e.elsewhere(200, console+" (the passkey RP ID)", `SELECT count(*) FROM ctrlz.webauthn_config WHERE rp_id = 'panel.example.test'`, login,
+			func() *aresp {
+				return e.b.put("/settings/webauthn", map[string]any{"rp_id": "panel.example.test", "enabled": true})
+			}),
+
+		"listSmsGateways": e.reads(login, "/sms/gateways", nil),
+		"putSmsGateway": e.elsewhere(200, console+" (a gateway's credentials)", auditRows, login,
+			func() *aresp {
+				return e.b.put("/sms/gateways/sms_ir", map[string]any{"credentials": map[string]string{"api_key": "key-sms-ir-123456"}, "cost_per_message": "120.5"})
+			}),
+		"putSmsRouting": e.elsewhere(200, console+" (which gateway sends)", auditRows, gateways,
+			func() *aresp {
+				return e.b.put("/sms/routing", map[string]any{"primary": "sms_ir", "fallback": "melipayamak"})
+			}),
+		"testSmsGateway": e.elsewhere(202, "queues a test message in the SMS outbox", `SELECT count(*) FROM ctrlz.sms_outbox`, gateways,
+			func() *aresp {
+				return e.b.post("/sms/gateways/melipayamak/test", map[string]any{"phone": "09125550006", "template": "otp", "locale": "en"})
+			}),
+		"getSmsOutbox": e.reads(func() {
+			e.login()
+			r.env.Scan(t, `SELECT id::text FROM ctrlz.sms_outbox ORDER BY created_at LIMIT 1`, nil, &e.id)
+		}, "/sms/outbox/{id}", nil),
+		"listSmsTemplates": e.reads(login, "/sms/templates", nil),
+		"putSmsTemplate": e.elsewhere(200, console+" (a message template)", auditRows, login,
+			func() *aresp {
+				return e.b.put("/sms/templates/otp/en", map[string]any{"body": "Your Ctrl Z code is {code}."})
+			}),
+		"putSmsProviderTemplate": e.elsewhere(200, console+" (a provider's template id)", auditRows, gateways,
+			func() *aresp {
+				return e.b.put("/sms/gateways/melipayamak/templates/otp/fa", map[string]any{"provider_template_id": "5001", "param_names": []string{"code"}})
+			}),
+		"getSmsLimits": e.reads(login, "/sms/limits", nil),
+		"putSmsLimits": e.elsewhere(200, console+" (the SMS caps)", auditRows,
+			func() {
+				e.login()
+				e.body = map[string]any{}
+				e.b.get("/sms/limits").want(200, "").json(&e.body)
+			},
+			func() *aresp { return e.b.put("/sms/limits", e.body) }),
+		"getSmsStats": e.reads(login, "/sms/stats?days=3", nil),
+		"listAudit":   e.reads(login, "/audit?limit=5", nil),
+		"listAlerts":  e.reads(func() { e.login(); e.alert() }, "/alerts", nil),
+		"ackAlert": e.elsewhere(204, "acknowledges an alert", auditRows,
+			func() { e.login(); e.alert() },
+			func() *aresp { return e.b.post("/alerts/"+e.id+"/ack", nil) }),
+	}
+}
+
+// alert plants an open alert and remembers its id.
+func (e *admIso) alert() {
+	t := e.t()
+	e.r.env.Exec(t, `DELETE FROM ctrlz.alerts`)
+	e.r.env.Scan(t, `INSERT INTO ctrlz.alerts (severity, kind, params) VALUES ('warning', 'test_open', '{}') RETURNING id::text`, nil, &e.id)
+}
