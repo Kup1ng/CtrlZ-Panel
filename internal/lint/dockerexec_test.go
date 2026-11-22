@@ -374,6 +374,30 @@ func TestGoExecLintCanFail(t *testing.T) {
 	}
 }
 
+// TestExecLintReadsTheProgramOfBothCallForms runs with one program on execPrograms. The list is empty since
+// round 18, so every literal fails and a test over the real list cannot tell which argument the lint reads as the
+// program: exec.CommandContext(ctx, "go") read at argument 0 is a variable, which fails too. A program on the list
+// makes the two readings differ (round 18 fix: the mutant images-are-pinned-the-context-form-reads-the-wrong-argument
+// had become equivalent to the original).
+func TestExecLintReadsTheProgramOfBothCallForms(t *testing.T) {
+	execPrograms["listed-tool"] = "a program the test lists for its own run"
+	t.Cleanup(func() { delete(execPrograms, "listed-tool") })
+	cases := []struct {
+		name, src string
+		bad       bool
+	}{
+		{"Command with a listed literal", "package x\nimport \"os/exec\"\nfunc f() { exec.Command(\"listed-tool\", \"a\") }\n", false},
+		{"CommandContext with a listed literal second", "package x\nimport (\n\"context\"\n\"os/exec\"\n)\nfunc f(c context.Context) { exec.CommandContext(c, \"listed-tool\", \"a\") }\n", false},
+		{"CommandContext with an unlisted literal second", "package x\nimport (\n\"context\"\n\"os/exec\"\n)\nfunc f(c context.Context) { exec.CommandContext(c, \"docker\", \"run\") }\n", true},
+		{"CommandContext with the listed name as the context argument", "package x\nimport (\n\"context\"\n\"os/exec\"\n)\nfunc f(p string) { exec.CommandContext(context.TODO(), p, \"listed-tool\") }\n", true},
+	}
+	for _, c := range cases {
+		if got := execProblems("x/a.go", c.src); (len(got) > 0) != c.bad {
+			t.Errorf("%s: problems %v, want a problem: %v", c.name, got, c.bad)
+		}
+	}
+}
+
 // A bare *exec.Cmd never crosses a package boundary (round 18 fix gate, admin-r18-18; the same class as
 // admin-r18-13). The fields Path, Args and Env of an exec.Cmd are assignable from any file, including one that
 // never imports os/exec, so a helper that returns the Cmd lets a test build a checked `docker ps` and then assign

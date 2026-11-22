@@ -20,16 +20,25 @@ import (
 // the queue longer. These tests run the real script and SQL against honest contention longer than the bound,
 // against a holder that is working but never idle, and against a stuck role together with its queue.
 
-// TestTheWatchdogLeavesAnHonestQueueOnAHotRowAlone: twelve honest transactions of one role queue on one
-// row, each holds it for 400 ms. The last waits about 4.4 s, far past the block bound of 1 s, and a sweep
-// every 600 ms runs the whole time. Nothing is ended, and every transaction commits.
+// TestTheWatchdogLeavesAnHonestQueueOnAHotRowAlone: five honest transactions of one role queue on one
+// row, each holds it for 1.5 s, in one statement. Every waiter's wait for the lock it is on lasts more than the
+// block bound of 1 s, and a sweep every 600 ms runs the whole time. Nothing is ended, and every transaction
+// commits.
+//
+// Why 1.5 s and five (round 18 fix of the first full run, mutant role-reach-the-watchdog-ends-an-honest-queue,
+// which survived): since db-r18-9 a wait is measured from pg_locks.waitstart, the start of the wait for ONE lock,
+// and a waiter in a queue of holders that each keep the row for 400 ms moves from the tuple lock to the
+// transaction lock of the holder ahead as the queue advances, so none of its waits reached 1 s and the sweep
+// had nothing to judge: the test passed against a rule that ended every blocker. A holder that keeps the row
+// longer than the bound in one statement makes a wait of more than 1 s, and the rule has to tell it from a
+// stuck one by what it is doing (running a statement), not by how long the waiter waited.
 func TestTheWatchdogLeavesAnHonestQueueOnAHotRowAlone(t *testing.T) {
 	c := testpg.Need(t, cluster)
 	h := newHarness(t, c)
 	ctx := h.ctx
 	sweep := sweeper(t, c, h, installWatchdog(t, c, h))
 
-	const n = 12
+	const n = 5
 	var wg sync.WaitGroup
 	errs := make(chan error, n)
 	ready := make(chan struct{})
@@ -56,7 +65,7 @@ func TestTheWatchdogLeavesAnHonestQueueOnAHotRowAlone(t *testing.T) {
 				errs <- fmt.Errorf("an honest request was ended or refused: %w", err)
 				return
 			}
-			if _, err := tx.Exec(ctx, "SELECT pg_catalog.pg_sleep(0.4)"); err != nil {
+			if _, err := tx.Exec(ctx, "SELECT pg_catalog.pg_sleep(1.5)"); err != nil {
 				errs <- err
 				return
 			}

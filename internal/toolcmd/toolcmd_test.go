@@ -130,11 +130,17 @@ func TestTheEnvironmentIsBuiltFromAnAllowList(t *testing.T) {
 // has to run anyway.
 func TestGoIgnoresItsSettingsFile(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "go"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "go", "env"), []byte("GOFLAGS=-nosuchflag-r18\n"), 0o600); err != nil {
-		t.Fatal(err)
+	// The settings file is os.UserConfigDir()/go/env: %AppData% on Windows, and on Linux $XDG_CONFIG_HOME,
+	// which toolPassName does not pass to the child, so the default $HOME/.config. The file is planted at
+	// both, because the CI runner is Linux and a file at the wrong place left the mutant that drops GOENV=off
+	// alive there (first full run of round 18, mutant images-are-pinned-toolcmd-go-reads-its-settings-file).
+	for _, d := range []string{filepath.Join(dir, "go"), filepath.Join(dir, ".config", "go")} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "env"), []byte("GOFLAGS=-nosuchflag-r18\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for _, k := range []string{"APPDATA", "XDG_CONFIG_HOME", "HOME"} {
 		t.Setenv(k, dir)

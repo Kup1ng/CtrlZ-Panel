@@ -4145,7 +4145,7 @@ mutants:
           s != r && false && !slices.Contains(readings, s)
     must_fail:
       - pkg: ./internal/auth/pwstrength
-        tests: [TestCorpusIsRefused, TestAnInvisibleCharacterInsideAWeakPasswordDoesNotMakeItStrong]
+        tests: [TestAnInvisibleCharacterInsideAWeakPasswordDoesNotMakeItStrong]
   - id: strength-gate-corpus-invisible-class-is-only-the-joiners
     rule: strength-gate-corpus
     finding: primitives-r10-2
@@ -4870,7 +4870,7 @@ mutants:
         old: |-
           return ring.Seal(keyring.DomainSMSCred, credentialsAAD(id, provider), plain.Reveal())
         new: |-
-          return ring.Seal(keyring.DomainSMSCred, []byte("credentials"), plain.Reveal())
+          return ring.Seal(keyring.DomainSMSCred, keyring.RowContext(nil, "credentials"), plain.Reveal())
     must_fail:
       - pkg: ./internal/lint
         tests: [TestEverySealBindsAnAADFunction]
@@ -5474,7 +5474,7 @@ mutants:
           return ring.Seal(keyring.DomainSMSCred, credentialsAAD(id, provider), plain.Reveal())
         new: |-
           seal := ring.Seal
-          return seal(keyring.DomainSMSCred, []byte("credentials"), plain.Reveal())
+          return seal(keyring.DomainSMSCred, keyring.RowContext(nil, "credentials"), plain.Reveal())
     must_fail:
       - pkg: ./internal/lint
         tests: [TestEverySealBindsAnAADFunction]
@@ -5656,11 +5656,9 @@ mutants:
           return ring.Seal(keyring.DomainSMSCred, credentialsAAD(id, provider), plain.Reveal())
         new: |-
           aad := credentialsAAD(id, provider)
-          	func(b []byte) {
-          		for i := range b {
-          			b[i] = 0
-          		}
-          	}(aad)
+          	func(c *keyring.Context) {
+          		*c = keyring.RowContext(nil, "credentials")
+          	}(&aad)
           	return ring.Seal(keyring.DomainSMSCred, aad, plain.Reveal())
     must_fail:
       - pkg: ./internal/lint
@@ -5675,9 +5673,9 @@ mutants:
           return ring.Seal(keyring.DomainSMSCred, credentialsAAD(id, provider), plain.Reveal())
         new: |-
           return func(r interface {
-          		Seal(domain string, context, plain []byte) ([]byte, error)
+          		Seal(domain string, context keyring.Context, plain []byte) ([]byte, error)
           	}) ([]byte, error) {
-          		return r.Seal(keyring.DomainSMSCred, []byte("credentials"), plain.Reveal())
+          		return r.Seal(keyring.DomainSMSCred, keyring.RowContext(nil, "credentials"), plain.Reveal())
           	}(ring)
     must_fail:
       - pkg: ./internal/lint
@@ -8065,13 +8063,13 @@ mutants:
   - id: budget-keying-the-network-cut-lint-allows-the-string-of-an-address
     rule: budget-keying
     finding: tenant-r16-14
-    why: The string form of an address is no longer a root of the network-cut lint, so a key cut by hand from ip.String() passes both the lint and the registry tests.
+    why: The string form of an address is on the safe members of the address type (part 7, round 18, which replaced the root list as the judge of the members), so a key cut by hand from ip.String() passes both the lint and the registry tests. The root entry of part 1 is no longer what stops it, so the edit is made where the guard is.
     edits:
       - file: internal/lint/netcut_test.go
         old: |-
-          "(net/netip.Addr).String":         "the string form of an address, which can be cut by hand",
+          "WithZone", "BitLen", "Compare", "Less", "Next", "Prev"}),
         new: |-
-          "(net/netip.Addr).Zone":           "the zone of an address",
+          "WithZone", "BitLen", "Compare", "Less", "Next", "Prev", "String"}),
     must_fail:
       - pkg: ./internal/lint
         tests: [TestNetworkCutLintCanFail]
@@ -8127,7 +8125,7 @@ mutants:
         old: |-
           if addrLevel(inst.TypeArgs.At(i)) == 2 || src != "" {
         new: |-
-          if addrLevel(inst.TypeArgs.At(i)) == 3 || src != "" {
+          if addrLevel(inst.TypeArgs.At(i)) == 3 && src == "never" {
     must_fail:
       - pkg: ./internal/lint
         tests: [TestNetworkCutLintCanFail]
@@ -13474,7 +13472,7 @@ mutants:
         old: |-
           if name == "." && (p == "os/exec" || p == "os") {
         new: |-
-          if false {
+          if name == "." && p == "never" {
     must_fail:
       - pkg: ./internal/lint
         tests: [TestGoExecLintCanFail]
@@ -13810,7 +13808,7 @@ mutants:
           idx = 0
     must_fail:
       - pkg: ./internal/lint
-        tests: [TestGoExecLintCanFail]
+        tests: [TestExecLintReadsTheProgramOfBothCallForms]
   - id: images-are-pinned-docker-run-takes-an-image-shaped-flag
     rule: images-are-pinned
     finding: admin-r17-22
@@ -15332,7 +15330,7 @@ mutants:
         old: |-
           if _, err := tx.SessionsTrim(p.User, caps.MaxSessions, now); err != nil {
         new: |-
-          if _, err := tx.SessionsTrim(p.User, 1<<30, now); err != nil {
+          if _, err := tx.SessionsTrim(p.User, caps.MaxSessions+1<<30, now); err != nil {
     must_fail:
       - pkg: ./internal/auth/session
         tests: [TestTheCapOnLiveSessionsEndsTheOldestAndNeverRefusesTheLogin]

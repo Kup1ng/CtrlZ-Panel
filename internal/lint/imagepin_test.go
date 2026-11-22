@@ -300,11 +300,20 @@ func imagePinProblems(s imageSources) []string {
 // realImageSources reads the tree. mutants.yaml, docs, the web workspaces and test data are not read.
 func realImageSources(t *testing.T) imageSources {
 	t.Helper()
-	root := repoRoot(t)
+	s, err := imageSourcesAt(repoRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// imageSourcesAt is realImageSources over any root, so that a test can plant a tree (the published tree has
+// .github/ci, which the work tree has not) and see what the walk reads.
+func imageSourcesAt(root string) (imageSources, error) {
 	s := imageSources{dockerfiles: map[string]string{}, goFiles: map[string]string{}, others: map[string]string{}}
 	b, err := os.ReadFile(filepath.Join(root, "deploy", "compose", "docker-compose.yml"))
 	if err != nil {
-		t.Fatal(err)
+		return s, err
 	}
 	s.compose = string(b)
 	skip := map[string]bool{".git": true, "node_modules": true, "docs": true, "apps": true, "packages": true, ".claude": true, ".codegraph": true, "testdata": true}
@@ -332,17 +341,58 @@ func realImageSources(t *testing.T) imageSources {
 		case strings.HasPrefix(name, "Dockerfile"):
 			s.dockerfiles[rel] = string(data)
 		case strings.HasSuffix(name, ".go"):
-			s.goFiles[rel] = string(data)
+			// unreadRel (gotree_test.go) is the one list of the places whose Go is not the product's: the CI overlay
+			// .github/ci of the published tree, whose helpers run with go run and start the go tool directly because
+			// they cannot import internal/toolcmd. Its .sh and .yml files are still read below, for the image pins.
+			if !unreadRel(rel) {
+				s.goFiles[rel] = string(data)
+			}
 		case strings.HasSuffix(name, ".sh"), strings.HasSuffix(name, ".yml"), strings.HasSuffix(name, ".yaml"),
 			strings.HasSuffix(name, ".mjs"), strings.HasSuffix(name, ".env"), strings.HasPrefix(name, ".env"):
 			s.others[rel] = string(data)
 		}
 		return nil
 	})
+	return s, err
+}
+
+// TestImageWalkReadsNoGoOfTheCIOverlay plants the published tree's overlay beside a product file: the Go helpers of
+// .github/ci start the go tool directly and are not product code (the exec lint would refuse them), while the overlay's
+// scripts and workflows are read for their image pins like any other (CI review round 24, ci-r24-1: the same defect as
+// ci-r13-3 in a second walker, which made every published snapshot of Panel main fail this package).
+func TestImageWalkReadsNoGoOfTheCIOverlay(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"deploy/compose/docker-compose.yml": "services: {}\n",
+		"internal/x/x.go":                   "package x\n",
+		".github/ci/plan/main.go":           "package main\n\nimport \"os/exec\"\n\nvar c = exec.Command(\"go\")\n",
+		".github/ci/images.sh":              "#!/bin/sh\ntrue\n",
+		".github/workflows/ci.yml":          "name: ci\n",
+	}
+	for rel, body := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, err := imageSourcesAt(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return s
+	if _, ok := s.goFiles["internal/x/x.go"]; !ok {
+		t.Error("the product Go file was not read: the walk reads nothing")
+	}
+	if _, ok := s.goFiles[".github/ci/plan/main.go"]; ok {
+		t.Error("the overlay's Go helper was read as product code")
+	}
+	for _, rel := range []string{".github/ci/images.sh", ".github/workflows/ci.yml"} {
+		if _, ok := s.others[rel]; !ok {
+			t.Errorf("%s of the overlay was not read for its image pins", rel)
+		}
+	}
 }
 
 func TestEveryImageIsPinnedByDigest(t *testing.T) {
