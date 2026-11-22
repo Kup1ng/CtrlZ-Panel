@@ -197,6 +197,7 @@ func Bounds() []Bound {
 		{"sweepMaxBatches", "batches one admin session sweep pass may run (rule bounded-sweeps); a work limit, not an amount that racing actors spend"},
 		{"maxContext", "length of one sealed-value context (keyring.RowContext): built in memory from the ids and parts in hand, nothing shared that racing actors could spend"},
 		{"persianMaxWord", "longest piece of a password looked up in the Persian word list (pwstrength): the work of one scan of one value in hand, nothing shared"},
+		{"finglishMaxCluster", "longest run of consonants in a Finglish spelling (pwstrength): a shape test on one piece of one password in hand, nothing shared that racing actors could spend"},
 		{"maxFrames", "frames kept in the log line of one panic (logattr.Stack); built in memory per call, nothing shared that racing actors could spend"},
 	}
 }
