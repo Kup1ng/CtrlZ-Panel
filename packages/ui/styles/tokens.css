@@ -1,0 +1,88 @@
+/*
+ * Design tokens. This is docs/design/heroui-export.css applied the way DESIGN.md
+ * "Changes from the export" says. The export was written for two sets; Flat is the
+ * one the owner chose (D17), so the colour blocks sit under the Flat class names only
+ * and the surface values that differ from the export are in flat.css (spec 5.3).
+ *
+ * Nothing here is in a @layer. HeroUI's theme sits in `layer(theme)`, and an
+ * unlayered declaration beats any layer, so this file wins whatever the import order.
+ *
+ * Never paste a hex for the values DESIGN.md lists under "Export values that
+ * cannot be used raw". Use the formulas below.
+ */
+
+:root {
+  /* D16: one radius. Controls and boxes derive from it in radius.generated.css. */
+  --radius: 8px;
+  --field-radius: var(--radius);
+  /* The saved value, in px so it does not move with the root font size. */
+  --spacing: 4.25px;
+  /* DESIGN.md: 1px field border. The stock theme has none, so without this line every field would be 2px shorter. */
+  --border-width-field: 1px;
+  --field-border-width: var(--border-width-field);
+  --size-50: 50px;
+  --size-75: 75px;
+  --radius-control-ratio: 0.4;
+  --radius-control-cap: 30px;
+  --radius-box: 20px;
+}
+
+/* Colours, light. */
+html.flat-light {
+  /* D39 Q3: the export's 55.17% gives 4.39:1 on the page, 52% gives 5.04. */
+  --muted: oklch(52% 0.006 235.48);
+  --scrollbar: oklch(87.1% 0.003 235.48);
+  --accent: oklch(73.04% 0.1555 235.48);
+  --accent-foreground: oklch(15% 0.03 235.48);
+  --success: oklch(73.29% 0.1947 148.61);
+  --warning: oklch(78.19% 0.1595 70.13);
+  /* D39 Q2: darkened so the light text on it reaches 4.71:1. The export's 65.32% gave 3.50. */
+  --danger: oklch(58% 0.2342 23.54);
+  --border: oklch(90% 0.003 235.48);
+  --focus: oklch(73.04% 0.1555 235.48);
+  --accent-soft: color-mix(in oklab, oklch(73.04% 0.1555 235.48) 15%, transparent);
+  --accent-hover: color-mix(in oklab, oklch(73.04% 0.1555 235.48) 90%, oklch(15% 0.03 235.48) 10%);
+  /* D39 Q1: the stock mix (about #2582B1) gives 3.68:1 on the soft fill; this gives 5.04. */
+  --accent-soft-foreground: oklch(0.5 0.11 235.48);
+
+  /*
+   * Chart palette (DESIGN Q7, decided with the first chart): the light list of DESIGN.md,
+   * with chart-3 on the accent so a single-series chart has the same identity in both
+   * modes. The stock Glass chart-3 was a slate grey (oklch 45% .04 240), and Flat had
+   * copied it, so light and dark sparklines looked like different products.
+   * The accent is 2.3:1 against a white card, under the 3:1 of WCAG 1.4.11. That is
+   * accepted for the sparkline of a KPI card only, because its value and trend are
+   * printed next to it; a chart that carries data by itself must add a second cue
+   * (marker, pattern or label), as DESIGN.md already requires.
+   */
+  --chart-1: #6e95b0;
+  --chart-2: #57768c;
+  --chart-3: #04b5fb;
+  --chart-4: #2c3d49;
+  --chart-5: #8cb4d1;
+}
+
+/* Colours, dark. */
+html.flat-dark {
+  color-scheme: dark;
+  --muted: oklch(70.5% 0.006 235.48);
+  --scrollbar: oklch(70.5% 0.003 235.48);
+  --accent: oklch(73.04% 0.1555 235.48);
+  --accent-foreground: oklch(15% 0.03 235.48);
+  --success: oklch(73.29% 0.1947 148.61);
+  --warning: oklch(82.03% 0.1396 74.14);
+  /* D39 Q2: the export's 59.40% gave 4.36:1, 57% gives 4.82. */
+  --danger: oklch(57% 0.1979 22.43);
+  --segment: oklch(39.64% 0.003 235.48);
+  --border: oklch(28% 0.003 235.48);
+  --focus: oklch(73.04% 0.1555 235.48);
+  --accent-soft: color-mix(in oklab, oklch(73.04% 0.1555 235.48) 15%, transparent);
+  --accent-hover: color-mix(in oklab, oklch(73.04% 0.1555 235.48) 90%, oklch(15% 0.03 235.48) 10%);
+
+  /* The dark list of DESIGN.md: blues that step up in lightness, with chart-3 on the accent. */
+  --chart-1: #003a78;
+  --chart-2: #0076b8;
+  --chart-3: #04b5fb;
+  --chart-4: #34c9ff;
+  --chart-5: #4fddff;
+}

@@ -1,0 +1,461 @@
+# Expected table, column and view privileges, from spec sections 6 and 7.
+#
+# Notation: S select, I insert, U update, D delete. A letter alone is a
+# table-level grant; S(a,b) is column-level; S(-a-b) is every column except a
+# and b, evaluated against the live column list so that a column added later
+# fails the test until it is listed or deliberately left out.
+# A role with no entry has no privilege on the table. Nothing is granted to PUBLIC.
+tables:
+  tenants:
+    scoped: "S(id,status)"
+    tenant: "S(-admin_hold) U(home_countries,raw_retention_days,aggregate_retention_months)"
+    compiler: "S(id,status,admin_hold)"
+    worker: "S(id,status,deleted_at,raw_retention_days,aggregate_retention_months)"
+    admin: "S U(status,admin_hold)"
+    auth: "S(id,status) I"
+    keytool: "S(id)"
+  users:
+    scoped: "S(id,tenant_id,must_reset,password_expires_at,password_hash,enforce_passkey,totp_enabled_at,totp_secret_ct,totp_pending_at) U(password_hash,password_expires_at,must_reset,password_changed_at,totp_secret_ct,totp_enabled_at,totp_last_step,enforce_passkey,totp_pending_at)"
+    tenant: "S(-password_hash-totp_secret_ct) U(locale,theme,onboarding_hints,onboarding_state,password_hash,totp_secret_ct,totp_enabled_at,totp_last_step,enforce_passkey,last_login_at,totp_pending_at,enforce_lift_at,passkey_review_at)"
+    keytool: "S(tenant_id,id,totp_secret_ct)"
+    admin: "S(-password_hash-totp_secret_ct-credential_gen)"
+    auth: "S(tenant_id,id,phone_e164,password_hash,totp_secret_ct,totp_enabled_at,enforce_passkey,must_reset,phone_verified_at,password_expires_at,enforce_lift_at,password_changed_at,totp_pending_at,credential_gen) U(phone_e164,phone_verified_at,password_hash,password_changed_at,must_reset,password_expires_at,totp_secret_ct,totp_enabled_at,totp_last_step,enforce_passkey,totp_pending_at) I"
+  recovery_codes:
+    tenant: "S I U D"
+  sessions:
+    scoped: "S(id,tenant_id,user_id,revoked_at) U(revoked_at)"
+    tenant: "S I U D"
+    worker: "S(tenant_id,id,absolute_expires_at,revoked_at) D"
+    admin: "S(tenant_id,id,user_id,created_at,last_seen_at,revoked_at)"
+    auth: "S(tenant_id,id,user_id,token_hash,idle_expires_at,absolute_expires_at,revoked_at,restricted,reauth_at) U(revoked_at)"
+  refresh_tokens:
+    scoped: "S(id,tenant_id,user_id,revoked_at) U(revoked_at)"
+    tenant: "S I U D"
+    worker: "S(tenant_id,id,expires_at) D"
+    admin: "S(tenant_id,id,user_id,revoked_at)"
+    auth: "S(tenant_id,id,user_id,token_hash,family_id,rotated_at,reuse_grace_until,expires_at,revoked_at) U(revoked_at)"
+  api_tokens:
+    tenant: "S I U(name,allowed_ips,last_used_at,revoked_at) D"
+    auth: "S(tenant_id,id,user_id,token_hash,kind,allowed_ips,revoked_at)"
+  webauthn_credentials:
+    scoped: "S(id,tenant_id,user_id,rp_id,stale_at) U(stale_at)"
+    tenant: "S I U(name,sign_count,last_used_at,backup_state) D"
+    admin: "S(tenant_id,id,user_id,rp_id,stale_at)"
+    auth: "S(tenant_id,id,user_id,credential_id,public_key,sign_count,rp_id,stale_at,transports,aaguid,backup_eligible,backup_state) U(stale_at)"
+  phone_change_requests:
+    tenant: "S I"
+    worker: "S(tenant_id,id,expires_at,completed_at) D"
+    auth: "S(tenant_id,id,user_id,new_phone_e164,old_otp_id,new_otp_id,expires_at,completed_at,created_at) U(completed_at)"
+  tenant_entitlements:
+    tenant: "S"
+    compiler: "S"
+    worker: "S"
+    admin: "S I U"
+    auth: "S(tenant_id,max_ip_claims) I"
+  notifications:
+    scoped: "I(tenant_id,kind,severity,params)"
+    tenant: "S I(tenant_id,kind,severity,params) U(read_at)"
+    worker: "I"
+    admin: "I"
+    auth: "I(tenant_id,kind,severity,params)"
+  announcement_reads:
+    tenant: "S I"
+    worker: "D"
+  feedback_items:
+    tenant: "S I"
+    admin: "S U(status,admin_reply,replied_at)"
+  tenant_audit_log:
+    scoped: "I(tenant_id,user_id,action,target,params)"
+    tenant: "S I"
+    worker: "S(tenant_id,id,at) D"
+    auth: "I(tenant_id,user_id,action,target,params)"
+  idempotency_keys:
+    tenant: "S I U"
+    worker: "D"
+  batch_jobs:
+    tenant: "S I"
+    worker: "S U D"
+  analytics_read_floors:
+    tenant: "S I U"
+    worker: "S"
+  tenant_assets:
+    tenant: "S I D"
+    compiler: "S"
+    worker: "D"
+  profiles:
+    tenant: "S I U(-id-tenant_id-compiled_hash) D"
+    compiler: "S"
+    worker: "S U(version,updated_at)"
+    admin: "S(tenant_id,id,name,kind,lock_state,locked_at) U(lock_state,lock_message,lock_password_hash,locked_by,locked_at)"
+  profile_options:
+    tenant: "S I U D"
+    compiler: "S"
+    worker: "S U(default_location_unavailable)"
+  profile_filters:
+    tenant: "S I U D"
+    compiler: "S"
+    worker: "S"
+  profile_services:
+    tenant: "S I U D"
+    compiler: "S"
+    worker: "S U(location_unavailable)"
+  rule_folders:
+    tenant: "S I U D"
+    compiler: "S"
+    worker: "S"
+  rules:
+    tenant: "S I U D"
+    compiler: "S"
+    worker: "S U(location_unavailable) D"
+  block_pages:
+    tenant: "S I U D"
+    compiler: "S"
+  unblock_requests:
+    tenant: "S U(status)"
+    hub: "I"
+    worker: "D"
+  filter_preview_jobs:
+    tenant: "S I"
+    worker: "S U D"
+  endpoint_groups:
+    tenant: "S I U D"
+    compiler: "S"
+  endpoints:
+    scoped: "S(id,tenant_id,pair_override_node_a,pair_override_node_b)"
+    tenant: "S(-doh_token_hash) I(tenant_id,id,name,type,group_id,comment,resolver_id,doh_token_ct,doh_token_hash,profile_id,profile2_id,analytics_level,admin_state,legacy_dns,authorize_secure_dns,authorize_ddns,expose_ip,prevent_deactivation,require_authorized_ips,schedule_timezone,apple_profile_generated_at) U(name,type,group_id,comment,profile_id,profile2_id,analytics_level,admin_state,legacy_dns,authorize_secure_dns,authorize_ddns,expose_ip,prevent_deactivation,require_authorized_ips,schedule_timezone,resolver_id,doh_token_ct,doh_token_hash,apple_profile_generated_at) D"
+    hub: "S(id,tenant_id,pair_override_node_a,pair_override_node_b,pair_version,first_query_at,last_query_at) U(first_query_at,last_query_at)"
+    compiler: "S(-doh_token_ct)"
+    worker: "S(tenant_id,id,legacy_dns,authorize_ddns,require_authorized_ips,last_query_at) U(pair_version)"
+    admin: "S(tenant_id,id,type,admin_state,admin_hold,first_query_at,last_query_at) U(admin_hold)"
+    auth: "S(tenant_id,id,pair_override_node_a,pair_override_node_b,admin_state)"
+  endpoint_ddns_hosts:
+    tenant: "S I U D"
+    worker: "S U(last_resolved_at,last_ips,last_error)"
+  schedule_windows:
+    tenant: "S I U D"
+    compiler: "S"
+  clients:
+    tenant: "S I U(alias,profile_id,profile2_id,analytics_level,group_name,is_custom) D"
+    hub: "S(tenant_id,id,endpoint_id,label,last_seen_at) I(tenant_id,endpoint_id,label,source,first_seen_at,last_seen_at) U(last_seen_at)"
+    compiler: "S(-hostname-mac-ip)"
+    worker: "S D"
+  authorized_ips:
+    tenant: "S I U(cleanup_opt_in) D"
+    hub: "S(tenant_id,id,endpoint_id,cidr,last_seen_at) U(last_seen_at)"
+    compiler: "S(tenant_id,id,endpoint_id,cidr)"
+    worker: "S I U(last_seen_at) D"
+  ip_claims:
+    tenant: "S"
+    hub: "S(tenant_id,id,endpoint_id,last_seen_at) U(last_seen_at)"
+    compiler: "S"
+    worker: "S U(state,grace_until,first_grace_at)"
+    admin: "S U(state,approved_by_admin)"
+    auth: "S I U"
+  ip_proof_challenges:
+    tenant: "S(-txt_code_hash-observed_ip)"
+    hub: "S(tenant_id,id,label,observed_at,expires_at,consumed_at) U(observed_at,observed_ip,observed_protocol,txt_code_hash)"
+    worker: "S(tenant_id,id,expires_at,consumed_at) D"
+    auth: "S I(tenant_id,claim_id,label,expires_at) U(consumed_at,attempts)"
+  setup_share_tokens:
+    tenant: "S I U(revoked_at,uses) D"
+    worker: "S(tenant_id,id,expires_at,revoked_at) D"
+    auth: "S(tenant_id,id,endpoint_id,token_hash,expires_at,max_uses,uses,client,revoked_at)"
+  profile_download_tokens:
+    tenant: "S I U(uses) D"
+    worker: "S(tenant_id,id,expires_at) D"
+    auth: "S(tenant_id,id,endpoint_id,token_hash,expires_at,max_uses,uses,params_hash)"
+  policy_outbox:
+    tenant: "I"
+    compiler: "S D"
+    worker: "I"
+    admin: "I"
+    auth: "I"
+  job_outbox:
+    tenant: "I"
+    hub: "I"
+    worker: "S D"
+    admin: "I"
+  public_settings:
+    scoped: "S"
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S"
+    admin: "S U"
+    auth: "S"
+  system_settings:
+    worker: "S"
+    admin: "S U"
+    auth: "S"
+  domain_settings:
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S"
+    admin: "S U"
+    auth: "S(panel_host)"
+  webauthn_config:
+    scoped: "S(rp_id)"
+    tenant: "S"
+    admin: "S U"
+    auth: "S(rp_id,allowed_origins,enabled)"
+  entitlement_defaults:
+    tenant: "S"
+    compiler: "S"
+    worker: "S"
+    admin: "S U"
+    auth: "S(max_ip_claims)"
+  leases:
+    hub: "S I U"
+    compiler: "S I U"
+    worker: "S I U"
+  invites:
+    worker: "S(id,expires_at,used_at) D"
+    admin: "S(id,phone_e164,locale,expires_at,created_at,used_at,revoked_at) I(token_hash,phone_e164,locale,created_by,expires_at) U(revoked_at)"
+    auth: "S(id,token_hash,phone_e164,expires_at,used_at,revoked_at) U(used_at,accepted_tenant_id)"
+  otp_challenges:
+    worker: "S(id,phone_e164,purpose,code_hash,delivery_ct,expires_at,created_at,delivery_claimed_until,delivery_attempts,consumed_at) U(delivery_ct,delivery_claimed_until,delivery_attempts)"
+    auth: "S I U D"
+  sms_counters:
+    worker: "S I U"
+    auth: "S I U D"
+  sms_gateways:
+    worker: "S U(last_ok_at,last_error_at,last_error_code,consecutive_failures,breaker_open_until,held_ct_sum,held_code,unusable_ct_sum)"
+    admin: "S I U"
+    auth: "S(provider,role,unusable_now)"
+  sms_templates:
+    worker: "S"
+    admin: "S I U"
+  auth_tickets:
+    auth: "S I U D"
+  auth_throttle:
+    auth: "S I U D"
+  admin_jobs:
+    worker: "S U(state,progress,started_at,finished_at)"
+    admin: "S I U(state,progress,finished_at)"
+  sms_outbox:
+    worker: "S U(state,attempts,claimed_until,last_error,sent_at,params_ct) D"
+    admin: "S(id,kind,gateway_id,state,attempts,last_error,created_by,created_at,sent_at) I(id,kind,gateway_id,phone_e164,template_key,locale,params_ct,created_by)"
+  sms_deliveries:
+    worker: "S I"
+    auth: "S(id,created_at) D"
+    admin: "S"
+  sms_provider_templates:
+    worker: "S"
+    admin: "S I U D"
+  admin_users:
+    admin: "S U(password_hash,totp_secret_ct,totp_last_step,disabled_at,last_login_at,pending_notice)"
+    auth: "S(id,must_change_password,password_expires_at,totp_enabled_at,totp_secret_ct,totp_last_step) I(username,password_hash,must_change_password,password_expires_at) U(password_hash,password_changed_at,must_change_password,password_expires_at,totp_enabled_at,totp_last_step,totp_secret_ct)"
+  admin_sessions:
+    admin: "S I U D"
+  audit_log:
+    admin: "S I"
+    # The definer owner of ctrlz_fn.keytool_audit_key_event: the last hash of the chain and one insert (0059).
+    auth: "S(id,entry_hash) I(at,admin_id,action,target,params,ip,prev_hash,entry_hash)"
+  alerts:
+    hub: "I"
+    compiler: "I"
+    worker: "I"
+    admin: "S U"
+  announcements:
+    scoped: "S"
+    worker: "S"
+    auth: "S"
+    admin: "S I U D"
+  nodes:
+    scoped: "S(id,dns_advertised_ip)"
+    hub: "S U(last_heartbeat_at,version_info,applied_seq,cert_serial)"
+    compiler: "S"
+    worker: "S"
+    admin: "S I U"
+    auth: "S(id,dns_advertised_ip)"
+  node_enrollments:
+    hub: "S I U"
+    worker: "D"
+    admin: "S I U"
+  node_certs:
+    hub: "S I U"
+    admin: "S U"
+  node_pairs:
+    scoped: "S"
+    tenant: "S(id,primary_node_id,fallback_node_id)"
+    hub: "S"
+    compiler: "S"
+    worker: "S"
+    admin: "S I U"
+    auth: "S"
+  node_upstreams:
+    hub: "S"
+    compiler: "S"
+    admin: "S I U D"
+  node_resolver_rules:
+    hub: "S"
+    compiler: "S"
+    admin: "S I U D"
+  locations:
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S"
+    admin: "S I U"
+  node_location_configs:
+    hub: "S"
+    compiler: "S"
+    worker: "S"
+    admin: "S I U D"
+  location_availability:
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S"
+    admin: "S I U D"
+  config_log:
+    hub: "S"
+    compiler: "S I"
+    worker: "D"
+    admin: "S"
+  policy_artifacts:
+    hub: "S"
+    compiler: "S I U"
+    worker: "D"
+    admin: "S"
+  config_snapshot:
+    hub: "S"
+    compiler: "S I D"
+    admin: "S"
+  node_quarantine:
+    hub: "S I U"
+    compiler: "S"
+    admin: "S U"
+  certificates:
+    hub: "S(id,kind,chain_pem,wrapped_key_ct,not_after,state)"
+    worker: "S(-wrapped_key_ct) I U"
+    admin: "S(-wrapped_key_ct) I U"
+  update_status:
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  bundles:
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  geoip_versions:
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_versions:
+    tenant: "S(version)"
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_filter:
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_filter_mode:
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_filter_table:
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_service_category:
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_service:
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_service_domain:
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_service_alias:
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_protected_domains:
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_infra_denylist:
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_common_domains:
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  catalog_rewrites:
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  endpoint_types:
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+  profile_presets:
+    tenant: "S"
+    hub: "S"
+    compiler: "S"
+    worker: "S I U"
+    admin: "S I U"
+
+# Views, by the role that may select from them.
+views:
+  hub_endpoint_index: [hub]
+  tenant_endpoint_status: [tenant]
+  tenant_profile_counts: [tenant]
+  admin_tenant_summary: [admin]
+
+# Schema privileges. usage lists the roles (besides the owner) holding USAGE.
+# Nobody but the owner holds CREATE anywhere, and public holds nothing at all.
+schemas:
+  public:    {owner: pg_database_owner, usage: []}
+  ctrlz:     {owner: ctrlz_migrator, usage: [tenant, hub, compiler, worker, admin, auth, backfill, keytool, scoped]}
+  ctrlz_fn:  {owner: ctrlz_auth, usage: [tenant, worker, admin, keytool]}
+  ctrlz_ext: {owner: ctrlz_migrator, usage: []}
+  river:     {owner: ctrlz_migrator, usage: [worker]}
+
+# CONNECT on the database for the six service roles (the migrator owns it and
+# holds everything implicitly). TEMP is
+# not granted, and PUBLIC holds nothing.
+database:
+  connect: [tenant, hub, compiler, worker, admin, keytool]
+
+# Roles that may call ctrlz.current_tenant_id(). The policies call it with the
+# caller's own rights, so every role that touches a tenant table needs it.
+current_tenant_id_execute: [tenant, hub, compiler, worker, admin, auth, backfill, keytool, scoped]
+
+# pg_default_acl, as stored. The schema-scoped REVOKE the spec states leaves no
+# row; the role-wide REVOKE for ctrlz_auth and the River defaults are ours.
+default_acl:
+  - {role: ctrlz_migrator, schema: "", objtype: f, acl: "{ctrlz_migrator=X/ctrlz_migrator}"}
+  - {role: ctrlz_auth,     schema: "", objtype: f, acl: "{ctrlz_auth=X/ctrlz_auth}"}
+  - {role: ctrlz_scoped,   schema: "", objtype: f, acl: "{ctrlz_scoped=X/ctrlz_scoped}"}
+  - {role: ctrlz_migrator, schema: river, objtype: r, acl: "{ctrlz_worker=arwdDxtm/ctrlz_migrator}"}
+  - {role: ctrlz_migrator, schema: river, objtype: S, acl: "{ctrlz_worker=rwU/ctrlz_migrator}"}

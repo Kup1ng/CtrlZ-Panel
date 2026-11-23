@@ -1,0 +1,143 @@
+-- P1 auth review round 16, area HTTP spine and tenant API (finding tenant-r16-11).
+--
+-- Rule known-unknown-oracle: whether a phone has an account may not select a WAIT. Only a real OTP
+-- request counted the one global row (day, 'global', 'all') and so took its row lock, which serialises
+-- every real send of the service; a decoy skipped the row, so on a busy hour a phone with an account
+-- waited behind every concurrent real send and a phone without one did not, and the extra wait marked
+-- the phone (and with a session that holds the row, a known phone answers 503 at lock_timeout while an
+-- unknown one answers 202 at once). A declared exception covers a THING, never the time it takes
+-- (round 13), and the pool meter counts asks and not their cost, so nothing saw it.
+--
+-- The class: every statement a real request runs that waits on shared state is run by a decoy too, in the
+-- same place and in the same form. The decoy now upserts the global row exactly like the real request,
+-- adding ZERO where the real one adds one: the same index probe, the same row lock taken at the same
+-- position of the same loop (so the same lock order, rule lock-order), the same cap test, and the same
+-- trigger (a new row may start at zero, an UPDATE that leaves the count alone passes). Nothing is sent
+-- and no money is counted for a decoy, as before.
+--
+-- This function is that of 0049 with the decoy's global step added; same signature, so CREATE OR
+-- REPLACE keeps the grant and functions.yaml needs no line. A new file and not an edit of an applied one.
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+SET ROLE ctrlz_auth;
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.auth_otp_issue(p_phone text, p_purpose text, p_code_hash bytea, p_delivery_ct bytea, p_ip inet, p_trusted boolean)
+RETURNS TABLE (id uuid, allowed boolean)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_day    date := (pg_catalog.now() AT TIME ZONE 'Asia/Tehran')::date;
+  v_ip     inet := p_ip;
+  v_cfg    ctrlz.system_settings%ROWTYPE;
+  v_decoy  boolean := p_delivery_ct IS NULL;
+  v_trust  boolean := COALESCE(p_trusted, false);
+  v_gcount integer;
+  v_gcost  numeric;
+  v_net    text;
+  v_scopes text[];
+  v_keys   text[];
+  v_caps   integer[];
+  v_id     uuid;
+  v_n      integer;
+  v_inc    integer[];
+  i        integer;
+BEGIN
+  IF p_phone IS NULL OR p_phone !~ '^\+[1-9][0-9]{7,14}$'
+     OR p_purpose IS NULL OR p_purpose NOT IN ('login', 'signup', 'invite', 'reset', 'phone_old', 'phone_new')
+     OR p_code_hash IS NULL OR p_ip IS NULL THEN
+    RETURN QUERY SELECT NULL::uuid, false;
+    RETURN;
+  END IF;
+
+  -- ::ffff:a.b.c.d and a.b.c.d are one client.
+  IF pg_catalog.family(v_ip) = 6 AND v_ip << '::ffff:0:0/96'::inet THEN
+    v_ip := '0.0.0.0'::inet + (v_ip - '::ffff:0.0.0.0'::inet);
+  END IF;
+
+  SELECT * INTO v_cfg FROM ctrlz.system_settings;
+  SELECT c.count, c.cost INTO v_gcount, v_gcost
+  FROM ctrlz.sms_counters c WHERE c.day = v_day AND c.scope = 'global' AND c.key = 'all';
+  v_gcount := COALESCE(v_gcount, 0);   -- no row yet leaves both NULL
+  v_gcost  := COALESCE(v_gcost, 0);
+
+  -- Both real and decoy refuse here, so a full cap reveals no phone.
+  IF ctrlz.cap_reached(v_gcount, v_cfg.otp_cap_global)
+     OR ctrlz.cap_reached(v_gcost, v_cfg.sms_cost_cap_daily)
+     OR (NOT v_trust
+         AND ctrlz.cap_reached(v_gcount::numeric * 100, v_cfg.otp_cap_global::numeric * v_cfg.otp_soft_pct)) THEN
+    RETURN QUERY SELECT NULL::uuid, false;
+    RETURN;
+  END IF;
+
+  IF pg_catalog.family(v_ip) = 4 THEN
+    v_net    := pg_catalog.network(pg_catalog.set_masklen(v_ip, 24))::text;
+    v_scopes := ARRAY['ip', 'ip'];
+    v_keys   := ARRAY[pg_catalog.host(v_ip), v_net];
+    v_caps   := ARRAY[v_cfg.otp_cap_ip, v_cfg.otp_cap_net24];
+  ELSE
+    -- family 6: the /64 of 0010, plus the /48, which holds 65,536 /64s
+    v_net    := pg_catalog.network(pg_catalog.set_masklen(v_ip, 64))::text;
+    v_scopes := ARRAY['ip', 'ip'];
+    v_keys   := ARRAY[v_net, pg_catalog.network(pg_catalog.set_masklen(v_ip, 48))::text];
+    v_caps   := ARRAY[v_cfg.otp_cap_ip, v_cfg.otp_cap_net48];
+  END IF;
+
+  -- A known device leaves the shared keys alone, so a stranger cannot spend them.
+  IF v_trust THEN
+    v_scopes := v_scopes || ARRAY['phone'];
+    v_keys   := v_keys   || ARRAY[p_phone || '|trusted'];
+    v_caps   := v_caps   || ARRAY[v_cfg.otp_cap_phone_trusted];
+  ELSE
+    v_scopes := v_scopes || ARRAY['phone_net', 'phone'];
+    v_keys   := v_keys   || ARRAY[p_phone || '|' || v_net, p_phone];
+    v_caps   := v_caps   || ARRAY[v_cfg.otp_cap_phone_net, v_cfg.otp_cap_phone];
+  END IF;
+  -- The global row is probed and locked by EVERY request, in the same place, and only a real one adds to
+  -- it (tenant-r16-11). A decoy that skipped the row waited for nobody while a real request queued
+  -- behind every other real send.
+  v_inc    := pg_catalog.array_fill(1, ARRAY[pg_catalog.array_length(v_keys, 1)]);
+  v_scopes := v_scopes || ARRAY['global'];
+  v_keys   := v_keys   || ARRAY['all'];
+  v_caps   := v_caps   || ARRAY[v_cfg.otp_cap_global];
+  v_inc    := v_inc    || ARRAY[CASE WHEN v_decoy THEN 0 ELSE 1 END];
+
+  BEGIN
+    FOR i IN 1 .. pg_catalog.array_length(v_keys, 1) LOOP
+      INSERT INTO ctrlz.sms_counters AS c (day, scope, key, count)
+      VALUES (v_day, v_scopes[i], v_keys[i], v_inc[i])
+      ON CONFLICT (day, scope, key) DO UPDATE SET count = c.count + v_inc[i] WHERE NOT ctrlz.cap_reached(c.count, v_caps[i])
+      RETURNING c.count INTO v_n;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'cap' USING ERRCODE = 'P0001';
+      END IF;
+    END LOOP;
+
+    -- The cooldown reads challenges, which exist only for messages sent. The
+    -- global counter above is locked until the caller's transaction ends, so a
+    -- concurrent send is already waiting behind it (a decoy took the row too, adding nothing: the
+    -- same wait for both, tenant-r16-11).
+    IF EXISTS (SELECT 1 FROM ctrlz.otp_challenges o
+               WHERE o.phone_e164 = p_phone AND o.purpose = p_purpose
+                 AND o.created_at > pg_catalog.now() - pg_catalog.make_interval(secs => v_cfg.otp_cooldown_s)) THEN
+      RAISE EXCEPTION 'cooldown' USING ERRCODE = 'P0001';
+    END IF;
+
+    INSERT INTO ctrlz.otp_challenges (phone_e164, purpose, code_hash, delivery_ct, expires_at, ip, trusted)
+    VALUES (p_phone, p_purpose, p_code_hash, p_delivery_ct, pg_catalog.now() + interval '5 minutes', v_ip, v_trust)
+    RETURNING ctrlz.otp_challenges.id INTO v_id;
+  EXCEPTION WHEN raise_exception THEN
+    -- The subtransaction undoes the counters bumped before the refusal.
+    RETURN QUERY SELECT NULL::uuid, false;
+    RETURN;
+  END;
+
+  RETURN QUERY SELECT v_id, true;
+END
+$$;
+-- +goose StatementEnd
+
+RESET ROLE;
