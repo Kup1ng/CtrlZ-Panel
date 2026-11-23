@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 // TestDeclareLostDoesNotDiscardAPairThatChangedAfterItWasJudged is db-r21-2. The declaration judges
@@ -39,13 +41,9 @@ func TestDeclareLostDoesNotDiscardAPairThatChangedAfterItWasJudged(t *testing.T)
 	}()
 
 	// The declaration has read the pair and waits for the row the discard updates.
-	deadline := time.Now().Add(60 * time.Second)
-	for r.count(`SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()`) == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("the declaration never reached the discard")
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	testwait.Until(t, 60*time.Second, "the declaration to reach the discard", func() bool {
+		return r.count(`SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()`) != 0
+	})
 	newer := []byte("a-valid-pair-staged-in-between")
 	if _, err := conn.Exec(r.env.Ctx, `UPDATE ctrlz.sms_gateways SET credentials_pending_ct = $1, pending_hint = '4444' WHERE provider = 'sms_ir'`, newer); err != nil {
 		t.Fatal(err)
