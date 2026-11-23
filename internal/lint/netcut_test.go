@@ -344,6 +344,7 @@ var netCutAllowed = map[string]string{
 	"internal/sms/counterkeys.go#netPrefix":      "the daily SMS counters key their network by the same function; they are stored counters bounded by the SMS caps of spec 5.1, not a pool",
 
 	"internal/api/routes_reauth.go#(Server).ListSessions":  "shows the address a session was opened from, in the owner's own session list (an answer, not a key)",
+	"internal/admincli/sms.go#runSMSPending":               "shows the address of the audit row that staged a pending credential pair to the owner at the console, so they can tell their own PUT from a stolen session's (an answer, not a key)",
 	"internal/adminapi/routes_audit.go#(Server).ListAudit": "shows the address of an audit row to the admin who reads it (an answer, not a key)",
 	"internal/auth/audit/canonical.go#Canonical":           "the canonical text of the ip field of an audit event, whose bytes are the MAC input; it keys nothing",
 	"internal/logattr/logattr.go#Addr":                     "the one log attribute for a peer address; a log line is not a bucket",

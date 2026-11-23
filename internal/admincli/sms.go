@@ -50,7 +50,7 @@ func runSMSPending(ctx context.Context, env Env, args []string) error {
 	}
 	return withTools(ctx, env, func(t *Tools) error {
 		var rows []store.SMSPendingGateway
-		staged := map[string]string{}
+		staged := map[string]stagedRow{}
 		if err := t.Store.WithGlobal(ctx, store.TxOpts{ReadOnly: true}, func(g store.GlobalTx) (err error) {
 			if rows, err = g.SMSPendingGateways(); err != nil {
 				return err
@@ -70,6 +70,16 @@ func runSMSPending(ctx context.Context, env Env, args []string) error {
 			return nil
 		}
 		for _, r := range rows {
+			// The address is written here and not by stagedBy: a function that returned the text of an
+			// address would make every caller a source of the network cut lint's key flow.
+			when, ip := "(no audit row of the staging among the last 200 gateway changes)", ""
+			if sr := staged[r.Provider]; sr.found {
+				ip = "an unknown address"
+				if sr.ip != nil {
+					ip = sr.ip.String()
+				}
+				when = fmt.Sprintf("at %s by %s from %s", sr.at, sr.who, ip)
+			}
 			replaces := "first credentials of this gateway"
 			if r.HasActive {
 				replaces = "replace the active credentials"
@@ -80,7 +90,7 @@ func runSMSPending(ctx context.Context, env Env, args []string) error {
 			fmt.Fprintf(env.Stdout, "%s: hint %q, %s\n  staged %s\n"+
 				"  your own PUT staged this: ctrlz-admin sms confirm %s --hint %q --fingerprint <the fingerprint that PUT returned>\n"+
 				"  you did not stage it, or your PUT was refused with pending_exists: ctrlz-admin sms discard %s   (a new PUT is refused while this waits)\n",
-				r.Provider, r.Hint, replaces, staged[r.Provider], r.Provider, r.Hint, r.Provider)
+				r.Provider, r.Hint, replaces, when, r.Provider, r.Hint, r.Provider)
 		}
 		return nil
 	})
@@ -91,10 +101,10 @@ func runSMSPending(ctx context.Context, env Env, args []string) error {
 // the gateway that names the field credentials is the one that staged it; the console reads it to let the
 // owner tell their own PUT from a stolen session's. Rows of the cost, of a confirmation and of a discard
 // name other fields and are skipped.
-func stagedBy(g store.GlobalTx, gateway uuid.UUID) (string, error) {
+func stagedBy(g store.GlobalTx, gateway uuid.UUID) (stagedRow, error) {
 	rows, err := g.AuditPage(0, "sms.gateway_change", 200)
 	if err != nil {
-		return "", err
+		return stagedRow{}, err
 	}
 	target := audit.SMSGatewayChange{Gateway: gateway}.Target()
 	for _, r := range rows {
@@ -114,21 +124,27 @@ func stagedBy(g store.GlobalTx, gateway uuid.UUID) (string, error) {
 		if !staging {
 			continue
 		}
-		who, ip := "an unknown admin", "an unknown address"
+		who := "an unknown admin"
 		if r.AdminID != nil {
 			who = "admin " + r.AdminID.String()
 			if a, ok, err := g.AdminUserByID(*r.AdminID); err != nil {
-				return "", err
+				return stagedRow{}, err
 			} else if ok {
 				who = fmt.Sprintf("admin %q", a.Username)
 			}
 		}
-		if r.IP != nil {
-			ip = r.IP.String()
-		}
-		return fmt.Sprintf("at %s by %s from %s", r.At.UTC().Format("2006-01-02 15:04:05 UTC"), who, ip), nil
+		return stagedRow{found: true, at: r.At.UTC().Format("2006-01-02 15:04:05 UTC"), who: who, ip: r.IP}, nil
 	}
-	return "(no audit row of the staging among the last 200 gateway changes)", nil
+	return stagedRow{}, nil
+}
+
+// stagedRow is the audit row that staged a pair, as parts. found is false when the last 200 gateway
+// changes hold none.
+type stagedRow struct {
+	found bool
+	at    string
+	who   string
+	ip    *netip.Addr
 }
 
 // providerCLI is a provider whose credentials can be confirmed. noop has none.

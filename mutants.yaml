@@ -16101,7 +16101,7 @@ mutants:
         old: |-
           staged, err := g.SMSGatewayStageCredentials(id, ct, hint)
         new: |-
-          if _, _, err := g.SMSGatewayConfirmCredentials(prov, hint); err != nil {
+          if _, _, err := g.SMSGatewayConfirmCredentials(prov, hint, store.SMSCredentialsFingerprint(ct)); err != nil {
               return err
           }
           staged, err := g.SMSGatewayStageCredentials(id, ct, hint)
@@ -16515,6 +16515,15 @@ mutants:
           		if err := t.Store.WithGlobal(ctx, store.TxOpts{}, func(g store.GlobalTx) error {
           			if _, err := g.AdminNoticeAppendAll(adminnotice.Notice{Kind: adminnotice.SMSGatewayChanged, At: env.Now()}); err != nil {
           				return err
+          			}
+          			sealed, err := g.SMSCredentialsSealed()
+          			if err != nil {
+          				return err
+          			}
+          			for _, r := range sealed {
+          				if r.Pending && r.Provider == provider && !opensWith(sms.OpenCredentials(t.Keys, r.ID, r.Provider, r.CT)) {
+          					return errors.New("the pending credentials do not open")
+          				}
           			}
           			id, ok, err := g.SMSGatewayConfirmCredentials(provider, *hint, fp)
           			if err != nil {

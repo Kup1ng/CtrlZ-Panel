@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 // TestAPendingPairIsNotReplacedByAnotherPut is db-r19-2. The console confirms by a hint the stager
@@ -118,12 +119,21 @@ func TestTwoStagesAtOnceLeaveExactlyOneWinner(t *testing.T) {
 		}
 		second <- ok
 	}()
-	// The second statement is blocked on the first's row lock; give it time to get there so that the
-	// order under test (a write that waited, then re-read the predicate) is the one that runs.
+	// The order under test is a write that waited on the row lock and then re-read the predicate, so
+	// wait until Postgres reports a backend parked on a lock instead of guessing how long the second
+	// goroutine needs to get there (a slow runner passed a fixed pause without the race ever running).
+	super := f.superConn(t)
+	testwait.UntilEvery(t, 20*time.Second, 25*time.Millisecond, "the second stage to wait for the first transaction's row lock", func() bool {
+		var n int
+		if err := super.QueryRow(f.ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n > 0
+	})
 	select {
 	case <-second:
 		t.Fatal("the second stage did not wait for the first transaction's row lock")
-	case <-time.After(1 * time.Second):
+	default:
 	}
 	close(release)
 	if ok := <-first; !ok {
