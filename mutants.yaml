@@ -15432,7 +15432,7 @@ mutants:
           if err := error(nil); err != nil {
     must_fail:
       - pkg: ./internal/store
-        tests: [TestCapsRaceHarness]
+        tests: [TestSessionsTrimWaitsForTheUserLock]
   - id: proof-before-work-a-package-level-var-must-be-a-literal
     rule: proof-before-work
     finding: tenant-r18-15
