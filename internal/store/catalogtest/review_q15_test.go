@@ -17,6 +17,8 @@ import (
 // Question 15 (owner decision of 2026-11-24, migration 0061, finding db-r18-17): row-level security under every
 // definer function that acts for a tenant. The tests below are the behaviour half; the shape of the catalog is judged
 // by checks 04, 05, 10 and 12 and by TestScopedRoleSeesOneTenantOnEveryTableItReaches.
+// None of them is a test of the Go statements of the issue (internal/api and internal/auth/otp drive those); they read the
+// database the migration made, as the roles the services log in as.
 
 // TestTheMovedFunctionsAreIsolatedWithoutTheirPredicate is the proof that the policy, and not the body, keeps the
 // tenants apart for the four functions question 15 put under row-level security (the three it moved to ctrlz_scoped
