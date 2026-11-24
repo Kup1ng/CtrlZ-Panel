@@ -1,0 +1,81 @@
+-- Review round 1 of questions 17 and 19 (dec-c-r1-6): the daily cap of notice SMS is counted per kind.
+--
+-- 0062 counted the audit rows of both actions against the one cap, so a holder of a session could regenerate the
+-- recovery codes three times, spend the day's messages, and then add a passkey (the way back in that a password
+-- change does not remove) with no SMS at all. The messages of one kind must not be spendable to silence the other,
+-- so the count is over the audit rows of the action that made THIS notice: passkey.add for a passkey,
+-- recovery.regenerate for the codes. The signature, the owner, the grants and the EXECUTE of the function are the
+-- ones of 0062; only the body changes.
+--
+-- A new file and not an edit of 0062: that file was already published to the CI snapshot of this branch, and a
+-- published migration is never edited (rule applied-migrations-are-frozen).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+SET LOCAL lock_timeout = '5s';
+
+SET ROLE ctrlz_auth;
+GRANT USAGE, CREATE ON SCHEMA ctrlz_fn TO ctrlz_scoped;
+RESET ROLE;
+
+SET ROLE ctrlz_scoped;
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.tenant_notice_sms(p_user_id uuid, p_notice_id uuid, p_cap integer)
+RETURNS boolean
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant   uuid := ctrlz.current_tenant_id();
+  v_template text;
+  v_phone    text;
+  v_locale   text;
+  v_n        bigint;
+BEGIN
+  IF v_tenant IS NULL OR p_user_id IS NULL OR p_notice_id IS NULL OR p_cap IS NULL THEN
+    RETURN false;
+  END IF;
+
+  -- The kind of the notice names the template; any other kind of notice has no SMS.
+  SELECT CASE n.kind WHEN 'passkey_added' THEN 'notice_passkey'
+                     WHEN 'recovery_codes_regenerated' THEN 'notice_recovery' END
+    INTO v_template
+    FROM ctrlz.notifications n
+   WHERE n.tenant_id = v_tenant AND n.id = p_notice_id;
+  IF v_template IS NULL THEN
+    RETURN false;
+  END IF;
+
+  -- Only a phone the account proved is told.
+  SELECT u.phone_e164, u.locale INTO v_phone, v_locale
+    FROM ctrlz.users u
+   WHERE u.tenant_id = v_tenant AND u.id = p_user_id AND u.phone_verified_at IS NOT NULL;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+
+  -- The audit row of the change that made this notice is already written, so it is one of the rows counted. Only
+  -- the rows of this notice's own action count, so one kind cannot spend the other's messages.
+  SELECT pg_catalog.count(*) INTO v_n
+    FROM ctrlz.tenant_audit_log a
+   WHERE a.tenant_id = v_tenant
+     AND a.action = CASE v_template WHEN 'notice_passkey' THEN 'passkey.add' ELSE 'recovery.regenerate' END
+     AND a.at > pg_catalog.now() - interval '24 hours';
+  IF ctrlz.cap_reached(v_n - 1, p_cap) THEN
+    RETURN false;
+  END IF;
+
+  -- No conflict target: a target would need SELECT on the table. The id is the notice's, so a second call for
+  -- the same notice queues nothing.
+  INSERT INTO ctrlz.sms_outbox (id, kind, phone_e164, template_key, locale)
+  VALUES (p_notice_id, 'notice', v_phone, v_template, v_locale)
+  ON CONFLICT DO NOTHING;
+  RETURN FOUND;
+END
+$$;
+-- +goose StatementEnd
+RESET ROLE;
+
+SET ROLE ctrlz_auth;
+REVOKE USAGE, CREATE ON SCHEMA ctrlz_fn FROM ctrlz_scoped;
+RESET ROLE;
