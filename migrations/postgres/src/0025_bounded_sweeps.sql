@@ -1,0 +1,55 @@
+-- P1 auth review round 5, rule bounded-sweeps (internal/sweepbatch, internal/lint
+-- TestBoundedSweeps; findings sms-r1-1, sms-r1-2, sms-r1-16, sms-r2-4).
+--
+-- Every retention or expiry statement is a batch bounded by primary key with a LIMIT that
+-- is a parameter, and runs in a transaction of its own. All of them were already, but
+-- worker_sweep_pending_totp (0020): it cleared every abandoned TOTP setup of a tenant in
+-- one statement, on the reasoning that few users match. A tenant whose users all started a
+-- setup and left is one statement over every user, and a rule with a size exception is a
+-- rule the next sweep takes the same exception from. The function now takes the batch size,
+-- clears at most that many, and returns how many; the sweeper repeats the call, each in its
+-- own transaction, until a call returns fewer than it was allowed.
+--
+-- Same predicate as before (a setup never confirmed and older than 15 minutes), same
+-- tenant scope. The function is replaced, so its grant is repeated; the old no-argument
+-- form is dropped.
+--
+-- A new file and not an edit of an applied one (README, Rules).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+SET ROLE ctrlz_auth;
+
+DROP FUNCTION ctrlz_fn.worker_sweep_pending_totp();
+
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.worker_sweep_pending_totp(p_limit integer)
+RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant uuid := ctrlz.current_tenant_id();
+  v_n      integer;
+BEGIN
+  IF v_tenant IS NULL OR p_limit IS NULL OR p_limit < 1 THEN
+    RETURN 0;
+  END IF;
+  -- The outer predicate repeats the subselect's: a setup confirmed between the two reads
+  -- must keep its seed.
+  UPDATE ctrlz.users u SET totp_secret_ct = NULL, totp_pending_at = NULL
+   WHERE u.id IN (SELECT s.id FROM ctrlz.users s
+                   WHERE s.tenant_id = v_tenant AND s.totp_enabled_at IS NULL
+                     AND s.totp_pending_at < pg_catalog.now() - interval '15 minutes'
+                   LIMIT LEAST(p_limit, 10000))
+     AND u.tenant_id = v_tenant AND u.totp_enabled_at IS NULL;
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN v_n;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.worker_sweep_pending_totp(integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.worker_sweep_pending_totp(integer) TO ctrlz_worker;
+
+RESET ROLE;

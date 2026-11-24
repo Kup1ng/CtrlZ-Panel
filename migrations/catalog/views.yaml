@@ -1,0 +1,7 @@
+# Every view in ctrlz. All are security_invoker, and there are no
+# materialized views, because they ignore RLS. Grants are in grants.yaml.
+views:
+  - hub_endpoint_index
+  - tenant_endpoint_status
+  - tenant_profile_counts
+  - admin_tenant_summary
