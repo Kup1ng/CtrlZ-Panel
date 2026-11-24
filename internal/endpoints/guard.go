@@ -97,6 +97,10 @@ type Guard struct {
 	actor    Actor
 	probe    bool
 	verified map[uuid.UUID]secret.String // profile to the hash that was verified
+	// verifiedOn lists the verified profiles with the Endpoint each was needed on at the probe, in the order they were checked.
+	// Check records a used row for every one of them, whether or not the write still needs it: the rows may have changed
+	// between the probe and the write, and a password that was confirmed and charged belongs in the trail all the same.
+	verifiedOn []needed
 }
 
 // Begin takes step 4 of the lock order (spec 3.7): every profile the request names, key-shared in id order, and every
@@ -254,9 +258,20 @@ func (g *Guard) Check(tx store.Tx, before, after map[uuid.UUID]*Input) error {
 	if g.probe {
 		return &probeResult{needed: need}
 	}
+	recorded := map[uuid.UUID]bool{}
 	for _, n := range need {
 		if _, ok := g.verified[n.Profile]; !ok {
 			return &Error{Kind: KindConflict}
+		}
+		if err := audit.Tenant(tx, g.actor.User, g.actor.IP, audit.ProfileLockPasswordUsed{ProfileID: n.Profile, EndpointID: n.Endpoint}); err != nil {
+			return err
+		}
+		recorded[n.Profile] = true
+	}
+	// A verified password the write no longer needs (the rows moved between the probe and the write) is recorded too.
+	for _, n := range g.verifiedOn {
+		if recorded[n.Profile] {
+			continue
 		}
 		if err := audit.Tenant(tx, g.actor.User, g.actor.IP, audit.ProfileLockPasswordUsed{ProfileID: n.Profile, EndpointID: n.Endpoint}); err != nil {
 			return err
@@ -410,7 +425,7 @@ func (e *Env) Run(ctx context.Context, st *store.Store, tenant uuid.UUID, opts s
 		}
 	}
 	if err := withRetry(ctx, st, tenant, opts, func(tx store.Tx) error {
-		return body(tx, &Guard{e: e, actor: a.Actor, verified: verified})
+		return body(tx, &Guard{e: e, actor: a.Actor, verified: verified, verifiedOn: used})
 	}); err != nil {
 		return refuse(err)
 	}

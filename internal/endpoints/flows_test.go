@@ -121,9 +121,14 @@ type fakeVerifier struct {
 	failed   []uuid.UUID
 	used     []uuid.UUID
 	accepted []uuid.UUID
+	// onCheck runs inside a password check, which is where the rows of a real request can change under it.
+	onCheck func()
 }
 
 func (v *fakeVerifier) CheckLockPassword(_ context.Context, profile uuid.UUID, pw, _ secret.String) (bool, error) {
+	if v.onCheck != nil {
+		v.onCheck()
+	}
 	v.calls = append(v.calls, profile)
 	return profile != v.wrongFor && pw.Reveal() == v.right, nil
 }
@@ -788,5 +793,33 @@ func TestPatchClientAnswersTheRowItWrote(t *testing.T) {
 	}
 	if _, err := f.env.PatchClient(f.ctx, f.st, f.A.Tenant, opts, a, ep.ID, uuid.New(), endpoints.ClientChange{Alias: &alias}); refusal(t, err).Kind != endpoints.KindNotFound {
 		t.Error("a client that is gone")
+	}
+}
+
+// A password that was verified for the probe but is not needed by the write that commits (the rows moved while Argon2 ran)
+// still leaves its used row: the owner's trail shows which password was confirmed (p3-D2-r2-1, r2-3).
+func TestVerifiedPasswordTheWriteNoLongerNeedsIsAudited(t *testing.T) {
+	f := newFx(t)
+	p1 := f.newProfile(t, f.A.Tenant, "locked")
+	ep := f.create(t, f.A.Tenant, p1, "guarded")[0]
+	f.lock(t, p1)
+	v := &fakeVerifier{right: "right-password"}
+	// While the password is checked, another request switches the Endpoint off: the write then removes nothing.
+	v.onCheck = func() {
+		f.exec(t, `UPDATE ctrlz.endpoints SET admin_state = 'soft_disabled' WHERE id = $1`, ep.ID)
+	}
+	soft := "soft_disabled"
+	if _, err := f.env.Patch(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, v, pw(p1, "right-password")), ep.ID, endpoints.Patch{AdminState: &soft}); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.calls) != 1 {
+		t.Fatalf("%d checks", len(v.calls))
+	}
+	if n := f.count(t, `SELECT count(*) FROM ctrlz.tenant_audit_log WHERE tenant_id = $1 AND action = 'profile.lock_password_used'`, f.A.Tenant); n != 1 {
+		t.Errorf("%d used rows for a password that was verified and charged", n)
+	}
+	// The other tenant's trail is untouched.
+	if n := f.count(t, `SELECT count(*) FROM ctrlz.tenant_audit_log WHERE tenant_id = $1 AND action = 'profile.lock_password_used'`, f.B.Tenant); n != 0 {
+		t.Errorf("%d used rows in the other tenant", n)
 	}
 }

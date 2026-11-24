@@ -2210,6 +2210,7 @@ paths:
       x-ctrlz-token: write
       x-ctrlz-lock: none
       x-ctrlz-outbox: none
+      x-ctrlz-max-body: 65536
       requestBody:
         required: true
         content:
