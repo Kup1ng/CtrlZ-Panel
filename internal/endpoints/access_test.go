@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -637,5 +638,93 @@ func TestChallengeForClaimOverlappingASuspendedOne(t *testing.T) {
 	_, err = f.env.OpenChallenge(f.ctx, f.st, f.A.Tenant, opts, ep.ID, y.Claim.ID)
 	if e := refusal(t, err); e.Kind != endpoints.KindIPSuspended {
 		t.Errorf("a challenge over a suspended claim: %v", e)
+	}
+}
+
+// A challenge refused by the tenant-wide bound while the claim holds no live challenge says 60 seconds, not 1: min() over no
+// rows is NULL and GREATEST skips a NULL, so the fallback has to sit inside it (p3-D3-r2-1). The bound is reached with the
+// live challenges of a claim that was released since, which still count for the tenant.
+func TestChallengeRetryWithNoLiveChallengeOfTheClaim(t *testing.T) {
+	f := newFx(t)
+	ep := f.create(t, f.A.Tenant, f.A.Profile, "e")[0]
+	f.exec(t, `UPDATE ctrlz.tenant_entitlements SET max_ip_claims = 1 WHERE tenant_id = $1`, f.A.Tenant)
+	if n := f.count(t, `SELECT count(*) FROM ctrlz.tenant_entitlements WHERE tenant_id = $1 AND max_ip_claims = 1`, f.A.Tenant); n != 1 {
+		t.Fatal("the tenant's claim limit was not set")
+	}
+	c1, c2 := "203.0.113.50/32", "203.0.113.51/32"
+	first, err := f.env.RequestClaim(f.ctx, f.st, f.A.Tenant, opts, ep.ID, endpoints.ClaimAsk{Cidr: &c1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 10; i++ {
+		if _, err := f.env.OpenChallenge(f.ctx, f.st, f.A.Tenant, opts, ep.ID, first.Claim.ID); err != nil {
+			t.Fatalf("challenge %d: %v", i, err)
+		}
+	}
+	f.exec(t, `UPDATE ctrlz.ip_claims SET state = 'released' WHERE id = $1`, first.Claim.ID)
+	second, err := f.env.RequestClaim(f.ctx, f.st, f.A.Tenant, opts, ep.ID, endpoints.ClaimAsk{Cidr: &c2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ten live challenges are held for a limit of one claim and one claim held: the bound is ten, and this claim has none.
+	_, err = f.env.OpenChallenge(f.ctx, f.st, f.A.Tenant, opts, ep.ID, second.Claim.ID)
+	if e := refusal(t, err); e.Kind != endpoints.KindTooManyChallenges || e.RetryAfter != 60 {
+		t.Errorf("a refusal by the tenant-wide bound: %v retry %d, want 60", e, e.RetryAfter)
+	}
+}
+
+// A claim that another writer moves while the open waits is answered as it is now (p3-D3-r2-2). The test holds the tenant's
+// claim lock in a transaction of its own, so the open has read the claim and waits inside ip_claim_open_challenge; the claim
+// is then released or suspended and the lock freed. The old code answered 429 from the state it had read before.
+func TestChallengeForAClaimMovedWhileWaiting(t *testing.T) {
+	for _, c := range []struct {
+		state string
+		want  endpoints.Kind
+	}{{"released", endpoints.KindNotFound}, {"suspended", endpoints.KindIPSuspended}} {
+		t.Run(c.state, func(t *testing.T) {
+			f := newFx(t)
+			ep := f.create(t, f.A.Tenant, f.A.Profile, "e")[0]
+			cidr := "203.0.113.60/32"
+			r, err := f.env.RequestClaim(f.ctx, f.st, f.A.Tenant, opts, ep.ID, endpoints.ClaimAsk{Cidr: &cidr})
+			if err != nil {
+				t.Fatal(err)
+			}
+			super, err := f.db.Super(f.ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = super.Close(f.ctx) }()
+			tx, err := super.Begin(f.ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback(f.ctx) }()
+			if _, err := tx.Exec(f.ctx, `SELECT pg_advisory_xact_lock(hashtextextended('ctrlz.ip_claim_request:' || $1::text, 0))`, f.A.Tenant.String()); err != nil {
+				t.Fatal(err)
+			}
+			wait := store.TxOpts{LockWait: 60 * time.Second}
+			done := make(chan error, 1)
+			go func() {
+				_, err := f.env.OpenChallenge(f.ctx, f.st, f.A.Tenant, wait, ep.ID, r.Claim.ID)
+				done <- err
+			}()
+			// The open is waiting once a session waits for an advisory lock; the claim was read before that.
+			deadline := time.Now().Add(30 * time.Second)
+			for f.count(t, `SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`) == 0 {
+				if time.Now().After(deadline) {
+					t.Fatal("the open never waited for the claim lock")
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+			if _, err := tx.Exec(f.ctx, `UPDATE ctrlz.ip_claims SET state = $2 WHERE id = $1`, r.Claim.ID, c.state); err != nil {
+				t.Fatal(err)
+			}
+			if err := tx.Commit(f.ctx); err != nil {
+				t.Fatal(err)
+			}
+			if e := refusal(t, <-done); e.Kind != c.want {
+				t.Errorf("a claim %s while the open waited: %v", c.state, e)
+			}
+		})
 	}
 }

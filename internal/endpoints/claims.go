@@ -144,6 +144,17 @@ func (e *Env) OpenChallenge(ctx context.Context, st *store.Store, tenant uuid.UU
 			}
 			return nil
 		}
+		// The claim is read again: the first read took no row lock, and another tenant's take (which releases the claim) or the
+		// registration sweep (which suspends it) can commit between that read and the function, neither taking this Endpoint's
+		// row. The function's FOR UPDATE waited for that commit, so this read sees the move, and the answer fits the claim as it
+		// is now and not a 429 for a claim that is gone or suspended (p3-D3-r2-2).
+		c, ok, err = tx.ClaimGet(endpoint, claim)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return notFound()
+		}
 		if c.State == "suspended" {
 			return &Error{Kind: KindIPSuspended}
 		}

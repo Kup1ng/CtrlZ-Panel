@@ -158,15 +158,6 @@ func (t Tx) AuthorizedExisting(endpoint uuid.UUID, cidrs []netip.Prefix) ([]int,
 	return out, sanitize(rows.Err())
 }
 
-const qAuthorizedContaining = `SELECT a.id FROM ctrlz.authorized_ips a
-WHERE a.tenant_id = $1 AND a.endpoint_id = $2 AND a.id = ANY($3::uuid[]) AND a.cidr >>= $4::inet ORDER BY a.id`
-
-// AuthorizedContaining says which of the rows hold the address (spec 5 rule 1: a row that holds the caller's own address is
-// not deleted). An invalid address holds none.
-func (t Tx) AuthorizedContaining(endpoint uuid.UUID, ids []uuid.UUID, ip netip.Addr) ([]uuid.UUID, error) {
-	return idRows(t.tx.Query(t.ctx, qAuthorizedContaining, t.tenant, endpoint, ids, addrArg(ip)))
-}
-
 // qAuthorizedInsert adds all the prefixes or none: the WHERE does not depend on the row, so the tenant-wide cap of manual
 // rows lets the whole request in or stops it. "After the write" is count + n, so the compare is count + n - 1 against
 // ctrlz.cap_reached's "spent >= cap". Learned rows (secure_dns, ddns) are not counted: their writers bound them per
@@ -397,11 +388,13 @@ func (t Tx) ClaimOverlapsSuspended(claim uuid.UUID) (bool, error) {
 	return yes, nil
 }
 
-const qClaimChallengeRetry = `SELECT COALESCE(GREATEST(1, ceil(extract(epoch FROM (min(x.expires_at) - now())))), 60)::int
+const qClaimChallengeRetry = `SELECT GREATEST(1, COALESCE(ceil(extract(epoch FROM (min(x.expires_at) - now()))), 60))::int
 FROM ctrlz.ip_proof_challenges x WHERE x.tenant_id = $1 AND x.claim_id = $2 AND x.expires_at > now()`
 
 // ClaimChallengeRetry says in how many seconds the oldest live challenge of the claim ends, which is when a refused open can
-// succeed again (the caps of PS 8); 60 when the claim has none and the tenant-wide bound is what refused.
+// succeed again (the caps of PS 8); 60 when the claim has none and the tenant-wide bound is what refused. The 60 sits inside
+// GREATEST: min() of no rows is NULL and GREATEST ignores a NULL, so a COALESCE outside it is never reached and the answer
+// would be 1 second (p3-D3-r2-1).
 func (t Tx) ClaimChallengeRetry(claim uuid.UUID) (int, error) {
 	var n int32
 	if err := t.tx.QueryRow(t.ctx, qClaimChallengeRetry, t.tenant, claim).Scan(&n); err != nil {
