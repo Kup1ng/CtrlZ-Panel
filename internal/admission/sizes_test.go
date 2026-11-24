@@ -66,8 +66,12 @@ func TestTheHeavyBudgetFitsTheContainer(t *testing.T) {
 			t.Errorf("a weight of %d MiB is above the pool of %d MiB", w>>20, admission.Pool>>20)
 		}
 	}
-	// 128 files of at most AnswerBytes are the 2 GiB of the volume in the spec.
-	if disk := int64(admission.Places) * admission.AnswerBytes; disk != 2<<30 {
-		t.Errorf("the spool is %d bytes at the most, the spec says 2 GiB", disk)
+	// 128 files of at most AnswerBytes are 2 GiB of the volume, and the spilled answers of ordinary operations are 128 shares
+	// of AnswerTenant on top of them: 2.5 GiB, which is what the spec says.
+	if disk := int64(admission.Places)*admission.AnswerBytes + admission.AnswerPool; disk != 2<<30+512<<20 {
+		t.Errorf("the spool is %d bytes at the most, the spec says 2.5 GiB", disk)
+	}
+	if admission.AnswerPool != int64(admission.Places)*admission.AnswerTenant {
+		t.Errorf("the pool of spilled answers is not one share for each place")
 	}
 }

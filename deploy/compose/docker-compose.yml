@@ -216,7 +216,8 @@ services:
       # The spool of the heavy operations (spec 6.5): a disk volume, never a tmpfs, whose pages count as the container's
       # memory. The api empties it at start and refuses to start when it cannot write there.
       CTRLZ_SPOOL_DIR: /spool
-    # 128 files of at most 16 MiB are 2 GiB of disk at the most; the volume is empty at start (the image owns /spool).
+    # 128 files of at most 16 MiB and 128 shares of 4 MiB of spilled answers are 2.5 GiB of disk at the most; the volume is
+    # empty at start (the image owns /spool).
     volumes:
       - api_spool:/spool
     secrets: [pg_tenant_password, valkey_password_api, kek_user_totp, kek_otp_delivery, kek_auth_mac]

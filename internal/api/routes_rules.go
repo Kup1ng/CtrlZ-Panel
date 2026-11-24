@@ -309,6 +309,14 @@ func (s *Server) CreateRules(ctx context.Context, req gen.CreateRulesRequestObje
 	if b.ExpiresAt != nil {
 		in.Expiry.At, in.Expiry.HasAt = *b.ExpiresAt, true
 	}
+	// The answer is one object for each pattern, at most about 1.2 KiB each, and it is spilled to disk when it is above 64 KiB.
+	// The rules are committed before it is written, where no refusal can be given, so the room is reserved here, before
+	// the write, at 2 KiB for each pattern (p2-B3-r10-3).
+	if len(b.Patterns) > heldRulesFloor {
+		if e := httpx.HoldAnswer(ctx, int64(len(b.Patterns))*ruleAnswerBytes); e != nil {
+			return nil, e
+		}
+	}
 	out := gen.CreateRules201JSONResponse{Rules: []gen.Rule{}}
 	err = s.writeTx(ctx, pr.TenantID, func(tx store.Tx) error {
 		rows, err := s.prof.CreateRules(tx, uuid.UUID(req.Id), in)
@@ -320,6 +328,13 @@ func (s *Server) CreateRules(ctx context.Context, req gen.CreateRulesRequestObje
 	})
 	return out, err
 }
+
+// heldRulesFloor is the number of patterns of a rule create whose answer may be above 64 KiB, the size from which it is
+// spilled and counted; ruleAnswerBytes is what each pattern reserves, above the largest rule object there can be.
+const (
+	heldRulesFloor  = 32
+	ruleAnswerBytes = 2 << 10
+)
 
 // UpdateRule is PATCH /profiles/{id}/rules/{rule_id}.
 func (s *Server) UpdateRule(ctx context.Context, req gen.UpdateRuleRequestObject) (gen.UpdateRuleResponseObject, error) {

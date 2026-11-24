@@ -1509,6 +1509,7 @@ paths:
       tags: [profiles]
       operationId: listFolders
       summary: The rule folders of the profile
+      description: 'Errors: `server_busy` when the answer is large and the tenant already holds its share of answers that clients have not read yet; retry.'
       x-ctrlz-auth: session
       x-ctrlz-rate: user-read
       x-ctrlz-token: read
@@ -1653,6 +1654,7 @@ paths:
       description: |
         `folder` is a folder id or `root`; `q` is lowered, split on dots and matched as a substring of the rule key, a
         label with a non-ASCII letter by its A-label; `sort` is `pattern`, `created` or `updated`.
+        Errors: `server_busy` when the page is large and the tenant already holds its share of answers that clients have not read yet; retry.
       x-ctrlz-auth: session
       x-ctrlz-rate: user-read
       x-ctrlz-token: read
@@ -1882,6 +1884,7 @@ paths:
       tags: [profiles]
       operationId: getJob
       summary: One job
+      description: 'Errors: `server_busy` when the answer of a finished job is large and the tenant already holds its share of answers that clients have not read yet; retry.'
       x-ctrlz-auth: session
       x-ctrlz-rate: user-read
       x-ctrlz-token: read

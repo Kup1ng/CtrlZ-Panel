@@ -99,11 +99,11 @@ func (s *spoolFile) readAll(size int64) ([]byte, error) {
 
 // copyIn copies body to the file with one buffer of spoolChunk, setting the read deadline before each read. It returns the
 // bytes written. An error of the file is errSpoolWrite; any other is the body's own (a cut, a limit, a client that left).
-func copyIn(sp *spoolFile, body io.Reader, start time.Time, setDeadline func(time.Time)) (int64, error) {
+func copyIn(sp *spoolFile, body io.Reader, start time.Time, base time.Duration, setDeadline func(time.Time)) (int64, error) {
 	buf := make([]byte, spoolChunk)
 	var n int64
 	for {
-		setDeadline(earnedDeadline(start, readBase, n))
+		setDeadline(earnedDeadline(start, base, n))
 		m, err := body.Read(buf)
 		if m > 0 {
 			if _, werr := sp.write(buf[:m]); werr != nil {

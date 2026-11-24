@@ -28,6 +28,7 @@ const (
 	keyReqHeader
 	keyDeferred
 	keyHeld
+	keyAnswer
 )
 
 // DefaultBodyLimit is the request body limit of spec 2.3 step 4. Only the

@@ -67,6 +67,8 @@ type heavyRig struct {
 	reached atomic.Int32
 	// handler is what the stub does; nil answers 201.
 	handler http.HandlerFunc
+	// ordinary is what the stub of GET /jobs/{id}, an ordinary operation, does; nil answers 200.
+	ordinary http.HandlerFunc
 }
 
 const importPath = "/api/v1/profiles:import"
@@ -108,6 +110,14 @@ func newHeavyRig(t *testing.T, cfg admission.Config) *heavyRig {
 	}
 	built.Router.With(built.PerOp).Post("/v1/profiles:import", stub)
 	built.Router.With(built.PerOp).Get("/v1/profiles/{id}/export", stub)
+	built.Router.With(built.PerOp).Post("/v1/profiles/{id}/folders/{folder_id}:upload", stub)
+	built.Router.With(built.PerOp).Get("/v1/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if rig.ordinary != nil {
+			rig.ordinary(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 	root := chi.NewRouter()
 	root.Mount("/api", built.Router)
 	rig.h = root

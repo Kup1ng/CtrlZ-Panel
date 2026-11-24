@@ -3,6 +3,8 @@ package httpx
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http/httptest"
@@ -10,6 +12,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"runtime/metrics"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -96,7 +99,7 @@ func TestAnEarnedDeadline(t *testing.T) {
 			}
 			return time.Hour
 		}
-		got, err := copyIn(spool(), c, start, c.setDeadline)
+		got, err := copyIn(spool(), c, start, readBase, c.setDeadline)
 		if !errors.Is(err, errTimeout) || got != 1 {
 			t.Fatalf("a body stalled at byte 1: %d bytes, %v", got, err)
 		}
@@ -107,7 +110,7 @@ func TestAnEarnedDeadline(t *testing.T) {
 
 	t.Run("6 MiB at 33 KiB a second passes", func(t *testing.T) {
 		c := &fakeConn{now: start, chunk: spoolChunk, left: 6 << 20, step: time.Second * 32 / 33}
-		got, err := copyIn(spool(), c, start, c.setDeadline)
+		got, err := copyIn(spool(), c, start, readBase, c.setDeadline)
 		if err != nil || got != 6<<20 {
 			t.Fatalf("a body of 6 MiB at 33 KiB/s: %d bytes, %v", got, err)
 		}
@@ -118,7 +121,7 @@ func TestAnEarnedDeadline(t *testing.T) {
 
 	t.Run("a byte every two seconds earns nothing", func(t *testing.T) {
 		c := &fakeConn{now: start, chunk: 1, left: 1 << 20, step: 2 * time.Second}
-		got, err := copyIn(spool(), c, start, c.setDeadline)
+		got, err := copyIn(spool(), c, start, readBase, c.setDeadline)
 		if !errors.Is(err, errTimeout) {
 			t.Fatalf("a trickle ended with %v after %d bytes, want a timeout", err, got)
 		}
@@ -296,8 +299,42 @@ func TestAHeavyOperationHoldsLessThanItsWeight(t *testing.T) {
 			r.Header.Set("Idempotency-Key", "k")
 			rc := chi.NewRouteContext()
 			rc.URLParams.Add("id", "00000000-0000-4000-8000-000000000001")
+			rc.URLParams.Add("folder_id", "00000000-0000-4000-8000-000000000002")
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rc))
-			_ = v.CheckHeavy(r, op, []byte(body))
+			// The read of the spool file into one buffer of the size of the body is a live copy too.
+			raw := bytes.Clone([]byte(body))
+			_ = v.CheckHeavy(r, op, raw)
+		}
+	}
+	// decodes is what the handler of an Import or an Upload does with a legal body before it touches the database: the
+	// body check, the base64 decode, the scan, the schema check of the document array by array and the typed decode. The
+	// database part (the read of the profile, the merge, a Duplicate) needs Postgres and stays with the flow tests of B8.
+	decodes := func(op, body, component string, typed func(raw []byte, check profiles.Schema) error) func() {
+		return func() {
+			check(op, body)()
+			var wrapper struct {
+				Document string `json:"document"`
+			}
+			if err := json.Unmarshal([]byte(body), &wrapper); err != nil {
+				t.Error(err)
+				return
+			}
+			raw, err := base64.StdEncoding.Strict().DecodeString(wrapper.Document)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			schema := func(name string, doc []byte) ([]profiles.Field, error) {
+				probs, err := v.CheckDocument(context.Background(), name, doc)
+				out := make([]profiles.Field, 0, len(probs))
+				for _, p := range probs {
+					out = append(out, profiles.Field{Name: p.Pointer, Code: p.Code})
+				}
+				return out, err
+			}
+			if err := typed(raw, schema); err != nil {
+				t.Errorf("%s: a legal file was refused: %v", component, err)
+			}
 		}
 	}
 	// 5.5 million control characters in the document member: the check once built several strings of four times that.
@@ -307,6 +344,13 @@ func TestAHeavyOperationHoldsLessThanItsWeight(t *testing.T) {
 		{"a document of 5.5 million 0x7f", 48 << 20, check("POST /profiles:import", garbage)},
 		{"10,000 ids of one character", 16 << 20, check(batchKey, ids)},
 	}
+	// The largest legal files: 10,000 rules in 4 MiB, in base64 inside a body of 5.6 MiB (6.5 property 8, p2-B3-r9-3).
+	importBody, uploadBody := largestFileBody(t, false), largestFileBody(t, true)
+	cases = append(cases,
+		shapeCase{"the largest legal Import file", admission.WeightLarge, decodes("POST /profiles:import", importBody, "ProfileDocument",
+			func(raw []byte, c profiles.Schema) error { _, err := profiles.DecodeDocument(raw, c); return err })},
+		shapeCase{"the largest legal Upload file", admission.WeightLarge, decodes("POST /profiles/{id}/folders/{folder_id}:upload", uploadBody, "RulesDocument",
+			func(raw []byte, c profiles.Schema) error { _, err := profiles.DecodeRulesDocument(raw, c); return err })})
 	// The largest export there can be: 10,000 rules, 5,000 services, 500 folders and 1,000 filters, every string at its longest.
 	var exported counter
 	cases = append(cases, shapeCase{"an export of 10,000 rules with the longest pattern, comment and target", 32 << 20, func() {
@@ -321,6 +365,35 @@ func TestAHeavyOperationHoldsLessThanItsWeight(t *testing.T) {
 			t.Errorf("%s: the heap it added reached %d MiB live, its weight is %d MiB", c.name, (peakLive-base)>>20, c.weight>>20)
 		}
 	}
+}
+
+// largestFileBody is the body of an Import (or of an Upload, rules only) with 10,000 rules, each as long as the file of 4 MiB
+// allows with a target, a comment and an expiry: the most objects and the most live bytes a legal file has.
+func largestFileBody(t *testing.T, rulesOnly bool) string {
+	t.Helper()
+	var raw []byte
+	for pattern := 200; pattern >= 20; pattern -= 10 {
+		long := func(n int, c string) string { return strings.Repeat(c, n) }
+		target := &profiles.DocTarget{Kind: "host", Host: long(100, "h")}
+		rules := make([]profiles.DocRule, 10000)
+		for i := range rules {
+			// A distinct key for each rule, so that no later step can fold them into one.
+			rules[i] = profiles.DocRule{Pattern: strconv.Itoa(i) + long(pattern, "p"), Action: "redirect", Target: target,
+				ExpiresAt: "2030-01-01T00:00:00.000000000+00:00", Comment: long(64, "c")}
+		}
+		if rulesOnly {
+			raw = profiles.RulesDocument{Format: profiles.RulesFormat, Version: profiles.DocVersion, Rules: rules}.Encode()
+		} else {
+			raw = profiles.Document{Format: profiles.DocFormat, Version: profiles.DocVersion, Name: "n", Kind: "custom", Rules: rules}.Encode()
+		}
+		if len(raw) < profiles.DocFileBytes {
+			break
+		}
+	}
+	if len(raw) < 3<<20 || len(raw) >= profiles.DocFileBytes {
+		t.Fatalf("the largest legal file is %d bytes", len(raw))
+	}
+	return `{"document":"` + base64.StdEncoding.EncodeToString(raw) + `"}`
 }
 
 // measureHeap runs fn and returns the heap before it and the highest live heap the collector found while it ran, with the

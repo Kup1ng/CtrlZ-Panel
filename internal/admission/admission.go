@@ -34,6 +34,12 @@ const (
 	QueueWait = 120 * time.Second
 	// WorkLimit is the deadline of the work itself.
 	WorkLimit = 10 * time.Second
+	// AnswerPool is the disk the answers of ordinary operations may hold while their client reads: an answer above 64 KiB
+	// is spilled to a file so that no memory waits for a client (p2-B3-r9-4, r10-1 to r10-3). AnswerTenant is what one
+	// tenant may hold of it, and the pool is that share for as many tenants as there are places, so another tenant is
+	// refused only when 128 tenants hold their shares. The sizes test adds the pool to the disk of 6.5 property 11.
+	AnswerPool   = Places * AnswerTenant
+	AnswerTenant = 4 << 20
 	// AnswerBytes is the most an answer may have: above it the request is a 500. A test holds the largest export there can
 	// be below it.
 	AnswerBytes = 16 << 20
@@ -51,6 +57,9 @@ var (
 	ErrBusy = errors.New("admission: no place")
 	// ErrQueueWait is a request that waited the whole QueueWait.
 	ErrQueueWait = errors.New("admission: the queue wait ended")
+	// ErrAnswerBusy is an answer whose bytes the pool of held answers cannot take now: the tenant's share is used, or the
+	// pool is.
+	ErrAnswerBusy = errors.New("admission: no room for the answer")
 	// ErrWeight is a weight the pool can never hold (a programming error: the weights are constants).
 	ErrWeight = errors.New("admission: the weight is above the pool")
 )
@@ -64,6 +73,10 @@ type Config struct {
 	Pool      int64
 	QueueWait time.Duration
 	WorkLimit time.Duration
+	// ReadBase is the idle bound of a body (6.5 property 3), 15 s when zero. A test shortens it.
+	ReadBase time.Duration
+	// AnswerPool and AnswerTenant default to the constants of the same names.
+	AnswerPool, AnswerTenant int64
 }
 
 // Admission is the one admission point of a process. Make it once and give it to the pipeline.
@@ -72,6 +85,7 @@ type Admission struct {
 	places    int
 	queueWait time.Duration
 	workLimit time.Duration
+	readBase  time.Duration
 	pool      int64
 	sem       *semaphore.Weighted
 
@@ -79,6 +93,10 @@ type Admission struct {
 	taken  map[string]struct{}
 	inPool int64
 	queued int
+
+	answerPool, answerTenant int64
+	answers                  int64
+	answersOf                map[string]int64
 }
 
 // New makes the admission point. It empties the spool directory (a file left by a process that died is data of a client
@@ -86,8 +104,14 @@ type Admission struct {
 // and not at the first import.
 func New(c Config) (*Admission, error) {
 	a := &Admission{
-		dir: c.Dir, places: c.Places, pool: c.Pool, queueWait: c.QueueWait, workLimit: c.WorkLimit,
-		taken: map[string]struct{}{},
+		dir: c.Dir, places: c.Places, pool: c.Pool, queueWait: c.QueueWait, workLimit: c.WorkLimit, readBase: c.ReadBase,
+		taken: map[string]struct{}{}, answerPool: c.AnswerPool, answerTenant: c.AnswerTenant, answersOf: map[string]int64{},
+	}
+	if a.answerPool <= 0 {
+		a.answerPool = AnswerPool
+	}
+	if a.answerTenant <= 0 {
+		a.answerTenant = AnswerTenant
 	}
 	if a.places <= 0 {
 		a.places = Places
@@ -147,6 +171,9 @@ func (a *Admission) Dir() string { return a.dir }
 // WorkLimit is the deadline of the work step.
 func (a *Admission) WorkLimit() time.Duration { return a.workLimit }
 
+// ReadBase is the time a body may stall before it is cut; zero means the caller's default.
+func (a *Admission) ReadBase() time.Duration { return a.readBase }
+
 // Place takes the tenant's place. A tenant has at most one (property 1), and the process has Places of them: either
 // refusal is ErrBusy. The release is safe to call more than once.
 func (a *Admission) Place(tenant string) (release func(), err error) {
@@ -200,6 +227,42 @@ func (a *Admission) Acquire(ctx context.Context, n int64) (release func(), err e
 			a.sem.Release(n)
 		})
 	}, nil
+}
+
+// HoldAnswer takes n bytes of the pool of held answers for the tenant, without waiting: a refusal is ErrAnswerBusy and the
+// request is 503 server_busy, which the client retries. It never waits because the bytes are freed by clients that may
+// not read for 30 s, and a request parked here would be one more thing a slow reader costs. An n above a tenant's share
+// is taken as the share, so one legal answer is never refused for its size alone. The release is safe to call more than once.
+func (a *Admission) HoldAnswer(tenant string, n int64) (release func(), err error) {
+	n = min(n, a.answerTenant, a.answerPool)
+	if n <= 0 {
+		return func() {}, nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.answersOf[tenant]+n > a.answerTenant || a.answers+n > a.answerPool {
+		return nil, ErrAnswerBusy
+	}
+	a.answersOf[tenant] += n
+	a.answers += n
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			a.answers -= n
+			if a.answersOf[tenant] -= n; a.answersOf[tenant] == 0 {
+				delete(a.answersOf, tenant)
+			}
+		})
+	}, nil
+}
+
+// AnswersHeld is the bytes held by HoldAnswer now, for tests.
+func (a *Admission) AnswersHeld() int64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.answers
 }
 
 // Queued is how many requests wait for weight now, for tests.

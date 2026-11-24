@@ -6,8 +6,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -441,6 +443,19 @@ func (a *API) perOp(next http.Handler) http.Handler {
 				a.serveHeavy(w, r, next, op, res, heavyIn{cookie: cookie, lookupKey: lookupKey, base: base})
 				return
 			}
+			if a.p.Admission != nil && res.Tenant != "" {
+				// An ordinary operation of a tenant answers through answerWriter: a big answer is spilled to a file and
+				// sent from here, so a client that does not read holds disk, counted per tenant, and no memory (answer.go).
+				hold := &answerHold{adm: a.p.Admission, tenant: res.Tenant}
+				defer hold.releaseAll()
+				aw := &answerWriter{w: w, hold: hold, dir: a.p.Admission.Dir()}
+				defer aw.close()
+				r = r.WithContext(context.WithValue(ctx, keyAnswer, hold))
+				_, setWrite := deadlinesOf(w)
+				next.ServeHTTP(aw, r)
+				aw.finish(a, r, setWrite)
+				return
+			}
 		}
 
 		next.ServeHTTP(w, r)
@@ -592,10 +607,18 @@ type heavyIn struct {
 // table under its weight.
 func weightOf(op apispec.Operation, size int64) int64 {
 	switch op.ID {
-	case "importProfile", "uploadFolderRules":
+	case "importProfile":
 		if size > 1<<20 {
 			return admission.WeightLarge
 		}
+	case "uploadFolderRules":
+		if size > 1<<20 {
+			return admission.WeightLarge
+		}
+		// A one-rule file still merges into the whole profile: UploadRules reads every rule of it (up to 10,000), keeps a
+		// copy of each in a map and builds two more maps of them, 22 MiB live at the longest legal values whatever the
+		// size of the file (p2-B3-r9-6). So the body does not size it below the export's weight.
+		return admission.WeightExport
 	case "exportProfile", "exportFolderRules", "duplicateProfile":
 		return admission.WeightExport
 	}
@@ -608,15 +631,24 @@ func weightOf(op apispec.Operation, size int64) int64 {
 func (a *API) serveHeavy(w http.ResponseWriter, r *http.Request, next http.Handler, op apispec.Operation, res Resolved, in heavyIn) {
 	adm := a.p.Admission
 	ctx := r.Context()
+	setRead, setWrite := deadlinesOf(w)
+	// Every answer of this function goes through refuse: the server's own WriteTimeout runs from the headers and a body, a
+	// queue wait or a slow answer outlives it, so the write deadline is moved to a fresh one first (6.5 property 3). Without
+	// it a 503 after the 120 s queue wait, or a 400 after a slow body, is written past the deadline and the client sees a
+	// closed connection and no status (p2-B3-r9-1, r9-5). The answer written from the file sets its own, earned one.
+	refuse := func(e *Error) {
+		setWrite(earnedDeadline(time.Now(), writeBase, 0))
+		a.refuse(w, r, e)
+	}
 	if res.Tenant == "" {
-		a.refuse(w, r, Internal())
+		refuse(Internal())
 		return
 	}
 	// 2. The place: one for the tenant, so what a tenant can hold is one file, one queue entry and one slot whatever its
 	// sessions, members and connections. It is given back when this function returns, which is when the answer is sent.
 	releasePlace, err := adm.Place(res.Tenant)
 	if err != nil {
-		a.refuse(w, r, busy())
+		refuse(busy())
 		return
 	}
 	defer releasePlace()
@@ -625,7 +657,7 @@ func (a *API) serveHeavy(w http.ResponseWriter, r *http.Request, next http.Handl
 	paid := op.Rate == ratelimit.BulkWrite
 	if paid {
 		if e := a.chargeBulkTenant(ctx, res); e != nil {
-			a.refuse(w, r, e)
+			refuse(e)
 			return
 		}
 	}
@@ -636,7 +668,7 @@ func (a *API) serveHeavy(w http.ResponseWriter, r *http.Request, next http.Handl
 	}
 	refuseBusy := func() {
 		giveBack()
-		a.refuse(w, r, busy())
+		refuse(busy())
 	}
 	sp, err := newSpool(adm.Dir())
 	if err != nil {
@@ -646,22 +678,31 @@ func (a *API) serveHeavy(w http.ResponseWriter, r *http.Request, next http.Handl
 	defer sp.close()
 
 	// 4. Spool in: the body goes to the file in chunks of 32 KiB, with a deadline the bytes themselves earn.
-	setRead, setWrite := deadlinesOf(w)
 	var size int64
 	if r.Body != nil && r.Body != http.NoBody {
 		start := time.Now()
-		n, err := copyIn(sp, r.Body, start, setRead)
+		base := adm.ReadBase()
+		if base <= 0 {
+			base = readBase
+		}
+		n, err := copyIn(sp, r.Body, start, base, setRead)
 		if err != nil {
 			var mbe *http.MaxBytesError
+			var ne net.Error
 			switch {
 			case errors.Is(err, errSpoolWrite):
 				refuseBusy()
 			case errors.As(err, &mbe):
-				a.refuse(w, r, New(http.StatusRequestEntityTooLarge, CodeTooLarge))
+				refuse(New(http.StatusRequestEntityTooLarge, CodeTooLarge))
+			case errors.Is(err, os.ErrDeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()):
+				// A body cut by its own read deadline is 400 (6.5 property 3). It comes before the context check: net/http
+				// cancels the request context when a read of the connection fails, so a stalled client would else be a
+				// 499 that nobody reads (p2-B3-r9-1).
+				refuse(BadRequest())
 			case ctx.Err() != nil:
-				a.refuse(w, r, clientGone())
+				refuse(clientGone())
 			default:
-				a.refuse(w, r, BadRequest())
+				refuse(BadRequest())
 			}
 			return
 		}
@@ -673,13 +714,13 @@ func (a *API) serveHeavy(w http.ResponseWriter, r *http.Request, next http.Handl
 	switch {
 	case err == nil:
 	case ctx.Err() != nil:
-		a.refuse(w, r, clientGone())
+		refuse(clientGone())
 		return
 	case errors.Is(err, admission.ErrQueueWait):
 		refuseBusy()
 		return
 	default:
-		a.refuse(w, r, Internal())
+		refuse(Internal())
 		return
 	}
 	defer slot()
@@ -694,7 +735,7 @@ func (a *API) serveHeavy(w http.ResponseWriter, r *http.Request, next http.Handl
 		refuseBusy()
 		return
 	default:
-		a.refuse(w, r, Internal())
+		refuse(Internal())
 		return
 	}
 

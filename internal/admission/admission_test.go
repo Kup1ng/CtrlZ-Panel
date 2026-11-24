@@ -173,3 +173,42 @@ func TestADirectoryThatCannotBeUsedStopsTheStart(t *testing.T) {
 		t.Fatal("a directory that does not exist was taken for the spool directory")
 	}
 }
+
+// The pool of held answers is bounded for each tenant and for the process, never waits, and gives its bytes back once
+// (p2-B3-r9-4).
+func TestHeldAnswersAreBoundedPerTenantAndInTheProcess(t *testing.T) {
+	a := newAdm(t, admission.Config{AnswerPool: 10 << 20, AnswerTenant: 4 << 20})
+	r1, err := a.HoldAnswer("t1", 3<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.HoldAnswer("t1", 2<<20); !errors.Is(err, admission.ErrAnswerBusy) {
+		t.Fatalf("a tenant above its share: %v", err)
+	}
+	// Another tenant has its own share until the pool is used.
+	r2, err := a.HoldAnswer("t2", 4<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.HoldAnswer("t3", 4<<20); !errors.Is(err, admission.ErrAnswerBusy) {
+		t.Fatalf("a request that the pool cannot take: %v", err)
+	}
+	if got := a.AnswersHeld(); got != 7<<20 {
+		t.Fatalf("%d bytes held, want 7 MiB", got)
+	}
+	r1()
+	r1() // a second release gives back nothing more
+	if got := a.AnswersHeld(); got != 4<<20 {
+		t.Fatalf("%d bytes held after the first release, want 4 MiB", got)
+	}
+	// An answer above a tenant's share is taken as the share, never refused for its size alone.
+	r3, err := a.HoldAnswer("t3", 64<<20)
+	if err != nil {
+		t.Fatalf("a legal answer above the share: %v", err)
+	}
+	r2()
+	r3()
+	if got := a.AnswersHeld(); got != 0 {
+		t.Fatalf("%d bytes held after every release", got)
+	}
+}
