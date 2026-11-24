@@ -76,9 +76,7 @@ func (r *Runner) sweepClaims(ctx context.Context, job uuid.UUID, report Report) 
 	if job == uuid.Nil {
 		// The periodic sweep is bounded and resumes where the last one stopped. A job is not: it ends as done only when it has
 		// walked every tenant (it ends the walk with the error of a tenant it had to pass over, and then runs again).
-		r.sweepMu.Lock()
-		defer r.sweepMu.Unlock()
-		w.After, w.Bound = r.sweepAfter, r.sweepBudget
+		// The mutex guards the place only, never the walk: two runs at once repeat idempotent work and do no harm.		r.sweepMu.Lock()		w.After, w.Bound = r.sweepAfter, r.sweepBudget		r.sweepMu.Unlock()
 	}
 	last, more, err := r.forEachTenantWith(ctx, store.TxOpts{Batch: batch}, w, func(tx store.Tx) error {
 		if job != uuid.Nil {
@@ -131,10 +129,13 @@ func (r *Runner) sweepClaims(ctx context.Context, job uuid.UUID, report Report) 
 	if job == uuid.Nil && (err == nil || errors.Is(err, store.ErrRetry)) {
 		// A pass that stopped at its bound is resumed after its last tenant; one that reached the end of the list starts over.
 		// A walk that ended in an error other than a passed-over tenant leaves the place as it was.
-		r.sweepAfter = uuid.Nil
+		next := uuid.Nil
 		if more {
-			r.sweepAfter = last
+			next = last
 		}
+		r.sweepMu.Lock()
+		r.sweepAfter = next
+		r.sweepMu.Unlock()
 	}
 	return prog, err
 }

@@ -202,9 +202,13 @@ func TestSweepResumesAfterItsBound(t *testing.T) {
 	if got := r.states(); got["grace"] != 2 || got["active"] != 0 {
 		t.Fatalf("after the second run: %v", got)
 	}
-	// The third starts over at the first tenant: nothing is left to change.
-	if p := r.sweep(); p.Tenants != 1 || p.Graced != 0 {
+	// The second run stopped at its bound on the last tenant, so the third finds the end of the list at once and wraps; the
+	// fourth starts over at the first tenant, where nothing is left to change.
+	if p := r.sweep(); p.Tenants != 0 {
 		t.Fatalf("the third run: %+v", p)
+	}
+	if p := r.sweep(); p.Tenants != 1 || p.Graced != 0 {
+		t.Fatalf("the fourth run: %+v", p)
 	}
 }
 
