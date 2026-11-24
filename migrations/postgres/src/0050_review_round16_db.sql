@@ -1,0 +1,49 @@
+-- P1 auth review round 16, area database, roles and store (finding db-r16-19).
+--
+-- Inside one rank the rows of a multi-row write are locked in one order, by one shape: a locking subselect
+-- that orders by the key (internal/store/locks.go, rules.md topic 1, round 16). The Go statements took it;
+-- this function is the one definer function that writes rows of the tables those statements order
+-- (sessions and refresh tokens of a user) in plan order, and so met the worker's sweep and the user's own
+-- "log out all" in the opposite order. The body is that of 0020 with the two UPDATEs taking their rows
+-- through the ordered subselect (an UPDATE of non-key columns asks for FOR NO KEY UPDATE, which is what it
+-- takes anyway; FOR UPDATE would conflict with the key share of a refresh insert, db-r4-1). The signature,
+-- the owner, the grants and the ranks (sessions, refresh_tokens) are unchanged.
+--
+-- catalogtest TestDefinerWritesLockInKeyOrder holds the class: a definer function that writes, without the
+-- shape, a table that a Go statement orders fails.
+--
+-- A new file and not an edit of an applied one (README, Rules).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+SET ROLE ctrlz_auth;
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.admin_revoke_user_sessions(p_user_id uuid)
+RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant uuid := ctrlz.current_tenant_id();
+  v_n      integer;
+BEGIN
+  IF v_tenant IS NULL OR p_user_id IS NULL THEN
+    RETURN 0;
+  END IF;
+  UPDATE ctrlz.sessions s SET revoked_at = pg_catalog.now()
+   WHERE s.tenant_id = v_tenant AND s.revoked_at IS NULL AND s.id = ANY (ARRAY(SELECT x.id FROM ctrlz.sessions x
+       WHERE x.tenant_id = v_tenant AND x.user_id = p_user_id AND x.revoked_at IS NULL
+       ORDER BY x.id FOR NO KEY UPDATE));
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  UPDATE ctrlz.refresh_tokens r SET revoked_at = pg_catalog.now()
+   WHERE r.tenant_id = v_tenant AND r.revoked_at IS NULL AND r.id = ANY (ARRAY(SELECT x.id FROM ctrlz.refresh_tokens x
+       WHERE x.tenant_id = v_tenant AND x.user_id = p_user_id AND x.revoked_at IS NULL
+       ORDER BY x.id FOR NO KEY UPDATE));
+  RETURN v_n;
+END
+$$;
+-- +goose StatementEnd
+
+RESET ROLE;

@@ -1,0 +1,54 @@
+-- P1 auth review round 14, SMS area (sms-r14-2).
+--
+-- sms_available said "a routed gateway has a closed breaker". A gateway whose login the provider
+-- refused is held (0043): the router passes it over locally, no call can succeed, and every such
+-- pass steps the breaker. The breaker is stepped only by a send, so when its pause lapsed (60 s
+-- doubling to 900 s) the function read true again, the login page offered the one-time code, one
+-- user per pause was told 202 for a code that could not arrive (the row ends unsent after three
+-- local passes, with the phone and network caps spent), and the breaker stepped again. The outcome
+-- was known in advance; only the breaker timestamp reached the function. Spec 9.7 says the flag
+-- "stays false while no routed gateway can send", and a held gateway cannot.
+--
+-- held_now is the fact the function needs and nothing more: whether the hold still names the
+-- credentials the row has now (the SHA-256 of credentials_ct equals held_ct_sum). A GENERATED
+-- column is recomputed by every UPDATE of either input, so saving other credentials ends the hold
+-- with no write of the hold columns (the property 0043 relies on) and an accepted test send that
+-- clears the columns lifts it. It is a boolean, so ctrlz_auth, which may read provider, role and
+-- the breaker timestamp of this table and never the sealed credentials or the digest of them,
+-- gets one more column that says nothing about a secret. The function itself still runs as its
+-- owner and reads only that column.
+--
+-- A new file and not an edit of an applied one (README, Rules). No existing row is held.
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+ALTER TABLE ctrlz.sms_gateways
+  ADD COLUMN held_now boolean NOT NULL
+    GENERATED ALWAYS AS (COALESCE(held_ct_sum = pg_catalog.sha256(credentials_ct), false)) STORED;
+
+GRANT SELECT (held_now) ON ctrlz.sms_gateways TO ctrlz_auth;
+
+-- The functions of ctrlz_fn are owned by ctrlz_auth (0017, 0039). The result row is the one of 0036,
+-- so the grants of the function stay.
+SET ROLE ctrlz_auth;
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.auth_public_config()
+RETURNS TABLE (registration_mode text, panel_host text, rp_id text, allowed_origins text[],
+               passkey_enabled boolean, sms_available boolean, otp_cooldown_s integer)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT s.registration_mode, d.panel_host, w.rp_id, w.allowed_origins,
+         w.enabled AND w.rp_id IS NOT NULL,
+         EXISTS (SELECT 1 FROM ctrlz.sms_gateways g
+                 WHERE g.role IN ('primary', 'fallback')
+                   AND NOT g.held_now
+                   AND (g.breaker_open_until IS NULL OR g.breaker_open_until < pg_catalog.now())),
+         s.otp_cooldown_s
+  FROM ctrlz.system_settings s, ctrlz.domain_settings d, ctrlz.webauthn_config w
+$$;
+-- +goose StatementEnd
+
+RESET ROLE;
