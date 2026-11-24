@@ -717,6 +717,7 @@ func TestIsolation(t *testing.T) {
 		f.env.Exec(t, `UPDATE ctrlz.tenants SET status = 'suspended' WHERE id = $1`, B.Tenant)
 		defer f.env.Exec(t, `UPDATE ctrlz.tenants SET status = 'active' WHERE id = $1`, B.Tenant)
 
+		loopStart := f.ck.now()
 		for _, op := range docOps {
 			if op.Auth == apispec.None {
 				continue
@@ -751,7 +752,10 @@ func TestIsolation(t *testing.T) {
 
 		// A session renewed from the refresh cookie is a session like any other: the renewal itself is
 		// allowed (it only swaps cookies), and the new session reaches /me and nothing else.
-		f.ck.add(3 * time.Hour) // the browser was restarted: only the refresh cookie remains
+		// The browser was restarted: only the refresh cookie remains. The loop above spent a minute for each operation, and every
+		// route added to the document spends one more, so the wait is what is left of three hours, which is above the idle bound of
+		// a session and below the life of a refresh token however many routes the document has.
+		f.ck.add(max(time.Minute, 3*time.Hour-f.ck.now().Sub(loopStart)))
 		delete(remembered.jar, session.CookieSession)
 		remembered.post("/auth/refresh", nil).want(204, "")
 		if remembered.jar[session.CookieSession] == nil {

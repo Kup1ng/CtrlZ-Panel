@@ -341,3 +341,31 @@ func TestAStalledBodyHoldsOnlyItsOwnTenantsPlace(t *testing.T) {
 	}
 	f.fresh(A.Tenant, A.User).do("POST", "/profiles:import", validBulkDoc(), idem("after-"+uuid.NewString()[:8])).want(201, "")
 }
+
+// TestLockCyclesFromManySessionsStopAtTheTenantsBudget: lock and unlock attempts of one tenant draw on one budget of 20 an
+// hour, whatever number of sessions make them, and no success gives it back; another tenant has its own budget, its password
+// login is untouched, and its attempts at the first tenant's profile id charge nothing of that profile's scope (spec 7, 10.5).
+func TestLockCyclesFromManySessionsStopAtTheTenantsBudget(t *testing.T) {
+	f := newFrig(t, frigOpts{})
+	A, B := f.env.A, f.env.B
+	pa := f.reauthed(A.Tenant, A.User).mustProfile("Cycles", "custom")
+	pb := f.reauthed(B.Tenant, B.User).mustProfile("Other tenant", "custom")
+	basea := "/profiles/" + pa.ID.String()
+	// Twenty attempts, each from a session of its own (the per session class of 10 a minute never decides here).
+	for i := 0; i < 10; i++ {
+		f.reauthed(A.Tenant, A.User).post(basea+"/lock", map[string]any{"password": "cycle-password"}).want(204, "")
+		f.reauthed(A.Tenant, A.User).post(basea+"/unlock", map[string]any{"password": "cycle-password"}).want(204, "")
+	}
+	f.reauthed(A.Tenant, A.User).post(basea+"/lock", map[string]any{"password": "cycle-password"}).want(429, "too_many_attempts")
+	// Another tenant: its own budget, its own login.
+	f.reauthed(B.Tenant, B.User).post("/profiles/"+pb.ID.String()+"/lock", map[string]any{"password": "other-password"}).want(204, "")
+	f.client().mustLogin(B.Phone, pwB)
+	// B's wrong guesses at A's profile id find no profile and charge no scope of A's profile: after them A's own unlock, with
+	// a fresh budget, works.
+	f.env.Exec(t, `DELETE FROM ctrlz.auth_throttle WHERE scope = 'profile_lock_tenant'`)
+	f.reauthed(A.Tenant, A.User).post(basea+"/lock", map[string]any{"password": "cycle-password"}).want(204, "")
+	for i := 0; i < 5; i++ {
+		f.reauthed(B.Tenant, B.User).post(basea+"/unlock", map[string]any{"password": "cycle-guess"}).want(404, "not_found")
+	}
+	f.reauthed(A.Tenant, A.User).post(basea+"/unlock", map[string]any{"password": "cycle-password"}).want(204, "")
+}

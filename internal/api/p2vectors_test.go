@@ -75,8 +75,10 @@ func TestTokenVectorsThroughTheRoute(t *testing.T) {
 		}
 		for _, part := range strings.Fields(c.Expect) {
 			k, v, _ := strings.Cut(part, "=")
-			got := map[string]string{"key": out.Rules[0].Key, "kind": out.Rules[0].MatchKind, "negated": fmt.Sprint(out.Rules[0].Negated)}[k]
-			if got != v {
+			// The route answers the key, the kind and the sign; the other members of an expectation (the literal counts) are the
+			// compiler's and have no field of a rule.
+			got, known := map[string]string{"key": out.Rules[0].Key, "kind": out.Rules[0].MatchKind, "negated": fmt.Sprint(out.Rules[0].Negated)}[k]
+			if known && got != v {
 				t.Errorf("%s (%q): %s = %q, want %q", c.ID, c.Input, k, got, v)
 			}
 		}
@@ -88,8 +90,8 @@ func TestTokenVectorsThroughTheRoute(t *testing.T) {
 }
 
 // TestUploadVectorsThroughTheRoute: each case of the upload group, with its existing items seeded, gives the case's counts and
-// resulting rows through the upload route (spec 10.3, T-195). A key repeated inside one file is the one place the route and the
-// bare merge differ: the document refuses a duplicate (6.3), so those cases are 422 duplicate and write nothing.
+// resulting rows through the upload route (spec 10.3, T-195), a key repeated inside one file included: the route merges it as
+// two uploads in a row, as the bare merge does.
 func TestUploadVectorsThroughTheRoute(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	A := f.env.A
@@ -110,8 +112,6 @@ func TestUploadVectorsThroughTheRoute(t *testing.T) {
 	for _, c := range cases {
 		f.env.Exec(t, `DELETE FROM ctrlz.rules WHERE profile_id = $1`, p.ID)
 		var items []string
-		seen := map[string]bool{}
-		dup := false
 		for _, a := range c.Args {
 			parts := strings.Split(a, "|")
 			if len(parts) != 4 {
@@ -122,10 +122,6 @@ func TestUploadVectorsThroughTheRoute(t *testing.T) {
 				f.env.Exec(t, `INSERT INTO ctrlz.rules (tenant_id, profile_id, folder_id, rule_key, match_kind, action) VALUES ($1, $2, $3, $4, 'domain', $5)`,
 					A.Tenant, p.ID, folders[parts[2]], parts[1], parts[3])
 			default:
-				if seen[parts[1]] {
-					dup = true
-				}
-				seen[parts[1]] = true
 				items = append(items, fmt.Sprintf(`{"pattern":%q,"action":%q}`, parts[1], parts[3]))
 			}
 		}
@@ -140,14 +136,6 @@ func TestUploadVectorsThroughTheRoute(t *testing.T) {
 		up := base + "/folders/" + folders[in.folder] + ":upload"
 		body := map[string]any{"document": b64(doc), "mode": c.Input}
 		r := f.fresh(A.Tenant, A.User).do("POST", up, body, idem("up-"+c.ID))
-		if dup {
-			var fl fieldList
-			r.want(422, "validation_failed").json(&fl)
-			if !fl.has("/rules/1/pattern", "duplicate") {
-				t.Errorf("%s: fields %+v, want duplicate", c.ID, fl.Fields)
-			}
-			continue
-		}
 		var res struct{ Created, Updated, Skipped, Conflict int }
 		r.want(200, "").json(&res)
 		var rows string

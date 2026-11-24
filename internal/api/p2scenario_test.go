@@ -34,6 +34,7 @@ type scn struct {
 	pool   []*client
 	ids    map[string]string
 	keys   int
+	salt   string // makes a key unique to this scenario: a key lives 24 hours, and another scenario of the tenant must not meet it
 	lockPW string
 }
 
@@ -55,7 +56,7 @@ func (f *frig) reauthed(tenant, user uuid.UUID) *client {
 // The names carry the tenant, so an answer that holds one proves it read this tenant's rows.
 func newScn(f *frig, tenant, user uuid.UUID, who string) *scn {
 	f.t.Helper()
-	s := &scn{f: f, tenant: tenant, user: user, who: who, ids: map[string]string{}, lockPW: "lock-password-" + who}
+	s := &scn{f: f, tenant: tenant, user: user, who: who, ids: map[string]string{}, lockPW: "lock-password-" + who, salt: uuid.NewString()[:12]}
 	for i := 0; i < scnPool; i++ {
 		s.pool = append(s.pool, f.reauthed(tenant, user))
 	}
@@ -112,7 +113,7 @@ func (s *scn) take() *client {
 // key is an Idempotency-Key no other request of the scenario used.
 func (s *scn) key() map[string]string {
 	s.keys++
-	return map[string]string{"Idempotency-Key": fmt.Sprintf("iso-%s-%d-%s", s.who, s.keys, s.tenant.String()[:8])}
+	return map[string]string{"Idempotency-Key": fmt.Sprintf("iso-%s-%d-%s", s.who, s.keys, s.salt)}
 }
 
 // send makes the request with a session of its own.

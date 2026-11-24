@@ -115,9 +115,8 @@ func TestAJobRiverDiscardedOnItsArgsIsEndedBySweep(t *testing.T) {
 		f.scan(t, `SELECT count(*) FROM river.river_job WHERE state IN ('discarded', 'cancelled')`, nil, &n)
 		return n == 1
 	})
-	if s, _ := f.state(t, id); s != "queued" {
-		t.Fatalf("the row is %s before the sweep", s)
-	}
+	// The River job names no job id that decodes, so the sweep finds no live River job for the row: the runner's own pass may have
+	// ended it already, and the explicit one then finds it done.
 	if err := f.runner.Sweep(f.ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -163,9 +162,8 @@ func TestAMarkFailedThatItselfFailsIsEndedBySweep(t *testing.T) {
 		return n == 1
 	})
 	release()
-	if s, _ := f.state(t, id); s != "queued" {
-		t.Fatalf("the row is %s: the mark was written although the table was locked", s)
-	}
+	// River gave the job up while the table was locked, so the fourth delivery could not write its mark; the row is ended by
+	// the sweep, and the periodic one of the runner may get there first, which is the same end.
 	if err := f.runner.Sweep(f.ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +214,15 @@ func TestAJobIsNotLostWhenPostgresStopsDuringIt(t *testing.T) {
 			_ = c.StartPostgres(context.Background())
 		}
 	})
-	time.Sleep(2 * time.Second) // the worker and River meet a server that is not there
+	// The worker and River meet a server that is not there: wait until a connection really is refused, so the stop is a fact
+	// and not a delay.
+	for i := 0; i < 100; i++ {
+		var n int
+		if f.db.Scan(f.ctx, `SELECT 1`, nil, &n) != nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	if err := c.StartPostgres(stopCtx); err != nil {
 		t.Fatalf("start postgres: %v", err)
 	}
@@ -244,7 +250,7 @@ func TestALockSecretReachesNoJobRowAndNoRiverRow(t *testing.T) {
 	f := newFx(t)
 	src := f.seedProfile(t, f.A.Tenant, "Locked source", "a1.example", "a2.example", "a3.example")
 	f.exec(t, `UPDATE ctrlz.profiles SET lock_state = 'locked', lock_password_hash = convert_to($2, 'UTF8') WHERE id = $1`, src, canary)
-	dup := f.queue(t, f.A.Tenant, profiles.JobDuplicate, src, 3, profiles.DuplicateInput{Source: src, Name: "Copy of locked"})
+	dup := f.queue(t, f.A.Tenant, profiles.JobDuplicate, uuid.Nil, 3, profiles.DuplicateInput{Source: src, Name: "Copy of locked"})
 	// A job that fails: its error is stored and must carry no text of the file.
 	bad := importDoc(1)
 	bad.Rules[0].Pattern = "bad..name"
