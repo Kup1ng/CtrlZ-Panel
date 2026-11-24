@@ -1,0 +1,445 @@
+-- Fixes from the design review of the P0 database foundation. A new file and
+-- not an edit of 0006 or 0007, because a migration that has been applied
+-- anywhere is never edited (README, Rules).
+--
+--  1. ip_claim_take needs evidence in the database, not the caller's word.
+--  2. The tenant role can no longer write proof evidence.
+--  3. Claim width is limited in every mode, and a wide request leaves a row an
+--     admin can approve.
+--  4. OTP issue counts only what it sends, and keys on the network, not on
+--     one address.
+--  5. OTP consume is bound to a phone and a purpose, and registration needs a
+--     consumed OTP for that phone.
+--  6. Announcements addressed to one tenant are no longer readable by all.
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+-- Grants, as the table owner. ----------------------------------------------------------
+
+-- Evidence of a proof is written by the hub from a ProofObservation (observed_*)
+-- and consumed by ip_claim_take. The tenant may only open a challenge: INSERT is
+-- limited to the columns it legitimately chooses, and it has no UPDATE at all.
+-- Table-level INSERT was granted to ctrlz_tenant in 0007, which made observed_at
+-- and observed_ip writable by the very party they constrain.
+REVOKE INSERT ON ctrlz.ip_proof_challenges FROM ctrlz_tenant;
+REVOKE UPDATE (consumed_at) ON ctrlz.ip_proof_challenges FROM ctrlz_tenant;
+GRANT INSERT (tenant_id, claim_id, label, txt_code_hash, expires_at) ON ctrlz.ip_proof_challenges TO ctrlz_tenant;
+-- ip_claim_take reads the evidence and consumes it. Row security still limits
+-- it to the caller's tenant, because the setting stays the caller's.
+GRANT SELECT ON ctrlz.ip_proof_challenges TO ctrlz_auth;
+GRANT UPDATE (consumed_at) ON ctrlz.ip_proof_challenges TO ctrlz_auth;
+
+-- announcements has no tenant column policy (it is a global table whose
+-- tenant_id is a plain value), so a table-level SELECT showed every tenant the
+-- notices addressed to every other tenant. Tenants read through a function.
+REVOKE SELECT ON ctrlz.announcements FROM ctrlz_tenant;
+GRANT SELECT ON ctrlz.announcements TO ctrlz_auth;
+
+-- Functions, as ctrlz_auth. -------------------------------------------------------------
+
+SET ROLE ctrlz_auth;
+
+-- Registration needs proof of the phone: a consumed OTP for exactly this phone
+-- and the purpose of this flow. Before, auth_otp_consume tied nothing to a
+-- phone and auth_register_user took no OTP, so anyone could register a number
+-- they did not own and squat it (phone_e164 is globally unique). Every refusal
+-- is still the same empty result.
+DROP FUNCTION ctrlz_fn.auth_register_user(text, text, text, uuid);
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.auth_register_user(p_phone text, p_password_hash text, p_locale text, p_invite_id uuid, p_otp_id uuid)
+RETURNS TABLE (tenant_id uuid, user_id uuid)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_mode         text;
+  v_invite_phone text;
+  v_tenant       uuid;
+  v_user         uuid;
+BEGIN
+  -- The OTP is locked so two registrations cannot both spend it.
+  PERFORM 1
+  FROM ctrlz.otp_challenges o
+  WHERE o.id = p_otp_id AND o.phone_e164 = p_phone
+    AND o.purpose = CASE WHEN p_invite_id IS NULL THEN 'signup' ELSE 'invite' END
+    AND o.consumed_at IS NOT NULL AND o.consumed_at > pg_catalog.now() - interval '10 minutes'
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  SELECT s.registration_mode INTO v_mode FROM ctrlz.system_settings s;
+
+  IF p_invite_id IS NOT NULL THEN
+    -- Admin invites work in every mode (R44).
+    SELECT i.phone_e164 INTO v_invite_phone
+    FROM ctrlz.invites i
+    WHERE i.id = p_invite_id AND i.used_at IS NULL AND i.revoked_at IS NULL
+      AND i.expires_at > pg_catalog.now()
+    FOR UPDATE;
+    IF v_invite_phone IS NULL OR v_invite_phone <> p_phone THEN
+      RETURN;
+    END IF;
+  ELSIF v_mode IS DISTINCT FROM 'open' THEN
+    RETURN;
+  END IF;
+
+  BEGIN
+    INSERT INTO ctrlz.tenants (id) VALUES (pg_catalog.uuidv7()) RETURNING ctrlz.tenants.id INTO v_tenant;
+    INSERT INTO ctrlz.users (tenant_id, phone_e164, phone_verified_at, password_hash, locale)
+    VALUES (v_tenant, p_phone, pg_catalog.now(), p_password_hash, COALESCE(p_locale, 'fa'))
+    RETURNING ctrlz.users.id INTO v_user;
+    INSERT INTO ctrlz.tenant_entitlements (tenant_id) VALUES (v_tenant);
+  EXCEPTION WHEN unique_violation THEN
+    -- Taken phone. The subtransaction undoes the tenant row as well.
+    RETURN;
+  END;
+
+  IF p_invite_id IS NOT NULL THEN
+    UPDATE ctrlz.invites SET used_at = pg_catalog.now(), accepted_tenant_id = v_tenant
+    WHERE id = p_invite_id;
+  END IF;
+
+  RETURN QUERY SELECT v_tenant, v_user;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.auth_register_user(text, text, text, uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.auth_register_user(text, text, text, uuid, uuid) TO ctrlz_tenant;
+
+-- Issue an OTP challenge.
+--
+-- Caps are on messages sent, not on attempts: every counter is bumped only if
+-- all of them are under their cap, in one subtransaction, so a refused request
+-- leaves every counter as it was. Before, one client over its own phone or IP
+-- cap still raised the global counter on every call and could exhaust the
+-- 5000-a-day global cap for everybody. The per-address key was also the full
+-- host, so one IPv6 /64 was unlimited; v6 now keys on the /64, v4 on the host
+-- and, looser, on the /24. A missing address is refused, not put in a shared
+-- "unknown" bucket. Input that the table would reject is refused up front, so
+-- no constraint error (and no row text in the server log) can come from here.
+-- The caps are provisional (D31).
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.auth_otp_issue(p_phone text, p_purpose text, p_code_hash bytea, p_delivery_ct bytea, p_ip inet)
+RETURNS TABLE (id uuid, allowed boolean)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_day    date := (pg_catalog.now() AT TIME ZONE 'Asia/Tehran')::date;
+  v_ip     inet := p_ip;
+  v_scopes text[];
+  v_keys   text[];
+  v_caps   integer[];
+  v_id     uuid;
+  v_n      integer;
+  i        integer;
+BEGIN
+  IF p_phone IS NULL OR p_phone !~ '^\+[1-9][0-9]{7,14}$'
+     OR p_purpose IS NULL OR p_purpose NOT IN ('login', 'signup', 'invite', 'reset', 'phone_old', 'phone_new')
+     OR p_code_hash IS NULL OR p_ip IS NULL THEN
+    RETURN QUERY SELECT NULL::uuid, false;
+    RETURN;
+  END IF;
+
+  -- ::ffff:a.b.c.d and a.b.c.d are one client.
+  IF pg_catalog.family(v_ip) = 6 AND v_ip << '::ffff:0:0/96'::inet THEN
+    v_ip := '0.0.0.0'::inet + (v_ip - '::ffff:0.0.0.0'::inet);
+  END IF;
+
+  IF pg_catalog.family(v_ip) = 4 THEN
+    v_scopes := ARRAY['ip', 'ip'];
+    v_keys   := ARRAY[pg_catalog.host(v_ip), pg_catalog.network(pg_catalog.set_masklen(v_ip, 24))::text];
+    v_caps   := ARRAY[20, 100];
+  ELSE
+    v_scopes := ARRAY['ip'];
+    v_keys   := ARRAY[pg_catalog.network(pg_catalog.set_masklen(v_ip, 64))::text];
+    v_caps   := ARRAY[20];
+  END IF;
+  v_scopes := v_scopes || ARRAY['phone', 'global'];
+  v_keys   := v_keys   || ARRAY[p_phone, 'all'];
+  v_caps   := v_caps   || ARRAY[5, 5000];
+
+  BEGIN
+    FOR i IN 1 .. pg_catalog.array_length(v_keys, 1) LOOP
+      -- One statement per counter: the cap test and the bump cannot be split by
+      -- a concurrent request, and a counter at its cap is left alone.
+      INSERT INTO ctrlz.sms_counters AS c (day, scope, key, count)
+      VALUES (v_day, v_scopes[i], v_keys[i], 1)
+      ON CONFLICT (day, scope, key) DO UPDATE SET count = c.count + 1 WHERE c.count < v_caps[i]
+      RETURNING c.count INTO v_n;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'cap' USING ERRCODE = 'P0001';
+      END IF;
+    END LOOP;
+
+    INSERT INTO ctrlz.otp_challenges (phone_e164, purpose, code_hash, delivery_ct, expires_at, ip)
+    VALUES (p_phone, p_purpose, p_code_hash, p_delivery_ct, pg_catalog.now() + interval '5 minutes', v_ip)
+    RETURNING ctrlz.otp_challenges.id INTO v_id;
+  EXCEPTION WHEN raise_exception THEN
+    -- The subtransaction undoes the counters bumped before the one at its cap.
+    RETURN QUERY SELECT NULL::uuid, false;
+    RETURN;
+  END;
+
+  RETURN QUERY SELECT v_id, true;
+END
+$$;
+-- +goose StatementEnd
+
+-- Check an OTP: single use, five tries per challenge, and only for the phone
+-- and purpose it was issued for. A mismatch of either is the generic
+-- "invalid" and does not count as a try, so knowing a challenge id (they are
+-- not secret) does not let anyone lock it.
+DROP FUNCTION ctrlz_fn.auth_otp_consume(uuid, bytea);
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.auth_otp_consume(p_id uuid, p_phone text, p_purpose text, p_code_hash bytea)
+RETURNS TABLE (outcome text)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  r record;
+BEGIN
+  SELECT o.code_hash, o.attempts, o.expires_at, o.consumed_at INTO r
+  FROM ctrlz.otp_challenges o
+  WHERE o.id = p_id AND o.phone_e164 = p_phone AND o.purpose = p_purpose
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 'invalid'::text;
+  ELSIF r.consumed_at IS NOT NULL THEN
+    RETURN QUERY SELECT 'consumed'::text;
+  ELSIF r.expires_at <= pg_catalog.now() THEN
+    RETURN QUERY SELECT 'expired'::text;
+  ELSIF r.attempts >= 5 THEN
+    RETURN QUERY SELECT 'locked'::text;
+  ELSIF r.code_hash = p_code_hash THEN
+    UPDATE ctrlz.otp_challenges SET attempts = attempts + 1, consumed_at = pg_catalog.now() WHERE id = p_id;
+    RETURN QUERY SELECT 'ok'::text;
+  ELSE
+    UPDATE ctrlz.otp_challenges SET attempts = attempts + 1 WHERE id = p_id;
+    RETURN QUERY SELECT 'invalid'::text;
+  END IF;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.auth_otp_consume(uuid, text, text, bytea) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.auth_otp_consume(uuid, text, text, bytea) TO ctrlz_tenant;
+
+-- Create a claim.
+--
+-- Width is limited in every mode (R2: /32 by default, about /28 at most):
+-- open mode takes /32 only, closed and invite modes take /28 and narrower.
+-- A wider request is not refused silently: it leaves a pending_proof row, which
+-- serves nothing and excludes nothing, and an admin can approve it
+-- (approved_by_admin), after which the normal path applies. Before, the
+-- request returned wide_requires_approval without a row, so the approval path
+-- had nothing to approve, and closed mode took any width at all.
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.ip_claim_request(p_endpoint_id uuid, p_cidr cidr, p_source text)
+RETURNS TABLE (claim_id uuid, outcome text)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant uuid := ctrlz.current_tenant_id();
+  v_mode   text;
+  v_min    integer;
+  v_id     uuid;
+BEGIN
+  IF v_tenant IS NULL THEN
+    RETURN;
+  END IF;
+  IF p_source IS NULL OR p_source NOT IN ('manual', 'browser', 'secure_dns', 'ddns') THEN
+    RETURN QUERY SELECT NULL::uuid, 'invalid_source'::text;
+    RETURN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM ctrlz.endpoints e WHERE e.tenant_id = v_tenant AND e.id = p_endpoint_id) THEN
+    RETURN QUERY SELECT NULL::uuid, 'not_found'::text;
+    RETURN;
+  END IF;
+  IF pg_catalog.family(p_cidr) <> 4 THEN
+    RETURN QUERY SELECT NULL::uuid, 'unsupported'::text;
+    RETURN;
+  END IF;
+
+  SELECT s.registration_mode INTO v_mode FROM ctrlz.system_settings s;
+  v_min := CASE WHEN v_mode = 'open' THEN 32 ELSE 28 END;
+
+  IF pg_catalog.masklen(p_cidr) < v_min THEN
+    INSERT INTO ctrlz.ip_claims (tenant_id, endpoint_id, cidr, state, source)
+    VALUES (v_tenant, p_endpoint_id, p_cidr, 'pending_proof', p_source)
+    RETURNING ctrlz.ip_claims.id INTO v_id;
+    RETURN QUERY SELECT v_id, 'wide_requires_approval'::text;
+  ELSIF v_mode = 'open' THEN
+    INSERT INTO ctrlz.ip_claims (tenant_id, endpoint_id, cidr, state, source)
+    VALUES (v_tenant, p_endpoint_id, p_cidr, 'pending_proof', p_source)
+    RETURNING ctrlz.ip_claims.id INTO v_id;
+    RETURN QUERY SELECT v_id, 'pending_proof'::text;
+  ELSE
+    BEGIN
+      INSERT INTO ctrlz.ip_claims (tenant_id, endpoint_id, cidr, state, source)
+      VALUES (v_tenant, p_endpoint_id, p_cidr, 'active', p_source)
+      RETURNING ctrlz.ip_claims.id INTO v_id;
+    EXCEPTION WHEN exclusion_violation THEN
+      RETURN QUERY SELECT NULL::uuid, 'unavailable'::text;
+      RETURN;
+    END;
+    RETURN QUERY SELECT v_id, 'active'::text;
+  END IF;
+END
+$$;
+-- +goose StatementEnd
+
+-- Move the caller's claim to active after proof, applying the takeover rule
+-- (D3).
+--
+--  * Evidence is required, and it is in the database: a challenge of this claim
+--    that the hub marked observed (observed_ip inside the claim's prefix), not
+--    expired, not yet consumed. It is consumed here. The caller's word and the
+--    method name prove nothing. DDNS is never proof: a claim whose source is
+--    ddns needs the same evidence as any other.
+--  * A suspended claim is not re-activated by its tenant. An admin clears it
+--    (back to pending_proof); then the normal path applies.
+--  * Width: /32 in open mode, /28 or narrower otherwise, unless an admin
+--    approved the claim.
+--  * A claim of another tenant is displaced only if the new claim covers it
+--    (proof of one address says nothing about a /24 around it) and it is
+--    unproven, idle for takeover_idle_days, or on a hard_disabled Endpoint.
+--    The overlapping rows are locked first and the displacing UPDATE repeats
+--    the predicate, so a victim that proved itself between the check and the
+--    update is not displaced on a stale snapshot. If anything else overlaps,
+--    nothing changes.
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.ip_claim_take(p_claim_id uuid, p_method text)
+RETURNS TABLE (outcome text)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant   uuid := ctrlz.current_tenant_id();
+  v_cidr     cidr;
+  v_state    text;
+  v_approved boolean;
+  v_mode     text;
+  v_idle     integer;
+  v_chal     uuid;
+  v_blocked  boolean;
+BEGIN
+  IF v_tenant IS NULL THEN
+    RETURN;
+  END IF;
+  IF p_method IS NULL OR p_method NOT IN ('verify_tcp', 'verify_udp_txt', 'browser_ip', 'secure_dns') THEN
+    RETURN QUERY SELECT 'invalid_method'::text;
+    RETURN;
+  END IF;
+
+  SELECT c.cidr, c.state, c.approved_by_admin INTO v_cidr, v_state, v_approved
+  FROM ctrlz.ip_claims c
+  WHERE c.tenant_id = v_tenant AND c.id = p_claim_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_state = 'released' THEN
+    RETURN QUERY SELECT 'not_found'::text;
+    RETURN;
+  ELSIF v_state = 'active' THEN
+    RETURN QUERY SELECT 'already_active'::text;
+    RETURN;
+  ELSIF v_state = 'suspended' THEN
+    RETURN QUERY SELECT 'suspended'::text;
+    RETURN;
+  END IF;
+
+  SELECT s.registration_mode, s.takeover_idle_days INTO v_mode, v_idle FROM ctrlz.system_settings s;
+
+  IF pg_catalog.masklen(v_cidr) < (CASE WHEN v_mode = 'open' THEN 32 ELSE 28 END) AND NOT v_approved THEN
+    RETURN QUERY SELECT 'wide_requires_approval'::text;
+    RETURN;
+  END IF;
+
+  SELECT ch.id INTO v_chal
+  FROM ctrlz.ip_proof_challenges ch
+  WHERE ch.tenant_id = v_tenant AND ch.claim_id = p_claim_id
+    AND ch.observed_at IS NOT NULL AND ch.observed_ip IS NOT NULL AND ch.observed_ip <<= v_cidr
+    AND ch.observed_at <= ch.expires_at AND ch.expires_at > pg_catalog.now()
+    AND ch.consumed_at IS NULL
+    AND (p_method <> 'verify_udp_txt' OR ch.txt_code_hash IS NOT NULL)
+  ORDER BY ch.observed_at DESC
+  LIMIT 1
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 'no_proof'::text;
+    RETURN;
+  END IF;
+
+  -- Lock first, then look: the check below runs as a new statement and sees
+  -- whatever a concurrent transaction committed while we waited.
+  PERFORM 1
+  FROM ctrlz.ip_claims o
+  WHERE o.cidr && v_cidr AND o.state IN ('active', 'grace') AND o.tenant_id <> v_tenant
+  FOR UPDATE;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM ctrlz.ip_claims o
+    LEFT JOIN ctrlz.endpoints oe ON oe.tenant_id = o.tenant_id AND oe.id = o.endpoint_id
+    WHERE o.cidr && v_cidr AND o.state IN ('active', 'grace') AND o.tenant_id <> v_tenant
+      AND NOT (
+        o.cidr <<= v_cidr
+        AND (o.proven_at IS NULL
+             OR COALESCE(o.last_seen_at, o.proven_at) < pg_catalog.now() - pg_catalog.make_interval(days => v_idle)
+             OR COALESCE(oe.admin_state, '') = 'hard_disabled')
+      )
+  ) INTO v_blocked;
+
+  IF v_blocked THEN
+    RETURN QUERY SELECT 'unavailable'::text;
+    RETURN;
+  END IF;
+
+  BEGIN
+    UPDATE ctrlz.ip_claims o SET state = 'released', displaced_at = pg_catalog.now()
+    WHERE o.cidr && v_cidr AND o.state IN ('active', 'grace') AND o.tenant_id <> v_tenant
+      AND o.cidr <<= v_cidr
+      AND (o.proven_at IS NULL
+           OR COALESCE(o.last_seen_at, o.proven_at) < pg_catalog.now() - pg_catalog.make_interval(days => v_idle)
+           OR EXISTS (SELECT 1 FROM ctrlz.endpoints oe
+                      WHERE oe.tenant_id = o.tenant_id AND oe.id = o.endpoint_id AND oe.admin_state = 'hard_disabled'));
+
+    UPDATE ctrlz.ip_claims c
+    SET state = 'active', proof_method = p_method, proven_at = pg_catalog.now(), grace_until = NULL
+    WHERE c.tenant_id = v_tenant AND c.id = p_claim_id;
+
+    UPDATE ctrlz.ip_proof_challenges ch SET consumed_at = pg_catalog.now()
+    WHERE ch.tenant_id = v_tenant AND ch.id = v_chal;
+  EXCEPTION WHEN exclusion_violation THEN
+    -- Something overlapping that the predicate did not release (the caller's
+    -- own tenant, or a row that changed). The subtransaction undoes the
+    -- displacement above.
+    RETURN QUERY SELECT 'unavailable'::text;
+    RETURN;
+  END;
+
+  RETURN QUERY SELECT 'active'::text;
+END
+$$;
+-- +goose StatementEnd
+
+-- The tenant's notices: the ones for everybody and the ones addressed to it,
+-- that are in their time window. tenant_id is not returned.
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.announcements_for_tenant()
+RETURNS TABLE (id uuid, audience text, body text, starts_at timestamptz, ends_at timestamptz)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT a.id, a.audience, a.body, a.starts_at, a.ends_at
+  FROM ctrlz.announcements a
+  WHERE ctrlz.current_tenant_id() IS NOT NULL
+    AND (a.audience = 'all' OR a.tenant_id = ctrlz.current_tenant_id())
+    AND a.starts_at <= pg_catalog.now()
+    AND (a.ends_at IS NULL OR a.ends_at > pg_catalog.now())
+  ORDER BY a.starts_at DESC, a.id
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.announcements_for_tenant() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.announcements_for_tenant() TO ctrlz_tenant;
+
+RESET ROLE;
