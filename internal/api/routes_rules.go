@@ -144,7 +144,7 @@ func (s *Server) ruleOut(tx store.Tx, profile uuid.UUID, rows []store.RuleRow) (
 	if err != nil {
 		return nil, err
 	}
-	fs, err := tx.Folders(profile)
+	fs, err := tx.FoldersBare(profile)
 	if err != nil {
 		return nil, err
 	}

@@ -257,22 +257,19 @@ func liveStates() []rivertype.JobState {
 	return []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRetryable, rivertype.JobStateRunning, rivertype.JobStateScheduled}
 }
 
-// withoutLiveRiverJob keeps the ids that no River job in a non-final state names.
+// withoutLiveRiverJob keeps the ids that no River job in a non-final state names. It asks River about each id on its
+// own and never lists the live jobs of every tenant in one page: a page of 10,000 cut the list at the 10,001st live job,
+// and a queued row whose job lay past the cut was failed while River still held the job (p2-B3-r12-1). A stale row is the
+// rare case (a job older than StaleAfter with no outbox row), so one small query for each is the cheap way to be exact.
 func (r *Runner) withoutLiveRiverJob(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
-	live := map[string]bool{}
-	res, err := r.client.JobList(ctx, river.NewJobListParams().Kinds(Args{}.Kind()).States(liveStates()...).First(10000))
-	if err != nil {
-		return nil, err
-	}
-	for _, j := range res.Jobs {
-		var a Args
-		if json.Unmarshal(j.EncodedArgs, &a) == nil {
-			live[a.JobID] = true
-		}
-	}
 	var dead []uuid.UUID
 	for _, id := range ids {
-		if !live[id.String()] {
+		res, err := r.client.JobList(ctx, river.NewJobListParams().Kinds(Args{}.Kind()).States(liveStates()...).
+			Where("args->>'job_id' = @job_id", river.NamedArgs{"job_id": id.String()}).First(1))
+		if err != nil {
+			return nil, err
+		}
+		if len(res.Jobs) == 0 {
 			dead = append(dead, id)
 		}
 	}

@@ -73,3 +73,9 @@ const DeclareLostBatch = declareLostBatch
 func (t Tx) DeclareLostIn(keyNumber int, lost []TOTPSecret, batch int) (int, error) {
 	return t.declareLost(keyNumber, lost, batch)
 }
+
+// The folder statements, so the plan test can run EXPLAIN on exactly the text the store sends.
+const (
+	QFoldersList   = qFoldersList
+	QFolderCounted = qFolderCounted
+)

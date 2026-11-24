@@ -116,9 +116,12 @@ func (a *answerWriter) WriteHeader(code int) {
 	}
 }
 
+// Write returns the refusal as an *Error, not the bare sentinel: the generated visitor hands what Write returns to
+// API.fail, and FromError would class an unknown error as 500 internal in the log while finish sends 503 server_busy for
+// the same request (p2-B3-r12-3). a.err keeps the sentinel, which finish reads through answerRefusal.
 func (a *answerWriter) Write(p []byte) (int, error) {
 	if a.err != nil {
-		return 0, a.err
+		return 0, answerRefusal(a.err)
 	}
 	if a.sp == nil {
 		if a.sent || len(p) <= answerSpillAt {
@@ -133,24 +136,25 @@ func (a *answerWriter) Write(p []byte) (int, error) {
 		sp, err := newSpool(a.dir)
 		if err != nil {
 			a.err = err
-			return 0, err
+			return 0, answerRefusal(err)
 		}
 		a.sp = sp
 	}
 	if a.size+int64(len(p)) > admission.AnswerBytes {
 		a.err = errAnswerTooLarge
-		return 0, a.err
+		return 0, answerRefusal(a.err)
 	}
 	if err := a.hold.take(int64(len(p))); err != nil {
 		a.err = err
-		return 0, err
+		return 0, answerRefusal(err)
 	}
 	n, err := a.sp.write(p)
 	a.size += int64(n)
 	if err != nil {
 		a.err = err
+		return n, answerRefusal(err)
 	}
-	return n, err
+	return n, nil
 }
 
 // finish sends what the handler left: a deferred status, or the spilled file with a length and the earned deadline. A

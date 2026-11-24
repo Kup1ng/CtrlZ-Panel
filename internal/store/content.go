@@ -397,8 +397,19 @@ type FolderRow struct {
 	RuleCount           int
 }
 
-const folderColumns = `f.id, f.name, f.kind, f.action, f.target_kind, f.target_location_id, host(f.target_ipv4), host(f.target_ipv6), f.target_host,
-  f.location_unavailable, (SELECT count(*) FROM ctrlz.rules r WHERE r.tenant_id = f.tenant_id AND r.folder_id = f.id)`
+// folderBare is the folder's own columns; the rule count is added after it, or a constant 0 stands in for it.
+const folderBare = `f.id, f.name, f.kind, f.action, f.target_kind, f.target_location_id, host(f.target_ipv4), host(f.target_ipv6), f.target_host,
+  f.location_unavailable`
+
+// folderColumns adds the rule count. The count names the profile as well as the folder and rides on the index
+// rules_folder_idx (0090), so each folder visits only its own rules and a whole list visits the rules of the
+// profile once. Without the profile and the index each folder walked every rule of the tenant: 500 folders over
+// 200,000 rules was 100 million row visits for one page of rules (p2-B3-r12-2).
+const folderColumns = folderBare + `,
+  (SELECT count(*) FROM ctrlz.rules r WHERE r.tenant_id = f.tenant_id AND r.profile_id = f.profile_id AND r.folder_id = f.id)`
+
+// folderNoCount is folderBare with the placeholder that scanFolder expects (RuleCount is then not a count).
+const folderNoCount = folderBare + `, 0`
 
 func scanFolder(r interface{ Scan(...any) error }) (FolderRow, error) {
 	var f FolderRow
@@ -417,9 +428,19 @@ func scanFolder(r interface{ Scan(...any) error }) (FolderRow, error) {
 
 const qFoldersList = `SELECT ` + folderColumns + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 ORDER BY f.name, f.id`
 
-// Folders lists the folders of the profile, by name then id.
-func (t Tx) Folders(profile uuid.UUID) ([]FolderRow, error) {
-	rows, err := t.tx.Query(t.ctx, qFoldersList, t.tenant, profile)
+const qFoldersBare = `SELECT ` + folderNoCount + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 ORDER BY f.name, f.id`
+
+// Folders lists the folders of the profile, by name then id, each with its rule count.
+func (t Tx) Folders(profile uuid.UUID) ([]FolderRow, error) { return t.folders(qFoldersList, profile) }
+
+// FoldersBare lists the folders without counting their rules (RuleCount is 0). A caller that reads only the
+// Folder Rule of each folder (the rules page, Export, Duplicate) uses it, so it does not pay for a count it drops.
+func (t Tx) FoldersBare(profile uuid.UUID) ([]FolderRow, error) {
+	return t.folders(qFoldersBare, profile)
+}
+
+func (t Tx) folders(q string, profile uuid.UUID) ([]FolderRow, error) {
+	rows, err := t.tx.Query(t.ctx, q, t.tenant, profile)
 	if err != nil {
 		return nil, sanitize(err)
 	}
@@ -435,11 +456,22 @@ func (t Tx) Folders(profile uuid.UUID) ([]FolderRow, error) {
 	return out, sanitize(rows.Err())
 }
 
-const qFolderGet = `SELECT ` + folderColumns + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 AND f.id = $3`
+const qFolderGet = `SELECT ` + folderNoCount + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 AND f.id = $3`
 
-// Folder reads one folder of the profile; an id of another profile is not found.
+const qFolderCounted = `SELECT ` + folderColumns + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 AND f.id = $3`
+
+// Folder reads one folder of the profile without its rule count (RuleCount is 0): the callers that check that a
+// folder exists, or read its Folder Rule, inside a write do not count the rules under the profile's lock. An id of
+// another profile is not found.
 func (t Tx) Folder(profile, id uuid.UUID) (FolderRow, bool, error) {
 	f, err := scanFolder(t.tx.QueryRow(t.ctx, qFolderGet, t.tenant, profile, id))
+	ok, err := notFound(err)
+	return f, ok, err
+}
+
+// FolderCounted is Folder with the rule count, for the two answers that show it.
+func (t Tx) FolderCounted(profile, id uuid.UUID) (FolderRow, bool, error) {
+	f, err := scanFolder(t.tx.QueryRow(t.ctx, qFolderCounted, t.tenant, profile, id))
 	ok, err := notFound(err)
 	return f, ok, err
 }

@@ -283,3 +283,42 @@ func TestAStatusWithoutABodyReachesTheClient(t *testing.T) {
 		t.Fatalf("%d", w.Code)
 	}
 }
+
+// TestARefusedSpillIsTheSameErrorTheClientGets: the error a handler's write returns when the tenant has no room for a spilled
+// answer maps to 503 server_busy through FromError, the status finish sends, and not to the 500 internal that the log of
+// API.fail would then show for a refusal that is the tenant's own share (p2-B3-r12-3). A size above the cap stays a real 500.
+func TestARefusedSpillIsTheSameErrorTheClientGets(t *testing.T) {
+	rig := newHeavyRig(t, admission.Config{AnswerTenant: 3 << 20, AnswerPool: 8 << 20})
+	rig.ordinary = bigAnswer(2<<20, nil)
+	w := newSlowReader()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); rig.h.ServeHTTP(w, jobGet("t1-a")) }()
+	<-w.entered
+
+	var got *httpx.Error
+	rig.ordinary = func(rw http.ResponseWriter, r *http.Request) {
+		_, err := rw.Write([]byte(strings.Repeat("x", 2<<20)))
+		got = httpx.FromError(err)
+		httpx.Write(rw, r, got)
+	}
+	r := serve(rig.h, jobGet("t1-b"))
+	if got == nil || got.Status != http.StatusServiceUnavailable || got.Code != httpx.CodeServerBusy {
+		t.Fatalf("the handler's write error maps to %+v, want 503 server_busy", got)
+	}
+	if r.Code != http.StatusServiceUnavailable || !strings.Contains(r.Body.String(), "server_busy") {
+		t.Fatalf("the client got %d", r.Code)
+	}
+	close(w.release)
+	wg.Wait()
+
+	rig.ordinary = func(rw http.ResponseWriter, r *http.Request) {
+		_, err := rw.Write([]byte(strings.Repeat("x", int(admission.AnswerBytes)+1)))
+		got = httpx.FromError(err)
+		httpx.Write(rw, r, got)
+	}
+	_ = serve(rig.h, jobGet("t2-a"))
+	if got == nil || got.Status != http.StatusInternalServerError {
+		t.Fatalf("an answer above the cap maps to %+v, want 500", got)
+	}
+}

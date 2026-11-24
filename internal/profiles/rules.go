@@ -474,7 +474,7 @@ func (e *Env) CreateFolder(tx store.Tx, profile uuid.UUID, in FolderIn) (store.F
 	if err := w.mark(); err != nil {
 		return store.FolderRow{}, err
 	}
-	f, _, err := tx.Folder(profile, id)
+	f, _, err := tx.FolderCounted(profile, id)
 	return f, err
 }
 
@@ -556,7 +556,7 @@ func (e *Env) UpdateFolder(tx store.Tx, profile, id uuid.UUID, in FolderPatch) (
 	if err := w.mark(); err != nil {
 		return store.FolderRow{}, err
 	}
-	f, _, err := tx.Folder(profile, id)
+	f, _, err := tx.FolderCounted(profile, id)
 	return f, err
 }
 

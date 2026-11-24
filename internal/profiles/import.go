@@ -73,7 +73,7 @@ func (e *Env) ReadDocument(tx store.Tx, id uuid.UUID) (Document, error) {
 	for _, s := range sv {
 		d.Services = append(d.Services, DocService{Slug: s.Slug, Enabled: optBool(s.Enabled), Action: s.Action, Target: docTarget(s.Target, key)})
 	}
-	fo, err := tx.Folders(id)
+	fo, err := tx.FoldersBare(id)
 	if err != nil {
 		return Document{}, err
 	}

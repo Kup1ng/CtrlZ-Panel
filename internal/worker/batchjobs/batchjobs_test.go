@@ -280,3 +280,42 @@ func TestTheSweepEndsAJobRiverCannotEnd(t *testing.T) {
 	// The slot is free: a new job can be queued.
 	f.queueImport(t, f.A.Tenant, "Again", 2)
 }
+
+// TestTheSweepKeepsAJobPastTheFirstPageOfRiverJobs: the River job of a stale row is found by its own id, however many
+// other live jobs River holds. The sweep once listed the first 10,000 live jobs of all tenants and failed every row whose
+// job lay beyond them, while River still held that job and would run it (p2-B3-r12-1). Jobs of River are listed by id, so
+// 10,001 live jobs inserted first put the real one past that page.
+func TestTheSweepKeepsAJobPastTheFirstPageOfRiverJobs(t *testing.T) {
+	f := newFx(t)
+	f.exec(t, `INSERT INTO river.river_job (state, max_attempts, kind, args, queue)
+	  SELECT 'available', 3, 'batch_job', jsonb_build_object('job_id', gen_random_uuid()::text), 'default' FROM generate_series(1, 10001)`)
+	id := f.queueImport(t, f.A.Tenant, "Waiting", 2)
+	if _, err := f.runner.Drain(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	var live int
+	f.scan(t, `SELECT count(*) FROM river.river_job WHERE args->>'job_id' = $1 AND state = 'available'`, []any{id.String()}, &live)
+	if live != 1 {
+		t.Fatalf("River holds %d jobs for the row, want 1", live)
+	}
+	f.age(t, id, time.Hour)
+	if err := f.runner.Sweep(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if s, e := f.state(t, id); s != "queued" {
+		t.Fatalf("a row whose River job is live is %s (%s)", s, e)
+	}
+	// And the row of a job that River does not hold is still ended.
+	lost := f.queueImport(t, f.B.Tenant, "Lost", 2)
+	f.exec(t, `DELETE FROM ctrlz.job_outbox`)
+	f.age(t, lost, time.Hour)
+	if err := f.runner.Sweep(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := f.state(t, lost); s != "failed" {
+		t.Fatalf("a row with no River job is %s", s)
+	}
+	if s, _ := f.state(t, id); s != "queued" {
+		t.Fatalf("the live row is %s after the second sweep", s)
+	}
+}
