@@ -647,10 +647,6 @@ func TestChallengeForClaimOverlappingASuspendedOne(t *testing.T) {
 func TestChallengeRetryWithNoLiveChallengeOfTheClaim(t *testing.T) {
 	f := newFx(t)
 	ep := f.create(t, f.A.Tenant, f.A.Profile, "e")[0]
-	f.exec(t, `UPDATE ctrlz.tenant_entitlements SET max_ip_claims = 1 WHERE tenant_id = $1`, f.A.Tenant)
-	if n := f.count(t, `SELECT count(*) FROM ctrlz.tenant_entitlements WHERE tenant_id = $1 AND max_ip_claims = 1`, f.A.Tenant); n != 1 {
-		t.Fatal("the tenant's claim limit was not set")
-	}
 	c1, c2 := "203.0.113.50/32", "203.0.113.51/32"
 	first, err := f.env.RequestClaim(f.ctx, f.st, f.A.Tenant, opts, ep.ID, endpoints.ClaimAsk{Cidr: &c1})
 	if err != nil {
@@ -661,12 +657,17 @@ func TestChallengeRetryWithNoLiveChallengeOfTheClaim(t *testing.T) {
 			t.Fatalf("challenge %d: %v", i, err)
 		}
 	}
-	f.exec(t, `UPDATE ctrlz.ip_claims SET state = 'released' WHERE id = $1`, first.Claim.ID)
 	second, err := f.env.RequestClaim(f.ctx, f.st, f.A.Tenant, opts, ep.ID, endpoints.ClaimAsk{Cidr: &c2})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Ten live challenges are held for a limit of one claim and one claim held: the bound is ten, and this claim has none.
+	// The tenant keeps one claim, the second, and a limit of one: the bound is ten live challenges, and the ten of the released
+	// first claim still count. The limit is lowered after the requests, which is the case the bound is written for.
+	f.exec(t, `UPDATE ctrlz.ip_claims SET state = 'released' WHERE tenant_id = $1 AND id <> $2`, f.A.Tenant, second.Claim.ID)
+	f.exec(t, `UPDATE ctrlz.tenant_entitlements SET max_ip_claims = 1 WHERE tenant_id = $1`, f.A.Tenant)
+	if n := f.count(t, `SELECT count(*) FROM ctrlz.tenant_entitlements WHERE tenant_id = $1 AND max_ip_claims = 1`, f.A.Tenant); n != 1 {
+		t.Fatal("the tenant's claim limit was not set")
+	}
 	_, err = f.env.OpenChallenge(f.ctx, f.st, f.A.Tenant, opts, ep.ID, second.Claim.ID)
 	if e := refusal(t, err); e.Kind != endpoints.KindTooManyChallenges || e.RetryAfter != 60 {
 		t.Errorf("a refusal by the tenant-wide bound: %v retry %d, want 60", e, e.RetryAfter)
