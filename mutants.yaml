@@ -5110,7 +5110,7 @@ mutants:
     edits:
       - file: internal/admincli/derive.go
         old: |-
-          return missingKeyFilesError{missing: names, refusal: err}
+          return missingKeyFilesError{missing: names, stale: stale, refusal: err}
         new: |-
           return err
     must_fail:

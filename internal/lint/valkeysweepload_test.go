@@ -348,7 +348,14 @@ func TestValkeySweepKeepsLimiterCallsOnTime(t *testing.T) {
 				return false
 			}
 			ex, _ := admin.Do(ctx, admin.B().Exists().Key(foreign).Build()).AsInt64()
-			if n <= budget && ex == 0 {
+			// The load's own keys are in the zone (ctrlz:rl:api:otp-send:load-N, one per client) and the sweep counts
+			// them like any other. A pass keeps the first 40,000 keys in the order SCAN gives them and deletes the
+			// rest, so a load key whose place in that order is in the tail is deleted by every pass and written again
+			// by its client within 80 ms, and DBSIZE then reads over the budget for as long as the load runs, whatever
+			// the sweep did to the fill. The hash seed of each server decides the order, so that happened in about
+			// one run in three (the 23 passes and the 1 minute of the runs of 2026-11-24). The sweep is judged by
+			// what it left of the fill: at most the budget plus one key of each client.
+			if n <= budget+clients && ex == 0 {
 				at = time.Now()
 				return true
 			}
