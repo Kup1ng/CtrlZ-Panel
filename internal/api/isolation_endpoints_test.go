@@ -42,12 +42,17 @@ func (e *isoEnv) endpointFixtures() map[string]isolation.Fixture {
 	// clean puts the Endpoint tables of the tenant back to the seed: the seeded Endpoint stays, whatever a case made goes.
 	clean := func(w isolation.Who) {
 		s := seed(w)
-		f.env.Exec(f.t, `DELETE FROM ctrlz.policy_outbox WHERE tenant_id = $1;
-			DELETE FROM ctrlz.idempotency_keys WHERE tenant_id = $1;
-			DELETE FROM ctrlz.endpoints WHERE tenant_id = $1 AND id <> $2;
-			DELETE FROM ctrlz.endpoint_groups WHERE tenant_id = $1;
-			DELETE FROM ctrlz.clients WHERE tenant_id = $1 AND source = 'manual';
-			DELETE FROM ctrlz.schedule_windows WHERE tenant_id = $1;`, s.Tenant, s.Endpoint)
+		// One statement each: a statement with parameters is prepared, and a prepared statement is one command.
+		for _, sql := range []string{
+			`DELETE FROM ctrlz.policy_outbox WHERE tenant_id = $1`,
+			`DELETE FROM ctrlz.idempotency_keys WHERE tenant_id = $1`,
+			`DELETE FROM ctrlz.endpoint_groups WHERE tenant_id = $1`,
+			`DELETE FROM ctrlz.clients WHERE tenant_id = $1 AND source = 'manual'`,
+			`DELETE FROM ctrlz.schedule_windows WHERE tenant_id = $1`,
+		} {
+			f.env.Exec(f.t, sql, s.Tenant)
+		}
+		f.env.Exec(f.t, `DELETE FROM ctrlz.endpoints WHERE tenant_id = $1 AND id <> $2`, s.Tenant, s.Endpoint)
 	}
 	mkEndpoint := func(w isolation.Who, name string) uuid.UUID {
 		s := seed(w)

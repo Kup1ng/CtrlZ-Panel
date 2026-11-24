@@ -196,7 +196,7 @@ func TestDefinerWriteLintCanFail(t *testing.T) {
 	create(`CREATE FUNCTION ctrlz_fn.planted_one_row(p_hash bytea) RETURNS void LANGUAGE sql AS $$ UPDATE ctrlz.auth_tickets SET attempts = attempts + 1 WHERE token_hash = p_hash $$`)
 	create(`CREATE FUNCTION ctrlz_fn.planted_ordered(p uuid) RETURNS void LANGUAGE sql AS $$ UPDATE ctrlz.api_tokens SET revoked_at = now() WHERE id = ANY (ARRAY(SELECT x.id FROM ctrlz.api_tokens x WHERE x.user_id = p ORDER BY x.id FOR NO KEY UPDATE)) $$`)
 	// db-r17-4: ONE function that writes a table in plan order is not safe either (a plan is not fixed).
-	create(`CREATE FUNCTION ctrlz_fn.planted_single_writer(p uuid) RETURNS void LANGUAGE sql AS $$ UPDATE ctrlz.schedule_windows SET updated_at = now() WHERE tenant_id = ctrlz.current_tenant_id() $$`)
+	create(`CREATE FUNCTION ctrlz_fn.planted_single_writer(p uuid) RETURNS void LANGUAGE sql AS $$ UPDATE ctrlz.unblock_requests SET updated_at = now() WHERE tenant_id = ctrlz.current_tenant_id() $$`)
 	// A table with no id: the sort that is the unique key is the one order, any other sort is not.
 	create(`CREATE FUNCTION ctrlz_fn.planted_key_sorted(p text) RETURNS void LANGUAGE sql AS $$ DELETE FROM ctrlz.auth_throttle t WHERE t.ctid = ANY (ARRAY(SELECT s.ctid FROM ctrlz.auth_throttle s WHERE s.scope = p ORDER BY s.scope, s.key FOR UPDATE)) $$`)
 	create(`CREATE FUNCTION ctrlz_fn.planted_key_sorted_wrong(p text) RETURNS void LANGUAGE sql AS $$ UPDATE ctrlz.auth_throttle t SET count = 0 WHERE t.ctid = ANY (ARRAY(SELECT s.ctid FROM ctrlz.auth_throttle s WHERE s.scope = p ORDER BY s.key, s.scope FOR UPDATE)) $$`)
@@ -226,7 +226,7 @@ func TestDefinerWriteLintCanFail(t *testing.T) {
 		"planted_sql_orders: a update of ctrlz.api_tokens",
 		"planted_sql_a: a update of ctrlz.notifications",
 		"planted_plpgsql_b: a delete of ctrlz.notifications",
-		"planted_single_writer: a update of ctrlz.schedule_windows",
+		"planted_single_writer: a update of ctrlz.unblock_requests",
 		"planted_key_sorted_wrong: a update of ctrlz.auth_throttle",
 		"planted_other_unique_key: a update of ctrlz.api_tokens",
 		"planted_insert_unsorted: an INSERT into ctrlz.policy_outbox",
