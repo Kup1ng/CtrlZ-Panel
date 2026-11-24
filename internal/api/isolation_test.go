@@ -106,6 +106,9 @@ func (e *isoEnv) reset(w isolation.Who) {
 		before = `DELETE FROM ctrlz.auth_throttle; TRUNCATE ctrlz.sms_counters;`
 	}
 	e.db.Reset(w, before)
+	// What an Endpoint case left (a group, a client, an Endpoint of its own, the rows hung on it) is not a table the harness resets, and a
+	// call that changes B only would leave A and B in different states for the next case, whatever that case is (isolation_access_test.go).
+	e.cleanEndpointTables(w)
 	// The phone is back, so a number the change moved to is free again.
 	*n = tn{who: w, pw: n.pw, newPhone: n.newPhone, invPhone: n.invPhone}
 }
@@ -724,6 +727,10 @@ func TestIsolation(t *testing.T) {
 			}
 			// A session that satisfies the class of the operation, so only the tenant's state can refuse it.
 			c := e.session(e.n[isolation.B], op.Auth == apispec.Reauth)
+			// A user holds at most MaxSessions live sessions and a login past it ends the oldest, which would be the remembered browser
+			// of this case (its refresh cookie is the last step): the session made for one operation is gone before the next is made, so
+			// the number of operations of the document is no bound on the case.
+			sessionOfTheCall := e.latestSessionID(e.n[isolation.B])
 			var body any
 			if base.Body != nil {
 				body = base.Body
@@ -743,6 +750,7 @@ func TestIsolation(t *testing.T) {
 					t.Errorf("%s %s (%s) for a suspended tenant: %d %s, want 403 account_suspended", op.Method, op.Path, op.ID, r.Code, r.Body)
 				}
 			}
+			f.env.Exec(t, `DELETE FROM ctrlz.sessions WHERE id = $1`, sessionOfTheCall)
 			f.ck.add(time.Minute)
 		}
 

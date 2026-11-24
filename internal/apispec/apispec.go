@@ -57,6 +57,9 @@ type Operation struct {
 	Path   string // as written in the document, with {name} parameters; relative to the server URL
 	Auth   Auth
 	Rate   string
+	// Also is a second rate class the pipeline charges for the operation, on the tenant of the live session (x-ctrlz-rate-also): the
+	// claim routes spend the tenant's hourly claim budget besides their own class (P3 spec 4.5). Empty for most.
+	Also string
 	// MaxBody is the body limit in bytes. Zero means the default of 16 KiB
 	// (spec 2.3). Only the passkey finish routes raise it.
 	MaxBody int64
@@ -77,6 +80,7 @@ type rawOp struct {
 	Tags    []string `yaml:"tags"`
 	Auth    string   `yaml:"x-ctrlz-auth"`
 	Rate    string   `yaml:"x-ctrlz-rate"`
+	Also    string   `yaml:"x-ctrlz-rate-also"`
 	MaxBody int64    `yaml:"x-ctrlz-max-body"`
 	Token   string   `yaml:"x-ctrlz-token"`
 	Lock    string   `yaml:"x-ctrlz-lock"`
@@ -124,7 +128,7 @@ func Parse(doc []byte, service ratelimit.Service) ([]Operation, error) {
 			if isHealth(raw.Tags) {
 				continue
 			}
-			op := Operation{ID: raw.ID, Method: upper(method), Path: path, Auth: Auth(raw.Auth), Rate: raw.Rate, MaxBody: raw.MaxBody, Token: raw.Token, Lock: raw.Lock, Outbox: raw.Outbox}
+			op := Operation{ID: raw.ID, Method: upper(method), Path: path, Auth: Auth(raw.Auth), Rate: raw.Rate, Also: raw.Also, MaxBody: raw.MaxBody, Token: raw.Token, Lock: raw.Lock, Outbox: raw.Outbox}
 			if op.ID == "" {
 				return nil, fmt.Errorf("apispec: %s has no operationId", op.Key())
 			}
@@ -143,6 +147,11 @@ func Parse(doc []byte, service ratelimit.Service) ([]Operation, error) {
 			}
 			if _, ok := ratelimit.Lookup(service, op.Rate); !ok {
 				return nil, fmt.Errorf("apispec: %s has x-ctrlz-rate %q, which %s does not have", op.ID, op.Rate, service)
+			}
+			if op.Also != "" {
+				if c, ok := ratelimit.Lookup(service, op.Also); !ok || c.Key != ratelimit.BySession || !op.Auth.NeedsSession() {
+					return nil, fmt.Errorf("apispec: %s has x-ctrlz-rate-also %q, which is not a session-keyed class of %s on a route with a session", op.ID, op.Also, service)
+				}
 			}
 			if op.MaxBody < 0 {
 				return nil, fmt.Errorf("apispec: %s has a negative x-ctrlz-max-body", op.ID)

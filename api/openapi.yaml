@@ -32,6 +32,9 @@ info:
     operation whose limit is above 64 KiB takes the bulk gate (a byte-weighted pool,
     one tenant's share of it) after its session resolved and before its body is read.
 
+    An operation may also name `x-ctrlz-rate-also`: a second class, keyed by the tenant of the live session, that the
+    pipeline charges after the first (the claim routes spend the tenant's hourly claim budget, P3 spec 4.5).
+
     Every operation also declares three more (P2 spec 8.1): `x-ctrlz-token`
     (`none`, `read` or `write`: what an API token may do, enforced from P3),
     `x-ctrlz-lock` (`none`, `guard`, `lock` or `unlock`: how it meets the lock of a
@@ -2581,6 +2584,7 @@ paths:
         `ip_suspended`, `rate_limited`.
       x-ctrlz-auth: session
       x-ctrlz-rate: user-write
+      x-ctrlz-rate-also: ip-claim
       x-ctrlz-token: none
       x-ctrlz-lock: none
       x-ctrlz-outbox: endpoint_set
@@ -2606,6 +2610,7 @@ paths:
       description: 'Charged to `ip-claim` too. Errors: `too_many_attempts` (with `Retry-After`), `ip_suspended`, `rate_limited`.'
       x-ctrlz-auth: session
       x-ctrlz-rate: user-write
+      x-ctrlz-rate-also: ip-claim
       x-ctrlz-token: none
       x-ctrlz-lock: none
       x-ctrlz-outbox: none
@@ -2657,6 +2662,7 @@ paths:
         `ip-claim` too. Errors: `ip_suspended`, `profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.
       x-ctrlz-auth: session
       x-ctrlz-rate: user-write
+      x-ctrlz-rate-also: ip-claim
       x-ctrlz-token: none
       x-ctrlz-lock: none
       x-ctrlz-outbox: endpoint_set

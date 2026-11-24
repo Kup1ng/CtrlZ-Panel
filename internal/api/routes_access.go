@@ -11,7 +11,6 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/api/gen"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/endpoints"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
-	"github.com/Kup1ng/CtrlZ-Panel/internal/ratelimit"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/setup"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
 )
@@ -78,27 +77,6 @@ func challengeCommands(label, zone string, primary, fallback netip.Addr) gen.Cha
 		l.Dns2 = fallback.String()
 	}
 	return gen.ChallengeCommands{Ready: true, VerifyHost: &host, Legacy: &l}
-}
-
-// chargeIPClaim charges the tenant's hourly budget for the claim routes (spec 4.5): every request, release and challenge open,
-// whatever session of the tenant sends it. It follows the operation's own class, which the pipeline has charged, and comes
-// before any work, so a refused operation costs the same as one that went through: the budget is what bounds the released
-// rows a loop of requests and releases could pile up.
-func (s *Server) chargeIPClaim(ctx context.Context, tenant uuid.UUID) error {
-	c, ok := ratelimit.Lookup(ratelimit.Tenant, ratelimit.IPClaim)
-	if !ok || s.d.Limiter == nil {
-		return httpx.Internal()
-	}
-	d, err := s.d.Limiter.Allow(ctx, c, ratelimit.Subject{Tenant: tenant.String()})
-	switch {
-	case err != nil && ctx.Err() != nil:
-		return ctx.Err()
-	case err != nil:
-		return httpx.Internal()
-	case !d.Allowed:
-		return httpx.RateLimited(d.RetryAfter)
-	}
-	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -292,9 +270,6 @@ func (s *Server) RequestIpClaim(ctx context.Context, req gen.RequestIpClaimReque
 	if e := ask.Check(); e != nil {
 		return nil, profileError(e)
 	}
-	if err := s.chargeIPClaim(ctx, pr.TenantID); err != nil {
-		return nil, err
-	}
 	r, err := s.ep.RequestClaim(ctx, s.d.Store, pr.TenantID, epWrite(), uuid.UUID(req.Id), ask)
 	if err != nil {
 		return nil, profileError(err)
@@ -306,9 +281,6 @@ func (s *Server) RequestIpClaim(ctx context.Context, req gen.RequestIpClaimReque
 func (s *Server) OpenIpClaimChallenge(ctx context.Context, req gen.OpenIpClaimChallengeRequestObject) (gen.OpenIpClaimChallengeResponseObject, error) {
 	pr, err := principal(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.chargeIPClaim(ctx, pr.TenantID); err != nil {
 		return nil, err
 	}
 	c, err := s.ep.OpenChallenge(ctx, s.d.Store, pr.TenantID, epWrite(), uuid.UUID(req.Id), uuid.UUID(req.ClaimId))
@@ -346,9 +318,6 @@ func (s *Server) ReleaseIpClaim(ctx context.Context, req gen.ReleaseIpClaimReque
 	}
 	a, err := s.endpointAuth(ctx, pr, req.Body.LockPasswords)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.chargeIPClaim(ctx, pr.TenantID); err != nil {
 		return nil, err
 	}
 	if err := s.ep.ReleaseClaim(ctx, s.d.Store, pr.TenantID, epWrite(), a, uuid.UUID(req.Id), uuid.UUID(req.ClaimId)); err != nil {

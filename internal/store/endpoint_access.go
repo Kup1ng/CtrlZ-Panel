@@ -288,7 +288,7 @@ func (t Tx) DDNSHostInsert(endpoint uuid.UUID, hostname string) (uuid.UUID, Won,
 	var id uuid.UUID
 	w, err := wonRow(t.tx.QueryRow(t.ctx, qDDNSHostInsert, t.tenant, endpoint, hostname, int32(MaxDDNSHostsPerEndpoint)).Scan(&id))
 	if err != nil || !w.Yes() {
-		return uuid.Nil, Won{}, sanitize(err)
+		return uuid.Nil, Won{}, err
 	}
 	return id, w, nil
 }

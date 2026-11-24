@@ -62,7 +62,7 @@ func TestAuthorizedIPFlow(t *testing.T) {
 	var added struct {
 		Items []pAuthorized `json:"items"`
 	}
-	a.post(base, map[string]any{"cidrs": []string{"198.18.0.0/15", "nonsense"}}).want(422, "validation_failed")
+	a.post(base, map[string]any{"cidrs": []string{"198.18.0.0/15", "1.2.3.4.5"}}).want(422, "validation_failed")
 	a.post(base, map[string]any{"cidrs": []string{a.ip, "198.18.0.0/16"}}).want(201, "").json(&added)
 	if len(added.Items) != 2 {
 		t.Fatalf("%d rows added", len(added.Items))
