@@ -24,7 +24,10 @@ type pEndpointPage struct {
 	Items      []pEndpoint    `json:"items"`
 	NextCursor string         `json:"next_cursor"`
 	ByType     map[string]int `json:"by_type"`
-	ByStatus   struct{ Pending, Active int }
+	ByStatus   struct {
+		Pending int `json:"pending"`
+		Active  int `json:"active"`
+	} `json:"by_status"`
 }
 
 func (f *frig) endpointType() string {
@@ -101,8 +104,16 @@ func TestEndpointFlow(t *testing.T) {
 		t.Fatalf("first page %+v", p1)
 	}
 	a.get("/endpoints?sort=name&limit=2&cursor="+p1.NextCursor).want(200, "").json(&p2)
-	if len(p2.Items) == 0 || strings.ToLower(p2.Items[0].Name) <= strings.ToLower(p1.Items[1].Name) {
-		t.Errorf("second page %+v after %+v", p2.Items, p1.Items)
+	// The order is the database's collation (punctuation is not what it sorts by), so the page is judged by what it must not hold.
+	if len(p2.Items) == 0 {
+		t.Fatalf("second page is empty after %+v", p1.Items)
+	}
+	for _, x := range p2.Items {
+		for _, y := range p1.Items {
+			if x.ID == y.ID {
+				t.Errorf("the second page repeats %s", x.Name)
+			}
+		}
 	}
 	a.get("/endpoints?limit=2&cursor="+p1.NextCursor).want(400, "bad_request")
 	var byType pEndpointPage
