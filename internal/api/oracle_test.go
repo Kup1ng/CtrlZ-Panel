@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/bearer"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/password"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/pwstrength"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/session"
@@ -261,6 +262,18 @@ func oracleVariants() []oracleVariant {
 		{name: "resetComplete", op: "resetComplete", noSubject: true, prepare: func(w *oracleWorld, who oracleWho) oracle.Request {
 			return post("/auth/password/reset/complete", map[string]any{"ticket": oracleTicket(w.seq()), "new_password": pwB})
 		}},
+		// The three public routes of P3 7.1. They take no phone, so the two runs ask with made-up values; each value is one this
+		// service could have issued (its tag checks) for a row that does not exist, so the request goes through the pipeline's
+		// screen, the lookup and the 404 that every refusal of these routes shares.
+		{name: "openShare", op: "openShare", noSubject: true, prepare: func(w *oracleWorld, who oracleWho) oracle.Request {
+			return post("/public/share", map[string]any{"link": w.ghostLink(bearer.ShareLink)})
+		}},
+		{name: "createShareAppleProfile", op: "createShareAppleProfile", noSubject: true, prepare: func(w *oracleWorld, who oracleWho) oracle.Request {
+			return post("/public/share/apple-profile", map[string]any{"link": w.ghostLink(bearer.ShareLink), "params": map[string]any{"protocol": "doh"}})
+		}},
+		{name: "downloadAppleProfile", op: "downloadAppleProfile", noSubject: true, prepare: func(w *oracleWorld, who oracleWho) oracle.Request {
+			return oracle.Request{Method: "GET", Path: "/public/apple-profile/" + w.ghostLink(bearer.DownloadLink)}
+		}},
 	}
 }
 
@@ -288,6 +301,15 @@ type oracleWorld struct {
 }
 
 func (w *oracleWorld) seq() int { w.mu.Lock(); defer w.mu.Unlock(); w.n++; return w.n }
+
+// ghostLink is a link value of the kind that checks (this service made it) and names no row.
+func (w *oracleWorld) ghostLink(k bearer.Kind) string {
+	v, err := w.f.srv.bearer.Mint(k, uuid.New(), w.f.ck.now().Add(time.Hour))
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	return v.Reveal()
+}
 
 func (w *oracleWorld) mustJSON(b []byte, v any) {
 	w.t.Helper()

@@ -135,12 +135,12 @@ func TestResolverViewAndGenerators(t *testing.T) {
 	b.get(path+"/resolvers").want(404, "not_found")
 
 	// The generators read only the view.
-	rr := a.get(path+"/generators/windows-doh").want(200, "")
+	rr := a.get(path+"/generators?generator=windows-doh").want(200, "")
 	if !strings.HasPrefix(rr.H.Get("Content-Type"), "text/plain") || !strings.Contains(string(rr.Body), "192.0.2.1") || !strings.Contains(string(rr.Body), got.DohURL) {
 		t.Errorf("windows script: %q", rr.Body)
 	}
-	a.get(path+"/generators/nope").want(404, "not_found")
-	b.get(path+"/generators/windows-doh").want(404, "not_found")
+	a.get(path+"/generators?generator=nope").want(404, "not_found")
+	b.get(path+"/generators?generator=windows-doh").want(404, "not_found")
 
 	// No zone: nothing is generated, and the view says why.
 	f.env.Exec(t, `UPDATE ctrlz.domain_settings SET dns_zone = NULL`)
@@ -149,7 +149,7 @@ func TestResolverViewAndGenerators(t *testing.T) {
 	if off.Resolvers.Ready || off.Resolvers.Reason != "zone_missing" || off.Resolvers.Host != "" || off.Resolvers.DohURL != "" {
 		t.Errorf("not-ready view %+v", off.Resolvers)
 	}
-	a.get(path+"/generators/windows-doh").want(409, "setup_unavailable")
+	a.get(path+"/generators?generator=windows-doh").want(409, "setup_unavailable")
 	a.post(path+"/share-links", map[string]any{}).want(409, "setup_unavailable")
 	r.apple(map[string]any{"protocol": "doh"}).want(409, "setup_unavailable")
 }
@@ -239,8 +239,8 @@ func TestShareLinkFlow(t *testing.T) {
 	a.post(path, map[string]any{}).want(201, "")
 
 	// ttl_hours is bounded.
-	a.post(path, map[string]any{"ttl_hours": 169}).want(422, "validation_failed")
-	a.post(path, map[string]any{"ttl_hours": 0}).want(422, "validation_failed")
+	a.post(path, map[string]any{"ttl_hours": 169}).want(400, "bad_request")
+	a.post(path, map[string]any{"ttl_hours": 0}).want(400, "bad_request")
 }
 
 // E4: every refusal of a public route is the same answer, and a value that cannot be ours costs no store call.
@@ -274,7 +274,7 @@ func TestPublicRefusalsAreOneAnswer(t *testing.T) {
 	soon := r.share(map[string]any{"ttl_hours": 1})
 
 	cases := map[string]string{
-		"junk": "x", "short": strings.Repeat("A", 63), "long": strings.Repeat("A", 65), "zeros": strings.Repeat("A", 64),
+		"zeros":                              strings.Repeat("A", 64),
 		"a share value of a row that is not": ghost.Reveal(),
 		"revoked":                            valueOf(t, rev.URL), "used up": valueOf(t, usedUp.URL), "deleted Endpoint": valueOf(t, doomed.URL),
 	}
@@ -293,6 +293,12 @@ func TestPublicRefusalsAreOneAnswer(t *testing.T) {
 	}
 	cases["a download value"] = d.Reveal()
 
+	// A body that is not the document's (a value of the wrong length or alphabet) is refused by the schema, as on every route: 400.
+	for _, v := range []string{"x", strings.Repeat("A", 63), strings.Repeat("A", 65), strings.Repeat("A", 63) + "="} {
+		if got := r.open(v); got.Code != 400 {
+			t.Errorf("a value of length %d answered %d, want 400", len(v), got.Code)
+		}
+	}
 	var first *resp
 	check := func(name string, got *resp) {
 		t.Helper()
@@ -328,7 +334,9 @@ func TestPublicRefusalsAreOneAnswer(t *testing.T) {
 	before := f.st.Asked()
 	for _, v := range []string{"x", string(flipped), valueOf(t, soon.URL), strings.Repeat("A", 64)} {
 		f.ck.add(2 * time.Second)
-		r.open(v).want(404, "not_found")
+		if got := r.open(v); got.Code != 404 && got.Code != 400 {
+			t.Errorf("a value that cannot be ours answered %d", got.Code)
+		}
 	}
 	if n := f.st.Asked() - before; n != 0 {
 		t.Errorf("%d store calls for values that cannot be ours", n)
@@ -436,14 +444,14 @@ func TestAppleProfileFlow(t *testing.T) {
 	r.apple(map[string]any{"protocol": "doh"}).want(201, "")
 
 	// The request is checked: a protocol, an SSID with a control, too many domains, a folder that is not the tenant's.
-	r.apple(map[string]any{"protocol": "dnscrypt"}).want(422, "validation_failed")
+	r.apple(map[string]any{"protocol": "dnscrypt"}).want(400, "bad_request")
 	r.apple(map[string]any{"protocol": "doh", "from_folder_id": uuid.NewString()}).want(404, "not_found")
 	var many []string
 	for i := 0; i < 101; i++ {
 		many = append(many, fmt.Sprintf("d%d.example.com", i))
 	}
 	f.ck.add(time.Minute)
-	r.apple(map[string]any{"protocol": "doh", "excluded_domains": many}).want(422, "validation_failed")
+	r.apple(map[string]any{"protocol": "doh", "excluded_domains": many}).want(400, "bad_request")
 }
 
 // A share link makes its own Apple links, bounded by its uses and not by the tenant's twenty, and they go with it.

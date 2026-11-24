@@ -2404,7 +2404,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/ResolverView"}
         default: {$ref: "#/components/responses/Problem"}
-  /endpoints/{id}/generators/{generator}:
+  /endpoints/{id}/generators:
     get:
       tags: [endpoints]
       operationId: getEndpointGenerator
@@ -2421,9 +2421,10 @@ paths:
       parameters:
         - {$ref: "#/components/parameters/Id"}
         - name: generator
-          in: path
+          in: query
           required: true
-          schema: {type: string, maxLength: 32, pattern: '^[a-z][a-z0-9-]*$', x-ctrlz-rowref: false}
+          description: The id of a generator of the registry, such as `windows-doh`, `firefox-policy`, `chromium-policy`, `android-private-dns` or `address-list`.
+          schema: {type: string, minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9-]*$', x-ctrlz-rowref: false}
         - {$ref: "#/components/parameters/ClientLabel"}
       responses:
         "200":
@@ -2594,7 +2595,7 @@ paths:
         - name: link
           in: path
           required: true
-          schema: {type: string, minLength: 64, maxLength: 64, pattern: '^[A-Za-z0-9_-]{64}$', x-ctrlz-rowref: false}
+          schema: {type: string, maxLength: 64, pattern: '^[A-Za-z0-9_-]{64}$', x-ctrlz-rowref: false}
       responses:
         "200":
           description: The profile, as `application/x-apple-aspen-config`.

@@ -568,7 +568,7 @@ func windowCases() []windowCase {
 				VALUES ($1, $2, 'clock', 'read', '\x7a03'::bytea, 'czt_c', $3) RETURNING id`, f.A.Tenant, f.A.User, until).Scan(&token); err != nil {
 				e.t.Fatal(err)
 			}
-			e.sameInstant("api_tokens.expires_at", e.at("api_tokens", "expires_at", "token_hash = '\x7a03'::bytea"), until)
+			e.sameInstant("api_tokens.expires_at", e.at("api_tokens", "expires_at", "token_hash = '\\x7a03'::bytea"), until)
 			for d, live := range map[time.Duration]bool{time.Hour - time.Second: true, time.Hour + time.Second: false} {
 				var n int
 				if err := e.super.QueryRow(f.ctx, "SELECT count(*) FROM ctrlz.api_tokens WHERE id = $1 AND expires_at > $2", token, e.app(d)).Scan(&n); err != nil {

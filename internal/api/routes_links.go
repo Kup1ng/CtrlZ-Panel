@@ -98,7 +98,7 @@ func (s *Server) GetEndpointGenerator(ctx context.Context, req gen.GetEndpointGe
 	}
 	var text string
 	err = s.d.Store.WithTenant(ctx, pr.TenantID, store.TxOpts{ReadOnly: true}, func(tx store.Tx) (err error) {
-		text, _, err = s.ep.Generate(tx, uuid.UUID(req.Id), str(req.Params.Client), req.Generator)
+		text, _, err = s.ep.Generate(tx, uuid.UUID(req.Id), str(req.Params.Client), req.Params.Generator)
 		return err
 	})
 	if err != nil {

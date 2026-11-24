@@ -225,27 +225,13 @@ func (a *API) perOp(next http.Handler) http.Handler {
 			return
 		}
 
-		// Step 8 for a route that carries a share or download link value (P3 7.1): the value is screened with no I/O, and one
-		// that fails, or that is in the dead set, is the same 404 as every other refusal and charges nothing. One that passes
-		// is charged to the class on the row it names, never to the network: a value is minted only by its tenant, so a
-		// stranger holds nothing that proves anything about his network.
+		// The page, the profile and every refusal of a route that carries a share or download link value are for one person and are
+		// never kept or indexed or passed on in a Referer (P3 7.1): the headers are set before the first answer, so a refusal
+		// carries them as a success does.
 		if class.Key == ratelimit.ByLink {
-			// The page, the profile and every refusal of these routes are for one person and are never kept or indexed or passed on
-			// in a Referer (7.1): the headers are set before the first answer, so a refusal carries them as a success does.
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("X-Robots-Tag", "noindex")
 			w.Header().Set("Referrer-Policy", "no-referrer")
-			key, ok := a.p.Bearer(r, op)
-			if !ok || a.dead.has("link:"+key) {
-				Write(w, r, NotFound())
-				return
-			}
-			if e := a.charge(ctx, class, ratelimit.Subject{Network: network, Link: key}); e != nil {
-				a.refuse(w, r, e)
-				return
-			}
-			ctx = context.WithValue(ctx, keyLinkDead, &linkDeadMark{set: a.dead, key: "link:" + key})
-			r = r.WithContext(ctx)
 		}
 
 		// Step 8: network-keyed class of the operation, or the bucket of the proof the
@@ -381,6 +367,25 @@ func (a *API) perOp(next http.Handler) http.Handler {
 				a.refuse(w, r, e)
 				return
 			}
+		}
+
+		// Step 8 for a route that carries a share or download link value (P3 7.1), after the schema check so that a body that is not the
+		// document's (rule boundary-input) is the 400 every route answers: the value is screened with no I/O, and one that fails, or that
+		// is in the dead set, is the same 404 as every other refusal and charges nothing. One that passes is charged to the class on the
+		// row it names, never to the network: a value is minted only by its tenant, so a stranger holds nothing that proves anything
+		// about his network.
+		if class.Key == ratelimit.ByLink {
+			key, ok := a.p.Bearer(r, op)
+			if !ok || a.dead.has("link:"+key) {
+				Write(w, r, NotFound())
+				return
+			}
+			if e := a.charge(ctx, class, ratelimit.Subject{Network: network, Link: key}); e != nil {
+				a.refuse(w, r, e)
+				return
+			}
+			ctx = context.WithValue(ctx, keyLinkDead, &linkDeadMark{set: a.dead, key: "link:" + key})
+			r = r.WithContext(ctx)
 		}
 
 		// Steps 8 (session-lookup) and 9: a route that needs a session.

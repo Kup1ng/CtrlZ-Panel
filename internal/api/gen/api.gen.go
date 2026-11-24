@@ -3831,6 +3831,9 @@ type ListClientsParams struct {
 
 // GetEndpointGeneratorParams defines parameters for GetEndpointGenerator.
 type GetEndpointGeneratorParams struct {
+	// Generator The id of a generator of the registry, such as `windows-doh`, `firefox-policy`, `chromium-policy`, `android-private-dns` or `address-list`.
+	Generator string `form:"generator" json:"generator"`
+
 	// Client A client label of the Endpoint (SC 3.1). Without it the view is the Endpoint's own.
 	Client *ClientLabel `form:"client,omitempty" json:"client,omitempty"`
 }
@@ -4263,8 +4266,8 @@ type ServerInterface interface {
 	// (POST /endpoints/{id}/clients:batch)
 	BatchClients(w http.ResponseWriter, r *http.Request, id Id)
 	// GetEndpointGenerator One generated setup text
-	// (GET /endpoints/{id}/generators/{generator})
-	GetEndpointGenerator(w http.ResponseWriter, r *http.Request, id Id, generator string, params GetEndpointGeneratorParams)
+	// (GET /endpoints/{id}/generators)
+	GetEndpointGenerator(w http.ResponseWriter, r *http.Request, id Id, params GetEndpointGeneratorParams)
 	// GetEndpointResolvers The values to set a device up with
 	// (GET /endpoints/{id}/resolvers)
 	GetEndpointResolvers(w http.ResponseWriter, r *http.Request, id Id, params GetEndpointResolversParams)
@@ -4776,8 +4779,8 @@ func (_ Unimplemented) BatchClients(w http.ResponseWriter, r *http.Request, id I
 }
 
 // GetEndpointGenerator One generated setup text
-// (GET /endpoints/{id}/generators/{generator})
-func (_ Unimplemented) GetEndpointGenerator(w http.ResponseWriter, r *http.Request, id Id, generator string, params GetEndpointGeneratorParams) {
+// (GET /endpoints/{id}/generators)
+func (_ Unimplemented) GetEndpointGenerator(w http.ResponseWriter, r *http.Request, id Id, params GetEndpointGeneratorParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6460,17 +6463,21 @@ func (siw *ServerInterfaceWrapper) GetEndpointGenerator(w http.ResponseWriter, r
 		return
 	}
 
-	// ------------- Path parameter "generator" -------------
-	var generator string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "generator", chi.URLParam(r, "generator"), &generator, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "generator", Err: err})
-		return
-	}
-
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetEndpointGeneratorParams
+
+	// ------------- Required query parameter "generator" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "generator", r.URL.Query(), &params.Generator, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "generator"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "generator", Err: err})
+		}
+		return
+	}
 
 	// ------------- Optional query parameter "client" -------------
 
@@ -6486,7 +6493,7 @@ func (siw *ServerInterfaceWrapper) GetEndpointGenerator(w http.ResponseWriter, r
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEndpointGenerator(w, r, id, generator, params)
+		siw.Handler.GetEndpointGenerator(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8480,7 +8487,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/endpoints/{id}/resolvers", wrapper.GetEndpointResolvers)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/endpoints/{id}/generators/{generator}", wrapper.GetEndpointGenerator)
+		r.Get(options.BaseURL+"/endpoints/{id}/generators", wrapper.GetEndpointGenerator)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/endpoints/{id}/share-links", wrapper.ListShareLinks)
@@ -11093,9 +11100,8 @@ func (response BatchClientsdefaultJSONResponse) VisitBatchClientsResponse(w http
 }
 
 type GetEndpointGeneratorRequestObject struct {
-	Id        Id     `json:"id"`
-	Generator string `json:"generator"`
-	Params    GetEndpointGeneratorParams
+	Id     Id `json:"id"`
+	Params GetEndpointGeneratorParams
 }
 
 type GetEndpointGeneratorResponseObject interface {
@@ -13492,7 +13498,7 @@ type StrictServerInterface interface {
 	// (POST /endpoints/{id}/clients:batch)
 	BatchClients(ctx context.Context, request BatchClientsRequestObject) (BatchClientsResponseObject, error)
 	// GetEndpointGenerator One generated setup text
-	// (GET /endpoints/{id}/generators/{generator})
+	// (GET /endpoints/{id}/generators)
 	GetEndpointGenerator(ctx context.Context, request GetEndpointGeneratorRequestObject) (GetEndpointGeneratorResponseObject, error)
 	// GetEndpointResolvers The values to set a device up with
 	// (GET /endpoints/{id}/resolvers)
@@ -15416,11 +15422,10 @@ func (sh *strictHandler) BatchClients(w http.ResponseWriter, r *http.Request, id
 }
 
 // GetEndpointGenerator operation middleware
-func (sh *strictHandler) GetEndpointGenerator(w http.ResponseWriter, r *http.Request, id Id, generator string, params GetEndpointGeneratorParams) {
+func (sh *strictHandler) GetEndpointGenerator(w http.ResponseWriter, r *http.Request, id Id, params GetEndpointGeneratorParams) {
 	var request GetEndpointGeneratorRequestObject
 
 	request.Id = id
-	request.Generator = generator
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {

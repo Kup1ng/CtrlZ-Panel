@@ -809,6 +809,10 @@ func idLocations(doc *openapi3.T, needsSession map[string]bool) map[string][]str
 				name := pr.Value.Name
 				base := pr.Value.In + ":" + name
 				switch {
+				case pr.Value.In == "path" && !session && notRowRef(pr.Value.Schema):
+					// A bearer value in the path of a route with no session (the link of an Apple profile download, P3 7.1) is a proof its
+					// holder owns, like a ticket in a body: there is no session of B to put A's value beside, and whoever holds it is its
+					// owner. The document says so by marking the string x-ctrlz-rowref false; an unmarked path parameter is still a row.
 				case pr.Value.In == "path":
 					locs = append(locs, base)
 				case !session:
@@ -1096,4 +1100,11 @@ func (n *tn) cursorOf(tenant uuid.UUID) string {
 		id = n.announceID
 	}
 	return encodeCursor(tenant, time.Now(), uuid.MustParse(id))
+}
+
+// notRowRef says the schema carries the mark x-ctrlz-rowref with the value false: a decision written in the document that the
+// string names no row.
+func notRowRef(s *openapi3.SchemaRef) bool {
+	v, ok := rowRefMarked(s)
+	return ok && !v
 }

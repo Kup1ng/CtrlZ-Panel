@@ -1,9 +1,15 @@
 package api
 
 import (
+	"strings"
+	"testing"
+
 	"github.com/google/uuid"
 
+	apidoc "github.com/Kup1ng/CtrlZ-Panel/api"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/authtest/isolation"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/ratelimit"
 )
 
 // The isolation fixtures of the Resolver view, the generators and the links (docs/specs/p3-endpoints.md 11.1, rule
@@ -95,9 +101,13 @@ func (e *isoEnv) linkFixtures() map[string]isolation.Fixture {
 			CrossStatus: 404,
 			Cross:       func() isolation.Result { return result(sess().get(ep(isolation.A) + "/resolvers")) }},
 		"getEndpointGenerator": {Effect: isolation.Shows, Status: 200, Arrange: base, Sees: sees,
-			Call:        func() isolation.Result { return result(sess().get(ep(isolation.B) + "/generators/windows-doh")) },
+			Call: func() isolation.Result {
+				return result(sess().get(ep(isolation.B) + "/generators?generator=windows-doh"))
+			},
 			CrossStatus: 404,
-			Cross:       func() isolation.Result { return result(sess().get(ep(isolation.A) + "/generators/windows-doh")) }},
+			Cross: func() isolation.Result {
+				return result(sess().get(ep(isolation.A) + "/generators?generator=windows-doh"))
+			}},
 		"listShareLinks": {Effect: isolation.Shows, Status: 200, Arrange: base,
 			Sees:        func() []string { return []string{st[isolation.B].link.String()} },
 			Call:        func() isolation.Result { return result(sess().get(ep(isolation.B) + "/share-links")) },
@@ -130,11 +140,11 @@ func (e *isoEnv) linkFixtures() map[string]isolation.Fixture {
 			},
 			CrossStatus: 404,
 			Cross: func() isolation.Result {
-				return result(sess().post(ep(isolation.A)+"/apple-profile", map[string]any{"protocol": "dot", "from_folder_id": st[isolation.B].folder.String()}))
+				return result(sess().post(ep(isolation.B)+"/apple-profile", map[string]any{"protocol": "dot", "from_folder_id": st[isolation.A].folder.String()}))
 			},
 			CrossAt: map[string]func() isolation.Result{
-				"body:from_folder_id": func() isolation.Result {
-					return result(sess().post(ep(isolation.B)+"/apple-profile", map[string]any{"protocol": "dot", "from_folder_id": st[isolation.A].folder.String()}))
+				"path:id": func() isolation.Result {
+					return result(sess().post(ep(isolation.A)+"/apple-profile", map[string]any{"protocol": "dot", "from_folder_id": st[isolation.B].folder.String()}))
 				},
 			}},
 		"openShare": {Effect: isolation.Changes, Status: 200, Arrange: base, Sees: sees,
@@ -150,4 +160,41 @@ func (e *isoEnv) linkFixtures() map[string]isolation.Fixture {
 				return result(anon().get("/public/apple-profile/" + st[isolation.B].download))
 			}},
 	}
+}
+
+// TestLinkIsolation runs the fixtures above by themselves, with the hooks of TestIsolation. TestIsolation judges every operation of
+// the document at once and stops at the first operation that has no fixture, so while another lane's operations wait for theirs
+// (the profile routes of P2) it never reaches these; this one holds the links to the same harness meanwhile.
+func TestLinkIsolation(t *testing.T) {
+	f := newFrig(t, frigOpts{})
+	e := newIsoEnv(f)
+	docOps, err := apispec.Parse(apidoc.Tenant(), ratelimit.Tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixtures := e.linkFixtures()
+	takes := opsThatTakeAnID(t)
+	var ops []isolation.Op
+	for _, op := range docOps {
+		if _, ok := fixtures[op.ID]; ok {
+			ops = append(ops, isolation.Op{ID: op.ID, Method: op.Method, Takes: strings.Join(takes[op.ID], ", "), Locations: takes[op.ID]})
+		}
+	}
+	if len(ops) != len(fixtures) {
+		t.Fatalf("%d fixtures and %d of them are operations of the document", len(fixtures), len(ops))
+	}
+	A := f.env.A
+	isolation.Run(t, ops, fixtures, isolation.Hooks{
+		Reset:  e.reset,
+		Digest: e.db.Digest,
+		Shape:  e.db.Shape,
+		Leaks: func() []string {
+			a := e.n[isolation.A]
+			leaks := append([]string{A.Tenant.String(), A.User.String(), strings.TrimPrefix(A.Phone, "+98"), "only for tenant A"}, a.notes...)
+			return append(leaks, e.db.OwnIDs(isolation.A)...)
+		},
+		ACookie: func() string { return A.Session },
+		Before:  func(w isolation.Who) any { return e.credGen(e.n[w]) },
+		After:   e.ownerKeepsTheirMarker(docOps),
+	})
 }
