@@ -26,6 +26,8 @@ type Tenants struct {
 
 	cols     map[string]string
 	saved    [2]map[string]string
+	rowCols  map[string]string    // the writable columns of each content table
+	rowSaved [2]map[string]string // the rows of each content table the seed gave one tenant, as a JSON array
 	digested []string
 	idTables []string
 }
@@ -43,6 +45,14 @@ func (s *Tenants) ids(w Who) catalogtest.SeedIDs {
 // are, so a column added later is restored too.
 func restoreTables() []struct{ table, key string } {
 	return []struct{ table, key string }{{"users", "tenant_id"}, {"tenants", "id"}, {"tenant_entitlements", "tenant_id"}}
+}
+
+// contentTables are the tables of the profile routes (P2): a case adds profiles, rules, keys, jobs and outbox rows that the
+// next case must not find, and the seed also gives each tenant a row of every one of them (a locked profile, a queued job)
+// that the cases read. They are put back to what the seed made, row for row, the way restoreTables puts back a row in place.
+func contentTables() []string {
+	return []string{"profiles", "profile_options", "profile_filters", "profile_services", "rule_folders", "rules", "block_pages",
+		"idempotency_keys", "batch_jobs", "policy_outbox", "job_outbox"}
 }
 
 // resetTables are emptied for the tenant between two cases: everything a route creates.
@@ -159,6 +169,23 @@ func (s *Tenants) Reset(w Who, before string) {
 			s.saved[w][rt.table] = js
 		}
 	}
+	if s.rowCols == nil {
+		s.rowCols = map[string]string{}
+		for _, tbl := range contentTables() {
+			var cols string
+			s.Env.Scan(t, `SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position) FROM information_schema.columns
+				WHERE table_schema = 'ctrlz' AND table_name = $1 AND is_generated = 'NEVER'`, []any{tbl}, &cols)
+			s.rowCols[tbl] = cols
+		}
+	}
+	if s.rowSaved[w] == nil {
+		s.rowSaved[w] = map[string]string{}
+		for _, tbl := range contentTables() {
+			var js string
+			s.Env.Scan(t, fmt.Sprintf(`SELECT coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb)::text FROM ctrlz.%s x WHERE tenant_id = $1`, tbl), []any{id.Tenant}, &js)
+			s.rowSaved[w][tbl] = js
+		}
+	}
 	tl := Lit(id.Tenant.String())
 	var sql strings.Builder
 	sql.WriteString(before)
@@ -171,6 +198,14 @@ func (s *Tenants) Reset(w Who, before string) {
 		cols := s.cols[rt.table]
 		fmt.Fprintf(&sql, `UPDATE ctrlz.%[1]s x SET (%[2]s) = (SELECT %[2]s FROM jsonb_populate_record(NULL::ctrlz.%[1]s, $j$%[4]s$j$::jsonb)) WHERE x.%[3]s = %[5]s;`,
 			rt.table, cols, rt.key, s.saved[w][rt.table], tl)
+	}
+	// The content tables reference one another and the seed rows reference them: with the foreign key and touch triggers off
+	// (the superuser may), every table is emptied and refilled in any order and the rows come back exactly as they were.
+	sql.WriteString(`SET LOCAL session_replication_role = replica;`)
+	for _, tbl := range contentTables() {
+		fmt.Fprintf(&sql, `DELETE FROM ctrlz.%[1]s WHERE tenant_id = %[2]s;
+			INSERT INTO ctrlz.%[1]s (%[3]s) SELECT %[3]s FROM jsonb_populate_recordset(NULL::ctrlz.%[1]s, $j$%[4]s$j$::jsonb);`,
+			tbl, tl, s.rowCols[tbl], s.rowSaved[w][tbl])
 	}
 	s.Env.Exec(t, sql.String())
 }

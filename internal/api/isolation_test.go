@@ -51,6 +51,7 @@ type tn struct {
 	announceID string
 	invite     string // the invite code a person would type
 	notes      []string
+	sc         *scn // the profile scenario of the P2 routes (p2scenario_test.go)
 }
 
 // note remembers an identifier of this tenant that must never show up in the other's answers.
@@ -224,7 +225,7 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 	reauthed := each(func(n *tn) { n.sess = e.session(n, true) })
 	plain := each(func(n *tn) { n.sess = e.session(n, false) })
 
-	return map[string]isolation.Fixture{
+	fixes := map[string]isolation.Fixture{
 		"getAuthConfig": {Effect: isolation.Shows, Status: 200, Arrange: nothing,
 			Call: func() isolation.Result { return result(anon().get("/auth/config")) }},
 		"loginPassword": {Effect: isolation.Changes, Status: 200, Arrange: nothing,
@@ -573,6 +574,14 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 			CrossStatus: 404,
 			Cross:       func() isolation.Result { return result(b().sess.post("/announcements/"+a().announceID+"/read", nil)) }},
 	}
+	// The P2 routes: one scenario table drives their fixtures, the structural walks and the flow tests (p2scenario_test.go).
+	for id, fx := range e.p2Fixtures() {
+		if _, dup := fixes[id]; dup {
+			f.t.Fatalf("%s has two fixtures", id)
+		}
+		fixes[id] = fx
+	}
+	return fixes
 }
 
 // TestIsolation is T-386 and spec 18.1, rule isolation-success-coverage: one harness over
@@ -804,6 +813,12 @@ func idLocations(doc *openapi3.T, needsSession map[string]bool) map[string][]str
 				base := pr.Value.In + ":" + name
 				switch {
 				case pr.Value.In == "path":
+					// A path value the document itself marks x-ctrlz-rowref false is the key of a global catalog row (a
+					// filter id, a service slug) and no tenant owns it, so there is no id of "another tenant" to put there
+					// (P2, B8). A path value with no mark, or marked true, is a place a row id is taken.
+					if v, marked := rowRefMarked(pr.Value.Schema); marked && !v {
+						continue
+					}
 					locs = append(locs, base)
 				case !session:
 					// A ticket, a challenge or an invite a caller holds with no session is a bearer proof.

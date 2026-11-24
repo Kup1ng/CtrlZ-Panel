@@ -21,16 +21,18 @@ func sinkQueries() []struct{ table, sql string } {
 		{"job_outbox", `SELECT count(*) FROM ctrlz.job_outbox t WHERE strpos(t::text, $1) > 0 OR strpos(t::text, $2) > 0`},
 		{"notifications", `SELECT count(*) FROM ctrlz.notifications t WHERE strpos(t::text, $1) > 0 OR strpos(t::text, $2) > 0`},
 		{"admin_jobs", `SELECT count(*) FROM ctrlz.admin_jobs t WHERE strpos(t::text, $1) > 0 OR strpos(t::text, $2) > 0`},
-		// River keeps its job arguments in its own schema (R21: "river args"). Its
-		// tables arrive with River's migrations; until then this finds nothing,
-		// and the first phase that creates them extends the list.
-		{"river tables", `SELECT count(*) FROM information_schema.tables WHERE table_schema = 'river' AND table_name = 'canary_placeholder' AND $1::text <> $2::text`},
+		// The tables the P2 write path keeps what a request carried: the stored answer of an idempotent request, the input,
+		// result and error of a batch job (spec 10.5, lock secrets), and River's own table, where the arguments of a job live
+		// (R21: "river args"; its args, metadata and errors are in the text of the row).
+		{"idempotency_keys", `SELECT count(*) FROM ctrlz.idempotency_keys t WHERE strpos(t::text, $1) > 0 OR strpos(t::text, $2) > 0`},
+		{"batch_jobs", `SELECT count(*) FROM ctrlz.batch_jobs t WHERE strpos(t::text, $1) > 0 OR strpos(t::text, $2) > 0`},
+		{"river_job", `SELECT count(*) FROM river.river_job t WHERE strpos(t::text, $1) > 0 OR strpos(t::text, $2) > 0`},
 	}
 }
 
 // AssertSinksClean fails if any canary is in one of the database sinks of
 // spec 18.4: tenant_audit_log, audit_log, sms_deliveries, alerts, job_outbox,
-// the notification rows and the admin job rows. It reads as the superuser, so
+// the notification rows, the admin job rows, and (P2) the idempotency keys, the batch jobs and River's jobs. It reads as the superuser, so
 // row level security and column grants cannot hide a leak.
 func (e *Env) AssertSinksClean(t *testing.T, canaries ...string) {
 	t.Helper()
