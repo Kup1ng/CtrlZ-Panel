@@ -883,12 +883,11 @@ func TestPanelHostSpellingsReachTheOriginAndTheLink(t *testing.T) {
 			t.Errorf("%q: origins = %v, want %s", c.configured, cfg.Origins, c.origin)
 		}
 		var inv struct {
-			Code string `json:"code"`
 			Link string `json:"link"`
 		}
 		b.callOn(h, adminHost, "POST", "/invites", map[string]any{"phone": "09125550077"}).want(201, "").json(&inv)
-		if want := c.origin + "/invite#" + inv.Code; inv.Link != want {
-			t.Errorf("%q: link = %q, want %q", c.configured, inv.Link, want)
+		if tok, ok := strings.CutPrefix(inv.Link, c.origin+"/invite#"); !ok || len(tok) != invite.TokenChars {
+			t.Errorf("%q: link has %d characters, want %s/invite# and a token of %d", c.configured, len(inv.Link), c.origin, invite.TokenChars)
 		}
 		r.env.Exec(t, `DELETE FROM ctrlz.invites`)
 	}

@@ -5714,7 +5714,7 @@ mutants:
         old: |-
           for _, r := range digits.Typed(s) {
         new: |-
-          for _, r := range s {
+          for _, r := range s + digits.Typed("") {
     must_fail:
       - pkg: ./internal/auth/digits
         tests: [TestEveryTypedCodeSurvivesTheSameMarks, TestEveryTypedCodeDropsEveryPasteMark]

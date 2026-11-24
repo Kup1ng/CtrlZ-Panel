@@ -72,7 +72,7 @@ func newRuntime(cfg Config, log *slog.Logger, consoleTool bool) (*Runtime, error
 				return nil, fmt.Errorf("keys: %w", err)
 			}
 			rt.Public = pub
-			log.Info("public keys loaded", logattr.Enums("domains", []keyring.DomainName{keyring.DomainName(d)}))
+			log.Info("public keys loaded", logattr.Enums("domains", []keyring.DomainName{pub.Name()}))
 		case cfg.Env == EnvTest:
 			// One process cannot share a key with another, so the links of a test process open only in itself.
 			ring, err := keyring.NewEphemeral(d)

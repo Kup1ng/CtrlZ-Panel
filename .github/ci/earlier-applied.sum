@@ -11,7 +11,7 @@
 # bodies of auth_otp_issue in 0010, 0011 and 0023 were reworded in round 6 (commit ff1dc2c) before
 # anything was released. Behaviour did not change, and the manifest pins them as they are.
 
-# newest: 0059_review_round18_admin_keytool_audit.sql
+# newest: 0060_invite_links.sql
 
 c86f452cc6bc16552ca1fdc2a3c9fc3dde9d8caa1618e11142adc6a712568e92  0001_schemas.sql
 f0ec3cb2a983c096d185560abc6560872206e81db5573c86a852bd9c468d1b6a  0002_global_tables.sql
@@ -72,3 +72,4 @@ d9ff55fdf14c366939d28db23ed80e5c88cfd500469abd39b554ad8197b5526a  0056_review_ro
 9ba8942103ffb074e183c47bff562327a31f25e3686eaaec66f21de69d059f13  0057_review_round18_sms.sql
 360343fb9126ab37624b101a39b6e7a48f224e56b98eecc2a37f2e070a371b88  0058_review_round18_admin_sms_pending.sql
 b505342adce80dc0696b2789ac9ef34024561dffb1bca8f02558d49042ea9f60  0059_review_round18_admin_keytool_audit.sql
+7de70d8a64c268c484e46bf73156b09c1539406e4b1fa6fb0d2bd4785080f2b2  0060_invite_links.sql

@@ -974,9 +974,9 @@ func TestGenSecretsNeverLeavesAnEmptyFile(t *testing.T) {
 		}
 		entries, _ := os.ReadDir(dir)
 		// 12 passwords (two for Valkey, one per service) and the proof key, kek_root, and 8 key files derived by
-		// the (stubbed) throwaway container.
-		if len(entries) != 21 {
-			t.Errorf("%d secret files, want 21", len(entries))
+		// the (stubbed) throwaway container, and the public half of the invite signing key beside them (D67).
+		if len(entries) != 23 {
+			t.Errorf("%d secret files, want 23", len(entries))
 		}
 		for _, e := range entries {
 			b, err := os.ReadFile(filepath.Join(dir, e.Name()))
@@ -1126,7 +1126,7 @@ func stubDocker(t *testing.T, haveImage bool) (binDir, logFile string) {
 		"run) echo \"$@\" >> '" + filepath.ToSlash(logFile) + "'\n" +
 		"  prev=''; dir=''\n" +
 		"  for a in \"$@\"; do if [ \"$prev\" = '-v' ]; then dir=${a%:/secrets}; fi; prev=$a; done\n" +
-		"  for d in user_totp admin_totp sms_cred otp_delivery auth_mac admin_mac invite_sign doh_token cert_wrap; do echo '# keyring' > \"$dir/kek_$d\"; done; echo '# public' > \"$dir/pub_invite_sign\" ;;\n" +
+		"  for d in user_totp admin_totp sms_cred otp_delivery auth_mac admin_mac invite_sign doh_token cert_wrap; do echo '# keyring' > \"$dir/kek_$d\"; done; echo '# ctrlz public keys domain=invite_sign' > \"$dir/pub_invite_sign\" ;;\n" +
 		"esac\n"
 	if err := os.WriteFile(filepath.Join(binDir, "docker"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)

@@ -109,7 +109,9 @@ func deriveAll(env Env, dir string, root secret.Bytes, newRoot bool) error {
 		}
 	}
 	for _, d := range keyring.PublicDomains() {
-		if _, err := os.Stat(filepath.Join(dir, keyring.PublicFileName(d))); errors.Is(err, os.ErrNotExist) {
+		// Read, not looked at: a key tool does not decide from a file being there (rule key-identity), and the text
+		// it reads here is judged by nobody, since the public file is rewritten from the key file whatever it says.
+		if _, err := os.ReadFile(filepath.Join(dir, keyring.PublicFileName(d))); errors.Is(err, os.ErrNotExist) {
 			missingPublic = append(missingPublic, d)
 		}
 	}

@@ -60,6 +60,9 @@ func TestABadInviteLinkCostsNoReadAndNoThrottleRow(t *testing.T) {
 	bad := f.badLinks(t)
 	live := f.plantInvite("+989125557002", time.Hour, false)
 	f.clearThrottle()
+	// Load the public configuration once now (setMode moved the clock past its life), so that what the pipeline
+	// reads for every request is in memory before the pool is closed.
+	f.client().get("/auth/config").want(200, "")
 	f.st.Close() // from here every read of the api fails
 
 	// A client of its own for every request, so that no class of the pipeline ever refuses and the clock of the
@@ -230,7 +233,9 @@ func TestInviteHoldersOnASharedNetworkAreNotRefusedWithTheNeighbour(t *testing.T
 		s.post("/auth/otp/request", map[string]any{"phone": fmt.Sprintf("0912555%04d", i), "purpose": "login"})
 	}
 	f.clearOTP()
-	f.client().post("/auth/otp/request", map[string]any{"phone": "09125559991", "purpose": "login"}).want(429, "")
+	block := f.client()
+	block.ip = "203.0.113.99"
+	block.post("/auth/otp/request", map[string]any{"phone": "09125559991", "purpose": "login"}).want(429, "")
 
 	// Invitee A is on the very block that was flooded, B is elsewhere: both go all the way through.
 	for name, ip := range map[string]string{"A on the block": shared, "B elsewhere": "198.18.0.77"} {

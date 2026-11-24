@@ -155,7 +155,7 @@ func forbiddenFields() []string {
 func shownOnce() map[string]string {
 	return map[string]string{
 		"one_time_password": "UserCreated and OneTimePasswordIssued",
-		"code":              "InviteCreated",
+		"link":              "InviteCreated",
 		"secret":            "AdminTotpSetup",
 		"otpauth_uri":       "AdminTotpSetup",
 	}

@@ -23,6 +23,7 @@ func TestJunkInviteTokensDoNotBlockALiveInvite(t *testing.T) {
 	phone := "+989125553001"
 	code := f.plantInvite(phone, time.Hour, false)
 	bad := f.forgedInvite()
+	f.clearThrottle() // what the set-up of the rig wrote is not what the junk tokens do
 
 	// 15 junk code requests and 15 junk registers from the invitee's own network.
 	refused := 0

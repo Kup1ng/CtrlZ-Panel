@@ -32,6 +32,9 @@ const (
 // also the Docker secret name.
 func PublicFileName(domain string) string { return publicPre + domain }
 
+// Name is the domain as a closed value for a log line.
+func (p *PublicRing) Name() DomainName { return DomainName(p.domain) }
+
 // PublicDomains lists the domains that have a public half.
 func PublicDomains() []string { return []string{DomainInviteSign} }
 
@@ -165,14 +168,16 @@ func LoadPublic(dir, domain string) (*PublicRing, error) {
 	if !ok {
 		return nil, fmt.Errorf("keyring: domain %s has no public half", domain)
 	}
-	text, err := os.ReadFile(filepath.Join(dir, PublicFileName(domain)))
+	// Read through the secret package like a key file: it is the one place that opens a file for the key ring.
+	secretText, err := secret.BytesFromFile(filepath.Join(dir, PublicFileName(domain)))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("keyring: domain %s: public key file %s is missing", domain, PublicFileName(domain))
 		}
 		return nil, fmt.Errorf("keyring: domain %s: public key file %s cannot be read", domain, PublicFileName(domain))
 	}
-	keys, err := parsePublic(domain, text)
+	keys, err := parsePublic(domain, secretText.Reveal())
+	secretText.Wipe()
 	if err != nil {
 		return nil, err
 	}
