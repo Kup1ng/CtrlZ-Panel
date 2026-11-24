@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/admission"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 func newAdm(t *testing.T, c admission.Config) *admission.Admission {
@@ -58,17 +59,6 @@ func TestAPlaceIsOnePerTenantAndTheProcessHasAFixedNumber(t *testing.T) {
 	}
 }
 
-func waitFor(t *testing.T, ok func() bool) {
-	t.Helper()
-	for i := 0; i < 400; i++ {
-		if ok() {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("the condition never held")
-}
-
 // The queue is first in first out and a large waiter is not passed by a small one that comes later (6.5 property 4).
 func TestTheQueueIsFirstInFirstOutAndALargeWaiterIsNotPassed(t *testing.T) {
 	a := newAdm(t, admission.Config{Pool: 48 << 20})
@@ -97,27 +87,27 @@ func TestTheQueueIsFirstInFirstOutAndALargeWaiterIsNotPassed(t *testing.T) {
 	}
 	start("big", 48<<20)
 	// The big one is queued before the small one is asked for, whatever the scheduler does with the goroutines.
-	time.Sleep(50 * time.Millisecond)
+	testwait.Until(t, 10*time.Second, "the big request to wait", func() bool { return a.Queued() == 1 })
 	start("small", 1<<20)
-	time.Sleep(50 * time.Millisecond)
-	select {
-	case g := <-got:
+	testwait.Until(t, 10*time.Second, "the small request to wait", func() bool { return a.Queued() == 2 })
+	if g, granted := testwait.TryReceive(got, 100*time.Millisecond); granted {
 		t.Fatalf("%s was granted while the big waiter was still ahead of it", g.name)
-	default:
 	}
 	first()
-	g := <-got
+	g := testwait.Receive(t, got, 10*time.Second, "the big request to be granted")
 	if g.name != "big" {
 		t.Fatalf("%s went first", g.name)
 	}
 	g.rel()
-	g = <-got
+	g = testwait.Receive(t, got, 10*time.Second, "the small request to be granted")
 	if g.name != "small" {
 		t.Fatalf("%s went second", g.name)
 	}
 	g.rel()
 	wg.Wait()
-	waitFor(t, func() bool { return a.Free() == 48<<20 })
+	if free := a.Free(); free != 48<<20 {
+		t.Fatalf("free weight %d, want the whole pool", free)
+	}
 }
 
 // A request waits at most QueueWait and then is refused; a client that leaves leaves the queue and holds nothing (6.5
@@ -134,9 +124,9 @@ func TestTheQueueWaitEndsAndAClientThatLeavesLeavesTheQueue(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { _, err := a.Acquire(ctx, 1<<20); done <- err }()
-	time.Sleep(10 * time.Millisecond)
+	testwait.Until(t, 10*time.Second, "the request to wait", func() bool { return a.Queued() == 1 })
 	cancel()
-	if err := <-done; !errors.Is(err, context.Canceled) {
+	if err := testwait.Receive(t, done, 10*time.Second, "the answer of the request that left"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("a client that left: %v, want context.Canceled and not the queue wait", err)
 	}
 	hold()

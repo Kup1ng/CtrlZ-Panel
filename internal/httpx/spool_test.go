@@ -387,15 +387,15 @@ func longestProfile() profiles.Document {
 	return d
 }
 
-// TestTheLargestExportFitsTheSpool: an answer above admission.SpoolMax is a 500, so the largest export there can be stays
+// TestTheLargestExportFitsTheSpool: an answer above admission.AnswerBytes is a 500, so the largest export there can be stays
 // below it (6.5 property 11).
 func TestTheLargestExportFitsTheSpool(t *testing.T) {
 	var n counter
 	if err := longestProfile().EncodeTo(&n); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("the largest export is %d bytes of %d", n.n, admission.SpoolMax)
-	if n.n >= admission.SpoolMax {
-		t.Fatalf("the largest export is %d bytes, the spool takes %d", n.n, admission.SpoolMax)
+	t.Logf("the largest export is %d bytes of %d", n.n, admission.AnswerBytes)
+	if n.n >= admission.AnswerBytes {
+		t.Fatalf("the largest export is %d bytes, the spool takes %d", n.n, admission.AnswerBytes)
 	}
 }

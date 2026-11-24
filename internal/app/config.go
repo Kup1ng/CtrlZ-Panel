@@ -159,6 +159,16 @@ type Config struct {
 	ShutdownTimeout time.Duration
 }
 
+// SpoolDirProblem is the refusal of an api that has no spool directory outside the test environment (spec 6.5 property 11). It
+// is asked where the api is built and not in LoadConfig, so that the other refusals of a start (the keys, the hashing
+// settings) are the ones a person sees first.
+func (c Config) SpoolDirProblem() error {
+	if c.Role == RoleAPI && c.SpoolDir == "" && c.Env != EnvTest {
+		return errors.New("CTRLZ_SPOOL_DIR is required for the api outside the test environment")
+	}
+	return nil
+}
+
 // Getenv is os.Getenv, replaceable in tests.
 type Getenv func(string) string
 
@@ -211,9 +221,6 @@ func LoadConfig(role Role, getenv Getenv) (Config, error) {
 	}
 	if role == RoleAPI {
 		c.SpoolDir = getenv("CTRLZ_SPOOL_DIR")
-		if c.SpoolDir == "" && c.Env != EnvTest {
-			return Config{}, errors.New("CTRLZ_SPOOL_DIR is required for the api outside the test environment")
-		}
 	}
 	if f := getenv("CTRLZ_NOOP_SMS_FILE"); f != "" {
 		if c.Env == EnvProduction {

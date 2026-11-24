@@ -219,23 +219,27 @@ func skipUnlessCI(t *testing.T, why string) {
 
 // CTRLZ_SPOOL_DIR is required for the api outside the test environment (spec 6.5 property 11) and for no other role.
 func TestTheApiNeedsASpoolDirectoryOutsideTest(t *testing.T) {
-	vars := func(m map[string]string) app.Getenv {
-		return func(k string) string { return m[k] }
+	load := func(role app.Role, m map[string]string) app.Config {
+		cfg, err := app.LoadConfig(role, func(k string) string { return m[k] })
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
 	}
-	if _, err := app.LoadConfig(app.RoleAPI, vars(map[string]string{"CTRLZ_ENV": "production"})); err == nil || !strings.Contains(err.Error(), "CTRLZ_SPOOL_DIR") {
+	if err := load(app.RoleAPI, map[string]string{"CTRLZ_ENV": "production"}).SpoolDirProblem(); err == nil || !strings.Contains(err.Error(), "CTRLZ_SPOOL_DIR") {
 		t.Fatalf("the api in production with no spool directory: %v", err)
 	}
-	if _, err := app.LoadConfig(app.RoleAPI, vars(map[string]string{"CTRLZ_ENV": "dev"})); err == nil {
+	if err := load(app.RoleAPI, map[string]string{"CTRLZ_ENV": "dev"}).SpoolDirProblem(); err == nil {
 		t.Fatal("the api in dev with no spool directory started")
 	}
-	cfg, err := app.LoadConfig(app.RoleAPI, vars(map[string]string{"CTRLZ_ENV": "production", "CTRLZ_SPOOL_DIR": "/spool"}))
-	if err != nil || cfg.SpoolDir != "/spool" {
+	cfg := load(app.RoleAPI, map[string]string{"CTRLZ_ENV": "production", "CTRLZ_SPOOL_DIR": "/spool"})
+	if err := cfg.SpoolDirProblem(); err != nil || cfg.SpoolDir != "/spool" {
 		t.Fatalf("the api with a spool directory: %+v %v", cfg, err)
 	}
-	if _, err := app.LoadConfig(app.RoleAPI, vars(map[string]string{"CTRLZ_ENV": "test"})); err != nil {
+	if err := load(app.RoleAPI, map[string]string{"CTRLZ_ENV": "test"}).SpoolDirProblem(); err != nil {
 		t.Fatalf("the test environment needs none: %v", err)
 	}
-	if _, err := app.LoadConfig(app.RoleAdmin, vars(map[string]string{"CTRLZ_ENV": "dev"})); err != nil {
+	if err := load(app.RoleAdmin, map[string]string{"CTRLZ_ENV": "dev"}).SpoolDirProblem(); err != nil {
 		t.Fatalf("the admin has no spool: %v", err)
 	}
 }

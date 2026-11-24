@@ -75,6 +75,10 @@ func serviceHandler(cfg Config, rt *Runtime, st *store.Store, log *slog.Logger, 
 
 	var h http.Handler
 	var err error
+	if err := cfg.SpoolDirProblem(); err != nil {
+		closeFn()
+		return nil, func() {}, err
+	}
 	if cfg.Role == RoleAPI {
 		// The queue of work owed after an answer (failed-login trail rows) is built here and not
 		// inside api.New so the process can wait for it: the close function runs after the server

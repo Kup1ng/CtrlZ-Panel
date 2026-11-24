@@ -149,20 +149,20 @@ type shape struct {
 // most 10 digits. The number of values is the operation's own. A function and not a variable: nothing may change it.
 func heavyShape() shape { return shape{values: -1, depth: 8, members: 32, digits: 10} }
 
-const maxScanStack = 64
+const scanStackSize = 64
 
 // scanShape reads the bytes of a JSON text once, allocates nothing, and says whether it is within s. It does not check
 // the syntax (the decoder does, and says 400); it refuses at the first cap passed, and no text within the caps is refused.
 func scanShape(raw []byte, s shape) bool {
 	track := s.depth > 0 || s.members > 0
-	if track && (s.depth <= 0 || s.depth >= maxScanStack) {
-		s.depth = maxScanStack - 1
+	if track && (s.depth <= 0 || s.depth >= scanStackSize) {
+		s.depth = scanStackSize - 1
 	}
 	type frame struct {
 		obj, key bool
 		members  int
 	}
-	var stack [maxScanStack]frame
+	var stack [scanStackSize]frame
 	sp := 0
 	var n int64
 	count := func() bool {

@@ -34,9 +34,9 @@ const (
 	QueueWait = 120 * time.Second
 	// WorkLimit is the deadline of the work itself.
 	WorkLimit = 10 * time.Second
-	// SpoolMax is the most an answer may have: above it the request is a 500. A test holds the largest export there can
+	// AnswerBytes is the most an answer may have: above it the request is a 500. A test holds the largest export there can
 	// be below it.
-	SpoolMax = 16 << 20
+	AnswerBytes = 16 << 20
 )
 
 // The three weights of 6.5 property 8: the most live memory the worst request of each kind may hold in the work step.
@@ -78,6 +78,7 @@ type Admission struct {
 	mu     sync.Mutex
 	taken  map[string]struct{}
 	inPool int64
+	queued int
 }
 
 // New makes the admission point. It empties the spool directory (a file left by a process that died is data of a client
@@ -174,7 +175,14 @@ func (a *Admission) Acquire(ctx context.Context, n int64) (release func(), err e
 	}
 	wctx, cancel := context.WithTimeout(ctx, a.queueWait)
 	defer cancel()
-	if err := a.sem.Acquire(wctx, n); err != nil {
+	a.mu.Lock()
+	a.queued++
+	a.mu.Unlock()
+	err = a.sem.Acquire(wctx, n)
+	a.mu.Lock()
+	a.queued--
+	a.mu.Unlock()
+	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -192,6 +200,13 @@ func (a *Admission) Acquire(ctx context.Context, n int64) (release func(), err e
 			a.sem.Release(n)
 		})
 	}, nil
+}
+
+// Queued is how many requests wait for weight now, for tests.
+func (a *Admission) Queued() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.queued
 }
 
 // Held reports how many places are taken and how many bytes of the pool are, for tests.

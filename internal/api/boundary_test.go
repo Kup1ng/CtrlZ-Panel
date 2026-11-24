@@ -35,8 +35,8 @@ func TestBoundaryFuzz(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// An operation that takes the bulk gate (P2 spec 6.2, AUTH 2.3 steps 8a to 10) checks its body only after its session
-	// resolved and its buckets were charged, so a forged cookie is 401 before any schema check: those operations are driven with
+	// A heavy operation (P2 spec 6.5: the bulk-write class and a big rule create) checks its body only after its session
+	// resolved, its place was taken and its buckets were charged, so a forged cookie is 401 before any schema check: those operations are driven with
 	// a live session. The clock moves a minute every few cases (a session's own bucket is 10 a minute) and the limiter is renewed
 	// now and then (the tenant's day budget of bulk-write is 200).
 	bulk := map[string]bool{}
@@ -45,7 +45,7 @@ func TestBoundaryFuzz(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, op := range ops {
-		if op.MaxBody > httpx.BulkThreshold {
+		if op.MaxBody > httpx.BulkThreshold || op.Rate == ratelimit.BulkWrite {
 			bulk[op.ID] = true
 		}
 	}

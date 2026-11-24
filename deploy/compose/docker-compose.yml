@@ -651,13 +651,13 @@ networks:
           ip_range: 10.213.77.0/25
 
 volumes:
-  api_spool:
   pgdata:
   chdata:
   valkey_api_data:
   valkey_admin_data:
   caddy_data:
   caddy_config:
+  api_spool:
 
 secrets:
   pg_superuser_password:

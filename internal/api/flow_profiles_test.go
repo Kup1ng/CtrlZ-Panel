@@ -153,6 +153,9 @@ func TestProfileFlow(t *testing.T) {
 	if len(ve.Fields) != 1 || ve.Fields[0].Name != "/rules/0/pattern" {
 		t.Fatalf("fields = %+v", ve.Fields)
 	}
+	// A heavy request is checked after its session and its class (spec 6.5), so the 400 of a missing header costs a token of the
+	// session's own 10 a minute like any other: the minute moves before the next four.
+	f.ck.add(time.Minute)
 	for _, doc := range []string{`{"format":"nope","version":1}`, `{"format":"ctrlz-profile","version":9,"kind":"custom"}`, `{"a":1,"a":2}`, `[1]`} {
 		a.do("POST", "/profiles:import", map[string]any{"document": base64.StdEncoding.EncodeToString([]byte(doc))}, idem(fmt.Sprintf("bad-%d", len(doc)))).want(422, "validation_failed")
 	}

@@ -66,8 +66,8 @@ func TestTheHeavyBudgetFitsTheContainer(t *testing.T) {
 			t.Errorf("a weight of %d MiB is above the pool of %d MiB", w>>20, admission.Pool>>20)
 		}
 	}
-	// 128 files of at most SpoolMax are the 2 GiB of the volume in the spec.
-	if disk := int64(admission.Places) * admission.SpoolMax; disk != 2<<30 {
+	// 128 files of at most AnswerBytes are the 2 GiB of the volume in the spec.
+	if disk := int64(admission.Places) * admission.AnswerBytes; disk != 2<<30 {
 		t.Errorf("the spool is %d bytes at the most, the spec says 2 GiB", disk)
 	}
 }

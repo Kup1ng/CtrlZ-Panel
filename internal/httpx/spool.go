@@ -36,7 +36,7 @@ func earnedDeadline(start time.Time, base time.Duration, n int64) time.Time {
 var (
 	// errSpoolWrite is a file that cannot be made or written (no disk): the request is 503 server_busy.
 	errSpoolWrite = errors.New("httpx: the spool file cannot be written")
-	// errAnswerTooLarge is an answer above admission.SpoolMax: the request is a 500.
+	// errAnswerTooLarge is an answer above admission.AnswerBytes: the request is a 500.
 	errAnswerTooLarge = errors.New("httpx: the answer is larger than the spool allows")
 )
 
@@ -172,7 +172,7 @@ func (w *spoolWriter) Write(p []byte) (int, error) {
 	if w.err != nil {
 		return 0, w.err
 	}
-	if w.size+int64(len(p)) > admission.SpoolMax {
+	if w.size+int64(len(p)) > admission.AnswerBytes {
 		w.err = errAnswerTooLarge
 		return 0, w.err
 	}
