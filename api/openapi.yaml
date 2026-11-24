@@ -2595,7 +2595,7 @@ paths:
         - name: link
           in: path
           required: true
-          schema: {type: string, maxLength: 64, pattern: '^[A-Za-z0-9_-]{64}$', x-ctrlz-rowref: false}
+          schema: {type: string, maxLength: 64, pattern: '^[A-Za-z0-9_-]{64}$', example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA, x-ctrlz-rowref: false}
       responses:
         "200":
           description: The profile, as `application/x-apple-aspen-config`.
