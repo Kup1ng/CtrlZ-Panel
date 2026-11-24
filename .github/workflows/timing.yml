@@ -1,0 +1,59 @@
+# The nightly timing tests of the Panel (spec 18.5, "Timing"): a known and an unknown phone must not be told apart by how
+# long a failed password login takes. They have a build tag (timing) and so no shard of ci.yml compiles them; this is their job
+# (CI review round 13, ci-r13-1; Plan.md D64, ci-unrun-checks).
+#
+# It runs from the clock on the default branch and by hand, never from a push or a pull request, so it neither slows the
+# run that the publisher waits for nor lets anyone but the owner start it. A wall-clock test on a shared runner is
+# noisy, and the owner's rule is that a flake is a finding, so the noise is handled where it can be: each test takes the
+# median of its samples on each side (500 for the password login, 100 per route for the oracle routes; rules= of
+# .github/ci/timing.sh names each), taken in turns, and .github/ci/timing.sh runs it again before it reports a failure, and
+# fails a run that did not take the samples (see the script). A real leak of 20 ms or more fails both runs.
+#
+# The same rules as ci.yml: a read-only token, no credential, the two pinned actions, no expression in a script.
+name: timing
+
+on:
+  schedule:
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: timing-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  timing:
+    name: timing known and unknown phone
+    runs-on: ubuntu-24.04
+    # Two tests of timing.sh with two attempts each, each attempt with a go test timeout of 25 minutes, and the setup
+    # (ci-r14-2, ci-r22-1). A night with no noise takes about 25 minutes of it.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No build or module cache, as in the scan job (ci-r20-1). This is the one place the timing test is compiled and
+      # run, and nothing local compiles it to cross-check: a cache entry that a job running the tree's tests had saved
+      # (the job token can write the cache) would otherwise decide what the nightly verdict was built from. One cold
+      # compile in a nightly job with the 120-minute bound of the job is the price.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Check the compiler
+        run: sh scripts/go-pin-check.sh
+      - name: Note the images of the runner
+        run: sh .github/ci/images.sh before
+      - name: The timing test
+        env:
+          CTRLZ_CI: "1"
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: sh .github/ci/timing.sh
+      - name: Judge the images the test ran against
+        run: sh .github/ci/images.sh after
