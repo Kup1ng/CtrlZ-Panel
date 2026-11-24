@@ -36,7 +36,6 @@ func (e *isoEnv) endpointFixtures() map[string]isolation.Fixture {
 		}
 		return f.env.B
 	}
-	a := func() *tn { return e.n[isolation.A] }
 	b := func() *tn { return e.n[isolation.B] }
 
 	// clean puts the Endpoint tables of the tenant back to the seed: the seeded Endpoint stays, whatever a case made goes.
@@ -277,7 +276,7 @@ func (e *isoEnv) endpointFixtures() map[string]isolation.Fixture {
 			Cross: func() isolation.Result { return result(sess().get(path(isolation.A, "/clients"))) },
 			CrossAt: map[string]func() isolation.Result{
 				"query:cursor": func() isolation.Result {
-					return result(sess().get(path(isolation.B, "/clients?cursor="+a().cursorOf(A.Tenant))))
+					return result(sess().get(path(isolation.B, "/clients?cursor="+encodeCursor(A.Tenant, f.ck.now(), st[isolation.A].client))))
 				},
 			}},
 		"createClient": {Effect: isolation.Changes, Status: 201, Arrange: base,
