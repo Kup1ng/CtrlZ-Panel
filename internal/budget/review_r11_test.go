@@ -110,6 +110,7 @@ func TestAbuseANetworkPoolIsBoundedPerNetworkPer48AndForTheProcess(t *testing.T)
 					continue
 				}
 				tried++
+				seen[nr] = true
 				if r, ok := p.Try(a); ok {
 					held = append(held, r)
 				}
@@ -137,7 +138,20 @@ func TestAbuseANetworkPoolIsBoundedPerNetworkPer48AndForTheProcess(t *testing.T)
 			// 3. The process bound: more networks than slots, all holding a unit, and a refusal costs nothing: the
 			// refused networks have their whole burst when the slots are free.
 			p = fresh()
-			probes := []netip.Addr{netip.MustParseAddr("198.51.100.9"), netip.MustParseAddr("2001:db8:9:9::9")}
+			// The two probes must not meet each other either: the seed is random per process, and when they share a
+			// place the first one's drain leaves the second nothing, which failed this test on GitHub about once in a
+			// thousand runs (CI run 45337324918, api/invite-read, "0 units after the slots were free"). So the second
+			// probe is the first 2001:db8:9:N::9 whose place differs from the first probe's.
+			first := netip.MustParseAddr("198.51.100.9")
+			firstPlace, _ := p.Place(first)
+			second := netip.MustParseAddr("2001:db8:9:9::9")
+			for i := 9; ; i++ {
+				second = netip.MustParseAddr(fmt.Sprintf("2001:db8:9:%x::9", i))
+				if np, _ := p.Place(second); np != firstPlace {
+					break
+				}
+			}
+			probes := []netip.Addr{first, second}
 			var all []func()
 			for _, a := range apart(p, row.Slots+4, probes...) {
 				if r, ok := p.Try(a); ok {

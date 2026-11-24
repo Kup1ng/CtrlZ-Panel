@@ -134,7 +134,19 @@ func TestARefusedTryGivesBackEverythingItTook(t *testing.T) {
 	c := registered(t)
 	now := time.Unix(1_800_000_000, 0)
 	p := netpool.New(c, func() time.Time { return now })
-	probes := []netip.Addr{netip.MustParseAddr("203.0.113.9"), v6(0x40)}
+	// The probes must not meet each other: the seed is random per process, and probes that share a place leave the
+	// second one nothing after the first one's drain (the same one-in-a-thousand flake as internal/budget, GitHub run
+	// 45337324918). The second is the first v6(i) from 0x40 whose place differs from the first probe's.
+	first := netip.MustParseAddr("203.0.113.9")
+	firstPlace, _ := p.Place(first)
+	second := v6(0x40)
+	for i := 0x40; ; i++ {
+		second = v6(i)
+		if np, _ := p.Place(second); np != firstPlace {
+			break
+		}
+	}
+	probes := []netip.Addr{first, second}
 
 	// Other networks hold every process slot.
 	var held []func()
