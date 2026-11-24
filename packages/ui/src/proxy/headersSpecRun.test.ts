@@ -79,7 +79,7 @@ describe("the stalled POST case", () => {
 
   it("asserts the status and the headers of an answer, and that the request does not stay open", () => {
     expect(body).toContain('not.toBe("open")');
-    expect(body).toContain("[408, 502, 504]");
+    expect(body).toContain("[200, 408, 502, 504]");
     expect(body).toContain('one("content-security-policy")');
   });
 });

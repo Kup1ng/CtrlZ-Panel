@@ -485,7 +485,7 @@ for (const {lang} of LANGS) {
       const items = page.locator(".banner-stack__item");
       await expect(items).toHaveCount(2);
       // 1 critical notification, then the live announcement; the password warning is third, behind "more".
-      await expect(items.nth(0)).toContainText(lang === "fa" ? "Passkey" : "passkey");
+      await expect(items.nth(0)).toContainText(lang === "fa" ? "پاسکی" : "passkey");
       await expect(items.nth(1)).toContainText("Live announcement");
       await expect(page.locator(".banner-stack")).not.toContainText("Over");
       await expect(page.locator(".banner-stack")).not.toContainText("Not yet");

@@ -162,6 +162,8 @@ describe("the body limit and the raw-target rules of the web handle (merge-r2)",
     const body = site!.join("\n");
     expect(body).toContain("import quiet_log");
     expect(body).toContain("@bad_target not expression {http.request.uri}.matches('^/')");
+    // Caddy sorts the directives of a site block and puts redir before respond; only a route keeps the order they are written in.
+    expect(site!.map((l) => l.trim()).filter((l) => /^(route|respond|redir) /.test(l)), "the two answers stand inside a route, in this order").toEqual(["route {", "respond @bad_target 400", "redir https://{host}{uri} 308"]);
     const order = site!.map((l) => l.trim()).filter((l) => l.startsWith("respond ") || l.startsWith("redir "));
     expect(order, "the refusal comes before the redirect, and nothing else answers").toEqual(["respond @bad_target 400", "redir https://{host}{uri} 308"]);
     expect(body, "no web or API handle on port 80").not.toMatch(/reverse_proxy|import web_rules|import hardening/);
@@ -193,7 +195,7 @@ describe("the body limit and the raw-target rules of the web handle (merge-r2)",
 
   it("a percent-escaped slash, backslash or dot under /_next/ is refused on the raw target, and so is a dot segment", () => {
     expect(rules()).toContain("@next_escaped expression {http.request.uri}.matches('(?i)^/_next/[^?]*%(2f|5c|2e)')");
-    expect(rules()).toContain("respond @next_escaped 404");
+    expect(rules()).toContain("respond @next_escaped \"Not Found\" 404");
     expect(rules()).toContain("@dot_segment expression {http.request.uri.path}.matches('(^|/)[.][.]?(/|$)')");
     expect(rules()).toContain("respond @dot_segment 404");
   });

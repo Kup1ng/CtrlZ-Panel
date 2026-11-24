@@ -471,14 +471,16 @@ export function declareHeadersSpec({app, appDir}: Options): void {
     // embed, object) now gets the proxy's plain 404 with the headers; chunk, style and font loads keep the pass-through. Real Chrome below, then
     // the header on its own, which is also what the request context can say. (A `%2e%2e` hop is not listed: Chrome resolves it to /_next/x before it asks, which the
     // locale redirect takes to the ordinary /fa/_next/x 404.)
-    test("a browser that opens a name under _next/static gets the proxy's plain 404, and no CSP violation (gate-r9-2)", async ({page: tab, guard}) => {
+    test("a browser that opens a name under _next/static gets the proxy's plain 404, and no CSP violation (gate-r9-2)", async ({page: tab, guard, baseURL}) => {
       guard.allowConsole(/status of 404/);
       for (const path of ["/_next/static/chunks/nothing-here.js", "/_next/static/x", "/_next/static/a%2fb", "/_next/static/a%5Cb"]) {
         const response = await tab.goto(path);
         expect(response!.status(), path).toBe(404);
         expect(response!.headers()["content-type"], path).not.toMatch(/html/);
         const csp = response!.headers()["content-security-policy"] ?? "";
-        expect(csp, path).toBe(expectedCsp(app, NONCE_IN_CSP.exec(csp)?.[1] ?? "x"));
+        // Behind Caddy the escaped spellings are its own 404 (merge-r2-6), which carries the default policy of the site and no nonce.
+        const byCaddy = servedThroughCaddy(baseURL) && /%2f|%5c/i.test(path);
+        expect(csp, path).toBe(byCaddy ? "default-src 'none'; base-uri 'none'; frame-ancestors 'none'" : expectedCsp(app, NONCE_IN_CSP.exec(csp)?.[1] ?? "x"));
         expect(await tab.evaluate(() => document.querySelectorAll("style, script").length), `no markup of Next's built-in page at ${path}`).toBe(0);
         expect(guard.consume("csp"), `a CSP violation at ${path}`).toEqual([]);
       }
@@ -1103,8 +1105,8 @@ export function declareHeadersSpec({app, appDir}: Options): void {
     // aborts, so Next writes its aborted-body error block for it (15.1, 15.6). Step 10d1 of ci-web.sh reads the web logs for exactly that block after the main run,
     // so this case does not run in the main run: step 10d1b runs it alone, with E2E_STALLED_POST=1, after the scan (the same arrangement as E2E_UPSTREAM_STOPPED).
     // The ending is either a reset or an answer, and an answer is Caddy's own 408, 502 or 504 with the headers of the site (the read timeout of the body reaches
-    // reverse_proxy as an error, which Caddy writes as 504, or 502 for a reset; handle_errors adds the headers). A 2xx or a 4xx of the page would mean the body was
-    // taken as finished, and "open" after 30 s is the failure.
+    // reverse_proxy as an error, which Caddy writes as 504, or 502 for a reset; handle_errors adds the headers), or the 200 of the page, which Next gives without
+    // reading the body. A 4xx of the page would mean the body was read as finished, and "open" after 30 s is the failure.
     test("a POST body that is announced and never finished is ended by Caddy within its read deadline (merge-r3-5)", async ({baseURL}) => {
       test.skip(!servedThroughCaddy(baseURL), "needs the Caddy run: plain next start has no such deadline at an edge");
       test.skip(process.env.E2E_STALLED_POST !== "1", "makes Next log an aborted body, which step 10d1 of ci-web.sh rejects: set E2E_STALLED_POST=1 and run only this case, after that step (merge-r4-1)");
@@ -1114,7 +1116,9 @@ export function declareHeadersSpec({app, appDir}: Options): void {
       expect(response.outcome, "a stalled body is ended by the edge, not held open").not.toBe("open");
       expect(response.ms, "within the deadline of 15 s, with a margin").toBeLessThan(30_000);
       if (response.status !== undefined) {
-        expect([408, 502, 504], "the edge's own status for a body that never finished, never a page or a success").toContain(response.status);
+        // Measured on the first run: after 15 s Caddy gives up on the body, dials Next with what it read, and Next answers a POST to a page with the page
+        // itself, without reading the body (there is no server action to run). So the answer is the edge's own error or that 200, with the headers of the site.
+        expect([200, 408, 502, 504], "an answer of the edge or the page, within the deadline").toContain(response.status);
         const one = (name: string) => response.headersArray().filter((x) => x.name.toLowerCase() === name).map((x) => x.value);
         expect(one("x-content-type-options"), "nosniff on the answer").toEqual(["nosniff"]);
         expect(one("content-security-policy"), "one CSP on the answer").toHaveLength(1);

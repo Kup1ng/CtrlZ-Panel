@@ -207,7 +207,8 @@
 	# No built name under /_next/ holds an escaped slash, backslash or dot (a bracket in a chunk name is %5B, and the query is
 	# not looked at), so there is nothing to lose. It also covers the .rsc rule below: `/_next/static/..%2f..%2fa.rsc`.
 	@next_escaped expression {http.request.uri}.matches('(?i)^/_next/[^?]*%(2f|5c|2e)')
-	respond @next_escaped 404
+	# With a body: a browser that opens such a name shows it as text, where an empty 404 is a network error page.
+	respond @next_escaped "Not Found" 404
 
 	# A dot segment in the decoded path, in any spelling a client can send (`/./`, `/../`, `%2e%2e/`), is something no link of
 	# either app has and no browser sends: it is cut here so no rule above or below is judged on a path that Caddy has already
@@ -332,6 +333,10 @@
 http:// {
 	import quiet_log
 	@bad_target not expression {http.request.uri}.matches('^/')
-	respond @bad_target 400
-	redir https://{host}{uri} 308
+	# A route, because Caddy sorts the directives of a site itself and puts redir before respond: without it the redirect answered
+	# every target, the opaque ones included (the first run through Caddy showed it).
+	route {
+		respond @bad_target 400
+		redir https://{host}{uri} 308
+	}
 }

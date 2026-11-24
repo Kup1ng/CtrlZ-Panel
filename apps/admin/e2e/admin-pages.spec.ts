@@ -1628,6 +1628,9 @@ for (const {lang, dir} of LANGS) {
         await expect.poll(() => bodies(mock, "PUT", "/sms/gateways/sms_ir")).toEqual([{credentials: {api_key: "fixture-key-value"}}]);
         // The write is the first call the click makes. The list is fetched again only after it, by the mutation's own invalidation.
         expect(mock.calls.slice(before).map((c) => `${c.method} ${c.path}`)[0]).toBe("PUT /sms/gateways/sms_ir");
+        // The save has ended before the test does: while it runs the dialog holds typed credentials and the leave guard is armed, and a page
+        // closed in that instant once outlasted the 10 s the guard gives it (the short check of 2026-11-24).
+        await expect(dialog).toBeHidden();
       });
 
       // The conflict gate (wp10-r5-3) and the read before a write (wp10-r6-5) for every form that keeps a draft of a server value. Nothing
