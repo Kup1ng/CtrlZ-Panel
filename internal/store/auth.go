@@ -327,7 +327,7 @@ func (a AuthLookups) OTPIssueForTenant(ctx context.Context, tenant uuid.UUID, ph
 	// The same refusal as every single-statement call (one): a request holds one connection at a time, and this call
 	// opens a transaction of its own, so a context that already belongs to one (or to a busy request scope) is refused
 	// before the tenant is even looked at.
-	if ctx.Value(txMarker{}) != nil || scopeBusy(ctx) {
+	if scopeBusy(ctx) || ctx.Value(txMarker{}) != nil {
 		return OTPIssued{}, ErrNested
 	}
 	var out OTPIssued
