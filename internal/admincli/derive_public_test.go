@@ -173,6 +173,30 @@ func TestDeriveWritesAndRefreshesThePublicFile(t *testing.T) {
 	if !equalSnap(before, snapshot(t, other)) {
 		t.Error("a refused run that left the public file missing wrote it")
 	}
+
+	// A public file that still lists a key line the key file dropped is stale. kek_root off the host always ends
+	// in a refusal, so a refusal must tell a stale file from a good one, or the api would trust a removed key
+	// for ever (review dec-a-r1-4). It is exit 4 naming the file, and nothing is written.
+	droppedKey, err := keyring.FileText(secret.NewBytes(foreign), keyring.DomainInviteSign, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale, err := keyring.PublicText(keyring.DomainInviteSign, droppedKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, pubName), stale, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	before = snapshot(t, other)
+	out.Reset()
+	errb.Reset()
+	if code := runCtrlzKeys([]string{"derive", "--dir", other}, &out, &errb); code != admincli.ExitRefusedMissing || !strings.Contains(errb.String(), pubName) {
+		t.Fatalf("a refusal with a stale public file: exit %d %q, want %d naming %s", code, errb.String(), admincli.ExitRefusedMissing, pubName)
+	}
+	if !equalSnap(before, snapshot(t, other)) {
+		t.Error("a refused run rewrote a stale public file")
+	}
 }
 
 func equalSnap(a, b map[string]string) bool {

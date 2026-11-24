@@ -490,7 +490,7 @@ func (s *Server) register(ctx context.Context, b gen.RegisterRequest) (login.Res
 			return s.login.PeekRegisterCode(ctx, in)
 		},
 		// The caller proved a right code before Work, so a busy answer is the server's and not a guess:
-		// the network count of the check is given back. The invite's own count stays (a live invite is
+		// the network count of the check is given back. The invite's own count stays (an invite link whose signature checked is
 		// a proof, keyed on the invite, and bounded by what the invite is worth).
 		Refund: func(ctx context.Context) { _ = s.throttle.OTPVerifyRefund(ctx, ip, challenge.ID) },
 		Work: func(ctx context.Context, _ proof.Proved) (login.Result, error) {

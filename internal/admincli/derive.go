@@ -68,11 +68,21 @@ func deriveKeys(env Env, args []string) error {
 // refusal for errors.Is and has its own exit code (ExitRefusedMissing).
 type missingKeyFilesError struct {
 	missing []string // file names
+	stale   []string // public files that no longer say what their key file says
 	refusal error
 }
 
 func (e missingKeyFilesError) Error() string {
-	return e.refusal.Error() + "; " + strings.Join(e.missing, ", ") + " is missing and was not made, because a key file is made only from the root that owns the rest"
+	msg := e.refusal.Error()
+	if len(e.missing) > 0 {
+		msg += "; " + strings.Join(e.missing, ", ") + " is missing and was not made, because a key file is made only from the root that owns the rest"
+	}
+	if len(e.stale) > 0 {
+		// Said apart so the operator does not look for a file that is there: it exists but would give a
+		// verifier a key the key file has dropped.
+		msg += "; " + strings.Join(e.stale, ", ") + " does not match its key file and was not rewritten, because a refused run writes nothing"
+	}
+	return msg
 }
 
 func (e missingKeyFilesError) Unwrap() error { return e.refusal }
@@ -84,7 +94,7 @@ func deriveAll(env Env, dir string, root secret.Bytes, newRoot bool) error {
 	var missing, foreign []string
 	// missingPublic counts as a missing key file when a refusal stops the run: a public file is a pure
 	// function of its key file, so it is made only from a key file the root has proved.
-	var missingPublic []string
+	var missingPublic, stalePublic []string
 	var refused []error
 	for _, d := range keyring.Domains() {
 		text, err := secret.BytesFromFile(filepath.Join(dir, keyring.FileName(d)))
@@ -111,24 +121,41 @@ func deriveAll(env Env, dir string, root secret.Bytes, newRoot bool) error {
 	for _, d := range keyring.PublicDomains() {
 		// Read, not looked at: a key tool does not decide from a file being there (rule key-identity), and the text
 		// it reads here is judged by nobody, since the public file is rewritten from the key file whatever it says.
-		if probe, err := secret.BytesFromFile(filepath.Join(dir, keyring.PublicFileName(d))); errors.Is(err, os.ErrNotExist) {
+		have, err := secret.BytesFromFile(filepath.Join(dir, keyring.PublicFileName(d)))
+		if errors.Is(err, os.ErrNotExist) {
 			missingPublic = append(missingPublic, d)
-		} else if err == nil {
-			probe.Wipe()
+			continue
 		}
+		if err != nil {
+			continue
+		}
+		// A stale file is told apart from a good one even when a refusal stops the run (review dec-a-r1-4): the
+		// public text needs no root, and an install whose kek_root is off the host always ends in a refusal, so a
+		// public file that still lists a key line the operator removed would stay and be trusted by the api for
+		// ever. A key file that is missing is counted above, and one that does not parse was refused above.
+		if keyText, kerr := secret.BytesFromFile(filepath.Join(dir, keyring.FileName(d))); kerr == nil {
+			if want, werr := keyring.PublicText(d, keyText); werr == nil && !bytes.Equal(have.Reveal(), want) {
+				stalePublic = append(stalePublic, d)
+			}
+			keyText.Wipe()
+		}
+		have.Wipe()
 	}
 	if len(refused) > 0 {
 		err := fmt.Errorf("%w; put back the kek_root these files came from, or if it is lost for good run again with --new-root (spec 8.5)", errors.Join(refused...))
-		if len(missing) > 0 || len(missingPublic) > 0 {
-			// Nothing is written on a refusal, so these were not made either.
-			var names []string
+		if len(missing) > 0 || len(missingPublic) > 0 || len(stalePublic) > 0 {
+			// Nothing is written on a refusal, so these were not made or refreshed either.
+			var names, stale []string
+			for _, d := range stalePublic {
+				stale = append(stale, keyring.PublicFileName(d))
+			}
 			for _, d := range missing {
 				names = append(names, keyring.FileName(d))
 			}
 			for _, d := range missingPublic {
 				names = append(names, keyring.PublicFileName(d))
 			}
-			return missingKeyFilesError{missing: names, refusal: err}
+			return missingKeyFilesError{missing: names, stale: stale, refusal: err}
 		}
 		return err
 	}

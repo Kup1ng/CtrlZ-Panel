@@ -39,7 +39,7 @@ var variablePairSites = map[string]string{
 }
 
 func pairedOps() map[string]bool {
-	return map[string]bool{"MAC": true, "VerifyMAC": true, "SealLabeled": true, "OpenLabeled": true}
+	return map[string]bool{"MAC": true, "VerifyMAC": true, "SealLabeled": true, "OpenLabeled": true, "Sign": true}
 }
 
 // keyringConstants reads the Domain and Label constants from the keyring source itself, so the
@@ -120,6 +120,11 @@ func keyringPairProblems(w *keyringWorld, listed func(domain, label string) bool
 		if domConst && labConst {
 			if !listed(dom, lab) {
 				out = append(out, at+": "+u.name+" uses label "+lab+" under domain "+dom+", which keyring.Uses does not list")
+			} else if mode, _ := keyring.ModeOf(dom); (u.name == "Sign") != (mode == keyring.ModeSigning) {
+				// Uses lists the pair, but a signing domain takes only Sign and every other labelled operation
+				// takes a labeled domain: the keyring refuses the rest at run time, which for a call on a path
+				// no test reaches is the first signing in front of the owner (review dec-a-r1-2).
+				out = append(out, at+": "+u.name+" is called under domain "+dom+", whose mode does not take it")
 			}
 			continue
 		}
@@ -181,6 +186,11 @@ func TestKeyringPairLintCanFail(t *testing.T) {
 		want            int
 	}{
 		{"a listed pair", "internal/api/x.go", `func f(r *keyring.Ring) { r.MAC(keyring.DomainAuthMAC, keyring.LabelOTP, nil) }`, 0},
+		{"the listed signing pair", "internal/adminapi/x.go", `func f(r *keyring.Ring) { r.Sign(keyring.DomainInviteSign, keyring.LabelInviteLink, nil) }`, 0},
+		{"a signing call under a MAC domain", "internal/adminapi/x.go", `func f(r *keyring.Ring) { r.Sign(keyring.DomainAdminMAC, keyring.LabelSession, nil) }`, 1},
+		{"a MAC under the signing domain", "internal/adminapi/x.go", `func f(r *keyring.Ring) { r.MAC(keyring.DomainInviteSign, keyring.LabelInviteLink, nil) }`, 1},
+		{"the invite label under another domain", "internal/adminapi/x.go", `func f(r *keyring.Ring) { r.Sign(keyring.DomainAdminMAC, keyring.LabelInviteLink, nil) }`, 1},
+		{"a signing method value", "internal/adminapi/x.go", `func f(r *keyring.Ring) { sign := r.Sign; _ = sign }`, 1},
 		{"the admin device label under auth_mac", "internal/api/x.go", `func f(r *keyring.Ring) { r.SealLabeled(keyring.DomainAuthMAC, keyring.LabelAdminDevice, nil, nil) }`, 1},
 		{"a ceremony tag under admin_mac", "internal/adminapi/x.go", `func f(r *keyring.Ring) { r.VerifyMAC(keyring.DomainAdminMAC, keyring.LabelCeremony, nil, nil) }`, 1},
 		{"the device label under admin_mac", "internal/adminapi/x.go", `func f(r *keyring.Ring) { r.OpenLabeled(keyring.DomainAdminMAC, keyring.LabelDevice, nil, nil) }`, 1},

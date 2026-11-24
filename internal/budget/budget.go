@@ -319,7 +319,7 @@ func All() []Bucket {
 			HeldProof: PartMarker, HeldInvite: true,
 			Deferred: "whether the marker holds for the account of the phone asked for is known only once the handler has read " +
 				"the phone and the account, so the pipeline charges the plain bucket and hands the refusal over; a request whose " +
-				"marker holds, and a live invite (purpose invite, the only way into a closed registration), is let through on its own buckets and given its plain token back, every other is refused"},
+				"marker holds, and an invite link whose signature checks (purpose invite, the only way into a closed registration; the row is read after, and a used or revoked one still passes here), is let through on its own buckets and given its plain token back, every other is refused"},
 		{Layer: RateClass, Service: Tenant, Name: "otp-send-user", Source: Subject, Parts: []Part{PartSession},
 			Limits: []Limit{{Max: 5, Per: time.Minute}, {Max: 30, Per: time.Hour}}, FailClosed: true},
 		{Layer: RateClass, Service: Tenant, Name: "user-read", Source: Subject, Parts: []Part{PartSession}, Limits: perMin(300)},

@@ -23,7 +23,7 @@ info:
     Nothing here returns a password hash, a TOTP secret, a token, an SMS
     credential or a log row of a tenant (spec 18.1). The only secrets that leave
     are one-time values shown once: a new user's or a re-issued one-time password,
-    an invite code, a TOTP seed during setup.
+    an invite link, a TOTP seed during setup.
 servers:
   - url: /api/v1
     description: Behind the Admin hostname, through the front door.
