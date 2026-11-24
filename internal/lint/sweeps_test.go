@@ -50,8 +50,9 @@ import (
 // so a retention statement written under a name with none of the old keywords fails like any other; each
 // entry below is addressed to a set its own parameters name, which no timer drives.
 const (
-	sweepSubject = "addressed to the rows of one subject (a user, a session, a token family, a ticket, a phone change, an IP claim, a throttle scope) named by the statement's own parameters, and bounded by what that subject holds; nothing drives it by a timer, so there is no backlog to batch"
-	sweepSingle  = "writes the one row of a singleton settings table, or the few rows of a table that holds one per provider or template; there is nothing to batch"
+	sweepSubject      = "addressed to the rows of one subject (a user, a session, a token family, a ticket, a phone change, an IP claim, a throttle scope) named by the statement's own parameters, and bounded by what that subject holds; nothing drives it by a timer, so there is no backlog to batch"
+	sweepEndpointRows = "addressed to the rows of one Endpoint, or of the ids one request names, picked once by the ordered locking subselect and bounded by what the request may hold (500 ids, 64 windows, the clients of one Endpoint, 10 share links); a request of a tenant drives it, nothing drives it by a timer, so there is no backlog to batch"
+	sweepSingle       = "writes the one row of a singleton settings table, or the few rows of a table that holds one per provider or template; there is nothing to batch"
 )
 
 // sweepNotASweep names the statements that are in scope and are neither bounded nor keyed,
@@ -95,6 +96,12 @@ var sweepNotASweep = map[string]string{
 	"qSMSTemplateSet":                   sweepSingle,
 	"qSMSLimitsSet":                     sweepSingle,
 	"qServiceDelete":                    "keyed by its whole primary key (tenant, profile, service_slug): one row, named by the statement's own parameters",
+	"qClientsDelete":                    sweepEndpointRows,
+	"qWindowsDelete":                    sweepEndpointRows,
+	"qEndpointsSetGroup":                sweepEndpointRows,
+	"qEndpointsDelete":                  sweepEndpointRows,
+	"qShareLinksRevoke":                 sweepEndpointRows,
+	"qDownloadLinksDelete":              sweepEndpointRows,
 	"qIdempotencyFinish":                "keyed by its whole primary key (tenant, key): the one row the request inserted, named by the statement's own parameters",
 }
 

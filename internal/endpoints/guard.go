@@ -45,13 +45,13 @@ type Password struct {
 // Verifier checks one lock password. The api implements it with the throttle scopes and the Argon2 gate of P2 7.2; this
 // package decides which passwords are checked and what the answer means.
 type Verifier interface {
-	// Verify charges profile_lock_tenant and profile_unlock for the profile, checks pw against the stored hash inside the
+	// CheckLockPassword charges profile_lock_tenant and profile_unlock for the profile, checks pw against the stored hash inside the
 	// Argon2 gate and outside any transaction, and gives every charge of the attempt back when the gate is busy. ok is false
 	// for a wrong password; an error is final (429 too_many_attempts, 503 server_busy).
-	Verify(ctx context.Context, profile uuid.UUID, pw, stored secret.String) (ok bool, err error)
-	// Failed records a wrong password for the audit log, in a transaction of its own (the request is refused, so nothing
+	CheckLockPassword(ctx context.Context, profile uuid.UUID, pw, stored secret.String) (ok bool, err error)
+	// LockPasswordFailed records a wrong password for the audit log, in a transaction of its own (the request is refused, so nothing
 	// of its own transaction is kept).
-	Failed(ctx context.Context, profile, endpoint uuid.UUID) error
+	LockPasswordFailed(ctx context.Context, profile, endpoint uuid.UUID) error
 }
 
 // Actor is who asks.
@@ -357,12 +357,12 @@ func (e *Env) Run(ctx context.Context, st *store.Store, tenant uuid.UUID, opts s
 					continue
 				}
 				i := byProfile[n.Profile]
-				good, err := a.Verifier.Verify(ctx, n.Profile, a.Passwords[i].Secret, secret.New(hash))
+				good, err := a.Verifier.CheckLockPassword(ctx, n.Profile, a.Passwords[i].Secret, secret.New(hash))
 				if err != nil {
 					return err
 				}
 				if !good {
-					if err := a.Verifier.Failed(context.WithoutCancel(ctx), n.Profile, n.Endpoint); err != nil {
+					if err := a.Verifier.LockPasswordFailed(context.WithoutCancel(ctx), n.Profile, n.Endpoint); err != nil {
 						return err
 					}
 					return &Error{Kind: KindInvalidCredentials, Fields: []Field{{fmt.Sprintf("/lock_passwords/%d", i), CodeInvalid}}}

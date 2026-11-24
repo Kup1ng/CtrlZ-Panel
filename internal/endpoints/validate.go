@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"sync"
 	"time"
 	_ "time/tzdata" // the zone names of the schedule resolve the same on the api and in P4's compiler, with no system zoneinfo
 	"unicode/utf8"
@@ -35,11 +36,11 @@ const (
 )
 
 // Zones is the list of schedule time zones, as GET /catalog/timezones answers it.
-func Zones() []string { return slices.Clone(zoneNames) }
+func Zones() []string { return slices.Clone(zoneNames()) }
 
 // ValidZone says the name is one of the listed zones and loads.
 func ValidZone(name string) bool {
-	if _, ok := slices.BinarySearch(zoneNames, name); !ok {
+	if _, ok := slices.BinarySearch(zoneNames(), name); !ok {
 		return false
 	}
 	_, err := time.LoadLocation(name)
@@ -67,8 +68,12 @@ func CheckGroupName(name string) *Error {
 	return nil
 }
 
-var analyticsLevels = []string{"none", "some", "full"}
-var adminStates = []string{"enabled", "soft_disabled", "hard_disabled"}
+// The enums of PS 4, as functions: a package-level slice would be state a caller could change.
+func analyticsLevels() []string { return []string{"none", "some", "full"} }
+func adminStates() []string     { return []string{"enabled", "soft_disabled", "hard_disabled"} }
+
+// zoneNames is the sorted zone list, built once.
+var zoneNames = sync.OnceValue(zoneNamesList)
 
 // WindowIn is a window as a request names it: its id is optional, and an id the Endpoint already has keeps the window's
 // identity across the replacement (the compiler's window_id is this id).

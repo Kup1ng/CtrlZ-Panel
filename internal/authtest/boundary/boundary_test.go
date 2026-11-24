@@ -270,7 +270,7 @@ func TestAPastedCodeReachesTheHandler(t *testing.T) {
 // another pattern fails there and a parameter on a pasted pattern is proven here.
 func TestAPastedQueryReachesTheHandler(t *testing.T) {
 	const marks = "\u200f\u061c\u2060\u00ad\t"
-	covered := 0
+	coveredBy := map[string]int{}
 	for name, raw := range map[string][]byte{"tenant": api.Tenant(), "admin": api.Admin()} {
 		v, err := httpx.NewValidator(raw)
 		if err != nil {
@@ -293,7 +293,7 @@ func TestAPastedQueryReachesTheHandler(t *testing.T) {
 					if pat := p.Schema.Value.Pattern; pat != digits.PastePattern && pat != digits.PasteContentPattern {
 						continue
 					}
-					covered++
+					coveredBy[name]++
 					q := url.Values{p.Name: {marks + "0912" + marks + "345"}}
 					r := httptest.NewRequest(method, "/api/v1"+path+"?"+q.Encode(), nil)
 					if e := v.Check(r, method+" "+path); e != nil {
@@ -308,7 +308,11 @@ func TestAPastedQueryReachesTheHandler(t *testing.T) {
 			}
 		}
 	}
-	if covered < 1 {
-		t.Error("no query parameter is on a pasted pattern: the Users filter has left the document or the test has stopped looking")
+	// Each document on its own: the tenant API took a search parameter of the same name (P3), and a total over both would hide the
+	// Users filter of the admin document going back to the text pattern.
+	for _, name := range []string{"tenant", "admin"} {
+		if coveredBy[name] < 1 {
+			t.Errorf("%s: no query parameter is on a pasted pattern: the search filter has left the document or the test has stopped looking", name)
+		}
 	}
 }

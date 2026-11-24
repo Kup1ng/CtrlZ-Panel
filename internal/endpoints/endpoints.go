@@ -81,7 +81,7 @@ func (in CreateIn) check(known bool) *Error {
 	} else if in.Profile2ID == in.ProfileID {
 		fs = append(fs, Field{"/profile2_id", CodeSameProfile})
 	}
-	if in.AnalyticsLevel != "" && !inSet(in.AnalyticsLevel, analyticsLevels) {
+	if in.AnalyticsLevel != "" && !inSet(in.AnalyticsLevel, analyticsLevels()) {
 		fs = append(fs, Field{"/analytics_level", CodeInvalid})
 	}
 	if tooLong(in.Comment, CommentLimit) {
@@ -220,10 +220,10 @@ func (p Patch) pre(prefix string, typeKnown bool) []Field {
 	if p.Comment != nil && tooLong(*p.Comment, CommentLimit) {
 		fs = append(fs, Field{at("comment"), CodeTooLong})
 	}
-	if p.AnalyticsLevel != nil && !inSet(*p.AnalyticsLevel, analyticsLevels) {
+	if p.AnalyticsLevel != nil && !inSet(*p.AnalyticsLevel, analyticsLevels()) {
 		fs = append(fs, Field{at("analytics_level"), CodeInvalid})
 	}
-	if p.AdminState != nil && !inSet(*p.AdminState, adminStates) {
+	if p.AdminState != nil && !inSet(*p.AdminState, adminStates()) {
 		fs = append(fs, Field{at("admin_state"), CodeInvalid})
 	}
 	if p.ScheduleTimezone != nil && !ValidZone(*p.ScheduleTimezone) {

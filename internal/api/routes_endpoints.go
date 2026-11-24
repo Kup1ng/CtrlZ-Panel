@@ -78,9 +78,9 @@ type lockVerifier struct {
 	ip     netip.Addr
 }
 
-// Verify charges the tenant-wide scope and the profile's own, in the order of the unlock route, then checks the password in
+// CheckLockPassword charges the tenant-wide scope and the profile's own, in the order of the unlock route, then checks the password in
 // the gate, outside any transaction. A busy gate gives both charges back.
-func (v lockVerifier) Verify(ctx context.Context, profile uuid.UUID, pw, stored secret.String) (bool, error) {
+func (v lockVerifier) CheckLockPassword(ctx context.Context, profile uuid.UUID, pw, stored secret.String) (bool, error) {
 	who := throttle.Who{Tenant: v.tenant, Profile: profile}
 	if err := v.s.throttle.Charge(ctx, throttle.ProfileLockTenant, who); err != nil {
 		return false, apiError(err)
@@ -101,9 +101,9 @@ func (v lockVerifier) Verify(ctx context.Context, profile uuid.UUID, pw, stored 
 	return ok, nil
 }
 
-// Failed writes the audit row of a wrong password, in a transaction of its own: the request is refused, so nothing of its
+// LockPasswordFailed writes the audit row of a wrong password, in a transaction of its own: the request is refused, so nothing of its
 // own is kept.
-func (v lockVerifier) Failed(ctx context.Context, profile, endpoint uuid.UUID) error {
+func (v lockVerifier) LockPasswordFailed(ctx context.Context, profile, endpoint uuid.UUID) error {
 	return v.s.writeTx(ctx, v.tenant, func(tx store.Tx) error {
 		return audit.Tenant(tx, v.user, v.ip, audit.ProfileLockPasswordFailed{ProfileID: profile, EndpointID: endpoint})
 	})
@@ -138,7 +138,7 @@ func (s *Server) endpointAuth(ctx context.Context, pr session.Principal, lp *gen
 }
 
 // epWrite is the options of every Endpoint write transaction: the bound on lock waits of 3.1.
-var epWrite = store.TxOpts{LockWait: writeLockWait}
+func epWrite() store.TxOpts { return store.TxOpts{LockWait: writeLockWait} }
 
 // ---------------------------------------------------------------------------
 // Conversions.
@@ -520,7 +520,7 @@ func (s *Server) PatchEndpoint(ctx context.Context, req gen.PatchEndpointRequest
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.ep.Patch(ctx, s.d.Store, pr.TenantID, epWrite, a, uuid.UUID(req.Id), patchOf(req.Body))
+	row, err := s.ep.Patch(ctx, s.d.Store, pr.TenantID, epWrite(), a, uuid.UUID(req.Id), patchOf(req.Body))
 	if err != nil {
 		return nil, profileError(err)
 	}
@@ -567,7 +567,7 @@ func (s *Server) BatchEndpoints(ctx context.Context, req gen.BatchEndpointsReque
 			in.Set.AdminState = &v
 		}
 	}
-	n, err := s.ep.Batch(ctx, s.d.Store, pr.TenantID, epWrite, a, in)
+	n, err := s.ep.Batch(ctx, s.d.Store, pr.TenantID, epWrite(), a, in)
 	if err != nil {
 		return nil, profileError(err)
 	}
@@ -587,7 +587,7 @@ func (s *Server) DeleteEndpoint(ctx context.Context, req gen.DeleteEndpointReque
 	if err != nil {
 		return nil, err
 	}
-	if err := s.ep.Delete(ctx, s.d.Store, pr.TenantID, epWrite, a, []uuid.UUID{uuid.UUID(req.Id)}); err != nil {
+	if err := s.ep.Delete(ctx, s.d.Store, pr.TenantID, epWrite(), a, []uuid.UUID{uuid.UUID(req.Id)}); err != nil {
 		return nil, profileError(err)
 	}
 	return gen.DeleteEndpoint204Response{}, nil
@@ -606,7 +606,7 @@ func (s *Server) RotateEndpointResolver(ctx context.Context, req gen.RotateEndpo
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.ep.Rotate(ctx, s.d.Store, pr.TenantID, epWrite, a, uuid.UUID(req.Id))
+	row, err := s.ep.Rotate(ctx, s.d.Store, pr.TenantID, epWrite(), a, uuid.UUID(req.Id))
 	if err != nil {
 		return nil, profileError(err)
 	}
@@ -664,7 +664,7 @@ func (s *Server) PutEndpointSchedule(ctx context.Context, req gen.PutEndpointSch
 	for _, w := range b.Windows {
 		in.Windows = append(in.Windows, endpoints.WindowIn{ID: uid(w.Id), Start: w.Start, End: w.End, ProfileID: uuid.UUID(w.ProfileId), Profile2ID: uid(w.Profile2Id)})
 	}
-	sc, err := s.ep.SetSchedule(ctx, s.d.Store, pr.TenantID, epWrite, a, uuid.UUID(req.Id), in)
+	sc, err := s.ep.SetSchedule(ctx, s.d.Store, pr.TenantID, epWrite(), a, uuid.UUID(req.Id), in)
 	if err != nil {
 		return nil, profileError(err)
 	}
@@ -704,7 +704,7 @@ func (s *Server) CreateEndpointGroup(ctx context.Context, req gen.CreateEndpoint
 	if err != nil {
 		return nil, err
 	}
-	g, err := s.ep.CreateGroup(ctx, s.d.Store, pr.TenantID, epWrite, req.Body.Name, uuidList(req.Body.EndpointIds))
+	g, err := s.ep.CreateGroup(ctx, s.d.Store, pr.TenantID, epWrite(), req.Body.Name, uuidList(req.Body.EndpointIds))
 	if err != nil {
 		return nil, profileError(err)
 	}
@@ -720,7 +720,7 @@ func (s *Server) PatchEndpointGroup(ctx context.Context, req gen.PatchEndpointGr
 	if err != nil {
 		return nil, err
 	}
-	g, err := s.ep.RenameGroup(ctx, s.d.Store, pr.TenantID, epWrite, uuid.UUID(req.Gid), req.Body.Name)
+	g, err := s.ep.RenameGroup(ctx, s.d.Store, pr.TenantID, epWrite(), uuid.UUID(req.Gid), req.Body.Name)
 	if err != nil {
 		return nil, profileError(err)
 	}
@@ -733,7 +733,7 @@ func (s *Server) DeleteEndpointGroup(ctx context.Context, req gen.DeleteEndpoint
 	if err != nil {
 		return nil, err
 	}
-	if err := s.ep.DeleteGroup(ctx, s.d.Store, pr.TenantID, epWrite, uuid.UUID(req.Gid)); err != nil {
+	if err := s.ep.DeleteGroup(ctx, s.d.Store, pr.TenantID, epWrite(), uuid.UUID(req.Gid)); err != nil {
 		return nil, profileError(err)
 	}
 	return gen.DeleteEndpointGroup204Response{}, nil
@@ -840,7 +840,7 @@ func (s *Server) CreateClient(ctx context.Context, req gen.CreateClientRequestOb
 	if b.AnalyticsLevel != nil {
 		in.AnalyticsLevel = string(*b.AnalyticsLevel)
 	}
-	c, err := s.ep.CreateClient(ctx, s.d.Store, pr.TenantID, epWrite, a, uuid.UUID(req.Id), in)
+	c, err := s.ep.CreateClient(ctx, s.d.Store, pr.TenantID, epWrite(), a, uuid.UUID(req.Id), in)
 	if err != nil {
 		return nil, profileError(err)
 	}
@@ -862,7 +862,7 @@ func (s *Server) PatchClient(ctx context.Context, req gen.PatchClientRequestObje
 		return nil, err
 	}
 	ch := clientChange(b.Alias, b.GroupName, b.ProfileId, b.Profile2Id, strPtr(b.AnalyticsLevel), strs(b.Clear), flag(b.ConfirmDestinations))
-	c, err := s.ep.PatchClient(ctx, s.d.Store, pr.TenantID, epWrite, a, uuid.UUID(req.Id), uuid.UUID(req.Cid), ch)
+	c, err := s.ep.PatchClient(ctx, s.d.Store, pr.TenantID, epWrite(), a, uuid.UUID(req.Id), uuid.UUID(req.Cid), ch)
 	if err != nil {
 		return nil, profileError(err)
 	}
@@ -896,7 +896,7 @@ func (s *Server) BatchClients(ctx context.Context, req gen.BatchClientsRequestOb
 		alias, group, p, p2, analytics = b.Set.Alias, b.Set.GroupName, b.Set.ProfileId, b.Set.Profile2Id, strPtr(b.Set.AnalyticsLevel)
 	}
 	in.Change = clientChange(alias, group, p, p2, analytics, strs(b.Clear), flag(b.ConfirmDestinations))
-	n, more, err := s.ep.BatchClients(ctx, s.d.Store, pr.TenantID, epWrite, a, uuid.UUID(req.Id), in)
+	n, more, err := s.ep.BatchClients(ctx, s.d.Store, pr.TenantID, epWrite(), a, uuid.UUID(req.Id), in)
 	if err != nil {
 		return nil, profileError(err)
 	}

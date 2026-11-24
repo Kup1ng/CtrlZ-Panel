@@ -131,6 +131,10 @@ func driveMaxClients(t *testing.T, e *raceEnv) {
 		var w store.Won
 		err := e.tenant.WithTenant(e.ctx, e.A.Tenant, store.TxOpts{}, func(tx store.Tx) error {
 			hold()
+			// The write path key-shares the profiles first (Guard.Begin): the statements of the Endpoint name profile columns.
+			if _, err := tx.ProfilesKeyShare([]uuid.UUID{e.A.Profile}); err != nil {
+				return err
+			}
 			if _, err := tx.EndpointsLock([]uuid.UUID{e.A.Endpoint}); err != nil {
 				return err
 			}

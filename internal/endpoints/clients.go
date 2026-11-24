@@ -29,7 +29,7 @@ func checkClientValues(alias, group, analytics string, p, p2 uuid.UUID) []Field 
 	if tooLong(group, AliasLimit) {
 		fs = append(fs, Field{"/group_name", CodeTooLong})
 	}
-	if analytics != "" && !inSet(analytics, analyticsLevels) {
+	if analytics != "" && !inSet(analytics, analyticsLevels()) {
 		fs = append(fs, Field{"/analytics_level", CodeInvalid})
 	}
 	switch {
@@ -159,7 +159,7 @@ func (c ClientChange) pre(prefix string) []Field {
 	if c.GroupName != nil && tooLong(*c.GroupName, AliasLimit) {
 		fs = append(fs, Field{at("group_name"), CodeTooLong})
 	}
-	if c.AnalyticsLevel != nil && !inSet(*c.AnalyticsLevel, analyticsLevels) {
+	if c.AnalyticsLevel != nil && !inSet(*c.AnalyticsLevel, analyticsLevels()) {
 		fs = append(fs, Field{at("analytics_level"), CodeInvalid})
 	}
 	return fs

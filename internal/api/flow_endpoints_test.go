@@ -65,18 +65,18 @@ func TestEndpointFlow(t *testing.T) {
 	var created struct {
 		Endpoints []pEndpoint `json:"endpoints"`
 	}
-	a.do("POST", "/endpoints", body, idem("k1")).want(201, "").json(&created)
+	a.do("POST", "/endpoints", body, idem("ep-flow-create-1")).want(201, "").json(&created)
 	if len(created.Endpoints) != 3 || created.Endpoints[0].Status != "pending" || created.Endpoints[0].AdminState != "enabled" {
 		t.Fatalf("created %+v", created.Endpoints)
 	}
 	var replay struct {
 		Endpoints []pEndpoint `json:"endpoints"`
 	}
-	a.do("POST", "/endpoints", body, idem("k1")).want(201, "").json(&replay)
+	a.do("POST", "/endpoints", body, idem("ep-flow-create-1")).want(201, "").json(&replay)
 	if len(replay.Endpoints) != 3 || replay.Endpoints[0].ID != created.Endpoints[0].ID {
 		t.Error("a replay made other Endpoints")
 	}
-	a.do("POST", "/endpoints", map[string]any{"type": typ, "names": []string{"other"}, "profile_id": A.Profile.String()}, idem("k1")).want(409, "idempotency_key_reused")
+	a.do("POST", "/endpoints", map[string]any{"type": typ, "names": []string{"other"}, "profile_id": A.Profile.String()}, idem("ep-flow-create-1")).want(409, "idempotency_key_reused")
 	var n int
 	f.env.Scan(f.t, `SELECT count(*) FROM ctrlz.endpoints WHERE tenant_id = $1 AND name IN ('=cmd|calc', 'beta', 'alpha')`, []any{A.Tenant}, &n)
 	if n != 3 {
@@ -84,7 +84,7 @@ func TestEndpointFlow(t *testing.T) {
 	}
 
 	// B's profile and B's ids are 404 for A, and B sees none of A's Endpoints.
-	a.do("POST", "/endpoints", map[string]any{"type": typ, "names": []string{"x"}, "profile_id": B.Profile.String()}, idem("k2")).want(404, "not_found")
+	a.do("POST", "/endpoints", map[string]any{"type": typ, "names": []string{"x"}, "profile_id": B.Profile.String()}, idem("ep-flow-create-2")).want(404, "not_found")
 	a.get("/endpoints/"+B.Endpoint.String()).want(404, "not_found")
 	var bPage pEndpointPage
 	b.get("/endpoints").want(200, "").json(&bPage)
@@ -153,7 +153,7 @@ func TestEndpointLockPasswordFlow(t *testing.T) {
 	var created struct {
 		Endpoints []pEndpoint `json:"endpoints"`
 	}
-	a.do("POST", "/endpoints", map[string]any{"type": typ, "names": []string{"kids tablet"}, "profile_id": locked.String()}, idem("lk1")).want(201, "").json(&created)
+	a.do("POST", "/endpoints", map[string]any{"type": typ, "names": []string{"kids tablet"}, "profile_id": locked.String()}, idem("ep-flow-lock-1")).want(201, "").json(&created)
 	ep := created.Endpoints[0].ID.String()
 	hash, err := f.hasher.Hash(f.env.Ctx, secret.New("correct horse"))
 	if err != nil {

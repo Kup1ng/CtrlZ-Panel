@@ -43,6 +43,7 @@ func tenantEvents() []audit.TenantEvent {
 		audit.PasskeyEnforce{Enabled: true}, audit.PasskeyReview{}, audit.PasskeyCloneSuspect{CredentialRowID: id},
 		audit.Register{Via: "invite"}, audit.TOTPLost{KeyNumber: 1, Users: 2},
 		audit.ProfileLock{ProfileID: id}, audit.ProfileUnlock{ProfileID: id}, audit.ProfileUnlockFailed{ProfileID: id},
+		audit.ProfileLockPasswordUsed{ProfileID: id, EndpointID: id}, audit.ProfileLockPasswordFailed{ProfileID: id, EndpointID: id},
 	}
 }
 

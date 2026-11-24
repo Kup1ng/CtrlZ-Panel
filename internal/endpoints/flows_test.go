@@ -118,12 +118,12 @@ type fakeVerifier struct {
 	failed []uuid.UUID
 }
 
-func (v *fakeVerifier) Verify(_ context.Context, profile uuid.UUID, pw, _ secret.String) (bool, error) {
+func (v *fakeVerifier) CheckLockPassword(_ context.Context, profile uuid.UUID, pw, _ secret.String) (bool, error) {
 	v.calls = append(v.calls, profile)
 	return pw.Reveal() == v.right, nil
 }
 
-func (v *fakeVerifier) Failed(_ context.Context, profile, _ uuid.UUID) error {
+func (v *fakeVerifier) LockPasswordFailed(_ context.Context, profile, _ uuid.UUID) error {
 	v.failed = append(v.failed, profile)
 	return nil
 }
