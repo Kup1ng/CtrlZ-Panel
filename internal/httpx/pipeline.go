@@ -321,6 +321,41 @@ func (a *API) perOp(next http.Handler) http.Handler {
 			}
 		}
 
+		// Step 8 for a route that carries a share or download link value (P3 7.1), BEFORE the schema check: the value is screened with
+		// no I/O, and one that fails, or that is in the dead set, is the same 404 as every other refusal (junk of any length or
+		// alphabet included) and charges nothing. The check is not cheap (it rebuilds the operation's schema for every request) and
+		// these routes have neither a session nor a network bucket, so a check ahead of the screen would be a cost that a stranger
+		// who holds no link could make the service pay without limit (p3-D4-r1-5). One that passes is charged to the class on the
+		// row it names, never to the network: a value is minted only by its tenant, so a stranger holds nothing that proves anything
+		// about his network. The schema check, and with it the 400 for a body that is not the document's, follows for a value that
+		// was charged.
+		if class.Key == ratelimit.ByLink {
+			key, ok := a.p.Bearer(r, op)
+			if !ok {
+				// A body over the limit cannot be read for its value, and it is 413 on every route: the size says nothing of a row,
+				// and what is left to read is at most the operation's limit.
+				if r.Body != nil && r.Body != http.NoBody {
+					var mbe *http.MaxBytesError
+					if _, err := io.Copy(io.Discard, r.Body); errors.As(err, &mbe) {
+						Write(w, r, New(http.StatusRequestEntityTooLarge, CodeTooLarge))
+						return
+					}
+				}
+				Write(w, r, NotFound())
+				return
+			}
+			if a.dead.has("link:" + key) {
+				Write(w, r, NotFound())
+				return
+			}
+			if e := a.charge(ctx, class, ratelimit.Subject{Network: network, Link: key}); e != nil {
+				a.refuse(w, r, e)
+				return
+			}
+			ctx = context.WithValue(ctx, keyLinkDead, &linkDeadMark{set: a.dead, key: "link:" + key})
+			r = r.WithContext(ctx)
+		}
+
 		// A route that needs a session answers 401 before it reads or checks the body. A
 		// session route carries no network bucket (Build forbids one), so a request with no
 		// cookie that could be ours used to be charged to nothing and still paid a read of
@@ -367,25 +402,6 @@ func (a *API) perOp(next http.Handler) http.Handler {
 				a.refuse(w, r, e)
 				return
 			}
-		}
-
-		// Step 8 for a route that carries a share or download link value (P3 7.1), after the schema check so that a body that is not the
-		// document's (rule boundary-input) is the 400 every route answers: the value is screened with no I/O, and one that fails, or that
-		// is in the dead set, is the same 404 as every other refusal and charges nothing. One that passes is charged to the class on the
-		// row it names, never to the network: a value is minted only by its tenant, so a stranger holds nothing that proves anything
-		// about his network.
-		if class.Key == ratelimit.ByLink {
-			key, ok := a.p.Bearer(r, op)
-			if !ok || a.dead.has("link:"+key) {
-				Write(w, r, NotFound())
-				return
-			}
-			if e := a.charge(ctx, class, ratelimit.Subject{Network: network, Link: key}); e != nil {
-				a.refuse(w, r, e)
-				return
-			}
-			ctx = context.WithValue(ctx, keyLinkDead, &linkDeadMark{set: a.dead, key: "link:" + key})
-			r = r.WithContext(ctx)
 		}
 
 		// Steps 8 (session-lookup) and 9: a route that needs a session.

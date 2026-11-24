@@ -99,6 +99,16 @@
 			header_up X-Forwarded-For {remote_host}
 		}
 	}
+	# The Apple profile download link that the api hands out is https://<panel host>/p/<value> (P3 7.1): a person scans or taps
+	# it, so it must reach the download operation, not the Next.js app (which has no /p page and would answer 404). The prefix is
+	# stripped and the value becomes the path parameter; every shape of value, junk included, goes to the api so that the answer
+	# is its one 404 and not the web app's. quiet_log already keeps the URI of this path out of the access log.
+	handle_path /p/* {
+		rewrite * /api/v1/public/apple-profile{path}
+		reverse_proxy api:8080 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
 	handle {
 		reverse_proxy web-panel:3000
 	}

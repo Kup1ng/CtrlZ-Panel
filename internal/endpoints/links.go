@@ -415,6 +415,19 @@ func (e *Env) OpenShareApple(ctx context.Context, st *store.Store, opts store.Tx
 	if info.TenantStatus != "active" || info.UsesLeft <= 0 || !info.ExpiresAt.After(now) {
 		return AppleOut{}, false, notFound()
 	}
+	// What the request alone decides is decided here, before any transaction: a link with a client makes that client's profile only
+	// (a link with none lets the page name one), and the shape of the request is Validate's. A refusal inside the transaction spends
+	// no use, so max_uses would never bound it, and each attempt would take a pooled connection and the Endpoint's row lock: a holder
+	// of one live value could post a request that is always refused as often as public-link allows, with no session (p3-D4-r1-6).
+	if info.Client != "" {
+		if req.Client != "" && req.Client != info.Client {
+			return AppleOut{}, false, invalid(Field{"/params/client", CodeInvalid})
+		}
+		req.Client = info.Client
+	}
+	if err := appleprofile.Validate(req); err != nil {
+		return AppleOut{}, false, appleField(err, "/params")
+	}
 	err = e.Plain(ctx, st, info.TenantID, opts, func(tx store.Tx) error {
 		out = AppleOut{}
 		found, err := tx.EndpointsLock([]uuid.UUID{info.EndpointID})
@@ -424,21 +437,8 @@ func (e *Env) OpenShareApple(ctx context.Context, st *store.Store, opts store.Tx
 		if len(found) != 1 {
 			return notFound()
 		}
-		_, won, err := tx.ShareLinkConsume(id, info.EndpointID, now)
-		if err != nil {
-			return err
-		}
-		if !won.Yes() {
-			return notFound()
-		}
-		// A link with a client makes that client's profile only; a link with none lets the page name one (the grammar is checked
-		// by Validate).
-		if info.Client != "" {
-			if req.Client != "" && req.Client != info.Client {
-				return invalid(Field{"/params/client", CodeInvalid})
-			}
-			req.Client = info.Client
-		}
+		// Every refusal that needs a read comes before the consume, so that none of them writes a row and rolls it back; the
+		// consume is the first write and the last decision, and it answers 404 for a link that died since the lookup.
 		v, _, err := e.ResolverFor(tx, info.EndpointID, req.Client)
 		if err != nil {
 			if ee, ok := err.(*Error); ok && ee.Kind == KindValidation {
@@ -452,6 +452,13 @@ func (e *Env) OpenShareApple(ctx context.Context, st *store.Store, opts store.Tx
 		p, err := expandApple(tx, req, uuid.Nil, "/params")
 		if err != nil {
 			return err
+		}
+		_, won, err := tx.ShareLinkConsume(id, info.EndpointID, now)
+		if err != nil {
+			return err
+		}
+		if !won.Yes() {
+			return notFound()
 		}
 		n, value, err := e.newDownload(info.EndpointID, p, now, id)
 		if err != nil {

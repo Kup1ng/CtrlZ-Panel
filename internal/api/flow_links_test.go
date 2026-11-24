@@ -293,12 +293,11 @@ func TestPublicRefusalsAreOneAnswer(t *testing.T) {
 	}
 	cases["a download value"] = d.Reveal()
 
-	// A body that is not the document's (a value of the wrong length or alphabet) is refused by the schema, as on every route: 400.
-	for _, v := range []string{"x", strings.Repeat("A", 63), strings.Repeat("A", 65), strings.Repeat("A", 63) + "="} {
-		if got := r.open(v); got.Code != 400 {
-			t.Errorf("a value of length %d answered %d, want 400", len(v), got.Code)
-		}
-	}
+	// A value of the wrong length or alphabet is junk like any other: it is screened before the schema, so it is the one 404 (spec 7.1).
+	cases["junk"] = "x"
+	cases["short"] = strings.Repeat("A", 63)
+	cases["long"] = strings.Repeat("A", 65)
+	cases["alphabet"] = strings.Repeat("A", 63) + "="
 	var first *resp
 	check := func(name string, got *resp) {
 		t.Helper()
@@ -334,7 +333,7 @@ func TestPublicRefusalsAreOneAnswer(t *testing.T) {
 	before := f.st.Asked()
 	for _, v := range []string{"x", string(flipped), valueOf(t, soon.URL), strings.Repeat("A", 64)} {
 		f.ck.add(2 * time.Second)
-		if got := r.open(v); got.Code != 404 && got.Code != 400 {
+		if got := r.open(v); got.Code != 404 {
 			t.Errorf("a value that cannot be ours answered %d", got.Code)
 		}
 	}
@@ -482,6 +481,30 @@ func TestShareLinkMakesAppleLinks(t *testing.T) {
 		t.Errorf("uses %d, want 1 (the refused request spent none)", uses)
 	}
 	f.client().post("/public/share/apple-profile", map[string]any{"link": valueOf(t, plain.URL), "params": map[string]any{"protocol": "doh", "from_folder_id": uuid.NewString()}}).want(400, "")
+
+	// What the request alone decides is refused before any transaction (p3-D4-r1-6): a request that is always refused, posted with a
+	// live value, costs the lookup of the value and nothing more, so it never takes the Endpoint's row lock or a second connection.
+	// The price of the lookup is measured on a value that screens and names no row, which is all of the work that is left.
+	ghost, err := f.srv.bearer.Mint(bearer.ShareLink, uuid.New(), f.ck.now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := f.st.Asked()
+	f.client().post("/public/share/apple-profile", map[string]any{"link": ghost.Reveal(), "params": map[string]any{"protocol": "doh"}}).want(404, "not_found")
+	lookup := f.st.Asked() - before
+	if lookup == 0 {
+		t.Fatal("a value that screens cost no lookup")
+	}
+	before = f.st.Asked()
+	f.client().post("/public/share/apple-profile", map[string]any{"link": valueOf(t, withClient.URL), "params": map[string]any{"protocol": "doh", "client": "tv"}}).want(422, "validation_failed")
+	f.client().post("/public/share/apple-profile", map[string]any{"link": valueOf(t, plain.URL), "params": map[string]any{"protocol": "doh", "excluded_domains": []string{"not a domain name"}}}).want(422, "validation_failed")
+	if n := f.st.Asked() - before; n != 2*lookup {
+		t.Errorf("two requests the shape alone refuses cost %d pool connections, want %d (the lookups only)", n, 2*lookup)
+	}
+	f.env.Scan(t, `SELECT uses FROM ctrlz.setup_share_tokens WHERE id = $1`, []any{plain.Link.ID}, &uses)
+	if uses != 1 {
+		t.Errorf("uses %d of the plain link, want 1 (the one that made a link; the refused ones spent none)", uses)
+	}
 	// The tenant's twenty are untouched: both links were made through a share link.
 	var own int
 	f.env.Scan(t, `SELECT count(*) FROM ctrlz.profile_download_tokens WHERE tenant_id = $1 AND via_share_id IS NULL`, []any{f.env.A.Tenant}, &own)

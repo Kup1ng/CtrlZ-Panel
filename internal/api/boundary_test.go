@@ -1,12 +1,18 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Kup1ng/CtrlZ-Panel/api"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/bearer"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/session"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/authtest/boundary"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
@@ -64,8 +70,20 @@ func TestBoundaryFuzz(t *testing.T) {
 			}
 			cookie = live
 		}
+		// The routes that carry a share or download link value screen it before the schema check (P3 7.1), so a request whose value
+		// is not one this service made is the 404 of junk and never reaches the check. Each of their cases carries a value that
+		// screens, made for a row that does not exist and used once, so that what a case breaks is the member it names; a case that
+		// breaks the value itself is junk and is 404 (or 400 or 413 when the router or the size says so first).
+		intact := true
+		if kind, ok := linkOps[c.Op]; ok {
+			c, intact = f.withLiveLink(t, c, kind)
+		}
 		r := boundary.DoAs(context.Background(), f.h, host, boundary.IP(i), c, cookie)
-		if v := boundary.Verdict(c, r); v != "" {
+		v := boundary.Verdict(c, r)
+		if !intact && !c.Baseline && r.Status == 404 {
+			v = ""
+		}
+		if v != "" {
 			t.Errorf("%s: %s", c.Name, v)
 			continue
 		}
@@ -93,4 +111,33 @@ func TestBoundaryFuzz(t *testing.T) {
 	if lines := boundary.WarnLines(f.logs.String()); len(lines) > 0 {
 		t.Errorf("%d WARN or ERROR lines from client input, first: %s", len(lines), lines[0])
 	}
+}
+
+// linkOps are the operations that carry a link value, and the kind of value each takes.
+var linkOps = map[string]bearer.Kind{
+	"openShare": bearer.ShareLink, "createShareAppleProfile": bearer.ShareLink, "downloadAppleProfile": bearer.DownloadLink,
+}
+
+// withLiveLink puts a value that screens in place of the sample the generator wrote, in the body or the path. intact says the
+// case still carries that value whole, in the member or the path segment of the route: only then does the case reach the schema
+// check, and so only then must it be refused by the member it breaks.
+func (f *frig) withLiveLink(t *testing.T, c boundary.Case, kind bearer.Kind) (out boundary.Case, intact bool) {
+	t.Helper()
+	v, err := f.srv.bearer.Mint(kind, uuid.New(), f.ck.now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := v.Reveal()
+	out = c
+	if c.Body != nil {
+		out.Body = bytes.ReplaceAll(c.Body, []byte(strings.Repeat("a", bearer.Len)), []byte(live))
+		var m map[string]json.RawMessage
+		var got string
+		if json.Unmarshal(out.Body, &m) == nil && json.Unmarshal(m["link"], &got) == nil {
+			intact = got == live
+		}
+		return out, intact
+	}
+	out.Path = strings.Replace(c.Path, strings.Repeat("A", bearer.Len), live, 1)
+	return out, out.Path == "/public/apple-profile/"+live
 }

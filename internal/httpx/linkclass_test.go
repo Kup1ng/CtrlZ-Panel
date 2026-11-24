@@ -173,3 +173,61 @@ func TestALinkClassWithNoBearerReaderIsRefusedAtBuild(t *testing.T) {
 		t.Error("a document with a link-keyed route and no Bearer reader was built")
 	}
 }
+
+// p3-D4-r1-5, r1-7: the value is screened before the schema check, so a stranger with no link cannot make the service run the
+// check, and a body of any shape with no value in it is the one 404 of junk. A value that screens and is charged is checked
+// next, and a body that is not the document's is the 400 every route answers.
+func TestTheValueIsScreenedBeforeTheSchemaCheck(t *testing.T) {
+	rig := newLinkPipeline(t, keyOf)
+	raw := func(body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/api/v1/public/share", strings.NewReader(body))
+		r.Host = host
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("X-Forwarded-For", "198.51.100.7")
+		w := httptest.NewRecorder()
+		rig.h.ServeHTTP(w, r)
+		return w
+	}
+	// Bodies the document refuses (an unknown member, a wrong type, not JSON) and that hold no value: 404, not 400.
+	for _, body := range []string{`{"x":1}`, `{"token":7}`, `not json`, `[]`, ``} {
+		if w := raw(body); w.Code != 404 || code(t, w) != "not_found" {
+			t.Errorf("body %q with no value answered %d %s, want the 404 of junk", body, w.Code, w.Body)
+		}
+	}
+	// A value that screens with a body the document refuses is charged, then checked: 400, and the handler never runs.
+	if w := raw(`{"token":"row-1","x":1}`); w.Code != 400 {
+		t.Errorf("a screened value with an unknown member answered %d, want 400", w.Code)
+	}
+	if rig.reached.Load() != 0 {
+		t.Errorf("the handler ran %d times for a body the schema refuses", rig.reached.Load())
+	}
+	// The refused body spent a use of the row's bucket: 30 a minute in all, 1 used by the 400 above.
+	served := 0
+	for i := 0; i < 40; i++ {
+		if raw(`{"token":"row-1"}`).Code == 200 {
+			served++
+		}
+	}
+	if served != 29 {
+		t.Errorf("served %d of 40 after one charged refusal, want 29", served)
+	}
+}
+
+// A body over the limit holds no value that can be read, and it is 413 as on every route and not the 404 of junk: the screen moved
+// ahead of the schema check, which used to be what said so.
+func TestABodyOverTheLimitOnALinkRouteIs413(t *testing.T) {
+	rig := newLinkPipeline(t, keyOf)
+	big := `{"token":"row-1","pad":"` + strings.Repeat("a", httpx.DefaultBodyLimit) + `"}`
+	r := httptest.NewRequest("POST", "/api/v1/public/share", strings.NewReader(big))
+	r.Host = host
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Forwarded-For", "198.51.100.7")
+	w := httptest.NewRecorder()
+	rig.h.ServeHTTP(w, r)
+	if w.Code != 413 {
+		t.Errorf("a body over the limit answered %d, want 413", w.Code)
+	}
+	if rig.reached.Load() != 0 {
+		t.Error("the handler ran for a body over the limit")
+	}
+}
