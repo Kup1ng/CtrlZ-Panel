@@ -12,7 +12,7 @@ import {useCallback} from "react";
 // nothing: nothing on one of these pages depends on the parameter.
 //
 // Secrets never go in a URL (R21). A dialog that holds a TOTP secret, recovery codes, a one-time
-// password, an invite code or a reauth step is state-only: it is not in this union, and it uses
+// password, an invite link or a reauth step is state-only: it is not in this union, and it uses
 // DialogFrame with its own state. Lint `no-secret-param` bans those words near this hook.
 
 /** Closed union of T-117 (the wireframe notes), plus the shell's bell and the admin's own. */

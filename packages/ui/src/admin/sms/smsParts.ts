@@ -48,17 +48,21 @@ export function countSms(body: string): SmsCount {
 }
 
 /**
- * The three login-code templates (`otp`, `otp_reset`, `otp_phone`) are held to ONE billed part by the API (owner decision
- * D58): the daily money cap counts one part for each message, so a body that needs two would understate it. This is the
- * rule of `sms.CheckBodyLength` on the server, with its figures: 64 UCS-2 units in Persian (70 for one part, minus the room
+ * The three login-code templates (`otp`, `otp_reset`, `otp_phone`) and the two security notices of Question 19
+ * (`notice_passkey`, `notice_recovery`) are held to ONE billed part by the API (owner decision D58): the daily money cap counts one part for each message, so a body that needs two would understate it. This is the
+ * rule of `sms.CheckBodyLength` (`oneBilledPart`) on the server, with its figures: 64 UCS-2 units in Persian (70 for one part, minus the room
  * for the telecom's opt-out line, «لغو11»), and in English 160 GSM-7 units with every character inside the GSM alphabet (one
- * outside it sends the whole message as UCS-2, 70 units). Other keys are not bounded.
+ * outside it sends the whole message as UCS-2, 70 units). Other keys are not bounded. A notice has no `{code}`: it takes no value, so its body is counted as typed.
  */
 export const OTP_FA_MAX_UNITS = 64;
 export const OTP_EN_MAX_UNITS = 160;
-const ONE_PART_KEYS: ReadonlySet<string> = new Set(["otp", "otp_reset", "otp_phone"]);
+const ONE_PART_KEYS: ReadonlySet<string> = new Set(["otp", "otp_reset", "otp_phone", "notice_passkey", "notice_recovery"]);
 
 export const isOnePartKey = (key: string): boolean => ONE_PART_KEYS.has(key);
+
+/** The two security notices: a text message with no placeholder, so a test send takes no value and the body must hold no `{code}` (the API counts zero markers for them). */
+const NOTICE_KEYS: ReadonlySet<string> = new Set(["notice_passkey", "notice_recovery"]);
+export const isNoticeKey = (key: string): boolean => NOTICE_KEYS.has(key);
 
 /**
  * Why the API would refuse this body for a one-part template, or null when it would not. `text` is the body as it will be

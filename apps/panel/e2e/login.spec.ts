@@ -146,7 +146,7 @@ for (const {lang, dir} of LANGS) {
       ["invite", false, true],
       ["closed", false, false],
     ] as const) {
-      test(`mode links: ${mode} shows ${register ? "Register" : invite ? "the invite code link" : "neither"}`, async ({page, context}) => {
+      test(`mode links: ${mode} shows ${register ? "Register" : invite ? "the invite link" : "neither"}`, async ({page, context}) => {
         await openAnonymous(context, {}, {registration_mode: mode});
         await gotoForm(page, `/${lang}/login`);
         await expect(page.getByRole("button", {name: T("login.submit")})).toBeVisible();

@@ -1,13 +1,13 @@
 import {describe, expect, it} from "vitest";
 
-import {asToken, leakPatterns, phoneTail} from "../../../scripts/ci-web-leak-patterns.mjs";
+import {asToken, leakPatterns, phoneTail, TOKEN_HEAD} from "../../../scripts/ci-web-leak-patterns.mjs";
 
 // Step 10f1 of scripts/ci-web.sh looks for these values in the logs of the front tier (merge-r4-8). The step itself needs the stack; what it looks
 // for is decided here, so a spelling of the phone or a recorded code that the scan misses cannot go unseen.
 const seed = {user: {phone: "09121234567", password: "user-secret-pass"}, admin: {password: "admin-secret-pass", totp_secret: "JBSWY3DPEHPK3PXP"}};
 const noop = [
   JSON.stringify({to: "+989121234567", template: "otp", values: {code: "482913"}}),
-  JSON.stringify({to: "+989121234567", template: "invite", values: {code: "AB12CD34", locale: "en"}}),
+  JSON.stringify({to: "+989121234567", template: "otp", values: {code: "AB12CD34", locale: "en"}}),
   "",
 ].join("\n");
 
@@ -32,7 +32,7 @@ describe("leakPatterns", () => {
     expect(records).toBe(2);
     expect(regex).toHaveLength(2);
     expect(regex.some((p: string) => new RegExp(p).test('GET /x?code=482913 HTTP'))).toBe(true);
-    expect(regex.some((p: string) => new RegExp(p).test("invite AB12CD34"))).toBe(true);
+    expect(regex.some((p: string) => new RegExp(p).test("signup AB12CD34"))).toBe(true);
     expect(regex.some((p: string) => new RegExp(p).test("locale en"))).toBe(false);
   });
 
@@ -51,5 +51,19 @@ describe("leakPatterns", () => {
 
   it("counts no record for an empty file, which the command line refuses", () => {
     expect(leakPatterns(seed, "\n").records).toBe(0);
+  });
+
+  // D67: an invite is never texted, so its token is in no noop record. The stack spec writes it to a file and the scan looks for the token itself.
+  it("holds each invite token, whole and by its head, and counts them (none is a scan that cannot see the invite link)", () => {
+    const link = (`${"Ctrlz-invite-fixture"}_Aa-09`).repeat(6).slice(0, 140);
+    const found = leakPatterns(seed, noop, `${link}\n\n${link.toLowerCase()}\n`);
+    expect(found.tokens).toBe(2);
+    expect(found.fixed).toContain(link);
+    expect(found.fixed).toContain(link.slice(0, TOKEN_HEAD));
+    expect(TOKEN_HEAD).toBe(40);
+    expect(leakPatterns(seed, noop).tokens).toBe(0);
+    // The scan's other patterns stay.
+    expect(found.fixed).toContain("user-secret-pass");
+    expect(found.regex).toHaveLength(2);
   });
 });

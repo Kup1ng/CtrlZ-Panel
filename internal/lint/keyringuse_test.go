@@ -29,9 +29,9 @@ import (
 //  3. the (domain, label) pair of the labelled operations is read from constant values, not from the
 //     name of an identifier.
 
-// ringMethodNames are the six operations of *keyring.Ring that bind a value to a key.
+// ringMethodNames are the seven operations (Sign joined with D67, so a signing pair is judged like a MAC pair) of *keyring.Ring that bind a value to a key.
 func ringMethodNames() map[string]bool {
-	return map[string]bool{"Seal": true, "Open": true, "SealLabeled": true, "OpenLabeled": true, "MAC": true, "VerifyMAC": true}
+	return map[string]bool{"Seal": true, "Open": true, "SealLabeled": true, "OpenLabeled": true, "MAC": true, "VerifyMAC": true, "Sign": true}
 }
 
 const keyringPkg = module + "/internal/keyring"

@@ -147,6 +147,8 @@ describe("ci-web.sh step 10, the log scans (merge-r4-8)", () => {
     expect(scan).toMatch(/\[ -s "\$work\/front\.log" \] \|\| fail/);
     expect(scan).toContain("scripts/ci-web-leak-patterns.mjs");
     expect(scan).toContain("deploy/compose/e2e-out/noop.jsonl");
+    // D67: an invite is not texted, so its token is read from the file the stack spec writes, and the scan names it.
+    expect(scan).toContain("deploy/compose/e2e-out/invite-tokens.txt");
     expect(scan, "no status of the log read may be dropped").not.toMatch(/logs [^\n]*\|\| true|logs [^\n]*\| grep/);
     expect(scan).toMatch(/grep -c -E -f "\$work\/leak-regex"/);
   });

@@ -206,7 +206,7 @@ describe("every free-text field is cleaned before it is sent", () => {
     );
   const exempt: Record<string, string> = {
     "account/HomeCountries.tsx": "a search box of a ComboBox: only the chosen country key is sent",
-    "auth/InviteFlow.tsx": "the invite code goes through changeGrouped, which keeps letters and digits only",
+    "auth/InviteFlow.tsx": "the pasted link goes through inviteTokenFromPaste, which drops every invisible character and white space and then accepts only the 140 characters of the token alphabet",
     "auth/SecondFactorInput.tsx": "the recovery code goes through changeGrouped, which keeps letters and digits only",
     "forms/PasswordField.tsx": "checked by hasInvisible in each form (the password scan above)",
     "lab/TokenLab.tsx": "specimens of the radius table (spec 6.3) on a page that is closed unless CTRLZ_LAB is set: nothing typed there is sent anywhere",

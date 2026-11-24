@@ -1,15 +1,14 @@
 import {toAsciiDigits} from "@ctrlz/i18n/digits.ts";
 
-// Typed codes that are not the six digits of an OTP: the invite code (20 Crockford base32 characters,
-// displayed in groups of four, AUTH 11.3) and the recovery code (16, `XXXX-XXXX-XXXX-XXXX`, AUTH 6.5).
+// The typed code that is not the six digits of an OTP: the recovery code (16, `XXXX-XXXX-XXXX-XXXX`, AUTH 6.5).
 // The server strips spaces and hyphens and folds case itself; the client does it too, so what is shown
 // is grouped and what is sent is the canonical text, and nothing depends on the server being forgiving.
+// The invite is not here: its token is a signed 140-character string that is never typed, so it must not be folded
+// (inviteToken.ts, D67).
 
-export const INVITE_LENGTH = 20;
 export const RECOVERY_LENGTH = 16;
 
 // Shown in an empty field. A shape and not a word, so it is the same in both languages and not a message.
-export const INVITE_PLACEHOLDER = "XXXX-XXXX-XXXX-XXXX-XXXX";
 export const RECOVERY_PLACEHOLDER = "XXXX-XXXX-XXXX-XXXX";
 
 /** Letters and digits only, upper case, Persian and Arabic digits as ASCII. Anything else is dropped. */
@@ -25,11 +24,9 @@ export function groupCode(canonical: string): string {
   return canonical.match(/.{1,4}/g)?.join("-") ?? "";
 }
 
-export const canonicalInvite = (text: string) => canonicalCode(text, INVITE_LENGTH);
 export const canonicalRecovery = (text: string) => canonicalCode(text, RECOVERY_LENGTH);
 
-/** A full invite code or recovery code, as far as its length can tell. */
-export const isFullInvite = (canonical: string) => canonical.length === INVITE_LENGTH;
+/** A full recovery code, as far as its length can tell. */
 export const isFullRecovery = (canonical: string) => canonical.length === RECOVERY_LENGTH;
 
 /** Where the caret goes in `groupCode(canonical)` when `count` canonical characters are before it. */

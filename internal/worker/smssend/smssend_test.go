@@ -824,7 +824,7 @@ func (r *rig) outbox(id uuid.UUID) (state, lastErr string, params bool) {
 
 func TestInviteIsSentAndItsParamsAreDropped(t *testing.T) {
 	r := newRig(t)
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 	r.drain()
 	if state, _, params := r.outbox(id); state != "sent" || params {
 		t.Fatalf("state %s, params kept %v", state, params)
@@ -856,7 +856,7 @@ func TestInviteParamsOpenOnlyWithTheSMSCredKey(t *testing.T) {
 	r.env.Exec(t, `DELETE FROM ctrlz.sms_gateways`)
 	r.env.AddGateway(t, other, authtest.Gateway{Provider: "noop", Role: "primary"})
 	r.router.Invalidate()
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX") // sealed under r.ring
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX") // sealed under r.ring
 	r.drain()
 	state, last, params := r.outbox(id)
 	if state != "failed" || last != "unreadable" || params {
@@ -871,7 +871,7 @@ func TestBothDownRetriesThenTheSweepEndsItAtAnHour(t *testing.T) {
 	r := newRig(t)
 	r.pri.reply = func(_ int, w http.ResponseWriter) { http500(w) }
 	r.fb.reply = func(_ int, w http.ResponseWriter) { http500(w) }
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 	r.drain()
 	if state, _, params := r.outbox(id); state != "pending" || !params {
 		t.Fatalf("after one failed pass: %s, params kept %v", state, params)
@@ -920,10 +920,10 @@ func TestBothDownRetriesThenTheSweepEndsItAtAnHour(t *testing.T) {
 func TestOutboxCountCapStopsTheSecondMessage(t *testing.T) {
 	r := newRig(t)
 	r.env.Exec(t, `UPDATE ctrlz.system_settings SET sms_outbox_cap_daily = 1`)
-	a := r.queue("invite", "invite", "+989121112233", uuid.Nil, "AAAAAAAAAAAAAAAAAAAA")
+	a := r.queue("test", "otp", "+989121112233", uuid.Nil, "AAAAAAAAAAAAAAAAAAAA")
 	r.drain()
-	b := r.queue("invite", "invite", "+989121112244", uuid.Nil, "BBBBBBBBBBBBBBBBBBBB")
-	c := r.queue("invite", "invite", "+989121112255", uuid.Nil, "CCCCCCCCCCCCCCCCCCCC")
+	b := r.queue("test", "otp", "+989121112244", uuid.Nil, "BBBBBBBBBBBBBBBBBBBB")
+	c := r.queue("test", "otp", "+989121112255", uuid.Nil, "CCCCCCCCCCCCCCCCCCCC")
 	r.drain()
 	if state, _, _ := r.outbox(a); state != "sent" {
 		t.Errorf("first: %s", state)
@@ -945,9 +945,9 @@ func TestOutboxCountCapStopsTheSecondMessage(t *testing.T) {
 func TestOutboxCostCapStopsMessages(t *testing.T) {
 	r := newRig(t)
 	r.env.Exec(t, `UPDATE ctrlz.system_settings SET sms_cost_cap_daily = 10`) // one message at the primary's price
-	a := r.queue("invite", "invite", "+989121112233", uuid.Nil, "AAAAAAAAAAAAAAAAAAAA")
+	a := r.queue("test", "otp", "+989121112233", uuid.Nil, "AAAAAAAAAAAAAAAAAAAA")
 	r.drain()
-	b := r.queue("invite", "invite", "+989121112244", uuid.Nil, "BBBBBBBBBBBBBBBBBBBB")
+	b := r.queue("test", "otp", "+989121112244", uuid.Nil, "BBBBBBBBBBBBBBBBBBBB")
 	r.drain()
 	if state, _, _ := r.outbox(a); state != "sent" {
 		t.Errorf("first: %s", state)
@@ -965,7 +965,7 @@ func TestRetryDoesNotCountTwiceAgainstTheOutboxCap(t *testing.T) {
 	r.env.Exec(t, `UPDATE ctrlz.system_settings SET sms_outbox_cap_daily = 1`)
 	r.pri.reply = func(_ int, w http.ResponseWriter) { http500(w) }
 	r.fb.reply = func(_ int, w http.ResponseWriter) { http500(w) }
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "AAAAAAAAAAAAAAAAAAAA")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "AAAAAAAAAAAAAAAAAAAA")
 	r.drain()
 	r.pri.reply = func(_ int, w http.ResponseWriter) { irOK(w) }
 	r.env.Exec(t, `UPDATE ctrlz.sms_gateways SET breaker_open_until = NULL`)
@@ -1156,7 +1156,7 @@ func TestARecordThatKeepsFailingDoesNotSendTheSameCodeForEver(t *testing.T) {
 // find it with Attempts > 1 and skip the count.
 func TestOutboxCountAndClaimCommitTogether(t *testing.T) {
 	r := newRig(t)
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 	r.env.Exec(t, `REVOKE INSERT, UPDATE ON ctrlz.sms_counters FROM ctrlz_worker`)
 	if _, err := r.w.Drain(r.env.Ctx); err == nil {
 		t.Fatal("a claim that could not count succeeded")
@@ -1208,7 +1208,7 @@ func TestAcceptedJustBeforeShutdownIsRecordedAndNotSentAgain(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(r.env.Ctx)
 	defer cancel2()
 	r.afterSend = cancel2
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 	if _, err := r.w.Drain(ctx2); err != nil {
 		t.Fatal(err)
 	}
@@ -1232,7 +1232,7 @@ func TestTwoWorkersShareOneBacklogWithoutDuplicates(t *testing.T) {
 	ids := make([]uuid.UUID, n)
 	for i := range values {
 		values[i] = fmt.Sprintf("INVITE%014d", i)
-		ids[i] = r.queue("invite", "invite", fmt.Sprintf("+98912111%04d", i), uuid.Nil, values[i])
+		ids[i] = r.queue("test", "otp", fmt.Sprintf("+98912111%04d", i), uuid.Nil, values[i])
 	}
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	src2 := smssend.NewSource(r.worker, r.ring, senderEnv(r.noopFile), log)

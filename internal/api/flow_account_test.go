@@ -93,17 +93,30 @@ func TestPhoneChange(t *testing.T) {
 
 	t.Run("a number that belongs to someone else", func(t *testing.T) {
 		b, oldCode, newCode := owner.startChange(B.Phone)
-		// The request is accepted like any other; the code for the taken number is
-		// a decoy that was never sent anywhere. Without it the confirm is a plain
-		// wrong code. Only someone who held that SIM and the code would meet
-		// phone_unavailable (5.6): the test plays that person by reading the code.
+		// The request is accepted like any other; the code for the taken number is a decoy that was never sent
+		// anywhere, and since question 15 it carries no tenant (a decoy is written with none), so even the code the
+		// test reads out of it cannot complete the change: the answer is the same wrong-code error as for any
+		// other code, where it used to be phone_unavailable for a person who held that SIM and the code.
 		confirm(owner, b.RequestID, oldCode, "000000").want(401, "otp_invalid")
-		confirm(owner, b.RequestID, oldCode, newCode).want(409, "phone_unavailable")
+		confirm(owner, b.RequestID, oldCode, newCode).want(401, "otp_invalid")
 		if f.count(`SELECT count(*) FROM ctrlz.users WHERE id = $1 AND phone_e164 = $2`, A.User, newPhone) != 1 {
 			t.Fatal("the number changed")
 		}
 		if f.count(`SELECT count(*) FROM ctrlz.users WHERE phone_e164 = $1`, B.Phone) != 1 {
 			t.Fatal("B lost its number")
+		}
+	})
+
+	t.Run("a number that someone takes after its code was sent", func(t *testing.T) {
+		const late = "+989128880006"
+		b, oldCode, newCode := owner.startChange(late)
+		// The code is real (nobody had the number when it was issued) and carries the tenant, so the confirm gets as
+		// far as the database, which finds the number taken by now: the one case of phone_unavailable (5.6).
+		f.env.Exec(t, `UPDATE ctrlz.users SET phone_e164 = $1 WHERE id = $2`, late, B.User)
+		defer f.env.Exec(t, `UPDATE ctrlz.users SET phone_e164 = $1 WHERE id = $2`, B.Phone, B.User)
+		confirm(owner, b.RequestID, oldCode, newCode).want(409, "phone_unavailable")
+		if f.count(`SELECT count(*) FROM ctrlz.users WHERE id = $1 AND phone_e164 = $2`, A.User, newPhone) != 1 {
+			t.Fatal("the number changed")
 		}
 	})
 

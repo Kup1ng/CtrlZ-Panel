@@ -55,7 +55,7 @@ func TestBlacklistedWhileTheFallbackWasNotAskedIsRetried(t *testing.T) {
 			r.pri.reply = func(_ int, w http.ResponseWriter) { irStatus(115)(w) }
 			phone := r.env.A.Phone
 			ch := r.request(phone)
-			inv := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+			inv := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 			r.drain()
 			if r.fb.count() != 0 {
 				t.Fatal("the fallback was called")

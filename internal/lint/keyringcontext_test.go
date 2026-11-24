@@ -72,7 +72,7 @@ func TestEverySealBindsAnAADFunction(t *testing.T) {
 	}
 }
 
-// plantedKeyring is the package the planted sources call: the real Ring's six methods with the real
+// plantedKeyring is the package the planted sources call: the real Ring's seven methods with the real
 // signatures reduced to bytes, and the real Domain and Label constants (so a planted call under a
 // pair the registry does not list is judged against the registry itself).
 func plantedKeyring(t *testing.T) string {
@@ -87,6 +87,7 @@ func plantedKeyring(t *testing.T) string {
 	b.WriteString("func (r *Ring) OpenLabeled(domain, label string, context Context, ct []byte) ([]byte, error) { return nil, nil }\n")
 	b.WriteString("func (r *Ring) MAC(domain, label string, parts ...[]byte) []byte { return nil }\n")
 	b.WriteString("func (r *Ring) VerifyMAC(domain, label string, tag []byte, parts ...[]byte) bool { return false }\n")
+	b.WriteString("func (r *Ring) Sign(domain, label string, msg []byte) (uint16, []byte, error) { return 0, nil, nil }\n")
 	consts := keyringConstants(t)
 	names := make([]string, 0, len(consts))
 	for n := range consts {

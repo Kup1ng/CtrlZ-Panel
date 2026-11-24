@@ -1,7 +1,7 @@
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 import {otpChallengeId} from "@ctrlz/api-client/testing/fixtures.ts";
 
-import {allowAuthErrors, field, gotoForm, inviteInfoFixture, openAnonymous, submit, text} from "./auth-support.ts";
+import {INVITE_TOKEN, allowAuthErrors, field, gotoForm, inviteInfoFixture, openAnonymous, submit, text} from "./auth-support.ts";
 
 // gate-r2-14. `global-error.tsx` is the fallback for every render error on the six auth pages: only (shell) has an error.tsx, and there is
 // no [locale]/error.tsx. It supplies its own <html>, with inline `style` attributes and `light-dark()` colours, because the provider
@@ -15,7 +15,7 @@ import {allowAuthErrors, field, gotoForm, inviteInfoFixture, openAnonymous, subm
 test.beforeEach(({guard}) => allowAuthErrors(guard));
 test.use({allowConsole: [/Minified React error|Objects are not valid as a React child|status of (404|500)/]});
 
-const CODE = "ABCDEFGHJKMNPQRSTVWX";
+const CODE = INVITE_TOKEN;
 
 for (const colorScheme of ["light", "dark"] as const) {
   test.describe(`the fatal state, ${colorScheme}`, () => {

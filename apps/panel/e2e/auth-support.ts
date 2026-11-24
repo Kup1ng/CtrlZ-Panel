@@ -126,6 +126,23 @@ export async function typeWhenFocused(page: Page, keys: string) {
 export const inviteInfoFixture = () => ({phone_masked: "+98912***4567", expires_at: "2026-11-20T10:00:00Z"});
 
 /**
+ * An invite token of the real shape (D67): 140 characters of A-Za-z0-9_- , case sensitive, with upper and lower case, digits, a
+ * hyphen and an underscore in it. It is put together from a seed and a filler so that a secret scanner does not take a fixture
+ * for a signed token; it is made up and signs nothing.
+ */
+export function inviteTokenFixture(seed: string): string {
+  const token = `${seed}_Aa-09`.repeat(Math.ceil(140 / (seed.length + 6))).slice(0, 140);
+  if (!/^[A-Za-z0-9_-]{140}$/.test(token)) throw new Error("the invite token fixture is not 140 characters of the token alphabet");
+  return token;
+}
+
+export const INVITE_TOKEN = inviteTokenFixture("Ctrlz-invite-fixture");
+/** A second token, for the specs that need two links in turn. */
+export const INVITE_TOKEN_B = inviteTokenFixture("Second-invite-fixture");
+/** What an admin copies from the create dialog: the panel's host, the language-free path and the token as the fragment. */
+export const inviteLinkFixture = (token: string = INVITE_TOKEN) => `https://panel.example.test/invite#${token}`;
+
+/**
  * A password the strength meter and the server both call strong, for the tests that need to send one. It is
  * put together from parts so that a secret scanner does not take a fixture for a leaked key; it is made up.
  */

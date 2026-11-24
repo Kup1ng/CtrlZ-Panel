@@ -197,7 +197,7 @@ func TestWorkerOutboxGatewaysAndAlerts(t *testing.T) {
 	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
 	f.global(t, admin, func(g store.GlobalTx) {
 		for i, id := range ids {
-			if err := g.SMSOutboxInsert(store.NewOutbox{ID: id, Kind: "invite", Phone: "+98912111004" + string(rune('0'+i)), TemplateKey: "invite", Locale: "fa", ParamsCT: []byte("ct")}); err != nil {
+			if err := g.SMSOutboxInsert(store.NewOutbox{ID: id, Kind: "test", Phone: "+98912111004" + string(rune('0'+i)), TemplateKey: "otp", Locale: "fa", ParamsCT: []byte("ct")}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -776,7 +776,7 @@ func TestOutboxClaimCeilingAndFailStale(t *testing.T) {
 	}
 	var id uuid.UUID
 	if err := super.QueryRow(f.ctx, `INSERT INTO ctrlz.sms_outbox (kind, phone_e164, template_key, locale, params_ct, attempts)
-VALUES ('invite', '+989121110062', 'invite', 'fa', '\x01', $1) RETURNING id`, store.OutboxMaxAttempts).Scan(&id); err != nil {
+VALUES ('test', '+989121110062', 'otp', 'fa', '\x01', $1) RETURNING id`, store.OutboxMaxAttempts).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	f.global(t, worker, func(g store.GlobalTx) {
@@ -821,7 +821,7 @@ func TestOutboxFailStaleWaitsForALiveClaimPastTheHour(t *testing.T) {
 	}
 	var id uuid.UUID
 	if err := super.QueryRow(f.ctx, `INSERT INTO ctrlz.sms_outbox (kind, phone_e164, template_key, locale, params_ct, attempts, created_at, claimed_until)
-VALUES ('invite', '+989121110063', 'invite', 'fa', '\x01', 3, now() - interval '61 minutes', now() + interval '10 seconds') RETURNING id`).Scan(&id); err != nil {
+VALUES ('test', '+989121110063', 'otp', 'fa', '\x01', 3, now() - interval '61 minutes', now() + interval '10 seconds') RETURNING id`).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	f.global(t, worker, func(g store.GlobalTx) {
@@ -841,7 +841,7 @@ VALUES ('invite', '+989121110063', 'invite', 'fa', '\x01', 3, now() - interval '
 
 	// With the claim gone, the same age ends the row as a timeout.
 	if err := super.QueryRow(f.ctx, `INSERT INTO ctrlz.sms_outbox (kind, phone_e164, template_key, locale, params_ct, attempts, created_at)
-VALUES ('invite', '+989121110064', 'invite', 'fa', '\x01', 3, now() - interval '61 minutes') RETURNING id`).Scan(&id); err != nil {
+VALUES ('test', '+989121110064', 'otp', 'fa', '\x01', 3, now() - interval '61 minutes') RETURNING id`).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	f.global(t, worker, func(g store.GlobalTx) {

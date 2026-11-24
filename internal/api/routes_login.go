@@ -260,75 +260,49 @@ func (s *Server) RequestOtp(ctx context.Context, req gen.RequestOtpRequestObject
 	// that carry a proof of their own. It answers the refusal here, before the floor and before any I/O, for
 	// every other request: the deferral must not turn a refused request into work (round 8, admin-r8-1).
 	//   - a device marker that holds for the phone's account is settled in otp.Request (HeldProofHolds);
-	//   - a live invite is read here, in a few slots, and settled in requestOTP (InviteProofHolds; round 9,
-	//     tenant-r9-1): a closed registration has no other way in, and the strangers who fill a carrier /24
-	//     must not be able to keep an invitee from his code.
-	var pre *store.InviteInfo
+	//   - an invite link whose signature checks is settled in requestOTP (InviteProofHolds; round 9, tenant-r9-1):
+	//     a closed registration has no other way in, and the strangers who fill a carrier /24 must not be able to
+	//     keep an invitee from his code. The link is opened here in process (D67), so a token that does not open
+	//     gets the plain bucket's answer with no read and no throttle row, which is what the pool of rounds 9 to
+	//     11 bounded and no longer exists.
 	if refusal := httpx.DeferredRefusal(ctx); refusal != nil {
 		isInvite := otp.Purpose(b.Purpose) == otp.Invite
 		if !isInvite && !httpx.HeldCarried(ctx) {
 			return nil, apiError(refusal)
 		}
 		if isInvite {
-			info, err := s.inviteAfterRefusal(ctx, deref(b.InviteToken), refusal)
-			if err != nil {
-				return nil, apiError(err)
+			if _, ok := s.openInvite(deref(b.InviteToken)); !ok {
+				return nil, apiError(refusal)
 			}
-			pre = &info
 		}
 	}
-	ch, err := floored(ctx, floorOTPReq, func(ctx context.Context) (otp.Challenge, error) { return s.requestOTP(ctx, b, pre) })
+	ch, err := floored(ctx, floorOTPReq, func(ctx context.Context) (otp.Challenge, error) { return s.requestOTP(ctx, b) })
 	if err != nil {
 		return nil, apiError(err)
 	}
 	return gen.RequestOtp202JSONResponse{OtpIssuedJSONResponse: otpIssued(ch)}, nil
 }
 
-// inviteAfterRefusal reads the invite of a code request the plain otp-send bucket refused. The shape of the
-// token is checked first (a text that is no code costs nothing), the read takes a read of its own network and one of the process (netReads, round 10) and is
-// refused at once when none is free (the cost of a flood of well-shaped junk is the pool for the length of a
-// read, never a queue), and a token that is not live gets the plain bucket's answer, so the answer tells a
-// stranger no more than the refusal did. liveInvite charges invite_net for such a token and invite_use for a
-// live one.
-func (s *Server) inviteAfterRefusal(ctx context.Context, token string, refusal *httpx.Error) (store.InviteInfo, error) {
-	if _, err := invite.Hash(token); err != nil {
-		return store.InviteInfo{}, refusal
-	}
-	release, ok := s.inviteReads.Try(httpx.ClientIPFrom(ctx))
-	if !ok {
-		return store.InviteInfo{}, refusal
-	}
-	defer release()
-	info, err := s.liveInvite(ctx, token)
-	if err != nil {
-		var he *httpx.Error
-		if errors.As(err, &he) && he.Code == httpx.CodeInviteInvalid {
-			return store.InviteInfo{}, refusal
-		}
-		return store.InviteInfo{}, err
-	}
-	return info, nil
-}
-
-func (s *Server) requestOTP(ctx context.Context, b gen.OtpRequest, pre *store.InviteInfo) (otp.Challenge, error) {
+func (s *Server) requestOTP(ctx context.Context, b gen.OtpRequest) (otp.Challenge, error) {
 	ip := httpx.ClientIPFrom(ctx)
 	purpose := otp.Purpose(b.Purpose)
 	var e164 string
 	switch purpose {
 	case otp.Invite:
-		// The phone comes from the invite, never from the request (5.3).
-		var info store.InviteInfo
-		if pre != nil {
-			info = *pre
-		} else {
-			var err error
-			if info, err = s.liveInvite(ctx, deref(b.InviteToken)); err != nil {
-				return otp.Challenge{}, err
-			}
+		// The phone comes from the invite row, never from the request (5.3). The link is opened in process
+		// first: one that does not open is the plain 404 with no read and no throttle row (D67). One that does
+		// is a proof, so its own buckets stand in for the network's and the plain token goes back, BEFORE
+		// anything is read; liveInviteRef then counts invite_use and asks the row.
+		ref, ok := s.openInvite(deref(b.InviteToken))
+		if !ok {
+			return otp.Challenge{}, errInviteInvalid()
 		}
-		// A live invite is a proof: its own buckets stand in for the network's, and the plain token goes back.
-		if e := httpx.InviteProofHolds(ctx, info.ID.String()); e != nil {
+		if e := httpx.InviteProofHolds(ctx, ref.ID.String()); e != nil {
 			return otp.Challenge{}, e
+		}
+		info, err := s.liveInviteRef(ctx, ref)
+		if err != nil {
+			return otp.Challenge{}, err
 		}
 		e164 = info.Phone
 	case otp.Login, otp.Reset, otp.Signup:
@@ -354,56 +328,41 @@ func (s *Server) requestOTP(ctx context.Context, b gen.OtpRequest, pre *store.In
 	})
 }
 
-// liveInvite finds an invite that can still be used. Unknown, malformed, used,
-// revoked and expired are all the same 404 invite_invalid (11.3).
-//
-// The lookup is a hash and one indexed read, so it comes first and decides which
-// budget the request belongs to (rule budget-keying):
-//
-//   - a live invite is a proof. Every use of it (the lookup, the code request, the
-//     register) counts on invite_use, keyed on the invite id and not on a network:
-//     an honest invitee behind a carrier NAT shares nothing with strangers, and
-//     whoever holds the token and moves networks gets no fresh budget;
-//   - anything else counts on invite_net, the network, and is refused when it is
-//     spent. invite_net is only ever charged by a request that proved nothing, and
-//     never refuses a live invite.
-//
-// Rounds 1 to 3 chose the charge point per route (every lookup, then every token,
-// then bad tokens only), and each choice let somebody spend a budget an honest
-// invitee needed. A spent invite_net now tells a live token from a bad one by its
-// answer, which is a 100-bit guess to exploit, and the sending limits of 5.1 and
-// the otp_verify_net scope still bound what a network can ask for.
-func (s *Server) liveInvite(ctx context.Context, token string) (store.InviteInfo, error) {
-	ip := httpx.ClientIPFrom(ctx)
-	info, valid, err := s.findInvite(ctx, token)
-	if err != nil {
-		return store.InviteInfo{}, err
-	}
-	if !valid {
-		if err := s.throttle.InviteHit(ctx, ip, uuid.Nil); err != nil {
-			return store.InviteInfo{}, err
-		}
-		return store.InviteInfo{}, errInviteInvalid()
-	}
-	if err := s.throttle.InviteHit(ctx, ip, info.ID); err != nil {
-		return store.InviteInfo{}, err
-	}
-	return info, nil
+// openInvite opens the link a person pasted: the one place the api reads an invite token, with no I/O (D67).
+func (s *Server) openInvite(text string) (invite.Ref, bool) {
+	return invite.Open(s.d.Invites, s.now(), text)
 }
 
-func (s *Server) findInvite(ctx context.Context, token string) (store.InviteInfo, bool, error) {
-	h, err := invite.Hash(token)
+// liveInvite finds an invite that can still be used. A link that does not open, and a row that is unknown, used,
+// revoked, expired or another invite's, are all the same 404 invite_invalid (11.3).
+//
+// The link is opened first, in process: one that does not open costs no throttle row and no read (D67), and the
+// network class of the route is what bounds a flood of them, as for any request with no proof. One that opens names
+// its invite, so every use of it counts on invite_use BEFORE the row is read (rule budget-keying: the id is a proof
+// and the count is the invite's, whatever network asks), and then the row decides.
+func (s *Server) liveInvite(ctx context.Context, text string) (store.InviteInfo, error) {
+	ref, ok := s.openInvite(text)
+	if !ok {
+		return store.InviteInfo{}, errInviteInvalid()
+	}
+	return s.liveInviteRef(ctx, ref)
+}
+
+// liveInviteRef is liveInvite for a link that was opened already. The row is the final authority: the id in the row
+// found by the hash must be the id in the link, and used, revoked and expired (on the database clock) are the same
+// 404 as a link that never was.
+func (s *Server) liveInviteRef(ctx context.Context, ref invite.Ref) (store.InviteInfo, error) {
+	if err := s.throttle.InviteHit(ctx, httpx.ClientIPFrom(ctx), ref.ID); err != nil {
+		return store.InviteInfo{}, err
+	}
+	info, found, err := s.auth.InviteByHash(ctx, ref.Hash)
 	if err != nil {
-		return store.InviteInfo{}, false, nil
+		return store.InviteInfo{}, err
 	}
-	info, found, err := s.auth.InviteByHash(ctx, h)
-	if err != nil {
-		return store.InviteInfo{}, false, err
+	if !found || info.ID != ref.ID || info.UsedAt != nil || info.RevokedAt != nil || info.Expired {
+		return store.InviteInfo{}, errInviteInvalid()
 	}
-	if !found || info.UsedAt != nil || info.RevokedAt != nil || info.Expired {
-		return store.InviteInfo{}, false, nil
-	}
-	return info, true, nil
+	return info, nil
 }
 
 // LoginOtp is POST /auth/login/otp (spec 5.6).
@@ -460,8 +419,8 @@ func (s *Server) Register(ctx context.Context, req gen.RegisterRequestObject) (g
 //
 //   - Shape: the locale. The column accepts fa and en only, and an absent locale is the
 //     default, not an empty string the CHECK would refuse.
-//   - Charge: the invite (a live one is charged to its own budget, a bad one to invite_net,
-//     see liveInvite; neither touches otp_verify_net) or, with no invite, otp_verify_net,
+//   - Charge: the invite (a link that opens is charged to its own budget, one that does not is refused with no
+//     charge, see liveInvite; neither touches otp_verify_net) or, with no invite, otp_verify_net,
 //     then the registration mode and the phone.
 //   - Check: the code is peeked, which consumes nothing and spends a try if it is wrong.
 //     A made-up challenge or a wrong code ends here, so it costs one database call and
@@ -492,9 +451,9 @@ func (s *Server) register(ctx context.Context, b gen.RegisterRequest) (login.Res
 		Charge: func(ctx context.Context) error {
 			if token := deref(b.InviteToken); token != "" {
 				// An invite works in every mode (11.1); its phone is its own. The invite comes FIRST and
-				// the network count of the code check is not taken for it at all: a live invite is a
+				// the network count of the code check is not taken for it at all: an invite link is a
 				// proof, bounded by invite_use and by the five tries of the challenge, and a token that
-				// is not live ends here on invite_net and never reaches a code check. Charged the other
+				// does not open ends here with no charge and never reaches a code check. Charged the other
 				// way round, thirty junk tokens from one carrier /24 spent otp_verify_net and refused
 				// every honest invitee behind it for fifteen minutes, in closed mode, which is the only
 				// signup route there (tenant-r7-1; rule budget-keying: a network bucket never refuses a
@@ -531,7 +490,7 @@ func (s *Server) register(ctx context.Context, b gen.RegisterRequest) (login.Res
 			return s.login.PeekRegisterCode(ctx, in)
 		},
 		// The caller proved a right code before Work, so a busy answer is the server's and not a guess:
-		// the network count of the check is given back. The invite's own count stays (a live invite is
+		// the network count of the check is given back. The invite's own count stays (an invite link whose signature checked is
 		// a proof, keyed on the invite, and bounded by what the invite is worth).
 		Refund: func(ctx context.Context) { _ = s.throttle.OTPVerifyRefund(ctx, ip, challenge.ID) },
 		Work: func(ctx context.Context, _ proof.Proved) (login.Result, error) {

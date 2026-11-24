@@ -13,6 +13,7 @@ execute ctrlz_fn.worker_sweep_throttle(p_limit integer)
 execute ctrlz_fn.worker_sweep_tickets(p_limit integer)
 policy analytics_read_floors tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy announcement_reads tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy announcements announcements_worker SELECT PERMISSIVE using=true check=-
 policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())

@@ -163,7 +163,7 @@ func runKeysStatus(ctx context.Context, env Env, args []string) error {
 			fmt.Fprintln(env.Stdout, "  users.totp_secret_ct: not readable by the admin role; the rekey tool prints its own counts")
 		case keyring.DomainDOHToken, keyring.DomainCertWrap:
 			fmt.Fprintln(env.Stdout, "  reserved for a later phase")
-		case keyring.DomainAdminMAC, keyring.DomainAuthMAC, keyring.DomainOTPDelivery:
+		case keyring.DomainAdminMAC, keyring.DomainAuthMAC, keyring.DomainOTPDelivery, keyring.DomainInviteSign:
 			fmt.Fprintln(env.Stdout, "  no stored ciphertext column to re-encrypt")
 			for _, l := range removalLines(domain) {
 				fmt.Fprintln(env.Stdout, "  "+l)

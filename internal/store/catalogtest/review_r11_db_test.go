@@ -38,7 +38,7 @@ func TestTheOTPBodyMigrationLeavesAnEditedRowAlone(t *testing.T) {
 	}
 	unq := func(s string) string { return strings.ReplaceAll(s, "''", "'") }
 	snapshot := map[string]string{}
-	for _, k := range []string{"otp", "otp_reset", "otp_phone", "invite", "account_exists"} {
+	for _, k := range []string{"otp", "otp_reset", "otp_phone", "account_exists", "notice_passkey", "notice_recovery"} {
 		for _, l := range []string{"fa", "en"} {
 			snapshot[k+"/"+l] = body(k, l)
 		}

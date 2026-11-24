@@ -12,7 +12,7 @@ import type {Locator, Page} from "@playwright/test";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 import {expectNoSecretResidue} from "@ctrlz/ui/testing/secretResidue.ts";
 
-import {adm, allowAdminErrors, authText, bodies, commonText, err, errText, gotoShell, LANGS, openAdmin, shellText, typeCode, type Lang} from "./admin-support.ts";
+import {adm, allowAdminErrors, authText, bodies, commonText, err, errText, gotoShell, LANGS, openAdmin, shellText, typeCode, type Lang, INVITE_CREATED, INVITE_LINK, INVITE_TOKEN} from "./admin-support.ts";
 
 // Spec 17.3 admin-pages.spec.ts (T-327, T-328, T-330, T-331, T-352, T-122, T-325): Users with create user, Invites with
 // create invite, the SMS page, Settings with the impact shown before confirm, Audit, and the header notices and alert
@@ -337,7 +337,7 @@ for (const {lang, dir} of LANGS) {
       const pending = inviteFixture({id: "10000000-0000-4000-8000-0000000000a1", phone_e164: "+989350001001"});
       const used = inviteFixture({id: "10000000-0000-4000-8000-0000000000a2", phone_e164: "+989350001002", state: "used"});
 
-      test("rows without a code, and Revoke only on a pending invite", async ({page, context, baseURL}) => {
+      test("rows without a link, and Revoke only on a pending invite", async ({page, context, baseURL}) => {
         await openAdmin(context, baseURL, {handlers: {"GET /invites": {body: {items: [pending, used]}}}});
         await goto(page, "/invites", A("pages.invites.title"));
         const grid = page.getByRole("grid", {name: A("invites.gridLabel")});
@@ -348,10 +348,10 @@ for (const {lang, dir} of LANGS) {
         await expect(grid.getByRole("button", {name: A("invites.revoke.row", {phone: "+989350001002"})})).toHaveCount(0);
       });
 
-      test("create: phone, language, SMS and lifetime go out, and the code and link are shown once", async ({page, context, baseURL}) => {
+      test("create: phone, language and lifetime go out, with no SMS switch, and the link is shown once with a copy button", async ({page, context, baseURL}) => {
         const mock = await openAdmin(context, baseURL, {
           handlers: {
-            "POST /invites": {status: 201, body: {id: "10000000-0000-4000-8000-0000000000a9", code: "INV-CODE-4821", link: "https://panel.example.ir/invite#INV-CODE-4821"}},
+            "POST /invites": {status: 201, body: INVITE_CREATED},
           },
         });
         await goto(page, "/invites", A("pages.invites.title"));
@@ -359,15 +359,20 @@ for (const {lang, dir} of LANGS) {
         await expect(page).toHaveURL(/dialog=createInvite$/);
         const form = page.getByRole("dialog", {name: A("invites.create.title")});
         await form.locator('input[name="phone"]').fill("09351234567");
-        await form.getByRole("switch", {name: A("invites.create.sendSms")}).locator("xpath=ancestor::label").click();
+        // D67: an invite is never sent by SMS, so the form has no switch for it and says so, and the phone's hint names the number.
+        await expect(form.getByRole("switch")).toHaveCount(0);
+        await expect(form.getByText(A("invites.create.phoneHint"))).toBeVisible();
         await form.getByRole("button", {name: A("invites.create.submit"), exact: true}).click();
 
-        await expect(page.getByTestId("one-time-code")).toHaveText("INV-CODE-4821");
-        await expect(page.getByTestId("one-time-link")).toHaveText("https://panel.example.ir/invite#INV-CODE-4821");
-        expect(bodies(mock, "POST", "/invites")).toEqual([{phone: "09351234567", locale: lang, send_sms: true, ttl_hours: 72}]);
+        const result = page.getByRole("dialog", {name: A("invites.result.title")});
+        await expect(page.getByTestId("one-time-link")).toHaveText(INVITE_LINK);
+        await expect(page.getByTestId("one-time-code")).toHaveCount(0);
+        await expect(result.getByText(A("invites.result.intro"))).toBeVisible();
+        await expect(result.getByRole("button", {name: A("invites.result.copyLink")})).toBeVisible();
+        expect(bodies(mock, "POST", "/invites")).toEqual([{phone: "09351234567", locale: lang, ttl_hours: 72}]);
         expect(url(page).search).toBe("");
-        expect(url(page).href).not.toContain("INV-CODE");
-        await expectNoSecretResidue(page, ["INV-CODE-4821", "https://panel.example.ir/invite#INV-CODE-4821"], "the code and link of a new invite");
+        expect(url(page).href).not.toContain(INVITE_TOKEN.slice(0, 8));
+        await expectNoSecretResidue(page, [INVITE_TOKEN, INVITE_LINK], "the link of a new invite");
       });
 
       // wp10-r16-3. A refetch that fails while rows are held keeps them and said nothing: after a create the admin could not tell
@@ -377,7 +382,7 @@ for (const {lang, dir} of LANGS) {
         await openAdmin(context, baseURL, {
           handlers: {
             "GET /invites": () => (list === "ok" ? {body: {items: [pending]}} : err(503, "service_unavailable")),
-            "POST /invites": {status: 201, body: {id: "10000000-0000-4000-8000-0000000000a9", code: "INV-CODE-4821", link: "https://panel.example.ir/invite#INV-CODE-4821"}},
+            "POST /invites": {status: 201, body: INVITE_CREATED},
           },
         });
         await goto(page, "/invites", A("pages.invites.title"));
@@ -389,7 +394,7 @@ for (const {lang, dir} of LANGS) {
         await form.locator('input[name="phone"]').fill("09351234567");
         list = "down";
         await form.getByRole("button", {name: A("invites.create.submit"), exact: true}).click();
-        await expect(page.getByTestId("one-time-code")).toHaveText("INV-CODE-4821");
+        await expect(page.getByTestId("one-time-link")).toHaveText(INVITE_LINK);
         const result = page.getByRole("dialog");
         await result.getByRole("checkbox").focus();
         await page.keyboard.press("Space");
@@ -407,7 +412,7 @@ for (const {lang, dir} of LANGS) {
       });
 
       test("create: a lifetime over 720 hours is held at 720 by the field, and an empty one is refused before a request", async ({page, context, baseURL}) => {
-        const mock = await openAdmin(context, baseURL, {handlers: {"POST /invites": {status: 201, body: {id: "10000000-0000-4000-8000-0000000000a9", code: "C", link: "https://panel.example.ir/invite#C"}}}});
+        const mock = await openAdmin(context, baseURL, {handlers: {"POST /invites": {status: 201, body: INVITE_CREATED}}});
         await goto(page, "/invites", A("pages.invites.title"));
         await page.getByRole("button", {name: A("invites.create.open")}).click();
         const form = page.getByRole("dialog", {name: A("invites.create.title")});
@@ -422,10 +427,10 @@ for (const {lang, dir} of LANGS) {
         await ttl.blur();
         await expect(ttl).toHaveValue(lang === "fa" ? "۷۲۰" : "720");
         await form.getByRole("button", {name: A("invites.create.submit"), exact: true}).click();
-        await expect.poll(() => bodies(mock, "POST", "/invites")).toEqual([{phone: "09351234567", locale: lang, send_sms: false, ttl_hours: 720}]);
+        await expect.poll(() => bodies(mock, "POST", "/invites")).toEqual([{phone: "09351234567", locale: lang, ttl_hours: 720}]);
       });
 
-      test("create: the invite code is shown when the POST answers, not when the list has been fetched again (wp10-r6-2)", async ({page, context, baseURL}) => {
+      test("create: the invite link is shown when the POST answers, not when the list has been fetched again (wp10-r6-2)", async ({page, context, baseURL}) => {
         let after = false;
         let release: () => void = () => undefined;
         const gate = new Promise<void>((resolve) => (release = resolve));
@@ -437,7 +442,7 @@ for (const {lang, dir} of LANGS) {
             },
             "POST /invites": () => {
               after = true;
-              return {status: 201, body: {id: "10000000-0000-4000-8000-0000000000a9", code: "INV-CODE-4821", link: "https://panel.example.ir/invite#INV-CODE-4821"}};
+              return {status: 201, body: INVITE_CREATED};
             },
           },
         });
@@ -447,7 +452,7 @@ for (const {lang, dir} of LANGS) {
           const form = page.getByRole("dialog", {name: A("invites.create.title")});
           await form.locator('input[name="phone"]').fill("09351234567");
           await form.getByRole("button", {name: A("invites.create.submit"), exact: true}).click();
-          await expect(page.getByTestId("one-time-code")).toHaveText("INV-CODE-4821");
+          await expect(page.getByTestId("one-time-link")).toHaveText(INVITE_LINK);
         } finally {
           release();
         }
@@ -456,7 +461,7 @@ for (const {lang, dir} of LANGS) {
       test("create: a write that needs a fresh code opens the dialog and is repeated once (gate-r32-3)", async ({page, context, baseURL}) => {
         let n = 0;
         const mock = await openAdmin(context, baseURL, {
-          handlers: {"POST /invites": () => (++n === 1 ? err(403, "totp_fresh_required") : {status: 201, body: {id: "10000000-0000-4000-8000-0000000000a9", code: "INV-CODE-4821", link: "https://panel.example.ir/invite#INV-CODE-4821"}}), "POST /auth/totp/fresh": FRESH},
+          handlers: {"POST /invites": () => (++n === 1 ? err(403, "totp_fresh_required") : {status: 201, body: INVITE_CREATED}), "POST /auth/totp/fresh": FRESH},
         });
         await goto(page, "/invites", A("pages.invites.title"));
         await page.getByRole("button", {name: A("invites.create.open")}).click();
@@ -464,7 +469,7 @@ for (const {lang, dir} of LANGS) {
         await page.getByRole("button", {name: A("invites.create.submit"), exact: true}).click();
         await expect(page.getByRole("dialog", {name: A("fresh.title")})).toBeVisible();
         await typeCode(page, "totp_code", CODE);
-        await expect(page.getByTestId("one-time-code")).toHaveText("INV-CODE-4821");
+        await expect(page.getByTestId("one-time-link")).toHaveText(INVITE_LINK);
         expect(bodies(mock, "POST", "/invites")).toHaveLength(2);
       });
 
@@ -477,7 +482,7 @@ for (const {lang, dir} of LANGS) {
             "POST /invites": async () => {
               sent = true;
               await gate;
-              return {status: 201, body: {id: "10000000-0000-4000-8000-0000000000a9", code: "INV-CODE-4821", link: "https://panel.example.ir/invite#INV-CODE-4821"}};
+              return {status: 201, body: INVITE_CREATED};
             },
           },
         });
@@ -494,13 +499,13 @@ for (const {lang, dir} of LANGS) {
         } finally {
           release();
         }
-        await expect(page.getByTestId("one-time-code")).toHaveText("INV-CODE-4821");
+        await expect(page.getByTestId("one-time-link")).toHaveText(INVITE_LINK);
       });
 
       // gate-r33-12, as for users: the lock must not outlive the call.
       test("create: after one invite is created the dialog opens again with Escape working (gate-r33-12)", async ({page, context, baseURL}) => {
         await openAdmin(context, baseURL, {
-          handlers: {"POST /invites": {status: 201, body: {id: "10000000-0000-4000-8000-0000000000a9", code: "INV-CODE-4821", link: "https://panel.example.ir/invite#INV-CODE-4821"}}},
+          handlers: {"POST /invites": {status: 201, body: INVITE_CREATED}},
         });
         await goto(page, "/invites", A("pages.invites.title"));
         await page.getByRole("button", {name: A("invites.create.open")}).click();
@@ -567,7 +572,7 @@ for (const {lang, dir} of LANGS) {
       const none = gatewayFixture({provider: "noop", role: "disabled", configured: false, hint: undefined, cost_per_message: undefined, last_ok_at: undefined});
       const base = {
         "GET /sms/gateways": {body: {items: [sms, mela, none]}},
-        "GET /sms/templates": {body: {items: [templateFixture({mappings: [{provider: "sms_ir", provider_template_id: "123456", param_names: ["code"]}]}), templateFixture({key: "invite", body: "Join us: {code}", locale: "en"})]}},
+        "GET /sms/templates": {body: {items: [templateFixture({mappings: [{provider: "sms_ir", provider_template_id: "123456", param_names: ["code"]}]}), templateFixture({key: "account_exists", body: "An account exists for this number.", locale: "en"})]}},
         "GET /sms/limits": {body: limitsFixture()},
         "GET /sms/stats": {body: statsFixture()},
       } as const;
@@ -922,6 +927,90 @@ for (const {lang, dir} of LANGS) {
         await expect(card.locator("textarea")).toHaveAttribute("aria-invalid", "true");
       });
 
+      // Question 19 and D67: the two security notices have no placeholder and the one-part bound, and no template of an invite is listed.
+      const NOTICES = {
+        passkeyFa: "Passkey تازه ثبت شد. شما نبودید؟ رمز Ctrl Z را بازیابی کنید.",
+        passkeyEn: "Ctrl Z: a passkey was added to your account. If this was not you, use the forgot password page.",
+        recoveryFa: "کدهای بازیابی Ctrl Z عوض شد. شما نبودید؟ کدها و رمز را عوض کنید.",
+      };
+      const noticeRows = () => ({
+        items: [
+          templateFixture({key: "notice_passkey", locale: "fa", body: NOTICES.passkeyFa}),
+          templateFixture({key: "notice_passkey", locale: "en", body: NOTICES.passkeyEn}),
+          templateFixture({key: "notice_recovery", locale: "fa", body: NOTICES.recoveryFa}),
+          templateFixture({key: "otp", locale: "fa"}),
+        ],
+      });
+
+      test("templates: the two notices are listed with the one-part rule, a notice-specific hint, and no template of an invite", async ({page, context, baseURL}) => {
+        const mock = await openAdmin(context, baseURL, {handlers: {...base, "GET /sms/templates": {body: noticeRows()}, "PUT /sms/templates/{key}/{locale}": {body: templateFixture({key: "notice_passkey", body: "x"})}}});
+        await goto(page, "/sms", A("pages.sms.title"));
+        await tab(page, "templates").click();
+        await expect(page.getByTestId("template-notice_passkey-fa")).toBeVisible();
+        await expect(page.getByTestId("template-notice_passkey-en")).toBeVisible();
+        await expect(page.getByTestId("template-notice_recovery-fa")).toBeVisible();
+        await expect(page.getByTestId(/^template-invite-/)).toHaveCount(0);
+        const fa = page.getByTestId("template-notice_passkey-fa");
+        // The hint says there is no placeholder; it is on a notice and not on a login code, which does take {code}.
+        await expect(fa.getByText(A("sms.templates.noticeHint"))).toBeVisible();
+        await expect(page.getByTestId("template-otp-fa").getByText(A("sms.templates.noticeHint"))).toHaveCount(0);
+        // The seeded body fits one part.
+        await expect(fa.getByTestId("otp-refused")).toHaveCount(0);
+        const digits = (n: number) => (lang === "fa" ? String(n).replace(/[0-9]/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]!) : String(n));
+        // Persian: 64 units fit, 65 do not, and the words are the notice's, not the login code's.
+        await fa.locator("textarea").fill("ک".repeat(65));
+        await expect(fa.getByTestId("otp-refused")).toContainText(A("sms.templates.noticeTooLongFa", {limit: digits(64)}));
+        await expect(fa.getByRole("button", {name: A("sms.templates.save")})).toBeDisabled();
+        await fa.locator("textarea").fill("ک".repeat(64));
+        await expect(fa.getByTestId("otp-refused")).toHaveCount(0);
+        // English: one letter outside the GSM alphabet is refused.
+        const en = page.getByTestId("template-notice_passkey-en");
+        await en.locator("textarea").fill("Ctrl Z: ç");
+        await expect(en.getByTestId("otp-refused")).toContainText(A("sms.templates.noticeNotGsm"));
+        await en.locator("textarea").fill("a".repeat(161));
+        await expect(en.getByTestId("otp-refused")).toContainText(A("sms.templates.noticeTooLongEn", {limit: digits(160)}));
+        // A notice takes no value: a placeholder is refused before Save, and nothing is sent.
+        await en.locator("textarea").fill("Ctrl Z: {code}");
+        await expect(en.getByTestId("otp-refused")).toContainText(A("sms.templates.noticeNoCode"));
+        await expect(en.getByRole("button", {name: A("sms.templates.save")})).toBeDisabled();
+        expect(bodies(mock, "PUT", "/sms/templates/notice_passkey/en")).toEqual([]);
+        // A text inside the rule is saved as typed.
+        await en.locator("textarea").fill("Ctrl Z: a passkey was added.");
+        await en.getByRole("button", {name: A("sms.templates.save")}).click();
+        await expect.poll(() => bodies(mock, "PUT", "/sms/templates/notice_passkey/en")).toEqual([{body: "Ctrl Z: a passkey was added."}]);
+      });
+
+      test("templates: a 422 body:too_long on a notice has the words that cover notices too (the bound moved after this build)", async ({page, context, baseURL}) => {
+        await openAdmin(context, baseURL, {
+          handlers: {...base, "GET /sms/templates": {body: noticeRows()}, "PUT /sms/templates/{key}/{locale}": err(422, "validation_failed", {fields: [{name: "body", code: "too_long"}]})},
+        });
+        await goto(page, "/sms", A("pages.sms.title"));
+        await tab(page, "templates").click();
+        const card = page.getByTestId("template-notice_recovery-fa");
+        await card.locator("textarea").fill("متن کوتاه");
+        await card.getByRole("button", {name: A("sms.templates.save")}).click();
+        await expect(card.getByText(A("fieldErrors.body.too_long"))).toBeVisible();
+        await expect(card.getByText(A("sms.templates.bodyInvalid"))).toHaveCount(0);
+      });
+
+      test("test send of a notice template takes no value: the phone, the template and the language are all it sends", async ({page, context, baseURL}) => {
+        const mock = await openAdmin(context, baseURL, {
+          handlers: {
+            ...base,
+            "GET /sms/templates": {body: {items: [templateFixture({key: "notice_passkey", locale: "fa", body: NOTICES.passkeyFa}), templateFixture({key: "notice_passkey", locale: "en", body: NOTICES.passkeyEn})]}},
+            "POST /sms/gateways/{provider}/test": {status: 202, body: {outbox_id: "20000000-0000-4000-8000-0000000000e2"}},
+            "GET /sms/outbox/{id}": {body: {state: "sent"}},
+          },
+        });
+        await goto(page, "/sms", A("pages.sms.title"));
+        await page.getByTestId("gateway-sms_ir").getByRole("button", {name: A("sms.gateways.test")}).click();
+        const dialog = page.getByRole("dialog", {name: A("sms.test.title", {provider: "sms.ir"})});
+        await dialog.locator('input[name="phone"]').fill("09121234567");
+        await dialog.getByRole("button", {name: A("sms.test.submit")}).click();
+        await expect(page.getByTestId("test-state")).toContainText(A("sms.test.sent", {provider: "sms.ir"}), {timeout: 15_000});
+        expect(bodies(mock, "POST", "/sms/gateways/sms_ir/test")).toEqual([{phone: "09121234567", template: "notice_passkey", locale: lang}]);
+      });
+
       test("templates: an sms.ir template id is 1 to 2147483647, and 0 is refused for every gateway (wp10-r17-1)", async ({page, context, baseURL}) => {
         const mock = await openAdmin(context, baseURL, {handlers: {...base, "PUT /sms/gateways/{provider}/templates/{key}/{locale}": {body: templateFixture()}, "POST /auth/totp/fresh": FRESH}});
         await goto(page, "/sms", A("pages.sms.title"));
@@ -952,11 +1041,11 @@ for (const {lang, dir} of LANGS) {
         await expect.poll(() => bodies(mock, "PUT", "/sms/gateways/melipayamak/templates/otp/fa")).toEqual([{provider_template_id: "123456789012345678", param_names: ["code"]}]);
       });
 
-      test("templates: the warning is for an OTP template only, and the English text is counted as GSM-7", async ({page, context, baseURL}) => {
+      test("templates: the one-part warning is for the login codes and the notices only, and the English text is counted as GSM-7", async ({page, context, baseURL}) => {
         await openAdmin(context, baseURL, {handlers: base});
         await goto(page, "/sms", A("pages.sms.title"));
         await tab(page, "templates").click();
-        const card = page.getByTestId("template-invite-en");
+        const card = page.getByTestId("template-account_exists-en");
         await expect(card.getByTestId("sms-count")).toContainText("GSM-7");
         await card.locator("textarea").fill("a".repeat(161));
         await expect(card.getByTestId("sms-count")).toContainText(lang === "fa" ? "۲" : "2");

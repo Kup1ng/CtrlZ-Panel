@@ -4,6 +4,7 @@ import type {BrowserContext, Page} from "@playwright/test";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 
 import {
+  INVITE_TOKEN,
   allowAuthErrors,
   callsTo,
   err,
@@ -31,7 +32,7 @@ const PHONE = "09123456789";
 const PASSWORD = "correct horse battery";
 const OTP_ID = otpChallengeId(10);
 const issued = {status: 202, body: {challenge_id: OTP_ID, expires_in_s: 300, resend_after_s: 1}};
-const INVITE = "ABCDEFGHJKMNPQRSTVWX";
+const INVITE = INVITE_TOKEN;
 
 /** Holds the page that a sign-in goes to, as a slow network does, until `release` is called. */
 async function holdProfiles(context: BrowserContext) {
@@ -219,46 +220,25 @@ for (const {lang, dir} of LANGS) {
       await expect(field(page, "password")).toBeFocused();
     });
 
-    // wp8-r5-3: a code shown in groups of four. An edit before a group boundary regroups the text, and the
-    // caret must stay with the character it was next to.
-    test("wp8-r5-3: the caret stays in place when an invite code is edited in the middle", async ({page, context}) => {
+    // wp8-r5-3 (D67): the invite field used to show a typed code in groups of four and kept the caret across the regrouping.
+    // The invite is now one pasted link, so the field is plain: what is typed stays as typed, and an edit in the middle keeps the caret.
+    // The recovery code below is still grouped.
+    test("wp8-r5-3: the invite field is not regrouped, and an edit in the middle keeps the caret", async ({page, context}) => {
       await openAnonymous(context, {});
       await gotoForm(page, `/${lang}/invite`);
       const token = field(page, "token");
       await token.focus();
-      await token.pressSequentially("ABCDEFGHJKMN");
-      await expect(token).toHaveValue("ABCD-EFGH-JKMN");
+      await token.pressSequentially("abcdefghjkmn");
+      await expect(token).toHaveValue("abcdefghjkmn");
       await token.press("Home");
       await token.press("ArrowRight");
       await token.press("ArrowRight");
       await token.press("Backspace");
-      await expect(token).toHaveValue("ACDE-FGHJ-KMN");
+      await expect(token).toHaveValue("acdefghjkmn");
       expect(await token.evaluate((el: HTMLInputElement) => el.selectionStart)).toBe(1);
       await token.pressSequentially("Z");
-      await expect(token).toHaveValue("AZCD-EFGH-JKMN");
+      await expect(token).toHaveValue("aZcdefghjkmn");
       expect(await token.evaluate((el: HTMLInputElement) => el.selectionStart)).toBe(2);
-      // A character that the field drops (a hyphen typed by hand) leaves the caret where it was.
-      await token.press("Home");
-      await token.press("ArrowRight");
-      await token.pressSequentially("-");
-      await expect(token).toHaveValue("AZCD-EFGH-JKMN");
-      expect(await token.evaluate((el: HTMLInputElement) => el.selectionStart)).toBe(1);
-    });
-
-    test("wp8-r5-3: typing across a group boundary puts the caret after the new character", async ({page, context}) => {
-      await openAnonymous(context, {});
-      await gotoForm(page, `/${lang}/invite`);
-      const token = field(page, "token");
-      await token.focus();
-      await token.pressSequentially("ABCDEFGH");
-      for (let i = 0; i < 4; i += 1) await token.press("ArrowLeft");
-      // Home would do, but this is where the caret was in the report: the end of the first group.
-      await token.pressSequentially("Z");
-      await expect(token).toHaveValue("ABCD-ZEFG-H");
-      expect(await token.evaluate((el: HTMLInputElement) => el.selectionStart)).toBe(6);
-      await token.pressSequentially("Y");
-      await expect(token).toHaveValue("ABCD-ZYEF-GH");
-      expect(await token.evaluate((el: HTMLInputElement) => el.selectionStart)).toBe(7);
     });
 
     test("wp8-r5-3: the recovery code behaves the same", async ({page, context}) => {

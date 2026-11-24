@@ -22,7 +22,7 @@ import {useCompleteSignIn} from "./useCompleteSignIn.ts";
 
 // The last step of registration and of an invite (10.4 step 2, 10.5 step 3): the SMS code, a password
 // that is recommended and not required, the meter, and the call that creates the account. The two pages
-// differ only in who the account is for (a typed number, or an invite code) and in the words.
+// differ only in who the account is for (a typed number, or an invite token) and in the words.
 
 export type Identity = {kind: "phone"; phone: string} | {kind: "invite"; token: string};
 export type Challenge = {id: string; readyAt: number};

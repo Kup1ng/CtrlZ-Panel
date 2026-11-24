@@ -30,6 +30,21 @@ func keyDir(t *testing.T, domains ...string) string {
 			t.Fatal(err)
 		}
 	}
+	// The public half of a signing domain is what the api reads, and the api holds no key file of that
+	// domain, so it is written whatever the list says; derive makes it beside the key file.
+	for _, d := range keyring.PublicDomains() {
+		txt, err := keyring.FileText(secret.NewBytes(root), d, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pub, err := keyring.PublicText(d, txt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, keyring.PublicFileName(d)), pub, 0o444); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return dir
 }
 
@@ -63,7 +78,7 @@ func runRole(t *testing.T, role app.Role, vars map[string]string) (string, error
 func TestRoleKeyDomains(t *testing.T) {
 	want := map[app.Role]string{
 		app.RoleAPI:     "user_totp otp_delivery auth_mac",
-		app.RoleAdmin:   "admin_totp sms_cred admin_mac",
+		app.RoleAdmin:   "admin_totp sms_cred admin_mac invite_sign",
 		app.RoleWorker:  "sms_cred otp_delivery",
 		app.RoleHub:     "",
 		app.RoleMigrate: "",
@@ -153,6 +168,32 @@ func TestMissingKeyFileNamesTheDomain(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), junk) || strings.Contains(out, junk) {
 		t.Error("key text reached the error or the log")
+	}
+}
+
+// TestOnlyTheApiHoldsThePublicHalfOfInviteSign is spec 8.3 (D67): admin signs and cannot be asked to verify
+// with anything it was not given, the api verifies and holds no private byte, and a missing pub file stops
+// the api at start.
+func TestOnlyTheApiHoldsThePublicHalfOfInviteSign(t *testing.T) {
+	for _, role := range app.Roles() {
+		got := strings.Join(role.PublicDomains(), " ")
+		want := map[bool]string{true: "invite_sign", false: ""}[role == app.RoleAPI]
+		if got != want {
+			t.Errorf("%s holds public [%s], want [%s]", role, got, want)
+		}
+		for _, d := range role.KeyDomains() {
+			if d == keyring.DomainInviteSign && role != app.RoleAdmin {
+				t.Errorf("%s holds the private key of invite_sign", role)
+			}
+		}
+	}
+	dir := keyDir(t, app.RoleAPI.KeyDomains()...)
+	if err := os.Remove(filepath.Join(dir, keyring.PublicFileName(keyring.DomainInviteSign))); err != nil {
+		t.Fatal(err)
+	}
+	_, err := runRole(t, app.RoleAPI, map[string]string{"CTRLZ_ENV": "production", "CTRLZ_KEK_DIR": dir})
+	if err == nil || !strings.Contains(err.Error(), "pub_invite_sign") {
+		t.Errorf("an api with no public key file started or named nothing: %v", err)
 	}
 }
 

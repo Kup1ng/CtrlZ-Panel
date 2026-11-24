@@ -90,8 +90,8 @@ func outboxAAD(id uuid.UUID, phone string) keyring.Context {
 	return keyring.RowContext([]uuid.UUID{id}, phone)
 }
 
-// SealOutbox seals the value of an sms_outbox row (an invite code, or the
-// number of a test send) under sms_cred. The admin service calls it with the id
+// SealOutbox seals the value of an sms_outbox row (the value of a test send; a
+// security notice has none, D67 and question 19) under sms_cred. The admin service calls it with the id
 // it will insert.
 func SealOutbox(ring *keyring.Ring, id uuid.UUID, phone string, value secret.String) ([]byte, error) {
 	plain, err := json.Marshal(outboxJSON{V: value.Reveal()})

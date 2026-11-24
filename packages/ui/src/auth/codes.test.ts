@@ -1,10 +1,9 @@
 import {describe, expect, it} from "vitest";
 
-import {canonicalInvite, canonicalRecovery, groupCode, groupedCaret, isFullInvite, isFullRecovery} from "./codes.ts";
+import {canonicalRecovery, groupCode, groupedCaret, isFullRecovery} from "./codes.ts";
 
-describe("invite and recovery codes", () => {
+describe("recovery codes", () => {
   it("canonicalises what was typed: upper case, no spaces or hyphens", () => {
-    expect(canonicalInvite("abcd-efgh ijkl-mnop qrst")).toBe("ABCDEFGHIJKLMNOPQRST");
     expect(canonicalRecovery(" ab12-cd34 ")).toBe("AB12CD34");
   });
 
@@ -14,21 +13,19 @@ describe("invite and recovery codes", () => {
   });
 
   it("cuts at the length of the code", () => {
-    expect(canonicalInvite("A".repeat(30))).toHaveLength(20);
     expect(canonicalRecovery("B".repeat(30))).toHaveLength(16);
   });
 
   it("groups four at a time for display and the grouping survives a round trip", () => {
     expect(groupCode("ABCDEFGHIJ")).toBe("ABCD-EFGH-IJ");
     expect(groupCode("")).toBe("");
-    const typed = groupCode("ABCDEFGHIJKLMNOPQRST");
-    expect(typed).toBe("ABCD-EFGH-IJKL-MNOP-QRST");
-    expect(canonicalInvite(typed)).toBe("ABCDEFGHIJKLMNOPQRST");
+    const typed = groupCode("ABCDEFGHIJKLMNOP");
+    expect(typed).toBe("ABCD-EFGH-IJKL-MNOP");
+    expect(canonicalRecovery(typed)).toBe("ABCDEFGHIJKLMNOP");
   });
 
   it("knows a full code", () => {
-    expect(isFullInvite("A".repeat(20))).toBe(true);
-    expect(isFullInvite("A".repeat(19))).toBe(false);
+    expect(isFullRecovery("A".repeat(15))).toBe(false);
     expect(isFullRecovery("A".repeat(16))).toBe(true);
   });
 });

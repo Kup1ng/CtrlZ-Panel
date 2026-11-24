@@ -268,7 +268,6 @@ type (
 
 	InviteCreate struct {
 		Invite   uuid.UUID `json:"-"`
-		SendSMS  bool      `json:"send_sms"`
 		TTLHours int       `json:"ttl_hours"`
 	}
 	InviteRevoke struct {

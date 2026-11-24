@@ -633,6 +633,13 @@ func TestImagePinLintCanFail(t *testing.T) {
 		"a variable of -f pairs that holds a subcommand": func(s *imageSources) {
 			s.others["scripts/w.sh"] = strings.Replace(s.others["scripts/w.sh"], "files=\"-f a.yml -f b.yml\"", "files=\"-f a.yml pull\"", 1)
 		},
+		// webi-r1-9: the variable is assigned once with -f pairs and again with a subcommand; `$files` is then not only flags.
+		"a variable of -f pairs that is assigned again with a subcommand": func(s *imageSources) {
+			s.others["scripts/w.sh"] = strings.Replace(s.others["scripts/w.sh"], "  w() {", "  files=\"$files pull\"\n  w() {", 1)
+		},
+		"a variable of -f pairs that is appended to with a subcommand": func(s *imageSources) {
+			s.others["scripts/w.sh"] = strings.Replace(s.others["scripts/w.sh"], "  w() {", "  files+=\" pull\"\n  w() {", 1)
+		},
 		"a build that pulls": func(s *imageSources) {
 			s.others["scripts/w.sh"] += "docker build --pull=true -q -t x .\n"
 		},

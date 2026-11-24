@@ -1,6 +1,6 @@
 import {createHmac} from "node:crypto";
-import {existsSync, readFileSync} from "node:fs";
-import {resolve} from "node:path";
+import {appendFileSync, existsSync, readFileSync} from "node:fs";
+import {dirname, resolve} from "node:path";
 
 import {request as playwrightRequest, type APIRequestContext, type BrowserContext, type Page} from "@playwright/test";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
@@ -42,6 +42,10 @@ function readSeed(): Seed {
 
 const seed = readSeed();
 const NOOP = resolve(process.env.E2E_NOOP_DIR ?? "../../deploy/compose/e2e-out", "noop.jsonl");
+// The invite tokens of this run, one per line, beside the noop file. An invite is never sent by SMS (D67), so its token is not in the noop file, and the
+// leak scan of step 10f1 (scripts/ci-web-leak-patterns.mjs) reads it from here: the token must not be in any log of the front tier. Private to the run:
+// the folder is removed with it (scripts/ci-web.sh).
+const INVITE_TOKENS = resolve(dirname(NOOP), "invite-tokens.txt");
 
 /** RFC 6238, SHA-1, 6 digits, 30 seconds: what the authenticator app does. */
 function totp(secretBase32: string, at = Date.now()): string {
@@ -253,7 +257,7 @@ test.describe("forgot password", () => {
 test.describe("invite", () => {
   test.use({viewport: {width: 1280, height: 800}});
 
-  test("an admin's invite code opens the page, the fragment disappears, and the account is created", async ({page}) => {
+  test("an admin's invite link opens the page, the fragment disappears, and the account is created", async ({page}) => {
     test.skip(!seed.admin.username, "needs E2E_SEED_FILE with the admin");
     // The admin proves a second TOTP code after the one that signed in, which waits for the next window.
     test.setTimeout(120_000);
@@ -265,11 +269,15 @@ test.describe("invite", () => {
       ).toBe(200);
       await nextStep();
       expect((await admin.post("/api/v1/auth/totp/fresh", {data: {code: totp(seed.admin.totp_secret)}})).status()).toBe(200);
-      const created = await admin.post("/api/v1/invites", {data: {phone, locale: "en", send_sms: false, ttl_hours: 1}});
+      // D67: no SMS carries an invite. The answer holds the link, once, and the token is the fragment of that link.
+      const created = await admin.post("/api/v1/invites", {data: {phone, locale: "en", ttl_hours: 1}});
       expect(created.status()).toBe(201);
-      const {code} = (await created.json()) as {code: string};
+      const {link} = (await created.json()) as {link: string};
+      expect(link).toMatch(/^https:\/\/[^/]+\/invite#[A-Za-z0-9_-]{140}$/);
+      const token = link.slice(link.indexOf("#") + 1);
+      appendFileSync(INVITE_TOKENS, `${token}\n`, {mode: 0o600});
 
-      await page.goto(`/en/invite#${code}`);
+      await page.goto(`/en/invite#${token}`);
       await expect(page.locator("bdi").first()).toBeVisible();
       expect(new URL(page.url()).hash).toBe("");
       const mark = smsMark();

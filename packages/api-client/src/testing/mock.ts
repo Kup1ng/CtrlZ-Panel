@@ -97,14 +97,41 @@ export function defaultHandlers(): Record<MockKey, MockHandler> {
       return {body: s.followPageLocale && page ? {...s.me, user: {...s.me.user, locale: page}} : s.me};
     },
     "GET /auth/config": () => ({body: publicConfigFixture()}),
-    "GET /notifications": (_c, s) => ({
-      body: {items: s.notifications, unread_count: s.notifications.filter((n) => !n.read_at).length},
-    }),
+    // The server's split (Question 19): the unread security notices, the newest 50, are `security_items` and are not in `items` or
+    // `unread_count`; a read one, or one past the newest 50, is in the list. `markable` is whatever the fixture says it is for this session.
+    // Paged like the server: newest first, `limit` rows a page (the panel asks for 50), the cursor is the offset of the next row, and
+    // `unread_count` is counted over every row of the list, not over the page.
+    "GET /notifications": (c, s) => {
+      const apart = s.notifications
+        .filter((n) => n.security && !n.read_at)
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+        .slice(0, 50);
+      const apartIds = new Set(apart.map((n) => n.id));
+      const rows = s.notifications
+        .filter((n) => !apartIds.has(n.id))
+        .map((n) => (n.read_at ? {...n, markable: true} : n))
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+      const limit = Math.min(Number(c.query.get("limit")) || 50, 100);
+      const from = Number(c.query.get("cursor")) || 0;
+      const items = rows.slice(from, from + limit);
+      return {
+        body: {
+          items,
+          ...(from + limit < rows.length ? {next_cursor: String(from + limit)} : {}),
+          unread_count: rows.filter((n) => !n.read_at).length,
+          security_items: apart,
+          security_unread_count: apart.length,
+        },
+      };
+    },
     "GET /announcements": (_c, s) => ({
       body: {items: s.announcements, unread_count: s.announcements.filter((a) => !a.read).length},
     }),
     "POST /notifications/{id}/read": (c, s) => {
       const id = c.path.split("/")[2];
+      // A security notice that is unread is marked only by a session made after it; from another it is 409 and nothing changes.
+      const target = s.notifications.find((n) => n.id === id);
+      if (target?.security && !target.read_at && !target.markable) return {status: 409, body: errorBody("conflict")};
       s.notifications = s.notifications.map((n) => (n.id === id && !n.read_at ? {...n, read_at: new Date().toISOString()} : n));
       return NO_CONTENT;
     },

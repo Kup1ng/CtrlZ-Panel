@@ -1,20 +1,26 @@
 "use client";
 
-import {Alert, Button, CloseButton} from "@heroui/react";
+import {Alert, Button, buttonVariants, CloseButton} from "@heroui/react";
 import {isAnnouncementLive, useAnnouncementFeed, useAnnouncementNow, useMarkAnnouncementRead} from "@ctrlz/api-client/hooks/announcements.ts";
 import {usePublicConfig} from "@ctrlz/api-client/hooks/config.ts";
 import {useSession} from "@ctrlz/api-client/hooks/me.ts";
 import {useMarkNotificationRead, useNotificationFeed} from "@ctrlz/api-client/hooks/notifications.ts";
+import {useAppFormat} from "@ctrlz/i18n/format.ts";
+import {Link} from "@ctrlz/i18n/navigation.ts";
 import {useTranslations} from "next-intl";
 import {useEffect, useRef, useState, useSyncExternalStore} from "react";
 
+import {useNoticeText} from "./noticeText.ts";
+import {announceRowLink, securityActions, type SecurityActionId} from "./securityNotice.ts";
 import {useAdminBanners} from "./useAdminBanners.ts";
 import {useShellApp} from "./shellContext.tsx";
+import {useMarkNoticeGroup} from "./useMarkNoticeGroup.ts";
+import {bellModel} from "./useBellData.ts";
 
 // T-122, spec 8.8. Global notices above the whole app, at most two at once and
 // the rest behind "n more". Priority:
 //   1 client conditions (offline)
-//   2 unread critical notifications
+//   2 unread security notices (Question 19), then unread critical notifications
 //   3 unread announcements inside their window
 //   4 "set a password" when SMS is off and the user has none
 // 1 is local. 2 to 4 come from the API through useServerBanners().
@@ -28,6 +34,10 @@ export type ShellBanner = {
   textAuto?: boolean;
   /** Absent means the banner cannot be dismissed (offline goes by itself). */
   onDismiss?: () => void;
+  /** Internal links under the text (a security notice sends the person to the password and the sessions). Addresses are checked before they get here. */
+  actions?: {id: string; label: string; href: string; row?: SecurityActionId}[];
+  /** Spoken at once when the banner appears (a security notice). Every other banner is a static notice of the page. */
+  urgent?: boolean;
 };
 
 const MAX_SHOWN = 2;
@@ -43,7 +53,7 @@ function subscribeOnline(cb: () => void) {
 
 /**
  * Banners that come from the API, priority 2 to 4 and already in order (spec 8.8):
- * unread critical notifications, then unread announcements inside their window,
+ * unread security notices, then unread critical notifications, then unread announcements inside their window,
  * then "set a password" when SMS is off and the user has none. Dismissing marks the
  * item read through the same route as the bell, so the two never disagree.
  */
@@ -51,10 +61,14 @@ function useServerBanners(): ShellBanner[] {
   const t = useTranslations("shell");
   const e = useTranslations("errors");
   const {status, me} = useSession();
-  const notifications = useNotificationFeed();
+  // This is the one place that loads further pages by itself (see useNotificationFeed): a flood of notices must not hide an unread security notice on a page nobody asks for, up to the cap (past it the banners say that more is unread).
+  const notifications = useNotificationFeed({autoPage: true});
   const announcements = useAnnouncementFeed();
   // A timer moves `now` at each start and end, so the window is judged again without a render from elsewhere.
   const now = useAnnouncementNow(announcements.items);
+  const textOf = useNoticeText();
+  const format = useAppFormat();
+  const markGroup = useMarkNoticeGroup();
   const {mutate: readNotification} = useMarkNotificationRead();
   const {mutate: readAnnouncement} = useMarkAnnouncementRead();
   const noPassword = status === "ready" && me?.user.has_password === false;
@@ -63,18 +77,40 @@ function useServerBanners(): ShellBanner[] {
   if (status !== "ready") return [];
   const out: ShellBanner[] = [];
 
-  for (const n of notifications.items) {
-    if (n.severity !== "critical" || n.read_at !== undefined) continue;
-    const base = `bell.kinds.${n.kind}`;
-    // An unknown kind gets the generic title, so an older client never breaks.
-    const known = t.has(`${base}.title` as never);
+  // The unread security notices, one banner per kind, newest first (Question 19, spec 8.5): two recovery-code notices and a
+  // passkey notice are two banners, so the passkey one is not behind "n more" (webi-r1-7). A warning, not a dialog: it stays
+  // until it is cleared. The button is there only when this session may clear every notice of the kind (`markable`); otherwise
+  // the text says the notice can be cleared after signing in again, and the banner stays, so a thief's session cannot hide it
+  // from the owner.
+  for (const n of bellModel({items: notifications.items, securityItems: notifications.securityItems}, []).security) {
+    const {title, body, known} = textOf(n);
     out.push({
-      id: `n:${n.id}`,
-      status: "danger",
-      title: known ? t(`${base}.title` as never, n.params as never) : t("bell.generic"),
-      text: known ? t(`${base}.text` as never, n.params as never) : undefined,
-      onDismiss: () => readNotification(n.id),
+      id: n.key,
+      status: "warning",
+      title,
+      text:
+        [
+          known ? body : undefined,
+          n.count > 1 ? t("bell.security.several", {count: n.count, first: format.dateTime(n.oldestAt)}) : undefined,
+          n.markable ? undefined : t("bell.security.notMarkable"),
+          // The panel loads a bounded number of pages by itself: past that, a notice (a passkey) could still be unread behind them (webi-r2-6).
+          notifications.moreUnread ? t("bell.moreUnread") : undefined,
+        ]
+          .filter(Boolean)
+          .join(" ") || undefined,
+      // One id after another and in a bounded number, so a group of hundreds is not sent at once (webi-r2-3, webi-r2-8).
+      onDismiss: n.markable ? () => markGroup(n.memberIds) : undefined,
+      actions: securityActions(n.kind).map((a) => ({id: a.id, row: a.id, href: a.href, label: t(`bell.security.${a.label}`)})),
+      urgent: true,
     });
+  }
+
+  for (const n of notifications.items) {
+    // An unread security notice is already a banner above, one per kind.
+    if (n.severity !== "critical" || n.read_at !== undefined || n.security) continue;
+    // An unknown kind gets the generic title, so an older client never breaks.
+    const {title, body, known} = textOf({kind: n.kind, params: n.params, createdAt: n.created_at});
+    out.push({id: `n:${n.id}`, status: "danger", title, text: known ? body : undefined, onDismiss: () => readNotification(n.id)});
   }
 
   const live = announcements.items
@@ -140,7 +176,7 @@ function BannerList({banners}: {banners: ShellBanner[]}) {
   return (
     <section ref={region} tabIndex={-1} aria-label={t("banners.region")} className="banner-stack focus:outline-none">
       {shown.map((b) => (
-        <Alert key={b.id} status={b.status} className="banner-stack__item">
+        <Alert key={b.id} status={b.status} className="banner-stack__item" role={b.urgent ? "alert" : undefined}>
           <Alert.Indicator />
           {/* min-w-0: a flex item cannot shrink below its content, and an announcement can hold a URL with no break in it. */}
           <Alert.Content className="min-w-0">
@@ -152,6 +188,15 @@ function BannerList({banners}: {banners: ShellBanner[]}) {
               >
                 {b.text}
               </Alert.Description>
+            ) : null}
+            {b.actions?.length ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {b.actions.map((a) => (
+                  <Link key={a.id} href={a.href} className={buttonVariants({size: "sm", variant: "outline"})} onClick={() => a.row && announceRowLink(a.row)}>
+                    {a.label}
+                  </Link>
+                ))}
+              </div>
             ) : null}
           </Alert.Content>
           {b.onDismiss ? <CloseButton aria-label={t("banners.dismiss")} onPress={b.onDismiss} /> : null}

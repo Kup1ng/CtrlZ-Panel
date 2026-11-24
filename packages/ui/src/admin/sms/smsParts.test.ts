@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest";
 
 import {isTemplateId} from "./providers.ts";
-import {countSms, filled, isOnePartKey, OTP_EN_MAX_UNITS, OTP_FA_MAX_UNITS, otpBodyRefusal, placeholders} from "./smsParts.ts";
+import {countSms, filled, isNoticeKey, isOnePartKey, OTP_EN_MAX_UNITS, OTP_FA_MAX_UNITS, otpBodyRefusal, placeholders} from "./smsParts.ts";
 
 describe("countSms", () => {
   it("fills {code} with a code of full length before it counts", () => {
@@ -106,5 +106,37 @@ describe("placeholders", () => {
   it("lists the names once, in order", () => {
     expect(placeholders("a {code} b {code} c {name}")).toEqual(["code", "name"]);
     expect(placeholders("none")).toEqual([]);
+  });
+});
+
+// Question 19: the two security notices have no placeholder and the same one-part bound as the login codes
+// (internal/sms oneBilledPart). Their seeded bodies, from migration 0064, must pass the rule the page judges before Save.
+describe("the security notice templates", () => {
+  const SEEDS = {
+    notice_passkey: {fa: "Passkey تازه ثبت شد. شما نبودید؟ رمز Ctrl Z را بازیابی کنید.", en: "Ctrl Z: a passkey was added to your account. If this was not you, use the forgot password page."},
+    notice_recovery: {fa: "کدهای بازیابی Ctrl Z عوض شد. شما نبودید؟ کدها و رمز را عوض کنید.", en: "Ctrl Z: your recovery codes were replaced. If this was not you, make new codes and change your password."},
+  } as const;
+
+  it("are one-part keys, and only these two are notice keys", () => {
+    for (const key of Object.keys(SEEDS)) {
+      expect(isOnePartKey(key), key).toBe(true);
+      expect(isNoticeKey(key), key).toBe(true);
+    }
+    expect(["otp", "otp_reset", "otp_phone", "account_exists", "invite", "notice"].some(isNoticeKey)).toBe(false);
+  });
+
+  it("accept their seeded bodies and refuse one unit more, in both languages", () => {
+    for (const [key, bodies] of Object.entries(SEEDS)) {
+      expect(otpBodyRefusal(key, "fa", bodies.fa), key).toBeNull();
+      expect(otpBodyRefusal(key, "en", bodies.en), key).toBeNull();
+      expect(otpBodyRefusal(key, "fa", bodies.fa + "ک".repeat(64)), key).toBe("too_long");
+      expect(otpBodyRefusal(key, "en", bodies.en + "a".repeat(160)), key).toBe("too_long");
+      expect(otpBodyRefusal(key, "en", bodies.en + " ç"), key).toBe("not_gsm");
+    }
+  });
+
+  it("count as typed, since a notice has no {code} to fill", () => {
+    expect(countSms(SEEDS.notice_passkey.en).characters).toBe(SEEDS.notice_passkey.en.length);
+    expect(placeholders(SEEDS.notice_passkey.en)).toEqual([]);
   });
 });

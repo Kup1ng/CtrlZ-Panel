@@ -70,7 +70,7 @@ cleanup() {
 trap cleanup EXIT
 
 sh scripts/gen-secrets.sh "$secrets" >/dev/null || fail "gen-secrets failed"
-for f in kek_root kek_user_totp kek_admin_totp kek_sms_cred kek_otp_delivery kek_auth_mac kek_admin_mac; do
+for f in kek_root kek_user_totp kek_admin_totp kek_sms_cred kek_otp_delivery kek_auth_mac kek_admin_mac kek_invite_sign pub_invite_sign; do
   [ -s "$secrets/$f" ] || fail "gen-secrets did not make $f"
 done
 

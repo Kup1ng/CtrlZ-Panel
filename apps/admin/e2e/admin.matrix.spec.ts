@@ -45,7 +45,7 @@ const handlers: Handlers = {
   "GET /invites": {body: {items: [inviteFixture(), inviteFixture({state: "used"}), inviteFixture({state: "expired"}), inviteFixture({state: "revoked"})]}},
   "GET /audit": {body: {items: [auditFixture({action: "sms.gateway_put", target: "sms_ir", params: {fields: ["credentials"]}}), auditFixture()]}},
   "GET /sms/gateways": {body: {items: gateways}},
-  "GET /sms/templates": {body: {items: [templateFixture({mappings: [{provider: "sms_ir", provider_template_id: "123456", param_names: ["code"]}]}), templateFixture({key: "invite", locale: "en", body: "Join Ctrl Z: {code}"})]}},
+  "GET /sms/templates": {body: {items: [templateFixture({mappings: [{provider: "sms_ir", provider_template_id: "123456", param_names: ["code"]}]}), templateFixture({key: "notice_passkey", locale: "en", body: "Ctrl Z: a passkey was added to your account. If this was not you, use the forgot password page."})]}},
   "GET /sms/limits": {body: limitsFixture()},
   "GET /sms/stats": {body: statsFixture()},
   "GET /settings/registration": {body: {mode: "invite", open_grace_days: 0, takeover_idle_days: 30}},

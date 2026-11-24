@@ -43,8 +43,8 @@ func TestConcurrentProbeFailuresMoveTheBreakerOneStep(t *testing.T) {
 	r.fb.reply = func(_ int, w http.ResponseWriter) { http500(w) }
 	r.request(r.env.A.Phone)
 	r.request(r.env.B.Phone)
-	r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
-	r.queue("invite", "invite", "+989121112244", uuid.Nil, "BCDEFGHJKMNPQRSTVWXY")
+	r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	r.queue("test", "otp", "+989121112244", uuid.Nil, "BCDEFGHJKMNPQRSTVWXY")
 	// Both gateways were shut for 60 s after three failures, and the pause ended.
 	r.env.Exec(t, `UPDATE ctrlz.sms_gateways SET consecutive_failures = 3, breaker_open_until = now() - interval '1 second'`)
 
@@ -72,7 +72,7 @@ func TestAStreamOfCodesCannotStarveAnInvite(t *testing.T) {
 	// the purpose, not to the row.
 	r.env.Exec(t, `INSERT INTO ctrlz.otp_challenges (phone_e164, purpose, code_hash, delivery_ct, expires_at, ip)
 SELECT phone_e164, purpose, code_hash, delivery_ct, expires_at, ip FROM ctrlz.otp_challenges, generate_series(1, 5) WHERE id = $1`, ch.ID)
-	r.queue("invite", "invite", "+989121112233", uuid.Nil, invite)
+	r.queue("test", "otp", "+989121112233", uuid.Nil, invite)
 	// The provider answers slowly, so the rows of one pass overlap and the order of
 	// arrival is the order of the passes.
 	r.pri.reply = func(_ int, w http.ResponseWriter) { time.Sleep(150 * time.Millisecond); irOK(w) }
@@ -210,7 +210,7 @@ func TestBlacklistedInviteEndsAtOnce(t *testing.T) {
 	r := newRig(t)
 	r.pri.reply = func(_ int, w http.ResponseWriter) { irStatus(115)(w) }
 	r.fb.reply = func(_ int, w http.ResponseWriter) { meliStatus("35")(w) }
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 	r.drain()
 	state, lastErr, params := r.outbox(id)
 	if state != "failed" || params || !strings.HasPrefix(lastErr, "blacklisted:") {

@@ -512,6 +512,7 @@ func (s *Server) RegenerateRecoveryCodes(ctx context.Context, _ gen.RegenerateRe
 		codes   []string
 		cookies []*http.Cookie
 	)
+	smsNotice := s.wantNoticeSMS(ctx)
 	err = s.inTenant(ctx, p.TenantID, func(tx store.Tx) error {
 		if _, ok, err := tx.UserLock(p.UserID); err != nil {
 			return err
@@ -544,10 +545,17 @@ func (s *Server) RegenerateRecoveryCodes(ctx context.Context, _ gen.RegenerateRe
 		// they hold. The notice is what lets the owner learn of it (tenant-r18-14, D64 passkey-add-notice). It
 		// belongs here and not to the first enable: that one shows the owner their own first codes. In rank
 		// order: after the session event, before the audit row.
-		if err := tx.NotificationAdd("recovery_codes_regenerated", "info", nil); err != nil {
+		noticeID, err := tx.SecurityNoticeAdd("recovery_codes_regenerated")
+		if err != nil {
 			return err
 		}
-		return audit.Tenant(tx, p.UserID, httpx.ClientIPFrom(tx.Context()), audit.RecoveryRegenerate{Left: len(codes)})
+		if err := audit.Tenant(tx, p.UserID, httpx.ClientIPFrom(tx.Context()), audit.RecoveryRegenerate{Left: len(codes)}); err != nil {
+			return err
+		}
+		if smsNotice {
+			return noticeSMS(tx, p.UserID, noticeID)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err

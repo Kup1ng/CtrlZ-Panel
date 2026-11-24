@@ -7,6 +7,7 @@ import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 import {expectMatrixPage} from "@ctrlz/ui/testing/matrixAssert.ts";
 
 import {
+  INVITE_TOKEN,
   allowAuthErrors,
   callsTo,
   err,
@@ -137,7 +138,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: "invite-lookup",
-    path: (l) => `/${l}/invite#ABCDEFGHJKMNPQRSTVWX`,
+    path: (l) => `/${l}/invite#${INVITE_TOKEN}`,
     setup: async (context) => void (await openAnonymous(context, {"POST /auth/invites/lookup": {body: {phone_masked: "+98912***4567", expires_at: "2026-11-20T10:00:00Z"}}})),
     after: async (page) => {
       await expect(page.locator("bdi", {hasText: "+98912***4567"})).toBeVisible();
@@ -340,7 +341,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: "invite-confirm",
-    path: (l) => `/${l}/invite#ABCDEFGHJKMNPQRSTVWX`,
+    path: (l) => `/${l}/invite#${INVITE_TOKEN}`,
     setup: async (context) => void (await openAnonymous(context, {"POST /auth/invites/lookup": {body: inviteInfoFixture()}, "POST /auth/otp/request": issued})),
     after: async (page) => {
       await expect(page.locator("bdi", {hasText: "+98912***4567"})).toBeVisible();
@@ -351,7 +352,7 @@ const SCREENS: Screen[] = [
   {
     name: "invite-sms-down",
     submitStaysDisabled: true,
-    path: (l) => `/${l}/invite#ABCDEFGHJKMNPQRSTVWX`,
+    path: (l) => `/${l}/invite#${INVITE_TOKEN}`,
     setup: async (context) => void (await openAnonymous(context, {"POST /auth/invites/lookup": {body: inviteInfoFixture()}}, {sms_available: false})),
     after: async (page, lang) => {
       await expect(page.getByText(text(lang, "invite.smsDown"))).toBeVisible();
@@ -361,7 +362,7 @@ const SCREENS: Screen[] = [
   {
     name: "invite-invalid",
     expects404: true,
-    path: (l) => `/${l}/invite#ABCDEFGHJKMNPQRSTVWX`,
+    path: (l) => `/${l}/invite#${INVITE_TOKEN}`,
     setup: async (context) => void (await openAnonymous(context, {"POST /auth/invites/lookup": err(404, "invite_invalid")})),
     after: async (page, lang) => {
       await expect(page.getByRole("heading", {level: 1})).toHaveText(text(lang, "invite.invalidTitle"));

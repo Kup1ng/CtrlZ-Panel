@@ -24,7 +24,7 @@ func TestTheOutboxClaimLeaseStartsWhenTheClaimRunsNotWhenTheTransactionBegan(t *
 	}
 	id := uuid.New()
 	if _, err := super.Exec(f.ctx, `INSERT INTO ctrlz.sms_outbox (id, kind, phone_e164, template_key, locale, params_ct)
-	  VALUES ($1, 'invite', '+989121110091', 'invite', 'fa', '\x01')`, id); err != nil {
+	  VALUES ($1, 'test', '+989121110091', 'otp', 'fa', '\x01')`, id); err != nil {
 		t.Fatal(err)
 	}
 	// A transaction that ends an exhausted OTP row first, and waits for the global counter row that
@@ -89,7 +89,7 @@ func TestClaimLeaseLeftIsMeasuredWhenAskedAndTakesTheShortestRow(t *testing.T) {
 	first, second := uuid.New(), uuid.New()
 	for _, id := range []uuid.UUID{first, second} {
 		if _, err := super.Exec(f.ctx, `INSERT INTO ctrlz.sms_outbox (id, kind, phone_e164, template_key, locale, params_ct)
-		  VALUES ($1, 'invite', '+989121110092', 'invite', 'fa', '\x01')`, id); err != nil {
+		  VALUES ($1, 'test', '+989121110092', 'otp', 'fa', '\x01')`, id); err != nil {
 			t.Fatal(err)
 		}
 	}

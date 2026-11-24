@@ -140,9 +140,17 @@ func TestMigration0055OnAnInstalledDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A function made after 0055 is born scoped and is not one 0055 moved: only those the database held at 0054 count.
+	held := map[string]bool{}
+	for sig := range before {
+		name, _, _ := strings.Cut(strings.TrimPrefix(sig, "ctrlz_fn."), "(")
+		held[name] = true
+	}
+	// The three that 0061 moved later (question 15) were held at 0054 as ctrlz_auth's and are scoped in functions.yaml now.
+	movedBy0061 := map[string]bool{"auth_tickets_revoke": true, "auth_phone_mark_verified": true, "auth_phone_change_complete": true}
 	want := 0
 	for _, f := range fx.Functions.SecurityDefiner {
-		if f.Owner == "scoped" {
+		if f.Owner == "scoped" && held[f.Name] && !movedBy0061[f.Name] {
 			want++
 		}
 	}

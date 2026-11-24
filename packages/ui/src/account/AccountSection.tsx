@@ -4,9 +4,11 @@ import type {ReactNode} from "react";
 // case (DESIGN.md: no all-caps) over full-width rows. The gap between rows is the one the lists use
 // (spec 8.10).
 
-export function AccountSection({id, title, children}: {id: string; title: string; children: ReactNode}) {
+export function AccountSection({id, title, children, busy = false}: {id: string; title: string; children: ReactNode; busy?: boolean}) {
   return (
-    <section aria-labelledby={`${id}-title`} className="flex flex-col gap-3">
+    // data-row-id: a security notice links to `#passkeys` (the section is the place that undoes a passkey); useRowFragment moves to it
+    // and puts the focus on the title below, the one place of a section that takes it.
+    <section aria-labelledby={`${id}-title`} data-row-id={id} aria-busy={busy || undefined} className="flex flex-col gap-3">
       {/* tabIndex -1: not a stop of the Tab order, but a place to put the focus when what had it was removed (wp9-r1-5). */}
       <h2 id={`${id}-title`} tabIndex={-1} className="text-foreground text-base font-semibold outline-none">
         {title}

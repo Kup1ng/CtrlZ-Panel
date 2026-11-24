@@ -20,6 +20,10 @@ import (
 type Runtime struct {
 	Keys   *keyring.Ring
 	Hasher *password.Hasher
+	// Public holds the public keys of the signing domains the role only verifies (the api and the invite
+	// links, D67). Nil for the roles that have none. It is read from pub_<domain> in the key directory, and
+	// is a throw-away ring in the test environment, like the keys.
+	Public *keyring.PublicRing
 }
 
 // newRuntime loads the role's key domains and builds its password hasher. A
@@ -58,6 +62,28 @@ func newRuntime(cfg Config, log *slog.Logger, consoleTool bool) (*Runtime, error
 		}
 		if err := rt.Keys.Require(domains...); err != nil {
 			return nil, fmt.Errorf("keys: %w", err)
+		}
+	}
+	for _, d := range cfg.Role.PublicDomains() {
+		switch {
+		case cfg.KEKDir != "":
+			pub, err := keyring.LoadPublic(cfg.KEKDir, d)
+			if err != nil {
+				return nil, fmt.Errorf("keys: %w", err)
+			}
+			rt.Public = pub
+			log.Info("public keys loaded", logattr.Enums("domains", []keyring.DomainName{pub.Name()}))
+		case cfg.Env == EnvTest:
+			// One process cannot share a key with another, so the links of a test process open only in itself.
+			ring, err := keyring.NewEphemeral(d)
+			if err != nil {
+				return nil, fmt.Errorf("keys: %w", err)
+			}
+			if rt.Public, err = ring.Public(d); err != nil {
+				return nil, fmt.Errorf("keys: %w", err)
+			}
+		default:
+			return nil, errors.New("keys: CTRLZ_KEK_DIR is not set (only CTRLZ_ENV=test may run without key files)")
 		}
 	}
 	switch {

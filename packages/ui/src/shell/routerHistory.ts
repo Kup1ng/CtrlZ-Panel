@@ -4,7 +4,7 @@
 // load the effect of a page component therefore runs before AppRouter's effect has put its own `history.replaceState` in place,
 // so a write made from the page reaches the browser's native one. The entry then loses the router's marker (`__NA`) and a Back to
 // it is not restored by the router, which leaves the URL of one page on the screen of another; and the router's own canonical URL
-// is never told of the change, so a later commit that keeps the URL writes the old address (a fragment with an invite code in it)
+// is never told of the change, so a later commit that keeps the URL writes the old address (a fragment with an invite token in it)
 // back into the bar. Next's patched `replaceState` copies the marker and tells the router, so the write goes through it.
 //
 // There is no reliable way to ask whether the patch is installed (the 17.2 guard wraps `replaceState` from the start of the

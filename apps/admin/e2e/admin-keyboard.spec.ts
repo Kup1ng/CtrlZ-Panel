@@ -2,7 +2,7 @@ import {adminUserFixture, alertFixture, gatewayFixture, inviteFixture, templateF
 import type {Locator, Page} from "@playwright/test";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 
-import {adm, allowAdminErrors, err, errText, commonText, gotoShell, LANGS, openAdmin, shellText, typeCode, type Lang} from "./admin-support.ts";
+import {adm, allowAdminErrors, err, errText, commonText, gotoShell, LANGS, openAdmin, shellText, typeCode, type Lang, INVITE_CREATED} from "./admin-support.ts";
 
 // Spec 17.5 for the admin app (wp10-r1-4): where the focus goes when a dialog opens, that Tab cannot leave it, where the
 // focus returns when it closes, that the arrow keys of a Tabs and of a Segment follow the reading direction, and that Back
@@ -202,7 +202,7 @@ for (const {lang, dir} of LANGS) {
 
       test(`Create invite: Done by ${key} returns the focus to the Create button, not to the page body`, async ({page, context, baseURL}) => {
         await openAdmin(context, baseURL, {
-          handlers: {"POST /invites": {status: 201, body: {id: "10000000-0000-4000-8000-0000000000a9", code: "INV-CODE-4821", link: "https://panel.example.ir/invite#INV-CODE-4821"}}},
+          handlers: {"POST /invites": {status: 201, body: INVITE_CREATED}},
         });
         await goto(page, "/invites", A("pages.invites.title"));
         const trigger = page.getByRole("button", {name: A("invites.create.open")});
@@ -502,7 +502,7 @@ for (const {lang, dir} of LANGS) {
         open: "invites.create.open",
         result: "invites.result.title",
         post: "POST /invites",
-        reply: {status: 201, body: {id: "10000000-0000-4000-8000-0000000000a9", code: "INV-CODE-4821", link: "https://panel.example.ir/invite#INV-CODE-4821"}},
+        reply: {status: 201, body: INVITE_CREATED},
         phone: "09351234567",
       },
     ] as const) {

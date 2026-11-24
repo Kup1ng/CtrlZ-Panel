@@ -79,7 +79,7 @@ func TestShutdownBetweenTheAcceptAndTheRecordLosesNothing(t *testing.T) {
 		t.Error("the accepted code has no delivery row")
 	}
 
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 	w2, ctx2 := stopping()
 	if _, err := w2.Drain(ctx2); err != nil {
 		t.Fatal(err)

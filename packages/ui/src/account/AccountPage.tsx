@@ -15,6 +15,7 @@ import {PasswordRow} from "./PasswordRow.tsx";
 import {PhoneRow} from "./PhoneRow.tsx";
 import {SessionsRow} from "./SessionsRow.tsx";
 import {TotpRow} from "./TotpRow.tsx";
+import {useRowFragment} from "./useRowFragment.ts";
 
 // Spec 12, WF "Preferences": Details, Passkeys and Options as three sections of full-width rows. The
 // shell's session gate has already asked `/me`, so the page reads the same cache entry; the loading and
@@ -24,6 +25,8 @@ import {TotpRow} from "./TotpRow.tsx";
 export function AccountPage() {
   const t = useTranslations("account");
   const {me, status, error, retry} = useSession();
+  // A security notice links to #password and #sessions (spec 8.5).
+  useRowFragment(Boolean(me));
 
   return (
     <>

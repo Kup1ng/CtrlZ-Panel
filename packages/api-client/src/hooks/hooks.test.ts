@@ -44,6 +44,7 @@ import {
   announcementFixture,
   meFixture,
   notificationFixture,
+  securityNoticeFixture,
   type Announcement,
   type Me,
   type Notification,
@@ -59,11 +60,17 @@ import {meKeys, meQueryOptions, useLogout, useSession, type Session} from "./me.
 import {
   flattenNotifications,
   markNotificationRead,
+  MARK_PER_PRESS,
   markNotificationReadOptions,
+  markNotificationsReadOptions,
+  needsMorePages,
   notificationKeys,
   notificationsQueryOptions,
   notificationUnread,
   POLL_MS,
+  securityNotices,
+  securityUnread,
+  unreadPastCap,
 } from "./notifications.ts";
 import {dismissedOnboardingState, dismissOnboarding, isOnboardingDismissed, updatePreferences, useOnboarding} from "./preferences.ts";
 import {publicConfigQueryOptions} from "./config.ts";
@@ -158,8 +165,8 @@ describe("notifications", () => {
     expect(POLL_MS).toBe(60_000);
     server.answer = (s) =>
       s.query.get("cursor") === "c2"
-        ? json(200, {items: [notificationFixture({id: "00000000-0000-4000-8000-0000000000bb"})], unread_count: 2})
-        : json(200, {items: [notificationFixture({id: "00000000-0000-4000-8000-0000000000aa"})], next_cursor: "c2", unread_count: 2});
+        ? json(200, {items: [notificationFixture({id: "00000000-0000-4000-8000-0000000000bb"})], unread_count: 2, security_items: [], security_unread_count: 0})
+        : json(200, {items: [notificationFixture({id: "00000000-0000-4000-8000-0000000000aa"})], next_cursor: "c2", unread_count: 2, security_items: [], security_unread_count: 0});
     const client = newClient();
     const o = notificationsQueryOptions();
     const first = await client.fetchInfiniteQuery({...o, pages: 2});
@@ -172,7 +179,7 @@ describe("notifications", () => {
   });
 
   it("counts unread from the first page's figure, which covers every row", () => {
-    const data = {pages: [{items: [notificationFixture()], unread_count: 7}, {items: [], unread_count: 7}], pageParams: [undefined, "c"]};
+    const data = {pages: [{items: [notificationFixture()], unread_count: 7, security_items: [], security_unread_count: 0}, {items: [], unread_count: 7, security_items: [], security_unread_count: 0}], pageParams: [undefined, "c"]};
     expect(notificationUnread(data)).toBe(7);
     expect(notificationUnread(undefined)).toBe(0);
   });
@@ -180,14 +187,14 @@ describe("notifications", () => {
   it("marks one read and lowers the count once, never below zero, and never for one already read", () => {
     const a = notificationFixture();
     const b = read();
-    const data = {pages: [{items: [a, b], unread_count: 1}], pageParams: [undefined]};
+    const data = {pages: [{items: [a, b], unread_count: 1, security_items: [], security_unread_count: 0}], pageParams: [undefined]};
     const once = markNotificationRead(data, a.id, new Date("2026-11-11T00:00:00Z"))!;
     expect(once.pages[0]!.items[0]!.read_at).toBe("2026-11-11T00:00:00.000Z");
     expect(once.pages[0]!.unread_count).toBe(0);
     expect(markNotificationRead(once, a.id, new Date())).toBe(once);
     expect(markNotificationRead(data, b.id, new Date())).toBe(data);
     expect(markNotificationRead(data, "missing", new Date())).toBe(data);
-    expect(markNotificationRead({pages: [{items: [a], unread_count: 0}], pageParams: [undefined]}, a.id, new Date())!.pages[0]!.unread_count).toBe(0);
+    expect(markNotificationRead({pages: [{items: [a], unread_count: 0, security_items: [], security_unread_count: 0}], pageParams: [undefined]}, a.id, new Date())!.pages[0]!.unread_count).toBe(0);
     // The input is not changed.
     expect(data.pages[0]!.unread_count).toBe(1);
   });
@@ -195,14 +202,14 @@ describe("notifications", () => {
   it("shows the read at once, calls POST /notifications/{id}/read, and refetches", async () => {
     const n = notificationFixture();
     const client = newClient();
-    client.setQueryData(notificationKeys.list, {pages: [{items: [n], unread_count: 1}], pageParams: [undefined]});
+    client.setQueryData(notificationKeys.list, {pages: [{items: [n], unread_count: 1, security_items: [], security_unread_count: 0}], pageParams: [undefined]});
     let during: number | undefined;
     server.answer = (s) => {
       if (s.method === "POST") {
         during = notificationUnread(client.getQueryData(notificationKeys.list));
         return new Response(null, {status: 204});
       }
-      return json(200, {items: [{...n, read_at: "2026-11-11T00:00:00Z"}], unread_count: 0});
+      return json(200, {items: [{...n, read_at: "2026-11-11T00:00:00Z"}], unread_count: 0, security_items: [], security_unread_count: 0});
     };
     await new MutationObserver(client, markNotificationReadOptions(client)).mutate(n.id);
     expect(during).toBe(0);
@@ -213,12 +220,156 @@ describe("notifications", () => {
   it("puts the unread state back when the call fails", async () => {
     const n = notificationFixture();
     const client = newClient();
-    const before = {pages: [{items: [n], unread_count: 1}], pageParams: [undefined]};
+    const before = {pages: [{items: [n], unread_count: 1, security_items: [], security_unread_count: 0}], pageParams: [undefined]};
     client.setQueryData(notificationKeys.list, before);
-    server.answer = (s) => (s.method === "POST" ? json(500, {code: "internal"}) : json(200, {items: [n], unread_count: 1}));
+    server.answer = (s) => (s.method === "POST" ? json(500, {code: "internal"}) : json(200, {items: [n], unread_count: 1, security_items: [], security_unread_count: 0}));
     await new MutationObserver(client, markNotificationReadOptions(client)).mutate(n.id).catch(() => undefined);
     expect(notificationUnread(client.getQueryData(notificationKeys.list))).toBe(1);
     expect(flattenNotifications(client.getQueryData(notificationKeys.list))[0]!.read_at).toBeUndefined();
+  });
+});
+
+describe("security notices (Question 19)", () => {
+  const page = (over: Partial<{items: Notification[]; unread_count: number; security_items: Notification[]; security_unread_count: number}> = {}) => ({
+    items: [],
+    unread_count: 0,
+    security_items: [],
+    security_unread_count: 0,
+    ...over,
+  });
+
+  it("reads the block and its count from the first page, and the count is not the ordinary one", () => {
+    const sec = [securityNoticeFixture(), securityNoticeFixture({kind: "recovery_codes_regenerated"})];
+    const data = {pages: [page({unread_count: 3, security_items: sec, security_unread_count: 2}), page({unread_count: 3, security_items: sec, security_unread_count: 2})], pageParams: [undefined, "c"]};
+    expect(securityNotices(data).map((n) => n.id)).toEqual(sec.map((n) => n.id));
+    expect(securityUnread(data)).toBe(2);
+    expect(notificationUnread(data)).toBe(3);
+    expect(securityNotices(undefined)).toEqual([]);
+    expect(securityUnread(undefined)).toBe(0);
+  });
+
+  it("marking one takes it out of the block on every page and lowers only the security count, never the ordinary one", () => {
+    const sec = securityNoticeFixture();
+    const other = securityNoticeFixture();
+    const plain = notificationFixture();
+    const data = {
+      pages: [page({items: [plain], unread_count: 1, security_items: [sec, other], security_unread_count: 2}), page({security_items: [sec, other], security_unread_count: 2})],
+      pageParams: [undefined, "c"],
+    };
+    const next = markNotificationRead(data, sec.id, new Date("2026-11-13T00:00:00Z"))!;
+    for (const p of next.pages) {
+      expect(p.security_items.map((n) => n.id)).toEqual([other.id]);
+      expect(p.security_unread_count).toBe(1);
+    }
+    expect(next.pages[0]!.unread_count).toBe(1);
+    expect(next.pages[0]!.items[0]!.read_at).toBeUndefined();
+    // The input is not changed.
+    expect(data.pages[0]!.security_items).toHaveLength(2);
+    // A second mark finds nothing to change.
+    expect(markNotificationRead(next, sec.id, new Date())).toBe(next);
+  });
+
+  it("an unread security notice past the newest 50 sits in the list and is counted by the ordinary figure", () => {
+    const past = securityNoticeFixture({markable: false});
+    const data = {pages: [page({items: [past], unread_count: 1})], pageParams: [undefined]};
+    const next = markNotificationRead(data, past.id, new Date("2026-11-13T00:00:00Z"))!;
+    expect(next.pages[0]!.items[0]!.read_at).toBe("2026-11-13T00:00:00.000Z");
+    expect(next.pages[0]!.unread_count).toBe(0);
+  });
+
+  // webi-r1-6: unread_count is over every row, so it says when an unread notice is on a page that is not loaded.
+  it("asks for the next page while unread_count is above the unread rows loaded, and stops at the cap", () => {
+    const past = securityNoticeFixture({markable: false});
+    const unreadRows = Array.from({length: 3}, () => notificationFixture());
+    const first = {pages: [page({items: unreadRows, unread_count: 4})], pageParams: [undefined]};
+    expect(needsMorePages(first, true)).toBe(true);
+    // The page that holds the fourth one arrives: nothing is missing any more.
+    const second = {pages: [first.pages[0]!, page({items: [past]})], pageParams: [undefined, "c"]};
+    expect(needsMorePages(second, true)).toBe(false);
+    // A read row does not count as unread, and no next page means nothing to ask for.
+    const read = {pages: [page({items: [notificationFixture({read_at: "2026-11-13T00:00:00Z"})], unread_count: 1})], pageParams: [undefined]};
+    expect(needsMorePages(read, true)).toBe(true);
+    expect(needsMorePages(read, false)).toBe(false);
+    expect(needsMorePages(undefined, true)).toBe(false);
+    // A count that never matches ends at the cap.
+    expect(needsMorePages(first, true, 1)).toBe(false);
+    // webi-r2-6: once the cap is reached with unread notices still unloaded, the panel says so; before the cap it just pages.
+    expect(unreadPastCap(first, true, 1)).toBe(true);
+    expect(unreadPastCap(first, true)).toBe(false);
+    expect(unreadPastCap(first, false, 1)).toBe(false);
+    expect(unreadPastCap(second, true, 1)).toBe(false);
+    expect(unreadPastCap(undefined, true, 1)).toBe(false);
+  });
+
+  it("a 409 from the API puts the block back and marks the list stale, so it is asked again, with one POST and no retry", async () => {
+    const sec = securityNoticeFixture({markable: false});
+    const client = newClient();
+    const before = {pages: [page({security_items: [sec], security_unread_count: 1})], pageParams: [undefined]};
+    client.setQueryData(notificationKeys.list, before);
+    server.answer = (s) => (s.method === "POST" ? json(409, {code: "conflict"}) : json(200, page({security_items: [sec], security_unread_count: 1})));
+    await new MutationObserver(client, markNotificationReadOptions(client)).mutate(sec.id).catch(() => undefined);
+    expect(securityUnread(client.getQueryData(notificationKeys.list))).toBe(1);
+    expect(securityNotices(client.getQueryData(notificationKeys.list)).map((n) => n.id)).toEqual([sec.id]);
+    expect(server.seen.filter((c) => c.method === "POST")).toHaveLength(1);
+    // The list is invalidated by the settle, so an active observer refetches; here the cache is marked stale.
+    expect(client.getQueryState(notificationKeys.list)?.isInvalidated).toBe(true);
+  });
+
+  // webi-r2-3, webi-r2-8: a group of hundreds must not be sent as hundreds of parallel calls against 60 writes a minute.
+  it("marks a group one id after another, stops at the first refusal and asks for the list once at the end", async () => {
+    const notes = Array.from({length: 4}, () => securityNoticeFixture({kind: "recovery_codes_regenerated"}));
+    const client = newClient();
+    client.setQueryData(notificationKeys.list, {pages: [page({security_items: notes, security_unread_count: 4})], pageParams: [undefined]});
+    let posts = 0;
+    server.answer = (s) => {
+      if (s.method !== "POST") return json(200, page({security_items: notes, security_unread_count: 4}));
+      posts += 1;
+      return posts === 3 ? json(429, {code: "rate_limited"}, {"retry-after": "30"}) : new Response(null, {status: 204});
+    };
+    const error = await new MutationObserver(client, markNotificationsReadOptions(client)).mutate(notes.map((n) => n.id)).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    // The third call was refused and the fourth never sent; the two that passed are cleared in the cache.
+    expect(server.seen.filter((c) => c.method === "POST")).toHaveLength(3);
+    expect(securityNotices(client.getQueryData(notificationKeys.list)).map((n) => n.id)).toEqual([notes[2]!.id, notes[3]!.id]);
+    expect(securityUnread(client.getQueryData(notificationKeys.list))).toBe(2);
+    expect(client.getQueryState(notificationKeys.list)?.isInvalidated).toBe(true);
+  });
+
+  // webi-r3-2, webi-r3-4: a 409 is the verdict having moved for one notice, not a failure of the press and not a rate limit.
+  it("skips a notice that answers 409, keeps it in the block, and says nothing is left for it", async () => {
+    const notes = Array.from({length: 3}, () => securityNoticeFixture({kind: "recovery_codes_regenerated"}));
+    const client = newClient();
+    client.setQueryData(notificationKeys.list, {pages: [page({security_items: notes, security_unread_count: 3})], pageParams: [undefined]});
+    server.answer = (s) => {
+      if (s.method !== "POST") return json(200, page({security_items: notes, security_unread_count: 3}));
+      return s.path === `/notifications/${notes[1]!.id}/read` ? json(409, {code: "conflict"}) : new Response(null, {status: 204});
+    };
+    const result = await new MutationObserver(client, markNotificationsReadOptions(client)).mutate(notes.map((n) => n.id));
+    expect(result).toEqual({done: 2, left: 0});
+    expect(server.seen.filter((c) => c.method === "POST")).toHaveLength(3);
+    expect(securityNotices(client.getQueryData(notificationKeys.list)).map((n) => n.id)).toEqual([notes[1]!.id]);
+    expect(securityUnread(client.getQueryData(notificationKeys.list))).toBe(1);
+    expect(client.getQueryState(notificationKeys.list)?.isInvalidated).toBe(true);
+  });
+
+  it("a single notice that answers 409 resolves with nothing done, and any other failure is still thrown", async () => {
+    const sec = securityNoticeFixture();
+    const client = newClient();
+    client.setQueryData(notificationKeys.list, {pages: [page({security_items: [sec], security_unread_count: 1})], pageParams: [undefined]});
+    server.answer = (s) => (s.method === "POST" ? json(409, {code: "conflict"}) : json(200, page({security_items: [sec], security_unread_count: 1})));
+    await expect(new MutationObserver(client, markNotificationsReadOptions(client)).mutate([sec.id])).resolves.toEqual({done: 0, left: 0});
+    server.answer = (s) => (s.method === "POST" ? json(500, {code: "internal"}) : json(200, page()));
+    await expect(new MutationObserver(client, markNotificationsReadOptions(client)).mutate([sec.id])).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("sends at most MARK_PER_PRESS marks in one press and says how many are left", async () => {
+    const notes = Array.from({length: MARK_PER_PRESS + 5}, () => securityNoticeFixture());
+    const client = newClient();
+    client.setQueryData(notificationKeys.list, {pages: [page({security_items: notes.slice(0, 50), security_unread_count: notes.length})], pageParams: [undefined]});
+    server.answer = (s) => (s.method === "POST" ? new Response(null, {status: 204}) : json(200, page()));
+    const result = await new MutationObserver(client, markNotificationsReadOptions(client)).mutate(notes.map((n) => n.id));
+    expect(result).toEqual({done: MARK_PER_PRESS, left: 5});
+    expect(server.seen.filter((c) => c.method === "POST")).toHaveLength(MARK_PER_PRESS);
   });
 });
 

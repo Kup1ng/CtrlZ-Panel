@@ -50,7 +50,7 @@ func sealOpen(r *Ring, d string, seal, open Context) (sealErr, openErr error) {
 // opens under its own context, so the refusal is the context's and not the domain's.
 func TestAnEmptyContextBindsNothingAndIsRefused(t *testing.T) {
 	r := allRing(t)
-	for _, d := range Domains() {
+	for _, d := range sealable() {
 		sealErr, _ := sealOpen(r, d, Context{}, tc("row"))
 		if !errors.Is(sealErr, ErrSeal) {
 			t.Errorf("%s: sealing under the zero Context = %v, want ErrSeal", d, sealErr)
@@ -109,7 +109,7 @@ func TestAContextOfTheZeroRowBindsNothingAndIsRefused(t *testing.T) {
 		if !ctx.zero() {
 			t.Errorf("%s: the constructor returned a context that binds something: %q", name, ctx.Bytes())
 		}
-		for _, d := range Domains() {
+		for _, d := range sealable() {
 			if sealErr, _ := sealOpen(r, d, ctx, tc("row")); !errors.Is(sealErr, ErrSeal) {
 				t.Errorf("%s: %s: Seal = %v, want ErrSeal", name, d, sealErr)
 			}
@@ -129,7 +129,7 @@ func TestAContextOfTheZeroRowBindsNothingAndIsRefused(t *testing.T) {
 			t.Errorf("%s: a real context was refused by its constructor", name)
 			continue
 		}
-		for _, d := range Domains() {
+		for _, d := range sealable() {
 			if sealErr, openErr := sealOpen(r, d, ctx, ctx); sealErr != nil || openErr != nil {
 				t.Errorf("%s: %s: seal %v, open %v", name, d, sealErr, openErr)
 			}
@@ -178,7 +178,7 @@ func TestContextHasNoWayToBeBuiltOutsideTheConstructors(t *testing.T) {
 // zero Context itself, because the AEAD check alone would accept that ciphertext for every row.
 func TestOpenRefusesTheZeroContextForACiphertextMadeUnderIt(t *testing.T) {
 	r := allRing(t)
-	for _, d := range Domains() {
+	for _, d := range sealable() {
 		m, _ := ModeOf(d)
 		label := ""
 		if m != ModeSealed {
@@ -211,4 +211,16 @@ func TestOpenRefusesTheZeroContextForACiphertextMadeUnderIt(t *testing.T) {
 			t.Errorf("%s: a ciphertext made under the zero Context opened (%v)", d, openErr)
 		}
 	}
+}
+
+// sealable lists the domains whose key seals or MACs, which are all but the signing ones: the key of a
+// signing domain only seeds Ed25519 (public_test.go).
+func sealable() []string {
+	var out []string
+	for _, d := range Domains() {
+		if m, _ := ModeOf(d); m != ModeSigning {
+			out = append(out, d)
+		}
+	}
+	return out
 }

@@ -376,8 +376,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Read an invite code, for the invite page
-         * @description Unknown, used, revoked and expired invites are all `404 invite_invalid`. Errors: `invite_invalid`, `too_many_attempts`.
+         * Read an invite link, for the invite page
+         * @description Forged, unknown, used, revoked and expired invites are all `404 invite_invalid`. Errors: `invite_invalid`, `too_many_attempts`.
          */
         post: operations["lookupInvite"];
         delete?: never;
@@ -878,7 +878,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark a notification read */
+        /**
+         * Mark a notification read
+         * @description Errors: `conflict`. A security notice (`security` true) is marked only by a session made after it; from any other session, the one that caused it included, it is `conflict` and nothing changes.
+         */
         post: operations["readNotification"];
         delete?: never;
         options?: never;
@@ -1266,6 +1269,8 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             read_at?: string;
+            security: boolean;
+            markable: boolean;
         };
         /** @description The values a notification's text is built from. Scalars only, so the client never renders a structure the server did not bound. */
         NotificationParams: {
@@ -1275,6 +1280,10 @@ export interface components {
             items: components["schemas"]["Notification"][];
             next_cursor?: string;
             unread_count: number;
+            /** @description The unread security notices, newest first, the same on every page. They are not in `items` or `unread_count`, except the ones older than the newest 50, which stay in the list so that no unread notice is left out of every response. */
+            security_items: components["schemas"]["Notification"][];
+            /** @description How many unread security notices are in `security_items`, at most 50. A notice older than the newest 50 is in `items` and `unread_count`, not here, so `unread_count` plus this is every unread notice once. */
+            security_unread_count: number;
         };
         Announcement: {
             /** Format: uuid */

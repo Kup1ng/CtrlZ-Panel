@@ -30,7 +30,6 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/cachex"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/keyring"
-	"github.com/Kup1ng/CtrlZ-Panel/internal/netpool"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/ratelimit"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
 )
@@ -46,6 +45,9 @@ type Deps struct {
 	// refuses to build without them: a route that needed a missing domain would
 	// fail at its first request, in front of a user, instead of at start-up.
 	Keys *keyring.Ring
+	// Invites holds the public keys that open invite links (pub_invite_sign, D67). The api can open a link and cannot make
+	// one. New refuses to build without it, so a missing file stops the start-up and not the first invitee.
+	Invites *keyring.PublicRing
 	// Hasher is the process's Argon2 hasher and its concurrency gate.
 	Hasher *password.Hasher
 	// PanelHost is CTRLZ_PANEL_HOST, used until domain_settings.panel_host is set
@@ -94,7 +96,6 @@ type Server struct {
 	login        *login.Service
 	phoneChange  *phonechange.Service
 	passkeys     *passkey.Provider
-	inviteReads  *netpool.Pool    // reads of an invite for a request the otp-send bucket refused, bounded per network, per /48 and for the process (rounds 9 to 11)
 	after        afterwork.Runner // what a floored handler owes after its answer: failed-login trail rows (tenant-r13-2)
 }
 
@@ -115,6 +116,9 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	}
 	if d.Keys == nil || d.Hasher == nil {
 		return nil, nil, errors.New("api: Keys and Hasher are required")
+	}
+	if d.Invites == nil {
+		return nil, nil, errors.New("api: Invites (the public key of invite_sign) is required")
 	}
 	if d.Log == nil {
 		// The caches say their own failures to it (cachex.Config.Log is required, round 16).
@@ -144,18 +148,13 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	if strengthAnon == nil {
 		strengthAnon = pwstrength.NewUnauthenticated()
 	}
-	inviteRead, ok := budget.FindNetPool(budget.Tenant, "invite-read")
-	if !ok {
-		return nil, nil, errors.New("api: the invite-read pool is not in the budget registry")
-	}
 	after := d.After
 	if after == nil {
 		after = afterwork.New(0, 0, 0).WithLog(d.Log)
 	}
 	s := &Server{
-		after:       after,
-		inviteReads: netpool.New(inviteRead, d.Now),
-		d:           d, cfg: cfg, auth: auth, now: d.Now, keys: d.Keys, hasher: d.Hasher, strength: strength, strengthAnon: strengthAnon,
+		after: after,
+		d:     d, cfg: cfg, auth: auth, now: d.Now, keys: d.Keys, hasher: d.Hasher, strength: strength, strengthAnon: strengthAnon,
 		throttle: throttle.NewUser(auth, d.Keys).WithCeilingHook(throttle.CeilingLog(d.Log)).WithRefusalHook(throttle.RefusalLog(d.Log, refusals)), tickets: tickets, otp: otpSvc, markers: markers,
 		login: &login.Service{
 			DB: d.Store, Auth: auth, OTP: otpSvc, Sessions: d.Sessions, Tickets: tickets, Markers: markers, Config: cfg.Get, Now: d.Now,

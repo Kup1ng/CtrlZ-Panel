@@ -67,6 +67,20 @@ describe("authApi.reauth", () => {
 
 // wp8-r17-1: every code a visitor typed goes out as ASCII digits (spec 10.3, 17.3). Each route that carries one is
 // pinned here, so deleting the conversion from any single branch fails a test.
+// D67: the invite token is a signed, case-sensitive string. It goes out as the page holds it, whatever its characters.
+describe("authApi sends the invite token as it is", () => {
+  const token = "Fixture-token_Aa-09".repeat(8).slice(0, 140);
+
+  it("lookupInvite, requestOtp and register leave the token alone: no upper case, no ASCII digits, hyphens and underscores kept", async () => {
+    await authApi.lookupInvite(token);
+    await authApi.requestOtp({purpose: "invite", invite_token: token, locale: "fa"});
+    await authApi.register({invite_token: token, challenge_id: "c", code: "۱۲۳۴۵۶", locale: "fa"});
+    expect(calls[0]?.body).toEqual({token});
+    expect(calls[1]?.body).toEqual({purpose: "invite", invite_token: token, locale: "fa"});
+    expect(calls[2]?.body?.invite_token).toBe(token);
+  });
+});
+
 describe("authApi sends typed codes as ASCII digits", () => {
   it("loginOtp, register and resetVerify convert the SMS code", async () => {
     await authApi.loginOtp({phone: "09120000000", challenge_id: "c", code: "۱۲۳۴۵۶", remember_me: false});

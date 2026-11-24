@@ -44,7 +44,7 @@ export function PasskeysSection({me}: {me: Me}) {
 
   if (config.status === "loading") {
     return (
-      <AccountSection id="passkeys" title={t("sections.passkeys")}>
+      <AccountSection id="passkeys" title={t("sections.passkeys")} busy>
         <Skeleton aria-hidden className="h-16 w-full rounded-(--radius-box)" />
       </AccountSection>
     );
@@ -83,7 +83,7 @@ function PasskeysList({me}: {me: Me}) {
   if (hasCode(passkeys.error, "passkey_unavailable")) return null;
 
   return (
-    <AccountSection id="passkeys" title={t("sections.passkeys")}>
+    <AccountSection id="passkeys" title={t("sections.passkeys")} busy={passkeys.isPending}>
       {reviewPending ? <ReviewAlert onReviewing={(on) => (reviewing.current = on)} /> : null}
       {me.security.enforce_lift_at ? <LiftAlert at={me.security.enforce_lift_at} /> : null}
       {passkeys.isPending ? (

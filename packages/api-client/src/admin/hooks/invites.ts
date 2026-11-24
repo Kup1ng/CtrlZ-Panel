@@ -5,7 +5,7 @@ import type {components} from "../../generated/admin";
 import {shouldRetry} from "../../queryDefaults.ts";
 import {adminApi} from "../client.ts";
 
-// Spec 13.2. Invites. A list never holds a code; the code and link come once, from the create call.
+// Spec 13.2, D67. Invites. A list never holds a link; the link comes once, from the create call.
 
 type S = components["schemas"];
 export type InviteRow = S["InviteRow"];
@@ -34,7 +34,7 @@ export function useCreateInvite() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreateInviteRequest) => required(await adminApi.POST("/invites", {body})),
-    // Not returned, for the same reason as useCreateUser: the invite code is shown once and must not wait for the list (wp10-r6-2).
+    // Not returned, for the same reason as useCreateUser: the invite link is shown once and must not wait for the list (wp10-r6-2).
     onSuccess: () => {
       void queryClient.invalidateQueries({queryKey: inviteKeys.all});
     },

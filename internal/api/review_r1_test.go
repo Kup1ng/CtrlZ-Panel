@@ -372,12 +372,11 @@ func TestACursorBelongsToTheTenantThatGotIt(t *testing.T) {
 	b.get("/notifications?cursor="+encodeCursor(f.env.B.Tenant, at, id)).want(200, "")
 }
 
-// TestInviteNetCountsBadTokensOnly is tenant-r1-6: one honest invitation (lookup,
-// code request, register, with a typo) costs the network nothing, so a carrier
-// network can serve several people in 15 minutes. Only a token that turns out to
-// be bad is charged to invite_net; a live one is charged to the invite itself
-// (rule budget-keying).
-func TestInviteNetCountsBadTokensOnly(t *testing.T) {
+// TestSeveralInviteesOnOneNetworkAreAllServed is what tenant-r1-6 asked of invite_net, as D67 keeps it: honest
+// invitations (lookup, code request, register, with a typo) from one carrier network do not use up anything a
+// neighbour needs. The scope that counted bad tokens is gone: a link that does not open costs no throttle row
+// at all, so there is nothing a stranger can spend (TestABadInviteLinkCostsNoReadAndNoThrottleRow).
+func TestSeveralInviteesOnOneNetworkAreAllServed(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	c := f.client() // one network for everybody
 	for i := 0; i < 5; i++ {
@@ -393,16 +392,10 @@ func TestInviteNetCountsBadTokensOnly(t *testing.T) {
 		reg(f.codes.Last()).want(201, "")
 		f.ck.add(time.Minute) // under the rate classes of the routes
 	}
-	// The honest invitations above charged invite_net nothing. Ten bad tokens reach
-	// its limit, and the eleventh is refused.
-	for i := 0; i < 10; i++ {
-		c.requestOTP("+989125559999", "invite", map[string]any{"invite_token": "AAAAA-AAAAA-AAAAA-AAAAA"}).want(404, "invite_invalid")
-		f.ck.add(time.Minute)
+	// Every use counted on the invite it names and on nothing of the network: five invites, five rows.
+	if n := f.count(`SELECT count(*) FROM ctrlz.auth_throttle WHERE scope = 'invite_net'`); n != 5 {
+		t.Fatalf("%d invite throttle rows after five invitations, want one for each invite", n)
 	}
-	c.post("/auth/invites/lookup", map[string]any{"token": "AAAAA-AAAAA-AAAAA-AAAAA"}).want(429, "too_many_attempts")
-	// A live invite is never refused by the spent network budget.
-	live := f.plantInvite("+989125558888", time.Hour, false)
-	c.post("/auth/invites/lookup", map[string]any{"token": live}).want(200, "")
 }
 
 // TestOTPReauthCountsOnReauthUser is tenant-r1-15: the OTP path of reauth is

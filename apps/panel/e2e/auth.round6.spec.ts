@@ -3,6 +3,8 @@ import {otpChallengeId} from "@ctrlz/api-client/testing/fixtures.ts";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 
 import {
+  INVITE_TOKEN,
+  INVITE_TOKEN_B,
   allowAuthErrors,
   callsTo,
   err,
@@ -28,8 +30,8 @@ const PHONE = "09123456789";
 const PASSWORD = "correct horse battery";
 const OTP_ID = otpChallengeId(11);
 const issued = {status: 202, body: {challenge_id: OTP_ID, expires_in_s: 300, resend_after_s: 60}};
-const INVITE_A = "ABCDEFGHJKMNPQRSTVWX";
-const INVITE_B = "BCDEFGHJKMNPQRSTVWXY";
+const INVITE_A = INVITE_TOKEN;
+const INVITE_B = INVITE_TOKEN_B;
 
 /** A gate a handler waits on, opened by `release`. */
 function gate() {

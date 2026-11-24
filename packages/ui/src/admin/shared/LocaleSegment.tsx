@@ -4,7 +4,7 @@ import {localeAutonym, locales, type Locale} from "@ctrlz/i18n/locale.ts";
 import {Segment} from "@heroui-pro/react";
 import {useId} from "react";
 
-// The language of a message the admin has someone else receive (a new user's language, an invite's SMS). The labels are
+// The language of a message the admin has someone else receive (a new user's language, an invite's language). The labels are
 // the languages' own names, as in the language switch, so they do not change with the page language. The control has a
 // visible label and is named by it.
 

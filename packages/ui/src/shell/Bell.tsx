@@ -53,12 +53,13 @@ export function BellDialog() {
 
 function PanelBellDialog() {
   const t = useTranslations("shell");
-  const {entries, markRead} = useBellData();
+  const {entries, security, markRead, hasMore, moreUnread, loadingMore, loadMore} = useBellData();
   const dialog = useUrlDialog("notificationsDialog");
 
   return (
     <UrlModal dialog={dialog} title={t("bell.title")}>
-      <NotificationList entries={entries} onOpen={markRead} />
+      {/* Opening an ordinary item reads it. A security notice is read only by its own button (Question 19). */}
+      <NotificationList entries={entries} security={security} onOpen={markRead} onMark={markRead} hasMore={hasMore} loadingMore={loadingMore} onLoadMore={loadMore} moreUnread={moreUnread} />
     </UrlModal>
   );
 }

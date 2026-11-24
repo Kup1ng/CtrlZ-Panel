@@ -163,8 +163,9 @@ if [ "${CTRLZ_WEB_STACK:-0}" = 1 ]; then
   cleanup() {
     # shellcheck disable=SC2086
     docker compose -p "$project" $files --env-file "$work/env" down -v --remove-orphans >/dev/null 2>&1 || true
-    # The noop SMS driver wrote the run's login, reset and invite codes and the phone numbers here, in a folder that
-    # every user may write (the worker is uid 65532). A failed step must not leave them on a shared host (merge-r1-11).
+    # The noop SMS driver wrote the run's login, reset and registration codes and the phone numbers here, and the invite flow of the stack run
+    # wrote its token (D67: an invite is never texted), in a folder that every user may write (the worker is uid 65532). A failed step must not
+    # leave them on a shared host (merge-r1-11).
     rm -rf "$work" "$here/deploy/compose/e2e-out"
   }
   trap cleanup EXIT
@@ -317,11 +318,11 @@ if [ "${CTRLZ_WEB_STACK:-0}" = 1 ]; then
   done
 
   # 10f1. The real sign-ins above sent passwords, TOTP codes, SMS codes and cookies through Caddy and Next. None of them may be in a log of the
-  # front tier (merge-r3-10). The values are the ones the seed made and the codes the noop driver recorded (scripts/ci-web-leak-patterns.mjs). They go
+  # front tier (merge-r3-10). The values are the ones the seed made, the codes the noop driver recorded and the invite tokens the stack run wrote (scripts/ci-web-leak-patterns.mjs). They go
   # to grep through private files and only a count per container is printed, so a leak is not copied into the CI log. A log that cannot be read, or
   # is empty, fails the step: a scan of nothing is not a pass (merge-r4-8).
   (umask 077; : > "$work/leak-fixed"; : > "$work/leak-regex"; : > "$work/front.log")
-  node scripts/ci-web-leak-patterns.mjs "$E2E_SEED_FILE" deploy/compose/e2e-out/noop.jsonl "$work/leak-fixed" "$work/leak-regex" || fail "10f1: the patterns of the scan could not be made"
+  node scripts/ci-web-leak-patterns.mjs "$E2E_SEED_FILE" deploy/compose/e2e-out/noop.jsonl "$work/leak-fixed" "$work/leak-regex" deploy/compose/e2e-out/invite-tokens.txt || fail "10f1: the patterns of the scan could not be made"
   for service in caddy web-panel web-admin; do
     web_compose logs --no-color --no-log-prefix "$service" > "$work/front.log" 2>&1 || fail "10f1: could not read the log of $service"
     [ -s "$work/front.log" ] || fail "10f1: the log of $service is empty, so the scan would prove nothing"

@@ -61,6 +61,12 @@ export const loginOk = (state: "ready" | "setup_required"): MockReply => ({
   headers: {"set-cookie": "__Host-ctrlz_admin=e2e; Path=/; Secure; HttpOnly; SameSite=Strict"},
 });
 
+// What POST /invites answers (D67): the id and the link, once. The token is made up from a seed (140 characters of the token
+// alphabet, so that a secret scanner does not take it for a signed one) and signs nothing.
+export const INVITE_TOKEN = (`${"Admin-invite-fixture"}_Aa-09`).repeat(6).slice(0, 140);
+export const INVITE_LINK = `https://panel.example.ir/invite#${INVITE_TOKEN}`;
+export const INVITE_CREATED = {id: "10000000-0000-4000-8000-0000000000a9", link: INVITE_LINK};
+
 export const STRONG_PASSWORD = "k7#Vq2!mZp9@Lw4$Xt";
 export const TOTP_URI = "otpauth://totp/Ctrl%20Z:admin?secret=JBSWY3DPEHPK3PXP&issuer=Ctrl%20Z&period=30&digits=6&algorithm=SHA1";
 

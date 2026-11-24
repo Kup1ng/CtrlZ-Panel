@@ -3,6 +3,7 @@ import {otpChallengeId} from "@ctrlz/api-client/testing/fixtures.ts";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 
 import {
+  INVITE_TOKEN,
   allowAuthErrors,
   callsTo,
   err,
@@ -29,7 +30,7 @@ const PHONE = "09123456789";
 const OTP_ID = otpChallengeId(14);
 const issued = {status: 202, body: {challenge_id: OTP_ID, expires_in_s: 300, resend_after_s: 60}};
 const mfa = {body: {status: "mfa_required", ticket: "t", ticket_expires_in_s: 300, methods: ["totp"]}};
-const CODE = "ABCDEFGHJKMNPQRSTVWX";
+const CODE = INVITE_TOKEN;
 
 const options = (rpId: string) => ({
   publicKey: {challenge: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8", rpId, timeout: 60000, userVerification: "preferred"},
@@ -223,27 +224,27 @@ for (const {lang, dir} of LANGS) {
     });
   });
 
-  test.describe(`invite link without a code, ${lang} (${dir})`, () => {
+  test.describe(`invite link without a token, ${lang} (${dir})`, () => {
     test.use({viewport: {width: 1280, height: 800}});
     const T = (path: string) => text(lang, path);
 
-    test("wp8-r1-5: a fragment of punctuation asks for the code by hand and the page does not wait", async ({page, context}) => {
+    test("wp8-r1-5: a fragment of punctuation is the invalid state, with no lookup, and the page does not wait", async ({page, context}) => {
       const mock = await openAnonymous(context);
       await page.goto(`/${lang}/invite#---`);
-      await expect(field(page, "token")).toBeVisible();
+      await expect(page.getByRole("heading", {level: 1})).toHaveText(T("invite.invalidTitle"));
       await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
       expect(new URL(page.url()).hash).toBe("");
       expect(callsTo(mock, "POST", "/auth/invites/lookup")).toHaveLength(0);
     });
 
-    test("wp8-r1-5: a hashchange to such a fragment, and then to a real code, is read each time", async ({page, context}) => {
+    test("wp8-r1-5: a hashchange to such a fragment, and then to a real token, is read each time", async ({page, context}) => {
       const mock = await openAnonymous(context, {"POST /auth/invites/lookup": {body: inviteInfoFixture()}});
       await page.goto(`/${lang}/invite`);
       await expect(field(page, "token")).toBeVisible();
       await page.evaluate(() => {
         location.hash = "#---";
       });
-      await expect(field(page, "token")).toBeVisible();
+      await expect(page.getByRole("heading", {level: 1})).toHaveText(T("invite.invalidTitle"));
       await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
       await page.evaluate((code) => {
         location.hash = `#${code}`;

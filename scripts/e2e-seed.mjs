@@ -272,11 +272,13 @@ async function seed(out, envFile) {
     // field it can take (it has no credentials), so the seed sends a zero price (found by the first run, merge item step 10f).
     await expectStatus("sms gateway", await admin.call("PUT", "/sms/gateways/noop", {cost_per_message: "0"}), 200);
     // The router sends nothing for a template the gateway has no mapping for (code no_template, the worker logs it and the message is
-    // retried for ever), noop included, so every flow that sends a code needs the five mappings. Both locales: the router falls back to the
+    // retried for ever), noop included, so every flow that sends a text needs its mapping. Both locales: the router falls back to the
     // other one, but a test that asks for either must not depend on that. The ids and names are placeholders that only noop sees.
-    for (const key of ["otp", "otp_reset", "otp_phone", "invite", "account_exists"]) {
+    // The keys are the ones of internal/sms/templates.go. An invite is never texted (D67), so there is no `invite` key: the admin API
+    // answers 404 for it. account_exists and the two security notices of Question 19 carry no value, so they map no parameter name.
+    const templates = [["otp", ["code"]], ["otp_reset", ["code"]], ["otp_phone", ["code"]], ["account_exists", []], ["notice_passkey", []], ["notice_recovery", []]];
+    for (const [key, params] of templates) {
       for (const locale of ["fa", "en"]) {
-        const params = key === "account_exists" ? [] : ["code"];
         await expectStatus(`sms template ${key}/${locale}`, await admin.call("PUT", `/sms/gateways/noop/templates/${key}/${locale}`, {provider_template_id: "1", param_names: params}), 200);
       }
     }

@@ -57,7 +57,7 @@ function addressOf(entry: TrailEntry): string | undefined {
 }
 
 /**
- * A secret that the visitor arrives with in the address, the code of an invite link (`/invite#CODE`): the test opens that address, so the first
+ * A secret that the visitor arrives with in the address, the token of an invite link (`/invite#TOKEN`): the test opens that address, so the first
  * navigation holds it, and Next's own first replaceState writes the same address back. Those two kinds of entry are the link and not a leak. The page
  * is then meant to strip it (InviteFlow does, with one replaceState), so from the first address entry that no longer holds the secret, every entry
  * is judged like any other.

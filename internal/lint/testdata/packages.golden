@@ -51,7 +51,6 @@ internal/migrate
 internal/migrategen
 internal/mutant
 internal/netkey
-internal/netpool
 internal/ratelimit
 internal/reachcheck
 internal/reqledger

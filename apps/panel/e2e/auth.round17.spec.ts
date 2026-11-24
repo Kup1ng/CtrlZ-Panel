@@ -3,6 +3,7 @@ import {installApiMock} from "@ctrlz/api-client/testing/mock.ts";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 
 import {
+  INVITE_TOKEN,
   allowAuthErrors,
   callsTo,
   err,
@@ -28,7 +29,7 @@ test.beforeEach(({guard}) => allowAuthErrors(guard));
 
 const PHONE = "09123456789";
 const OTP_ID = otpChallengeId(5);
-const CODE = "ABCDEFGHJKMNPQRSTVWX";
+const CODE = INVITE_TOKEN;
 const issued = {status: 202, body: {challenge_id: OTP_ID, expires_in_s: 300, resend_after_s: 1}};
 
 function gate() {

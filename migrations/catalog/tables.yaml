@@ -109,10 +109,14 @@ global:
 value_columns:
   - announcements.tenant_id
   - invites.accepted_tenant_id
+  # Stamped by auth_otp_issue for the challenges of an account (question 15, 0061); a plain value, no foreign key.
+  - otp_challenges.tenant_id
 
 # Global tables that have row-level security ON, each with its named policies in policies.yaml.
 # Check 04 refuses RLS on any other global table, and refuses a listed table that has it off.
 global_rls:
+  - announcements
+  - auth_tickets
   - otp_challenges
   - sms_counters
 
@@ -153,6 +157,7 @@ named_constraints:
   - {table: catalog_service, name: catalog_service_wire_id_range, contains: "4294967295"}
   - {table: users, name: users_one_time_password, contains: "password_expires_at IS NULL"}
   - {table: webauthn_credentials, name: webauthn_credentials_name_len, contains: "char_length(name) <= 64"}
+  - {table: sms_outbox, name: sms_outbox_notice_bare, contains: "(params_ct IS NULL) AND (gateway_id IS NULL)"}
   - {table: phone_change_requests, name: phone_change_requests_lifetime, contains: "00:15:00"}
   # A counter a cap compares with never starts below zero (db-r10-1, rule caps-and-endings).
   - {table: sms_counters, name: sms_counters_count_not_negative, contains: "CHECK ((count >= 0))"}

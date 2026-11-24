@@ -216,7 +216,8 @@ services:
       # The api share of the container for Argon2 (spec 4.1): slots times memory per slot.
       CTRLZ_ARGON2_BUDGET_MIB: ${CTRLZ_API_ARGON2_BUDGET_MIB:-128}
       GOMEMLIMIT: ${GOMEMLIMIT_API:-200MiB}
-    secrets: [pg_tenant_password, valkey_password_api, kek_user_totp, kek_otp_delivery, kek_auth_mac]
+    # pub_invite_sign is the public half of the key that signs invite links (D67): the api can open a link and cannot make one.
+    secrets: [pg_tenant_password, valkey_password_api, kek_user_totp, kek_otp_delivery, kek_auth_mac, pub_invite_sign]
     healthcheck: &go-health-8080
       test: ["CMD", "/usr/local/bin/ctrlz", "healthcheck", "http://127.0.0.1:8080/healthz"]
       interval: 10s
@@ -245,7 +246,7 @@ services:
       # The admin container has 128 MiB: one 46 MiB hash, and no stored hash larger than the budget.
       CTRLZ_ARGON2_BUDGET_MIB: ${CTRLZ_ADMIN_ARGON2_BUDGET_MIB:-64}
       GOMEMLIMIT: ${GOMEMLIMIT_ADMIN:-96MiB}
-    secrets: [pg_admin_password, valkey_password_admin, kek_admin_totp, kek_sms_cred, kek_admin_mac]
+    secrets: [pg_admin_password, valkey_password_admin, kek_admin_totp, kek_sms_cred, kek_admin_mac, kek_invite_sign]
     healthcheck:
       <<: *go-health-8080
       test: ["CMD", "/usr/local/bin/ctrlz", "healthcheck", "http://127.0.0.1:8081/healthz"]
@@ -725,3 +726,8 @@ secrets:
     file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_sms_cred
   kek_admin_mac:
     file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_admin_mac
+  # The signing key of invite links is admin's alone (D67); its public half, which is no secret, is the api's alone.
+  kek_invite_sign:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_invite_sign
+  pub_invite_sign:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pub_invite_sign

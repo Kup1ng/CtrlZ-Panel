@@ -18,8 +18,6 @@ execute ctrlz_fn.auth_otp_check(p_id uuid, p_phone text, p_purpose text, p_code_
 execute ctrlz_fn.auth_otp_consume(p_id uuid, p_phone text, p_purpose text, p_code_hash bytea)
 execute ctrlz_fn.auth_otp_issue(p_phone text, p_purpose text, p_code_hash bytea, p_delivery_ct bytea, p_ip inet, p_trusted boolean)
 execute ctrlz_fn.auth_passkey_by_credential(p_credential_id bytea)
-execute ctrlz_fn.auth_phone_change_complete(p_request_id uuid)
-execute ctrlz_fn.auth_phone_mark_verified(p_user_id uuid, p_otp_id uuid)
 execute ctrlz_fn.auth_public_config()
 execute ctrlz_fn.auth_refresh_by_hash(p_hash bytea)
 execute ctrlz_fn.auth_register_user(p_phone text, p_password_hash text, p_locale text, p_invite_id uuid, p_otp_id uuid)
@@ -31,7 +29,6 @@ execute ctrlz_fn.auth_throttle_reset(p_scope text, p_key bytea)
 execute ctrlz_fn.auth_ticket_peek(p_token_hash bytea, p_kind text)
 execute ctrlz_fn.auth_ticket_put(p_token_hash bytea, p_kind text, p_tenant uuid, p_user uuid, p_remember boolean, p_first_factor text, p_payload bytea, p_ttl_seconds integer, p_subject_gen bigint)
 execute ctrlz_fn.auth_ticket_take(p_token_hash bytea, p_kind text)
-execute ctrlz_fn.auth_tickets_revoke(p_user_id uuid)
 execute ctrlz_fn.auth_token_by_hash(p_hash bytea)
 execute ctrlz_fn.auth_user_by_phone(p_phone text)
 execute ctrlz_fn.ip_claim_check(p_cidr cidr)
@@ -50,6 +47,7 @@ policy analytics_read_floors tenant_isolation ALL PERMISSIVE using=(tenant_id = 
 policy announcement_reads tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy api_tokens auth_lookup SELECT PERMISSIVE using=true check=-
 policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy auth_tickets auth_tickets_all ALL PERMISSIVE using=true check=true
 policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy block_pages tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
@@ -107,7 +105,6 @@ schema ctrlz_fn USAGE
 table admin_users INSERT (must_change_password, password_expires_at, password_hash, username)
 table admin_users SELECT (id, must_change_password, password_expires_at, totp_enabled_at, totp_last_step, totp_secret_ct)
 table admin_users UPDATE (must_change_password, password_changed_at, password_expires_at, password_hash, totp_enabled_at, totp_last_step, totp_secret_ct)
-table announcements SELECT
 table api_tokens SELECT (allowed_ips, id, kind, revoked_at, tenant_id, token_hash, user_id)
 table audit_log INSERT (action, admin_id, at, entry_hash, ip, params, prev_hash, target)
 table audit_log SELECT (entry_hash, id)
@@ -137,8 +134,6 @@ table otp_challenges DELETE
 table otp_challenges INSERT
 table otp_challenges SELECT
 table otp_challenges UPDATE
-table phone_change_requests SELECT (completed_at, created_at, expires_at, id, new_otp_id, new_phone_e164, old_otp_id, tenant_id, user_id)
-table phone_change_requests UPDATE (completed_at)
 table policy_outbox INSERT
 table profile_download_tokens SELECT (endpoint_id, expires_at, id, max_uses, params_hash, tenant_id, token_hash, uses)
 table public_settings SELECT
@@ -162,7 +157,7 @@ table tenants INSERT
 table tenants SELECT (id, status)
 table users INSERT
 table users SELECT (credential_gen, enforce_lift_at, enforce_passkey, id, must_reset, password_changed_at, password_expires_at, password_hash, phone_e164, phone_verified_at, tenant_id, totp_enabled_at, totp_pending_at, totp_secret_ct)
-table users UPDATE (enforce_passkey, must_reset, password_changed_at, password_expires_at, password_hash, phone_e164, phone_verified_at, totp_enabled_at, totp_last_step, totp_pending_at, totp_secret_ct)
+table users UPDATE (enforce_passkey, must_reset, password_changed_at, password_expires_at, password_hash, totp_enabled_at, totp_last_step, totp_pending_at, totp_secret_ct)
 table webauthn_config SELECT (allowed_origins, enabled, rp_id)
 table webauthn_credentials SELECT (aaguid, backup_eligible, backup_state, credential_id, id, public_key, rp_id, sign_count, stale_at, tenant_id, transports, user_id)
 table webauthn_credentials UPDATE (stale_at)

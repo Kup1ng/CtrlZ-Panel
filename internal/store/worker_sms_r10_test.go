@@ -38,7 +38,7 @@ func TestTheEndingStatementsWaitARecordBudgetPastTheLease(t *testing.T) {
 	}
 	var outbox uuid.UUID
 	if err := super.QueryRow(f.ctx, `INSERT INTO ctrlz.sms_outbox (kind, phone_e164, template_key, locale, params_ct, attempts)
-VALUES ('invite', '+989121110093', 'invite', 'fa', '\x01', $1) RETURNING id`, store.OutboxMaxAttempts).Scan(&outbox); err != nil {
+VALUES ('test', '+989121110093', 'otp', 'fa', '\x01', $1) RETURNING id`, store.OutboxMaxAttempts).Scan(&outbox); err != nil {
 		t.Fatal(err)
 	}
 	globalCount := func() int {

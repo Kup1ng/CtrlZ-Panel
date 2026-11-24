@@ -28,7 +28,7 @@ import {RefreshFailed} from "../shared/RefreshFailed.tsx";
 import {useCheckedWrite} from "../shared/useCheckedWrite.ts";
 import {useServerDraft, useServerForm} from "../shared/useServerDraft.ts";
 import {isTemplateId, providerLabel} from "./providers.ts";
-import {countSms, OTP_EN_MAX_UNITS, OTP_FA_MAX_UNITS, otpBodyRefusal, placeholders} from "./smsParts.ts";
+import {countSms, isNoticeKey, OTP_EN_MAX_UNITS, OTP_FA_MAX_UNITS, otpBodyRefusal, placeholders} from "./smsParts.ts";
 import {keepFocus, keepRetry} from "../shared/restoreFocus.ts";
 
 // Spec 13.3, the Templates tab. One card per template and language: the body editor with a live count of characters and
@@ -96,14 +96,19 @@ function TemplateCard({row, gateways}: {row: SmsTemplateRow; gateways: SmsGatewa
   // The API holds the three login-code templates to one billed part (422 body:too_long). The same rule is judged here on the text
   // as it will be sent, so the admin sees the reason before Save and not as a refusal after it (wp10-r17-1).
   const refusal = otpBodyRefusal(row.key, row.locale, cleanProse(body));
+  // The two security notices (Question 19) are held to one part too, but they are not login codes, and they take no value:
+  // a `{code}` in one is a refused body (the API counts zero markers for them), so it is said before Save as well.
+  const notice = isNoticeKey(row.key);
   const refusalText =
     refusal === "not_gsm"
-      ? t("sms.templates.otpNotGsm")
+      ? t(notice ? "sms.templates.noticeNotGsm" : "sms.templates.otpNotGsm")
       : refusal === "too_long"
         ? row.locale === "en"
-          ? t("sms.templates.otpTooLongEn", {limit: format.number(OTP_EN_MAX_UNITS)})
-          : t("sms.templates.otpTooLongFa", {limit: format.number(OTP_FA_MAX_UNITS)})
-        : null;
+          ? t(notice ? "sms.templates.noticeTooLongEn" : "sms.templates.otpTooLongEn", {limit: format.number(OTP_EN_MAX_UNITS)})
+          : t(notice ? "sms.templates.noticeTooLongFa" : "sms.templates.otpTooLongFa", {limit: format.number(OTP_FA_MAX_UNITS)})
+        : notice && body.includes("{code}")
+          ? t("sms.templates.noticeNoCode")
+          : null;
 
   async function submit() {
     if (busy.current || form.blocked || !dirty || conflict) return;
@@ -158,7 +163,7 @@ function TemplateCard({row, gateways}: {row: SmsTemplateRow; gateways: SmsGatewa
           >
             <Label>{t("sms.templates.body")}</Label>
             <TextArea rows={3} dir="auto" maxLength={1024} className="[overflow-wrap:anywhere]" />
-            <Description>{t("sms.templates.bodyHint")}</Description>
+            <Description>{t(notice ? "sms.templates.noticeHint" : "sms.templates.bodyHint")}</Description>
             <FieldError>{form.fieldMessage("body")}</FieldError>
           </TextField>
           {conflict ? (

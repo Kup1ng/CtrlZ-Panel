@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"time"
 
@@ -286,9 +287,11 @@ func (s *Server) ListNotifications(ctx context.Context, req gen.ListNotification
 		return nil, err
 	}
 	limit := pageLimit(req.Params.Limit)
-	out := gen.NotificationPage{Items: []gen.Notification{}}
-	err = s.readTenant(ctx, p.TenantID, func(tx store.Tx) error {
-		rows, err := tx.NotificationsPage(cur, limit+1) // one more, to know whether there is a next page
+	out := gen.NotificationPage{Items: []gen.Notification{}, SecurityItems: []gen.Notification{}}
+	// One snapshot for the four statements: the page and the count leave out the notices shown apart, and the
+	// notices shown apart are asked for later, so they must agree about which these are.
+	err = s.readTenantSnapshot(ctx, p.TenantID, func(tx store.Tx) error {
+		rows, err := tx.NotificationsPage(cur, limit+1, p.SessionID) // one more, to know whether there is a next page
 		if err != nil {
 			return err
 		}
@@ -299,27 +302,45 @@ func (s *Server) ListNotifications(ctx context.Context, req gen.ListNotification
 			out.NextCursor = &c
 		}
 		for _, n := range rows {
-			item := gen.Notification{
-				Id: n.ID, Kind: n.Kind, Severity: gen.NotificationSeverity(n.Severity), CreatedAt: n.CreatedAt, ReadAt: n.ReadAt,
-				Params: map[string]interface{}{},
-			}
-			_ = json.Unmarshal(n.Params, &item.Params)
-			if item.Params == nil {
-				item.Params = map[string]interface{}{}
-			}
-			if n.Link != "" {
-				l := n.Link
-				item.Link = &l
-			}
-			out.Items = append(out.Items, item)
+			out.Items = append(out.Items, notificationItem(n))
 		}
 		out.UnreadCount, err = tx.NotificationsUnread()
+		if err != nil {
+			return err
+		}
+		// The unread security notices are apart from the list and the badge (question 19, spec 12.3), the same
+		// on every page, each with whether this session may mark it.
+		sec, err := tx.SecurityNotices(p.SessionID)
+		if err != nil {
+			return err
+		}
+		for _, n := range sec {
+			out.SecurityItems = append(out.SecurityItems, notificationItem(n))
+		}
+		out.SecurityUnreadCount, err = tx.SecurityNoticesUnread()
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	return gen.ListNotifications200JSONResponse(out), nil
+}
+
+// notificationItem is the wire form of one notice.
+func notificationItem(n store.Notification) gen.Notification {
+	item := gen.Notification{
+		Id: n.ID, Kind: n.Kind, Severity: gen.NotificationSeverity(n.Severity), CreatedAt: n.CreatedAt, ReadAt: n.ReadAt,
+		Params: map[string]interface{}{}, Security: n.Security, Markable: n.Markable,
+	}
+	_ = json.Unmarshal(n.Params, &item.Params)
+	if item.Params == nil {
+		item.Params = map[string]interface{}{}
+	}
+	if n.Link != "" {
+		l := n.Link
+		item.Link = &l
+	}
+	return item
 }
 
 // ReadNotification is POST /notifications/{id}/read.
@@ -329,12 +350,19 @@ func (s *Server) ReadNotification(ctx context.Context, req gen.ReadNotificationR
 		return nil, err
 	}
 	err = s.inTenant(ctx, p.TenantID, func(tx store.Tx) error {
-		if ok, err := tx.NotificationRead(req.Id); err != nil {
+		res, err := tx.NotificationRead(req.Id, p.SessionID)
+		if err != nil {
 			return err
-		} else if !ok {
-			return httpx.NotFound()
 		}
-		return nil
+		switch res {
+		case store.NoticeMarked:
+			return nil
+		case store.NoticeLocked:
+			// A security notice that this session existed before: the one that caused it could hide the
+			// sign the owner would see, so only a newer session may read it (question 19, spec 12.3).
+			return httpx.New(http.StatusConflict, httpx.CodeConflict)
+		}
+		return httpx.NotFound()
 	})
 	if err != nil {
 		return nil, err

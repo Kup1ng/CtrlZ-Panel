@@ -3,6 +3,7 @@ import {otpChallengeId} from "@ctrlz/api-client/testing/fixtures.ts";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 
 import {
+  INVITE_TOKEN,
   allowAuthErrors,
   callsTo,
   err,
@@ -29,7 +30,7 @@ const OTP_ID = otpChallengeId(8);
 // One second, so the real clock is enough to wake the Resend button.
 const issued = {status: 202, body: {challenge_id: OTP_ID, expires_in_s: 300, resend_after_s: 1}};
 const mfa = (methods: string[] = ["totp"]) => ({body: {status: "mfa_required", ticket: "t", ticket_expires_in_s: 300, methods}});
-const CODE = "ABCDEFGHJKMNPQRSTVWX";
+const CODE = INVITE_TOKEN;
 
 const options = (rpId: string) => ({
   publicKey: {challenge: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8", rpId, timeout: 60000, userVerification: "preferred"},

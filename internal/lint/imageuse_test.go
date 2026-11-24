@@ -304,6 +304,28 @@ var shellFuncStart = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{`)
 // that holds anything else (a subcommand, a flag of another meaning) is not matched, so it still fails.
 var composeFlagsVar = regexp.MustCompile("(?m)^\\s*([A-Za-z_][A-Za-z0-9_]*)=\"(-f [^\\s\"$`]+(?: -f [^\\s\"$`]+)*)\"\\s*$")
 
+// composeFlagVars returns the variables that the script assigns nothing but `-f <file>` pairs. A name counts only when
+// every assignment of it in the text is such a pair line: a second `files="$files pull"` or `files+=" pull"` or
+// `files=$(...)` takes it out, so `$files` is then read as the word it can hold and the subcommand behind it is judged.
+// Assignments are counted by name wherever they stand in a line, so one after `;` or `then` is seen too. Counting more
+// than the shell assigns only makes the lint stricter. Only the forms NAME= and NAME+= are counted: `for NAME in`, `read NAME`,
+// `printf -v NAME` and `${NAME:=` assign the variable and are not seen, so a script that used one of them below its pair line
+// would keep `$files` exempt (webi-r2-10). No script does; the backlog entry says what closing it needs.
+func composeFlagVars(text string) map[string]bool {
+	pairs := map[string]int{}
+	for _, m := range composeFlagsVar.FindAllStringSubmatch(text, -1) {
+		pairs[m[1]]++
+	}
+	out := map[string]bool{}
+	for name, n := range pairs {
+		assign := regexp.MustCompile(`(?:^|[^A-Za-z0-9_$])` + regexp.QuoteMeta(name) + `\+?=`)
+		if len(assign.FindAllStringIndex(text, -1)) == n {
+			out[name] = true
+		}
+	}
+	return out
+}
+
 // dockerWrappers finds the shell functions of a text that run docker compose, and the physical lines of their
 // bodies. Derived from the text and not from the name `dc`, so a wrapper called anything is judged as the
 // command it stands for.
@@ -342,10 +364,7 @@ func dockerWrappers(text string) (names map[string]bool, lines map[int]bool) {
 func dockerImageProblems(path, text string) []string {
 	var out []string
 	wrappers, wrapperLines := dockerWrappers(text)
-	flagVars := map[string]bool{}
-	for _, m := range composeFlagsVar.FindAllStringSubmatch(text, -1) {
-		flagVars[m[1]] = true
-	}
+	flagVars := composeFlagVars(text)
 	nums, _, joined := logicalLines(text)
 	for k, ln := range joined {
 		trim := strings.TrimSpace(ln)

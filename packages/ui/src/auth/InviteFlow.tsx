@@ -2,7 +2,7 @@
 
 import {hasCode} from "@ctrlz/api-client/errors.ts";
 import {useAppFormat} from "@ctrlz/i18n/format.ts";
-import {Alert, Button, FieldError, Input, Label, Link, TextField} from "@heroui/react";
+import {Alert, Button, Description, FieldError, Input, Label, Link, TextField} from "@heroui/react";
 import {useLocale, useTranslations} from "next-intl";
 import {useEffect, useRef, useState} from "react";
 
@@ -19,19 +19,25 @@ import {authApi, type InviteInfo, type Locale} from "./authApi.ts";
 import {useAuthHref} from "./authHref.ts";
 import {hashOfHashChange} from "./inviteFragment.ts";
 import {createLookupStart} from "./lookupStart.ts";
-import {canonicalInvite, changeGrouped, groupCode, INVITE_LENGTH, INVITE_PLACEHOLDER, isFullInvite} from "./codes.ts";
+import {inviteTokenFromFragment, inviteTokenFromPaste, isInviteToken} from "./inviteToken.ts";
 import {RegisterConfirm, type Challenge} from "./RegisterConfirm.tsx";
 import {useAuthConfig} from "./useAuthConfig.ts";
 
-// Spec 10.5. The link is `/invite#<code>`. On mount the fragment is read and removed from the address bar
-// at once: it never reaches a server, but it should not sit in the history entry, in a screenshot or in the
-// referrer of the next page either. Without a fragment the visitor types the code, which is shown in groups
-// and sent as its canonical text. The code lives in component state and nowhere else (no storage). The one time it
-// is written into a URL again is the language switch, and only a code that came from a link: it goes into the other
-// language's fragment, which that page removes at once (wp8-r20-1, wp8-r21-3). A code the visitor typed is never
-// put in a URL, because a URL is recorded in the browser's global history and a typed code never was in one.
+// Spec 10.5, D67. The link is `/invite#<token>`, the token a signed, case-sensitive string of 140 characters that nobody
+// types. On mount the fragment is read and removed from the address bar at once: it never reaches a server, but it should
+// not sit in the history entry, in a screenshot or in the referrer of the next page either. Without a fragment the visitor
+// pastes the link (or the bare token) into one field; it is cut out, checked for its length and alphabet, and sent exactly
+// as it is (inviteToken.ts: nothing is folded, grouped or turned into ASCII). The token lives in component state and
+// nowhere else (no storage). The one time it is written into a URL again is the language switch, and only a token that came
+// from a link: it goes into the other language's fragment, which that page removes at once (wp8-r20-1, wp8-r21-3). A
+// pasted token is never put in a URL, because a URL is recorded in the browser's global history and a pasted token never was in one.
 
 type Phase = "reading" | "code" | "looking" | "info" | "confirm" | "invalid";
+
+/** Lets go of the token the page holds as far as a "Send code" that is on the wire is concerned (webi-r3-5). */
+function supersede(epoch: {current: number}) {
+  epoch.current += 1;
+}
 
 export function InviteFlow() {
   const t = useTranslations("auth");
@@ -42,58 +48,21 @@ export function InviteFlow() {
   const [info, setInfo] = useState<InviteInfo | null>(null);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [notice, setNotice] = useState<unknown>(null);
-  // Whether the code in `token` came from the link's fragment. The language switch carries only such a code in the
+  // Whether the token in `token` came from the link's fragment. The language switch carries only such a token in the
   // destination's fragment: it was in a URL already, so nothing new reaches the history, and the page that loads looks
-  // it up again instead of the switch being held off (wp8-r20-1). A code the visitor typed stays out of every URL
-  // (wp8-r21-3). Set when the fragment is taken, cleared when the visitor types over the code or starts again.
+  // it up again instead of the switch being held off (wp8-r20-1). A token the visitor pasted stays out of every URL
+  // (wp8-r21-3). Set when the fragment is taken, cleared when the visitor pastes another or starts again.
   const [fromLink, setFromLink] = useState(false);
-  // Only a whole code, and not one the server called invalid. The confirm step still holds the switch
+  // Only a whole token, and not one the server called invalid. The confirm step still holds the switch
   // (RegisterConfirm): its challenge cannot be carried, and another SMS would be sent.
-  useCarryAcrossLocaleSwitch(fromLink && phase !== "invalid" && phase !== "reading" && isFullInvite(token) ? token : null);
+  useCarryAcrossLocaleSwitch(fromLink && phase !== "invalid" && phase !== "reading" && isInviteToken(token) ? token : null);
   const consumed = useRef(false);
   // Which link the page is on. The effect below starts one lookup per number (lookupStart.ts says why not a flag).
   const [linkSeq, setLinkSeq] = useState(0);
   const [lookupStart] = useState(createLookupStart);
-
-  // The fragment is taken when the page loads, once however many times a development build runs the effect
-  // (the second run would find it gone and show the empty field), and again when it changes without a load:
-  // a link pasted into the address bar of a tab that is already on this page is a `hashchange`, not a load.
-  // The address bar is an external system that only the browser can read, and only after hydration, so the
-  // state is set here and not derived.
-  //
-  // Two things about the router (gate-r21-1, -9). The code of a `hashchange` is read from the event's `newURL`: by the
-  // time the listener runs, Next's router may have written its canonical URL, which has no fragment, over the one the
-  // visitor pasted. And the strip goes through the router's own `replaceState`, once the router has installed it: a
-  // mount effect runs before the router's, and a strip made then reaches the browser's native method, which drops the
-  // router's marker from the entry (a Back to it shows another page) and leaves the router holding the code.
-  useEffect(() => {
-    const take = (hash: string): boolean => {
-      if (!hash) return false;
-      const linkCode = canonicalInvite(hash.replace(/^#/, ""));
-      replaceUrlAfterRouterMount(() => (window.location.hash ? `${window.location.pathname}${window.location.search}` : null));
-      if (linkCode) {
-        setToken(linkCode);
-        setFromLink(true);
-        setNotice(null);
-        setLinkSeq((n) => n + 1);
-        setPhase("looking");
-      } else {
-        // A fragment with no letter or digit in it (a link a chat app has mangled, `#---`) carries no code.
-        // The page must not wait for a lookup that will never start: it asks for the code by hand (wp8-r1-5).
-        setPhase("code");
-      }
-      return true;
-    };
-    if (!consumed.current) {
-      consumed.current = true;
-      // The address bar can be read only in the browser and after hydration, so this one read of an external system is the state's source.
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above: the fragment is external, and no render can derive it
-      if (!take(window.location.hash)) setPhase("code");
-    }
-    const onHashChange = (event: HashChangeEvent) => void take(hashOfHashChange(event.newURL, window.location.hash));
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
-  }, []);
+  // Which token the page holds, as a number: take() and restart() bump it, and a "Send code" answer that was asked under an
+  // older number is dropped (webi-r3-5). `lookup.cancel` does the same for the lookup on the wire; this is the send's.
+  const sendEpoch = useRef(0);
 
   const lookup = useLookup({
     onInfo: (found) => {
@@ -108,7 +77,60 @@ export function InviteFlow() {
       setPhase("code");
     },
   });
-  // A link that carried the code looks it up straight away.
+
+  // The fragment is taken when the page loads, once however many times a development build runs the effect
+  // (the second run would find it gone and show the empty field), and again when it changes without a load:
+  // a link pasted into the address bar of a tab that is already on this page is a `hashchange`, not a load.
+  // The address bar is an external system that only the browser can read, and only after hydration, so the
+  // state is set here and not derived.
+  //
+  // Two things about the router (gate-r21-1, -9). The token of a `hashchange` is read from the event's `newURL`: by the
+  // time the listener runs, Next's router may have written its canonical URL, which has no fragment, over the one the
+  // visitor pasted. And the strip goes through the router's own `replaceState`, once the router has installed it: a
+  // mount effect runs before the router's, and a strip made then reaches the browser's native method, which drops the
+  // router's marker from the entry (a Back to it shows another page) and leaves the router holding the token.
+  const cancelLookup = lookup.cancel;
+  useEffect(() => {
+    const take = (hash: string): boolean => {
+      if (!hash) return false;
+      const linkToken = inviteTokenFromFragment(hash);
+      replaceUrlAfterRouterMount(() => (window.location.hash ? `${window.location.pathname}${window.location.search}` : null));
+      if (linkToken === null) {
+        // Something is there and it is not a token (a link a chat app has cut or mangled, `#---`): the one `invite_invalid`
+        // state, with no lookup spent on a string that cannot be signed. The page does not wait for a lookup that will
+        // never start (wp8-r1-5); "Try another link" leads to the paste field.
+        // A lookup of an earlier link may still be on the wire: its answer would put that invite's number on a page that holds no
+        // token (webi-r1-8), so it is superseded here, and the token that came from a link is gone with the state.
+        cancelLookup();
+        supersede(sendEpoch);
+        setToken("");
+        setFromLink(false);
+        setInfo(null);
+        setChallenge(null);
+        setNotice(null);
+        setPhase("invalid");
+      } else {
+        supersede(sendEpoch);
+        setChallenge(null);
+        setToken(linkToken);
+        setFromLink(true);
+        setNotice(null);
+        setLinkSeq((n) => n + 1);
+        setPhase("looking");
+      }
+      return true;
+    };
+    if (!consumed.current) {
+      consumed.current = true;
+      // The address bar can be read only in the browser and after hydration, so this one read of an external system is the state's source.
+      if (!take(window.location.hash)) setPhase("code");
+    }
+    const onHashChange = (event: HashChangeEvent) => void take(hashOfHashChange(event.newURL, window.location.hash));
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [cancelLookup]);
+
+  // A link that carried the token looks it up straight away.
   // `run` is the one stable member of `lookup` (a new object each render would re-run this effect after every commit).
   const run = lookup.run;
   useEffect(() => {
@@ -117,6 +139,9 @@ export function InviteFlow() {
   }, [phase, token, linkSeq, run, lookupStart]);
 
   const restart = () => {
+    // The same rule as a bad link: an answer that is still coming belongs to a token this page no longer holds.
+    lookup.cancel();
+    supersede(sendEpoch);
     setToken("");
     setFromLink(false);
     setInfo(null);
@@ -173,6 +198,7 @@ export function InviteFlow() {
         token={token}
         info={info}
         notice={notice}
+        sendEpoch={sendEpoch}
         onSend={() => setNotice(null)}
         smsAvailable={config.status === "ready" ? config.smsAvailable : true}
         onSent={(sent) => {
@@ -189,10 +215,9 @@ export function InviteFlow() {
   return (
     <CodeStep
       token={token}
-      onToken={(canonical) => {
-        setToken(canonical);
-        setFromLink(false);
-      }}
+      onToken={setToken}
+      // Any edit of the field takes the offer of the link's token back: what is in it is no longer the link (wp8-r21-3).
+      onEdit={() => setFromLink(false)}
       notice={notice}
       lookup={lookup}
     />
@@ -210,9 +235,9 @@ function useLookup({
   onFailed: (error: unknown) => void;
 }) {
   const [pending, setPending] = useState(false);
-  // Which lookup is the current one, and which code is on the wire. A second link pasted while the first lookup
+  // Which lookup is the current one, and which token is on the wire. A second link pasted while the first lookup
   // runs starts its own lookup, and the first one's answer is dropped when it arrives: it would otherwise put
-  // the first invite's number on a page whose token is the second (wp8-r6-2). The same code twice is one lookup.
+  // the first invite's number on a page whose token is the second (wp8-r6-2). The same token twice is one lookup.
   const latestRun = useRef(0);
   const inFlight = useRef<string | null>(null);
   // The callbacks change on every render, and the effect that starts a lookup must not run again for that.
@@ -221,13 +246,13 @@ function useLookup({
     latest.current = {onInfo, onInvalid, onFailed};
   });
 
-  const [run] = useState(() => async (code: string, report?: (error: unknown) => void) => {
-    if (inFlight.current === code) return;
+  const [run] = useState(() => async (token: string, report?: (error: unknown) => void) => {
+    if (inFlight.current === token) return;
     const mine = ++latestRun.current;
-    inFlight.current = code;
+    inFlight.current = token;
     setPending(true);
     try {
-      const found = await authApi.lookupInvite(code);
+      const found = await authApi.lookupInvite(token);
       if (mine === latestRun.current) latest.current.onInfo(found);
     } catch (error) {
       if (mine !== latestRun.current) return;
@@ -242,26 +267,39 @@ function useLookup({
       }
     }
   });
-  return {run, pending};
+  // Supersedes the lookup on the wire: its answer is dropped when it arrives and the wait ends now.
+  const [cancel] = useState(() => () => {
+    latestRun.current++;
+    inFlight.current = null;
+    setPending(false);
+  });
+  return {run, pending, cancel};
 }
 
 function CodeStep({
   token,
   onToken,
+  onEdit,
   notice,
   lookup,
 }: {
+  /** The token the visitor is on (a link's whose lookup failed, say): the field starts with it, so a retry needs no second paste. */
   token: string;
-  onToken: (canonical: string) => void;
+  /** A token that passed the shape check and is about to be looked up. */
+  onToken: (pasted: string) => void;
+  onEdit: () => void;
   notice: unknown;
   lookup: ReturnType<typeof useLookup>;
 }) {
   const t = useTranslations("auth");
+  const errors = useTranslations("errors");
   const href = useAuthHref();
   const form = useApiForm({focus: "token"});
+  // What is in the field: a whole link or a bare token, as pasted. It is state of this step only (never a URL, never storage).
+  const [text, setText] = useState(token);
 
-  // A failure of the lookup that the link started arrives as `notice`. It goes through the form like a typed
-  // code's failure does, so a 429 starts its wait here too and the button stays disabled until it ends, instead
+  // A failure of the lookup that the link started arrives as `notice`. It goes through the form like a pasted
+  // link's failure does, so a 429 starts its wait here too and the button stays disabled until it ends, instead
   // of letting each press send a lookup that is refused again (wp8-r2-4). Once per notice.
   const {fail} = form;
   const shownFor = useRef<unknown>(null);
@@ -273,9 +311,14 @@ function CodeStep({
 
   function submit() {
     if (lookup.pending || form.blocked) return;
-    if (!isFullInvite(token)) return form.setFieldError("token", t("fields.inviteCode.required"));
+    if (text.trim() === "") return form.setFieldError("token", t("fields.inviteLink.required"));
+    // The shape is checked before a lookup is spent. A paste that is not a token gets the one invite_invalid text: the
+    // page says nothing about why, and a shape check reveals nothing about any invite.
+    const pasted = inviteTokenFromPaste(text);
+    if (pasted === null) return form.setFieldError("token", errors("invite_invalid"));
     form.clear();
-    void lookup.run(token, (error) => void form.fail(error));
+    onToken(pasted);
+    void lookup.run(pasted, (error) => void form.fail(error));
   }
 
   return (
@@ -288,18 +331,15 @@ function CodeStep({
           autoComplete="off"
           isDisabled={lookup.pending}
           isInvalid={form.fieldMessage("token") !== undefined}
-          value={groupCode(token)}
-          onChange={form.bind("token", (text: string) => changeGrouped(text, INVITE_LENGTH, onToken)).onChange}
+          value={text}
+          onChange={form.bind("token", (next: string) => {
+            setText(next);
+            onEdit();
+          }).onChange}
         >
-          <Label>{t("fields.inviteCode.label")}</Label>
-          <Input
-            dir="ltr"
-            className="text-start font-mono"
-            placeholder={INVITE_PLACEHOLDER}
-            autoCapitalize="characters"
-            autoCorrect="off"
-            spellCheck={false}
-          />
+          <Label>{t("fields.inviteLink.label")}</Label>
+          <Input dir="ltr" className="text-start font-mono" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+          <Description>{t("fields.inviteLink.hint")}</Description>
           <FieldError>{form.fieldMessage("token")}</FieldError>
         </TextField>
         <FormError error={form.formError} onRetry={submit} />
@@ -319,6 +359,7 @@ function InfoStep({
   token,
   info,
   notice,
+  sendEpoch,
   onSend,
   smsAvailable,
   onSent,
@@ -328,6 +369,8 @@ function InfoStep({
   token: string;
   info: InviteInfo;
   notice: unknown;
+  /** Bumped when the page lets go of this token; an answer asked under an older number is not acted on (webi-r3-5). */
+  sendEpoch: {readonly current: number};
   /** The request starts: the notice of the step we came back to goes (wp8-r3-2). */
   onSend: () => void;
   smsAvailable: boolean;
@@ -346,10 +389,13 @@ function InfoStep({
     setPending(true);
     form.clear();
     onSend();
+    const mine = sendEpoch.current;
     try {
       const issued = await authApi.requestOtp({purpose: "invite", invite_token: token, locale});
-      onSent({id: issued.challenge_id, readyAt: Date.now() + issued.resend_after_s * 1000});
+      // The page moved to another token (or none) while the SMS was being asked for: its number is not the one this answer is for.
+      if (mine === sendEpoch.current) onSent({id: issued.challenge_id, readyAt: Date.now() + issued.resend_after_s * 1000});
     } catch (error) {
+      if (mine !== sendEpoch.current) return;
       if (hasCode(error, "invite_invalid", "registration_closed")) onInvalid();
       else form.fail(error);
     } finally {

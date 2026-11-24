@@ -3,6 +3,7 @@ import type {Page} from "@playwright/test";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 
 import {
+  INVITE_TOKEN,
   allowAuthErrors,
   callsTo,
   field,
@@ -24,7 +25,7 @@ const PHONE = "09123456789";
 const OTP_ID = otpChallengeId(6);
 // One second, so the real clock is enough to wake the button.
 const issued = {status: 202, body: {challenge_id: OTP_ID, expires_in_s: 300, resend_after_s: 1}};
-const CODE = "ABCDEFGHJKMNPQRSTVWX";
+const CODE = INVITE_TOKEN;
 
 for (const {lang, dir} of LANGS) {
   test.describe(`resend, ${lang} (${dir})`, () => {

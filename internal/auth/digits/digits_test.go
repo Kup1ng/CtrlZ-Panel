@@ -8,12 +8,15 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/google/uuid"
+
 	"github.com/Kup1ng/CtrlZ-Panel/internal/appclock"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/digits"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/invite"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/otp"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/recovery"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/totp"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/keyring"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 )
 
@@ -77,8 +80,22 @@ func TestEveryTypedCodeSurvivesTheSameMarks(t *testing.T) {
 	}
 	recCode := strings.ReplaceAll(rec.Codes[0].Reveal(), "-", "")
 	smsCode := "482915"
-	// The invite code is the fourth typed code (round 15, tenant-r15-1 and -5): the same table.
-	inviteCode := "0123456789ABCDEFGHJK"
+	// The invite link is the fourth pasted value (round 15, tenant-r15-1 and -5; D67): the same table, minus the
+	// wrappers that add a hyphen, because a hyphen is a base64url character of the token and is kept.
+	inviteRing, err := keyring.NewEphemeral(keyring.DomainInviteSign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invitePub, err := inviteRing.Public(keyring.DomainInviteSign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inviteID := uuid.New()
+	inviteTok, _, err := invite.Mint(inviteRing, inviteID, now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inviteCode := inviteTok.Reveal()
 	split := func(s string, n int) []string {
 		var out []string
 		for len(s) > n {
@@ -98,16 +115,20 @@ func TestEveryTypedCodeSurvivesTheSameMarks(t *testing.T) {
 		if got, ok := recovery.Canonical(w(split(recCode, 4))); !ok || got != recCode {
 			t.Errorf("recovery code, %s: %q %v", name, got, ok)
 		}
-		if got, ok := invite.Canonical(w(split(inviteCode, 5))); !ok || got != inviteCode {
-			t.Errorf("invite code, %s: %q %v", name, got, ok)
+		if strings.Contains(name, "hyphen") {
+			continue
+		}
+		if ref, ok := invite.Open(invitePub, now, w(split(inviteCode, 5))); !ok || ref.ID != inviteID {
+			t.Errorf("invite link, %s: %v", name, ok)
 		}
 	}
-	// Persian and Arabic digits are the digits of the code, as in the other three.
-	if got, ok := invite.Canonical("۰۱۲۳۴۵۶۷۸۹ABCDEFGHJK"); !ok || got != inviteCode {
-		t.Errorf("invite code with Persian digits: %q %v", got, ok)
+	// Persian and Arabic digits are the digits of the link, as in the other three.
+	persian := strings.NewReplacer("0", "۰", "1", "۱", "2", "۲", "3", "۳", "4", "۴", "5", "۵", "6", "۶", "7", "۷", "8", "۸", "9", "۹").Replace(inviteCode)
+	if ref, ok := invite.Open(invitePub, now, persian); !ok || ref.ID != inviteID {
+		t.Errorf("invite link with Persian digits: %v", ok)
 	}
-	if _, ok := invite.Canonical(inviteCode[:19] + "U"); ok {
-		t.Error("invite: U is not in the alphabet")
+	if _, ok := invite.Open(invitePub, now, inviteCode[:len(inviteCode)-1]+"."); ok {
+		t.Error("invite: a visible stray character was read as part of the link")
 	}
 	// The control: a visible stray character is still not a code, in all three.
 	if otp.NormalizeCode("48x915") == smsCode {
@@ -169,6 +190,20 @@ func TestEveryTypedCodeDropsEveryPasteMark(t *testing.T) {
 	}
 	recCode := strings.ReplaceAll(rec.Codes[0].Reveal(), "-", "")
 	const smsCode = "482915"
+	inviteRing, err := keyring.NewEphemeral(keyring.DomainInviteSign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invitePub, err := inviteRing.Public(keyring.DomainInviteSign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inviteID := uuid.New()
+	inviteTok, _, err := invite.Mint(inviteRing, inviteID, now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inviteCode := inviteTok.Reveal()
 	for _, m := range marks {
 		w := func(s string) string { return string(m) + s[:3] + string(m) + s[3:] + string(m) }
 		if got := otp.NormalizeCode(w(smsCode)); got != smsCode {
@@ -180,9 +215,8 @@ func TestEveryTypedCodeDropsEveryPasteMark(t *testing.T) {
 		if got, ok := recovery.Canonical(w(recCode)); !ok || got != recCode {
 			t.Errorf("recovery code with U+%04X: %q %v", m, got, ok)
 		}
-		const inviteCode = "0123456789ABCDEFGHJK"
-		if got, ok := invite.Canonical(string(m) + inviteCode[:5] + string(m) + inviteCode[5:] + string(m)); !ok || got != inviteCode {
-			t.Errorf("invite code with U+%04X: %q %v", m, got, ok)
+		if ref, ok := invite.Open(invitePub, now, string(m)+inviteCode[:5]+string(m)+inviteCode[5:]+string(m)); !ok || ref.ID != inviteID {
+			t.Errorf("invite link with U+%04X: %v", m, ok)
 		}
 		if got := digits.Typed(string(m)); got != "" {
 			t.Errorf("Typed(U+%04X) = %q, want nothing", m, got)

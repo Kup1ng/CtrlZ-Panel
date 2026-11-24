@@ -52,8 +52,19 @@ export function notificationFixture(over: Partial<Notification> = {}): Notificat
     severity: "info",
     params: {},
     created_at: "2026-11-10T08:00:00Z",
+    // Made required by the security notices of D67 (Question 19). An ordinary notice is not one and can be marked by any session.
+    security: false,
+    markable: true,
     ...over,
   };
+}
+
+/**
+ * An unread security notice of Question 19 (a passkey added). `markable` is the API's verdict for the asking session: true for
+ * a session made after the notice, false for one that existed when it was made. A read one is markable, as the API says.
+ */
+export function securityNoticeFixture(over: Partial<Notification> = {}): Notification {
+  return notificationFixture({kind: "passkey_added", severity: "info", security: true, markable: true, created_at: "2026-11-12T08:00:00Z", ...over});
 }
 
 export function announcementFixture(over: Partial<Announcement> = {}): Announcement {

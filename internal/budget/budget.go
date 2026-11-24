@@ -108,7 +108,7 @@ const (
 	PartTokenSession Part = "token_session" // the id of the session a cookie opens, read from the body its tag covers (session.Manager.Screen); live or dead
 	PartMarker       Part = "marker"        // the random id inside a device marker whose seal checked
 	PartAdminSession Part = "admin_session" // the id of an admin session whose cookie checked and that is live
-	PartInvite       Part = "invite"        // the id of an invite that exists and is live
+	PartInvite       Part = "invite"        // the id inside an invite link whose signature checked
 	PartUserSession  Part = "user_session"  // the id of a tenant session whose cookie checked and that is live (session.Principal.SessionID)
 	PartChallenge    Part = "challenge"     // the id of an OTP challenge whose tag checked (otp.Service.OpenChallenge)
 )
@@ -211,12 +211,12 @@ type Bucket struct {
 	// place (round 8, tenant-r8-4).
 	HeldProof Part
 
-	// HeldInvite: for a HeldProof class, says a live invite takes the network's place as well (round 9, tenant-r9-1).
-	// The invite is the one proof that has no seal the pipeline can open: it is a token that names a row, and
-	// only the handler can read it. So the pipeline hands over the plain refusal of a request with no marker too
+	// HeldInvite: for a HeldProof class, says an invite link whose signature checks takes the network's place as well
+	// (round 9, tenant-r9-1; D67). The pipeline cannot open the link of an otp request (the purpose and the token are
+	// in the body, and the handler reads them), so it hands over the plain refusal of a request with no marker too
 	// (it costs the schema check and the decode, in process, and no I/O), and the handler asks
-	// httpx.InviteProofHolds once the invite is shown live: the invite's own buckets (keyed on the invite id, the
-	// ProofPart keys of the class) are charged, the plain token is given back, and a token that is not live gets the
+	// httpx.InviteProofHolds once the link is opened in process: the invite's own buckets (keyed on the invite id, the
+	// ProofPart keys of the class) are charged, the plain token is given back, and a token that does not open gets the
 	// plain bucket's answer. A request that is not an invite request is answered with the refusal before anything is
 	// read. Without it a closed-mode invitee on a carrier /24 that strangers had filled could not get the code that
 	// registration needs (rule budget-keying: a network bucket never refuses a live proof).
@@ -319,7 +319,7 @@ func All() []Bucket {
 			HeldProof: PartMarker, HeldInvite: true,
 			Deferred: "whether the marker holds for the account of the phone asked for is known only once the handler has read " +
 				"the phone and the account, so the pipeline charges the plain bucket and hands the refusal over; a request whose " +
-				"marker holds, and a live invite (purpose invite, the only way into a closed registration), is let through on its own buckets and given its plain token back, every other is refused"},
+				"marker holds, and an invite link whose signature checks (purpose invite, the only way into a closed registration; the row is read after, and a used or revoked one still passes here), is let through on its own buckets and given its plain token back, every other is refused"},
 		{Layer: RateClass, Service: Tenant, Name: "otp-send-user", Source: Subject, Parts: []Part{PartSession},
 			Limits: []Limit{{Max: 5, Per: time.Minute}, {Max: 30, Per: time.Hour}}, FailClosed: true},
 		{Layer: RateClass, Service: Tenant, Name: "user-read", Source: Subject, Parts: []Part{PartSession}, Limits: perMin(300)},
@@ -432,15 +432,9 @@ func All() []Bucket {
 		// stored under login_phone: the key is an HMAC over the scope's own name.
 		{Layer: Throttle, Service: Tenant, Name: "otp_verify_challenge", Store: "otp_verify_net", Source: Proof, Parts: []Part{PartChallenge},
 			Max: 30, Window: m15},
-		{Layer: Throttle, Service: Tenant, Name: "invite_net", Source: Network, Parts: []Part{PartNetwork},
-			Max: 10, Window: m15, ProofBucket: "invite_use"},
-		// The IPv6 /48 of invite_net (round 11, tenant-r11-4): a /48 holds 65,536 /64s, each of which would otherwise
-		// be a network of its own, with its own ten tries and its own row in auth_throttle. Charged before invite_net,
-		// and a refusal by it ends the charge, so a rotator spends its /48 and writes no row per /64 after that. Four
-		// times the /64's limit, as every Wide bucket is. Stored under invite_net like login_marker is stored under
-		// login_phone: the key is an HMAC over the scope's own name, and the database needs no new name.
-		{Layer: Throttle, Service: Tenant, Name: "invite_net48", Store: "invite_net", Source: Network, Parts: []Part{PartWide},
-			Max: 40, Window: m15, ProofBucket: "invite_use"},
+		// Every use of an invite link whose signature checks (D67), keyed on the id inside it. A link that does not check
+		// is refused in process with no row, so there is no scope for a bad token: the network class of the route bounds
+		// what a stranger can ask. The database scope stays "invite_net", the name its CHECK knows.
 		{Layer: Throttle, Service: Tenant, Name: "invite_use", Store: "invite_net", Source: Proof, Parts: []Part{PartInvite},
 			Max: 30, Window: m15},
 
@@ -576,53 +570,6 @@ func Gates() []GateBucket {
 			NoSubject: "admin accounts are made at the console by the owner and the gate has one slot, so a bound per account would be a bound on the owner"},
 		{Service: Tenant, Name: "argon2", Proofs: []Part{PartMarker, PartSession}, PerSubject: true},
 	}
-}
-
-// NetPool is a bucket that bounds work in flight, per source network and for the process, and is not a counter in a
-// store: a few slots that a request takes for the length of one read and gives back (round 11, tenant-r11-4; the
-// pool twin of GateBucket). It is registered here for the reason every network bucket is: one declaration, one key
-// source, and a test that drives it the way a stranger would (internal/budget
-// TestAbuseANetworkPoolIsBoundedPerNetworkPer48AndForTheProcess, generated for every row). Round 10 built one by hand
-// in internal/api that bounded a /24 or a /64 and nothing wider, so one IPv6 /48 (65,536 /64s) held every slot of
-// the process.
-//
-// A request takes, in this order and without ever waiting, one place of its network (the /24 of an IPv4 address, the
-// /64 of an IPv6 one), one place of its /48 (IPv6 only) and one slot of the process; a refusal at any step gives back
-// everything the earlier steps took, tokens included, so a refused request costs the network nothing but the
-// refusal. internal/netpool is the only implementation, and internal/lint
-// TestNoCodeKeysAnythingOnTheNetworkOutsideTheRegistry holds every other file to it.
-type NetPool struct {
-	Service Service
-	Name    string
-	// Slots is the number of reads the whole process holds at once, a little more than the networks it expects.
-	Slots int
-	// Concurrency is how many reads one network, and one /48, holds at a time.
-	Concurrency int
-	// Burst and Refill are a network's token bucket: Burst reads at once, Refill more a second. A /48 has WideFactor
-	// times both, and the same Concurrency, so the whole allocation of one subscriber is one source, as everywhere.
-	Burst      int
-	Refill     float64
-	WideFactor int
-	// Why says what the pool protects, for the reader of the registry.
-	Why string
-}
-
-// NetPools returns every network pool. A function, as All is.
-func NetPools() []NetPool {
-	return []NetPool{
-		{Service: Tenant, Name: "invite-read", Slots: 8, Concurrency: 1, Burst: 30, Refill: 2, WideFactor: 4,
-			Why: "the read of an invite for a code request that the otp-send bucket of the network refused (spec 5.3): one indexed read and one throttle write per well-shaped token, which only the handler can tell from a live one"},
-	}
-}
-
-// FindNetPool returns the pool of that service and name.
-func FindNetPool(s Service, name string) (NetPool, bool) {
-	for _, p := range NetPools() {
-		if p.Service == s && p.Name == name {
-			return p, true
-		}
-	}
-	return NetPool{}, false
 }
 
 // groupTOTP is the CeilingGroup of the tenant's second-factor scopes: one run of guesses at one account's code.

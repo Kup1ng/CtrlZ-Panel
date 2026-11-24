@@ -743,6 +743,13 @@ func TestEveryDomainHasOneMode(t *testing.T) {
 			if !macPanics || verifies {
 				t.Errorf("%s: a sealed domain made or verified a MAC: its key is an AES key", d)
 			}
+		case ModeSigning:
+			if uerr == nil || lerr == nil {
+				t.Errorf("%s: a signing domain sealed: its key is an Ed25519 seed", d)
+			}
+			if !macPanics || verifies {
+				t.Errorf("%s: a signing domain made or verified a MAC", d)
+			}
 		case ModeLabeled:
 			if uerr == nil {
 				t.Errorf("%s: a labeled domain accepted the unlabeled seal: its key is also an AES key", d)

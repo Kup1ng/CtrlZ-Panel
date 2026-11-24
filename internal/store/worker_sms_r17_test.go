@@ -30,7 +30,7 @@ FROM generate_series(1, $1) n`, backlog); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := super.Exec(f.ctx, `INSERT INTO ctrlz.sms_outbox (id, kind, phone_e164, template_key, locale, params_ct)
-SELECT gen_random_uuid(), 'invite', '+9891212' || lpad(n::text, 5, '0'), 'invite', 'fa', '\x01'
+SELECT gen_random_uuid(), 'test', '+9891212' || lpad(n::text, 5, '0'), 'otp', 'fa', '\x01'
 FROM generate_series(1, $1) n`, backlog); err != nil {
 		t.Fatal(err)
 	}

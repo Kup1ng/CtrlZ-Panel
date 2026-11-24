@@ -98,6 +98,8 @@ function SessionsPanel({close}: {close: () => void}) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Question 17: a Remember me session can be past its two idle hours and still listed, because a refresh brings it back. last_seen_at says so; no row is called ended or left out. */}
+      <p className="text-muted text-xs">{t("sessions.rememberNote")}</p>
       <ul ref={list} tabIndex={-1} aria-label={t("sessions.listLabel")} className="divide-separator flex flex-col divide-y outline-none">
         {rows.map((row) => (
           <li key={row.id} data-session={row.id} data-current={row.current || undefined} className="flex flex-wrap items-start gap-x-3 gap-y-2 py-3 first:pt-0">

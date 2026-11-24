@@ -17,7 +17,7 @@ import {gridOf, restoreFocusLater} from "../shared/restoreFocus.ts";
 import {useCheckedWrite} from "../shared/useCheckedWrite.ts";
 import {CreateInviteDialog} from "./CreateInviteDialog.tsx";
 
-// Spec 13.2, T-327, T-330. The invites, newest first, never with a code (the API does not keep one in a list). Create is
+// Spec 13.2, T-327, T-330. The invites, newest first, never with a link (the API does not keep one in a list). Create is
 // the `+` of the header (`?dialog=createInvite`); Revoke is an AlertDialog and `DELETE /invites/{id}`. Only a pending
 // invite can be revoked: the other states are history.
 

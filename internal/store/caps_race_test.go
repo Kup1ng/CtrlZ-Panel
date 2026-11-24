@@ -16,6 +16,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/caps"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/store/catalogtest"
 )
 
 // The race harness of rule caps-and-endings (P1 auth review, round 5; spec 18.2, 18.3;
@@ -268,6 +269,7 @@ func capDrivers() map[string]func(*testing.T, *raceEnv) {
 		"cost.needs_price":     driveCostNeedsPrice,
 		"passkeys.per_user":    drivePasskeys,
 		"sessions.per_user":    driveSessions,
+		"notice.sms":           driveNoticeSMS,
 		"totp.step.user":       driveTOTPUser,
 		"totp.step.admin":      driveTOTPAdmin,
 		"recovery.code":        driveRecovery,
@@ -694,7 +696,7 @@ func driveOutboxClaim(t *testing.T, e *raceEnv) {
 	e.exec(t, `DELETE FROM ctrlz.sms_outbox`)
 	id := uuid.New()
 	if err := e.globalErr(e.admin, func(g store.GlobalTx) error {
-		return g.SMSOutboxInsert(store.NewOutbox{ID: id, Kind: "invite", Phone: phoneN(52), TemplateKey: "invite", Locale: "fa", ParamsCT: []byte("ct")})
+		return g.SMSOutboxInsert(store.NewOutbox{ID: id, Kind: "test", Phone: phoneN(52), TemplateKey: "otp", Locale: "fa", ParamsCT: []byte("ct")})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -800,7 +802,7 @@ func driveOutboxEnding(t *testing.T, e *raceEnv) {
 	e.exec(t, `DELETE FROM ctrlz.sms_outbox`)
 	id := uuid.New()
 	if err := e.globalErr(e.admin, func(g store.GlobalTx) error {
-		return g.SMSOutboxInsert(store.NewOutbox{ID: id, Kind: "invite", Phone: phoneN(70), TemplateKey: "invite", Locale: "fa", ParamsCT: []byte("ct")})
+		return g.SMSOutboxInsert(store.NewOutbox{ID: id, Kind: "test", Phone: phoneN(70), TemplateKey: "otp", Locale: "fa", ParamsCT: []byte("ct")})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1142,11 +1144,28 @@ func driveGatewayUnusable(t *testing.T, e *raceEnv) {
 // the others have not committed. The user row lock the trim takes is what makes the last committer count them
 // all: the account ends at exactly the cap, the newest sessions survive, the refresh tokens of the ended ones
 // end with them, and another tenant's sessions are not counted against A.
+//
+// A second barrier sits between the trim and the commit. Without it the test measured the lock only by luck of
+// timing: after the first barrier the spenders trim and commit one after another, and a spender that trims after the
+// others have committed sees them all and repairs the count, so the mutant that drops the user lock survived a run
+// (the flake of the first GitHub run of question 15). With the second barrier every trim has read its snapshot before
+// any spender commits, so without the lock the account ends at the cap plus the spenders it could not see, every
+// time. With the lock the spenders queue behind one another and never meet at it, so the first to arrive waits out
+// the timeout once and the gate stays open for the rest.
 func driveSessions(t *testing.T, e *raceEnv) {
 	live := func(user uuid.UUID) int {
 		return e.count(t, `SELECT count(*) FROM ctrlz.sessions WHERE user_id = $1 AND revoked_at IS NULL`, user)
 	}
-	open := func(tenant, user uuid.UUID, label string, hold func()) error {
+	var released atomic.Bool
+	settle := newBarrier(spenders, 3*time.Second)
+	afterTrim := func() {
+		if released.Load() {
+			return
+		}
+		settle()
+		released.Store(true)
+	}
+	open := func(tenant, user uuid.UUID, label string, hold, after func()) error {
 		return e.tenant.WithTenant(e.ctx, tenant, store.TxOpts{}, func(tx store.Tx) error {
 			now := time.Now()
 			id, err := tx.SessionCreate(store.NewSession{UserID: user, TokenHash: []byte(label), IdleExpiresAt: now.Add(time.Hour),
@@ -1158,23 +1177,26 @@ func driveSessions(t *testing.T, e *raceEnv) {
 				return err
 			}
 			hold()
-			_, err = tx.SessionsTrim(user, caps.MaxSessions, now)
-			return err
+			if _, err = tx.SessionsTrim(user, caps.MaxSessions, now); err != nil {
+				return err
+			}
+			after()
+			return nil
 		})
 	}
 	for i := live(e.A.User); i < caps.MaxSessions-3; i++ {
-		if err := open(e.A.Tenant, e.A.User, fmt.Sprintf("fill-%d", i), func() {}); err != nil {
+		if err := open(e.A.Tenant, e.A.User, fmt.Sprintf("fill-%d", i), func() {}, func() {}); err != nil {
 			t.Fatalf("filling: %v", err)
 		}
 	}
 	for i := 0; i < 3; i++ {
-		if err := open(e.B.Tenant, e.B.User, fmt.Sprintf("b-%d", i), func() {}); err != nil {
+		if err := open(e.B.Tenant, e.B.User, fmt.Sprintf("b-%d", i), func() {}, func() {}); err != nil {
 			t.Fatalf("tenant B: %v", err)
 		}
 	}
 	bLive := live(e.B.User)
 	race(spenders, func(i int, hold func()) {
-		if err := open(e.A.Tenant, e.A.User, fmt.Sprintf("race-%d", i), hold); err != nil {
+		if err := open(e.A.Tenant, e.A.User, fmt.Sprintf("race-%d", i), hold, afterTrim); err != nil {
 			t.Errorf("spender %d: %v", i, err)
 		}
 	})
@@ -1200,5 +1222,77 @@ func driveSessions(t *testing.T, e *raceEnv) {
 	}
 	if n := live(e.B.User); n != bLive {
 		t.Errorf("tenant B lost sessions to a trim from tenant A: %d, had %d", n, bLive)
+	}
+}
+
+// driveNoticeSMS: of the security notices that two tenants make at once, each tenant is sent exactly caps.MaxNoticeSMS
+// messages, however many spenders race for them (question 19, spec 12.3). A spender is what the two routes are: the
+// user row lock, the notice, the audit row the cap counts, and then the SMS, in one transaction. The user row lock is
+// what makes the count exact (the audit rows of two uncommitted transactions are not visible to each other), so the
+// driver takes it the way the routes do; tenant B races at the same moment on its own account and neither tenant's
+// spenders are counted against the other.
+func driveNoticeSMS(t *testing.T, e *raceEnv) {
+	e.exec(t, `UPDATE ctrlz.users SET phone_verified_at = now() WHERE id = ANY ($1)`, []uuid.UUID{e.A.User, e.B.User})
+	e.exec(t, `DELETE FROM ctrlz.sms_outbox`)
+	var queued [2]atomic.Int32
+	race(2*spenders, func(i int, hold func()) {
+		who := e.A
+		if i >= spenders {
+			who = e.B
+		}
+		err := e.tenant.WithTenant(e.ctx, who.Tenant, store.TxOpts{}, func(tx store.Tx) error {
+			hold()
+			if _, ok, err := tx.UserLock(who.User); err != nil || !ok {
+				return fmt.Errorf("user lock: %v %v", ok, err)
+			}
+			notice, err := tx.SecurityNoticeAdd("passkey_added")
+			if err != nil {
+				return err
+			}
+			if _, err := tx.DB().Exec(tx.Context(), `INSERT INTO ctrlz.tenant_audit_log (tenant_id, user_id, action) VALUES ($1, $2, 'passkey.add')`, tx.TenantID(), who.User); err != nil {
+				return err
+			}
+			sent, err := tx.SecurityNoticeSMS(who.User, notice, caps.MaxNoticeSMS)
+			if sent {
+				queued[i/spenders].Add(1)
+			}
+			return err
+		})
+		if err != nil {
+			t.Errorf("spender %d: %v", i, err)
+		}
+	})
+	for i, who := range []catalogtest.SeedIDs{e.A, e.B} {
+		if n := int(queued[i].Load()); n != caps.MaxNoticeSMS {
+			t.Errorf("tenant %d was told %d times by %d racing changes, want exactly %d", i+1, n, spenders, caps.MaxNoticeSMS)
+		}
+		if n := e.count(t, `SELECT count(*) FROM ctrlz.sms_outbox WHERE phone_e164 = $1 AND kind = 'notice'`, who.Phone); n != caps.MaxNoticeSMS {
+			t.Errorf("tenant %d has %d messages in the outbox, want %d", i+1, n, caps.MaxNoticeSMS)
+		}
+		if n := e.count(t, `SELECT count(*) FROM ctrlz.notifications WHERE tenant_id = $1 AND kind = 'passkey_added'`, who.Tenant); n != spenders {
+			t.Errorf("tenant %d has %d notices, want one for each of the %d changes, sent or not", i+1, n, spenders)
+		}
+	}
+	// The cap is per kind: a tenant whose passkey messages are spent is still told of a replaced set of recovery
+	// codes (review dec-c-r1-6), which is what a thief who spends one kind to silence the other would try.
+	for i, who := range []catalogtest.SeedIDs{e.A, e.B} {
+		var sent bool
+		err := e.tenant.WithTenant(e.ctx, who.Tenant, store.TxOpts{}, func(tx store.Tx) error {
+			if _, ok, err := tx.UserLock(who.User); err != nil || !ok {
+				return fmt.Errorf("user lock: %v %v", ok, err)
+			}
+			notice, err := tx.SecurityNoticeAdd("recovery_codes_regenerated")
+			if err != nil {
+				return err
+			}
+			if _, err := tx.DB().Exec(tx.Context(), `INSERT INTO ctrlz.tenant_audit_log (tenant_id, user_id, action) VALUES ($1, $2, 'recovery.regenerate')`, tx.TenantID(), who.User); err != nil {
+				return err
+			}
+			sent, err = tx.SecurityNoticeSMS(who.User, notice, caps.MaxNoticeSMS)
+			return err
+		})
+		if err != nil || !sent {
+			t.Errorf("tenant %d: a recovery notice after its passkey messages were spent was not sent: %v %v", i+1, sent, err)
+		}
 	}
 }

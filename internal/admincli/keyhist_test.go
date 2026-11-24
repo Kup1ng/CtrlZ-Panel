@@ -209,7 +209,23 @@ func (h history) write(t testing.TB, dir string) {
 		if err := os.WriteFile(filepath.Join(dir, "kek_"+d), h.fileText(d), 0o444); err != nil {
 			t.Fatal(err)
 		}
+		// The public half of a signing domain sits beside its key file, as derive left it (D67).
+		if slices.Contains(keyring.PublicDomains(), d) {
+			if err := os.WriteFile(filepath.Join(dir, keyring.PublicFileName(d)), h.publicText(t, d), 0o444); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
+}
+
+// publicText is the public key file the host holds for a signing domain: a pure function of its key file.
+func (h history) publicText(t testing.TB, domain string) []byte {
+	t.Helper()
+	out, err := keyring.PublicText(domain, secret.NewBytes(h.fileText(domain)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
 
 // ring loads the domains the way a container does. It reports false when a file

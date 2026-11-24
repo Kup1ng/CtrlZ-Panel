@@ -8,6 +8,7 @@ import {
   err,
   field,
   gotoForm,
+  INVITE_TOKEN,
   inviteInfoFixture,
   lastBody,
   LANGS,
@@ -140,13 +141,12 @@ for (const {lang, dir} of LANGS) {
       await expect(page.getByRole("menuitemradio", {name: otherName})).not.toHaveAttribute("aria-disabled", "true");
     });
 
-    // wp8-r20-1 (it replaces the hold of wp8-r10-2 and wp8-r16-5 on the invite page): the code of a link lives only in
+    // wp8-r20-1 (it replaces the hold of wp8-r10-2 and wp8-r16-5 on the invite page): the token of a link lives only in
     // this page's state, so the switch is free and carries it in the destination's fragment. The page that loads takes
     // the fragment off the bar and looks the invite up again, so an invitee reaches the other language at the same step.
-    const CODE = "ABCD-EFGH-JKMN-PQRS-TVWX";
-    const canonical = CODE.replaceAll("-", "");
+    const CODE = INVITE_TOKEN;
 
-    test("wp8-r20-1: the language can be switched on the invite info step, and the code goes with it", async ({page, context}) => {
+    test("wp8-r20-1: the language can be switched on the invite info step, and the token goes with it", async ({page, context}) => {
       const mock = await openAnonymous(context, {"POST /auth/invites/lookup": {body: inviteInfoFixture()}});
       await page.goto(`/${lang}/invite#${CODE}`);
       await expect(page.getByRole("heading", {level: 1})).toHaveText(T("invite.lookupTitle"));
@@ -162,10 +162,10 @@ for (const {lang, dir} of LANGS) {
       expect(new URL(page.url()).hash).toBe("");
       const lookups = callsTo(mock, "POST", "/auth/invites/lookup");
       expect(lookups).toHaveLength(2);
-      expect(lastBody(mock, "POST", "/auth/invites/lookup")).toMatchObject({token: canonical});
+      expect(lastBody(mock, "POST", "/auth/invites/lookup")).toMatchObject({token: CODE});
     });
 
-    test("wp8-r20-1: a link whose lookup failed can switch language too, and the code goes with it", async ({page, context}) => {
+    test("wp8-r20-1: a link whose lookup failed can switch language too, and the token goes with it", async ({page, context}) => {
       const mock = await openAnonymous(context, {"POST /auth/invites/lookup": err(503, "service_unavailable")});
       await page.goto(`/${lang}/invite#${CODE}`);
       await expect(field(page, "token")).toHaveValue(CODE);
@@ -175,11 +175,11 @@ for (const {lang, dir} of LANGS) {
       await item.click();
       await page.waitForURL(`**/${OTHER}/invite`);
       await expect(field(page, "token")).toHaveValue(CODE);
-      expect(lastBody(mock, "POST", "/auth/invites/lookup")).toMatchObject({token: canonical});
+      expect(lastBody(mock, "POST", "/auth/invites/lookup")).toMatchObject({token: CODE});
     });
 
-    // wp8-r21-3: only the code of a link goes into a URL. A fragment in a navigation is recorded in the browser's
-    // global history, which a code the visitor typed never was. The committed URLs of the frame are collected, since
+    // wp8-r21-3: only the token of a link goes into a URL. A fragment in a navigation is recorded in the browser's
+    // global history, which a token the visitor pasted never was. The committed URLs of the frame are collected, since
     // the destination takes its fragment off the bar again and the final URL would not show it.
     const committedUrls = (page: Page) => {
       const urls: string[] = [];
@@ -189,11 +189,11 @@ for (const {lang, dir} of LANGS) {
       return urls;
     };
 
-    test("wp8-r21-3: a typed code is not written into the URL by the language switch", async ({page, context}) => {
+    test("wp8-r21-3: a pasted token is not written into the URL by the language switch", async ({page, context}) => {
       const mock = await openAnonymous(context, {"POST /auth/invites/lookup": {body: inviteInfoFixture()}});
       const urls = committedUrls(page);
       await gotoForm(page, `/${lang}/invite`);
-      await field(page, "token").pressSequentially(canonical);
+      await field(page, "token").fill(CODE);
       await submit(page).click();
       await expect(page.getByRole("heading", {level: 1})).toHaveText(T("invite.lookupTitle"));
       await openCorner(page);
@@ -201,13 +201,13 @@ for (const {lang, dir} of LANGS) {
       await expect(item).not.toHaveAttribute("aria-disabled", "true");
       await item.click();
       await page.waitForURL(`**/${OTHER}/invite`);
-      // The code was typed, so it is not carried: the other language asks for it again, and no URL held it.
+      // The token was pasted, so it is not carried: the other language asks for it again, and no URL held it.
       await expect(field(page, "token")).toHaveValue("");
       expect(urls.filter((url) => url.includes("#"))).toEqual([]);
       expect(callsTo(mock, "POST", "/auth/invites/lookup")).toHaveLength(1);
     });
 
-    test("wp8-r21-3: a link's code is still carried, and was in the destination's fragment", async ({page, context}) => {
+    test("wp8-r21-3: a link's token is still carried, and was in the destination's fragment", async ({page, context}) => {
       await openAnonymous(context, {"POST /auth/invites/lookup": {body: inviteInfoFixture()}});
       const urls = committedUrls(page);
       await page.goto(`/${lang}/invite#${CODE}`);
@@ -219,12 +219,12 @@ for (const {lang, dir} of LANGS) {
       expect(urls.some((url) => url.includes(`/${OTHER}/invite#`))).toBe(true);
     });
 
-    test("wp8-r21-3: typing over the code of a link stops it being carried", async ({page, context}) => {
+    test("wp8-r21-3: editing the field of a link's token stops it being carried", async ({page, context}) => {
       await openAnonymous(context, {"POST /auth/invites/lookup": err(503, "service_unavailable")});
       const urls = committedUrls(page);
       await page.goto(`/${lang}/invite#${CODE}`);
       await expect(field(page, "token")).toHaveValue(CODE);
-      // One character is replaced by the visitor: the code in the field is now a typed one.
+      // One character is replaced by the visitor: the text in the field is now a pasted one.
       await field(page, "token").press("Backspace");
       await field(page, "token").pressSequentially("X");
       await openCorner(page);
@@ -234,7 +234,7 @@ for (const {lang, dir} of LANGS) {
       expect(urls.filter((url) => url.includes(`/${OTHER}/invite#`))).toEqual([]);
     });
 
-    test("wp8-r20-1: a code that is not whole is not carried, and the field starts empty in the other language", async ({page, context}) => {
+    test("wp8-r20-1: a text that is not a token is not carried, and the field starts empty in the other language", async ({page, context}) => {
       await openAnonymous(context, {});
       await gotoForm(page, `/${lang}/invite`);
       await field(page, "token").pressSequentially("ABCD");

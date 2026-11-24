@@ -1,7 +1,8 @@
 import type {Page} from "@playwright/test";
+import {otpChallengeId} from "@ctrlz/api-client/testing/fixtures.ts";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 
-import {allowAuthErrors, callsTo, field, gotoForm, inviteInfoFixture, lastBody, LANGS, openAnonymous, text} from "./auth-support.ts";
+import {INVITE_TOKEN, allowAuthErrors, callsTo, field, gotoForm, inviteInfoFixture, lastBody, LANGS, openAnonymous, text} from "./auth-support.ts";
 
 // gate-r21-1, -6, -7, -9 (a regression of wp8-r1-5, whose own test passed only by timing).
 //
@@ -14,7 +15,7 @@ import {allowAuthErrors, callsTo, field, gotoForm, inviteInfoFixture, lastBody, 
 test.beforeEach(({guard}) => allowAuthErrors(guard));
 test.use({viewport: {width: 1280, height: 800}});
 
-const CODE = "ABCDEFGHJKMNPQRSTVWX";
+const CODE = INVITE_TOKEN;
 const routerMarker = (page: Page) => page.evaluate(() => (history.state as {__NA?: boolean} | null)?.__NA === true);
 
 for (const {lang} of LANGS) {
@@ -49,7 +50,7 @@ for (const {lang} of LANGS) {
       expect(new URL(page.url()).hash).toBe("");
     });
 
-    test("the same link twice, and a link of punctuation between them, are each read", async ({page, context}) => {
+    test("the same link twice, and a mangled link between them, are each read", async ({page, context}) => {
       const mock = await openAnonymous(context, {"POST /auth/invites/lookup": {body: inviteInfoFixture()}});
       await page.goto(`/${lang}/invite`);
       await expect(field(page, "token")).toBeVisible();
@@ -57,15 +58,60 @@ for (const {lang} of LANGS) {
         await page.evaluate((value) => void (location.hash = `#${value}`), hash);
         await expect.poll(() => page.evaluate(() => location.hash)).toBe("");
       }
+      // The mangled one is the invalid state with no lookup, and the real one after it is still read.
       await expect(page.getByRole("heading", {level: 1})).toHaveText(text(lang, "invite.lookupTitle"));
       expect(callsTo(mock, "POST", "/auth/invites/lookup")).toHaveLength(1);
     });
 
-    test("/invite#CODE: the strip goes through the router, the entry keeps its marker, and Back from a link is the invite page", async ({page, context}) => {
-      await openAnonymous(context, {"POST /auth/invites/lookup": {body: inviteInfoFixture()}});
-      // A mangled link: no code in it, so the page is the code field and its sign-in link is there to follow.
-      await page.goto(`/${lang}/invite#---`);
+    // webi-r1-8: the bad link supersedes the lookup of the earlier one, so a late answer cannot put that invite's number on a page that holds no token.
+    test("a mangled link pasted while a lookup is slow ends that lookup: its late answer does not open the info step", async ({page, context}) => {
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => void (release = resolve));
+      const mock = await openAnonymous(context, {
+        "POST /auth/invites/lookup": async () => {
+          await gate;
+          return {body: inviteInfoFixture()};
+        },
+      });
+      await page.goto(`/${lang}/invite#${CODE}`);
+      await expect.poll(() => callsTo(mock, "POST", "/auth/invites/lookup").length).toBe(1);
+      await page.evaluate(() => void (location.hash = "#---"));
+      await expect(page.getByRole("heading", {level: 1})).toHaveText(text(lang, "invite.invalidTitle"));
+      release();
+      await page.waitForTimeout(600);
+      await expect(page.getByRole("heading", {level: 1})).toHaveText(text(lang, "invite.invalidTitle"));
+      expect(callsTo(mock, "POST", "/auth/otp/request")).toHaveLength(0);
+    });
+
+    // webi-r3-5: "Send code" is on the wire when the visitor leaves the invite; its late answer must not open the confirm step of a page
+    // that no longer holds that token.
+    test("Try another link while the code is being sent: the late answer does not open the confirm step", async ({page, context}) => {
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => void (release = resolve));
+      const mock = await openAnonymous(context, {
+        "POST /auth/invites/lookup": {body: inviteInfoFixture()},
+        "POST /auth/otp/request": async () => {
+          await gate;
+          return {status: 202, body: {challenge_id: otpChallengeId(1), expires_in_s: 300, resend_after_s: 60}};
+        },
+      });
+      await page.goto(`/${lang}/invite#${CODE}`);
+      await expect(page.getByRole("heading", {level: 1})).toHaveText(text(lang, "invite.lookupTitle"));
+      await page.getByRole("button", {name: text(lang, "invite.send")}).click();
+      await expect.poll(() => callsTo(mock, "POST", "/auth/otp/request").length).toBe(1);
+      await page.getByRole("button", {name: text(lang, "invite.another")}).click();
+      await expect(page.getByRole("heading", {level: 1})).toHaveText(text(lang, "invite.title"));
+      release();
+      await page.waitForTimeout(600);
+      await expect(page.getByRole("heading", {level: 1})).toHaveText(text(lang, "invite.title"));
       await expect(field(page, "token")).toBeVisible();
+    });
+
+    test("/invite#TOKEN: the strip goes through the router, the entry keeps its marker, and Back from a link is the invite page", async ({page, context}) => {
+      await openAnonymous(context, {"POST /auth/invites/lookup": {body: inviteInfoFixture()}});
+      // A mangled link: no token in it, so the page is the invalid state (no lookup) and its sign-in link is there to follow.
+      await page.goto(`/${lang}/invite#---`);
+      await expect(page.getByRole("heading", {level: 1})).toHaveText(text(lang, "invite.invalidTitle"));
       await expect.poll(() => page.evaluate(() => location.hash)).toBe("");
       expect(await routerMarker(page), "the entry still belongs to the router").toBe(true);
       await page.getByRole("link", {name: text(lang, "invite.signIn")}).click();
@@ -77,14 +123,14 @@ for (const {lang} of LANGS) {
       await expect(page.getByRole("heading", {level: 1})).toHaveText(text(lang, "invite.title"));
     });
 
-    test("a code in the link is gone from the address bar and from what the router holds, also after a refresh of the page's data", async ({page, context}) => {
+    test("a token in the link is gone from the address bar and from what the router holds, also after a refresh of the page's data", async ({page, context}) => {
       await openAnonymous(context, {"POST /auth/invites/lookup": {body: inviteInfoFixture()}});
       await page.goto(`/${lang}/invite#${CODE}`);
       await expect(page.getByRole("heading", {level: 1})).toHaveText(text(lang, "invite.lookupTitle"));
       await expect.poll(() => page.evaluate(() => location.hash)).toBe("");
       expect(await routerMarker(page)).toBe(true);
       // A router action that commits without changing the address makes the router write its canonical URL again. If it still held the
-      // fragment, this would put the code back (latent today: nothing on the page refreshes).
+      // fragment, this would put the token back (latent today: nothing on the page refreshes).
       const refreshed = await page.evaluate(() => {
         const router = (window as unknown as {next?: {router?: {refresh?: () => void}}}).next?.router;
         router?.refresh?.();
@@ -92,8 +138,8 @@ for (const {lang} of LANGS) {
       });
       expect(refreshed, "Next exposes its router for this check").toBe(true);
       await page.waitForTimeout(500);
-      expect(await page.evaluate(() => location.href)).not.toContain(CODE.slice(0, 4));
-      expect(await page.evaluate(() => JSON.stringify(history.state))).not.toContain(CODE.slice(0, 4));
+      expect(await page.evaluate(() => location.href)).not.toContain(CODE.slice(0, 8));
+      expect(await page.evaluate(() => JSON.stringify(history.state))).not.toContain(CODE.slice(0, 8));
     });
 
     test("the login page's ?step= mirror keeps the router's marker, and Back from Forgot password is the login page", async ({page, context}) => {

@@ -105,6 +105,7 @@
     "manage": "Manage",
     "manageAria": "Manage sessions",
     "listLabel": "Your sessions",
+    "rememberNote": "A session you kept for 30 days stays in this list after two idle hours, because a refresh can still bring it back. The last activity says when it was last used. End any session you do not recognise.",
     "method": {
       "password": "Signed in with a password",
       "otp": "Signed in with a text message code",

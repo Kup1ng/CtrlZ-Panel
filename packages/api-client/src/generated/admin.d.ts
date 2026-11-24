@@ -281,8 +281,8 @@ export interface paths {
         get: operations["listInvites"];
         put?: never;
         /**
-         * Make an invite code, and optionally text it
-         * @description The code and link are in this response and nowhere else. Errors: `phone_unavailable`, `invalid_phone`, `totp_fresh_required`.
+         * Make an invite link
+         * @description The link is in this response and nowhere else; an invite is never sent by SMS, the admin copies the link (D67). Errors: `phone_unavailable`, `invalid_phone`, `totp_fresh_required`.
          */
         post: operations["createInvite"];
         delete?: never;
@@ -769,16 +769,13 @@ export interface components {
         CreateInviteRequest: {
             phone: string;
             locale?: components["schemas"]["LocaleCode"];
-            send_sms: boolean;
             /** @default 72 */
             ttl_hours: number;
         };
         InviteCreated: {
             /** Format: uuid */
             id: string;
-            /** @description Shown once. */
-            code: string;
-            /** @description https://<panel host>/invite#<code>. A fragment never reaches a server. */
+            /** @description https://<panel host>/invite#<signed token>. Shown once. A fragment never reaches a server. */
             link: string;
         };
         InviteRow: {

@@ -3,7 +3,7 @@
 import {INVITE_TTL_DEFAULT_HOURS, INVITE_TTL_MAX_HOURS, inviteKeys, useCreateInvite} from "@ctrlz/api-client/admin/hooks/invites.ts";
 import {hasCode} from "@ctrlz/api-client/errors.ts";
 import {isLocale, type Locale} from "@ctrlz/i18n/locale.ts";
-import {Alert, Switch} from "@heroui/react";
+import {Alert} from "@heroui/react";
 import {useQueryClient} from "@tanstack/react-query";
 import {answerMayBeLost} from "../../account/accountApi.ts";
 import {useLeaveGuard} from "../../dialog/useLeaveGuard.ts";
@@ -25,16 +25,16 @@ import {LocaleSegment} from "../shared/LocaleSegment.tsx";
 import {OneTimeResult} from "../shared/OneTimeResult.tsx";
 import {createButton, keepFocus} from "../shared/restoreFocus.ts";
 
-// Spec 13.2, T-330. `POST /invites {phone, locale, send_sms, ttl_hours}`. The form is bound to `?dialog=createInvite`; the
-// code and the link come back once, so they are shown in a state-only panel after the parameter has left the address
-// (see dialogUrl.ts), and the mutation is reset. `send_sms` works through the outbox queue, so it does not need to know
-// whether a gateway is up right now: the invite exists either way and the admin can copy the link.
+// Spec 13.2, T-330, D67. `POST /invites {phone, locale, ttl_hours}` answers `{id, link}`. The form is bound to
+// `?dialog=createInvite`; the link comes back once, so it is shown in a state-only panel after the parameter has left the
+// address (see dialogUrl.ts), and the mutation is reset. An invite is never sent by SMS: the admin copies the link and gives
+// it to the person any way they like, so this dialog works while every gateway is down.
 
 export function CreateInviteDialog({dialog}: {dialog: UrlDialog}) {
   const t = useTranslations("admin");
   const open = dialog.value === "createInvite";
-  const [result, setResult] = useState<{code: string; link: string; texted: boolean} | null>(null);
-  // The POST is in flight: its answer carries a code and a link that cannot be shown again, so the dialog stays (gate-r32-6).
+  const [result, setResult] = useState<{link: string} | null>(null);
+  // The POST is in flight: its answer carries a link that cannot be shown again, so the dialog stays (gate-r32-6).
   const [busy, setBusy] = useState(false);
 
   return (
@@ -45,11 +45,8 @@ export function CreateInviteDialog({dialog}: {dialog: UrlDialog}) {
       {result ? (
         <OneTimeResult
           title={t("invites.result.title")}
-          intro={result.texted ? t("invites.result.introTexted") : t("invites.result.intro")}
-          values={[
-            {id: "code", label: t("invites.result.code"), value: result.code, copyLabel: t("invites.result.copyCode")},
-            {id: "link", label: t("invites.result.link"), value: result.link, copyLabel: t("invites.result.copyLink")},
-          ]}
+          intro={t("invites.result.intro")}
+          values={[{id: "link", label: t("invites.result.link"), value: result.link, copyLabel: t("invites.result.copyLink")}]}
           onClose={() => setResult(null)}
           returnFocus={() => createButton(t("invites.create.open"))}
         />
@@ -65,7 +62,7 @@ function CreateForm({
 }: {
   onClose: () => void;
   onBusy: (busy: boolean) => void;
-  onCreated: (result: {code: string; link: string; texted: boolean}) => void;
+  onCreated: (result: {link: string}) => void;
 }) {
   const t = useTranslations("admin");
   const a = useTranslations("auth");
@@ -77,13 +74,12 @@ function CreateForm({
   const form = useAdminForm({focus: "phone"});
   const [phone, setPhone] = useState("");
   const [locale, setLocale] = useState<Locale>(isLocale(pageLocale) ? pageLocale : "fa");
-  const [sendSms, setSendSms] = useState(false);
   const [ttl, setTtl] = useState<number | undefined>(INVITE_TTL_DEFAULT_HOURS);
   const [pending, setPending] = useState(false);
-  // No answer came after the server may have committed: the invite may exist with a code nobody saw (gate-r32-7).
+  // No answer came after the server may have committed: the invite may exist with a link nobody saw (gate-r32-7).
   const [lost, setLost] = useState(false);
   const busy = useRef(false);
-  // Back, a reload and a closed tab ask first while the call runs: leaving would drop the code the answer carries (gate-r32-6).
+  // Back, a reload and a closed tab ask first while the call runs: leaving would drop the link the answer carries (gate-r32-6).
   useLeaveGuard(pending);
 
   async function submit() {
@@ -102,9 +98,9 @@ function CreateForm({
     let done = false;
     try {
       // A write that needs the fresh TOTP window opens the dialog and is repeated once (admin-fresh, gate-r32-3).
-      const created = await send(() => create.mutateAsync({phone: number, locale, send_sms: sendSms, ttl_hours: ttl}));
+      const created = await send(() => create.mutateAsync({phone: number, locale, ttl_hours: ttl}));
       done = true;
-      onCreated({code: created.code, link: created.link, texted: sendSms});
+      onCreated({link: created.link});
       create.reset();
       // Only the page that made the call: the address of another page is not ours to rewrite.
       if (window.location.pathname === page) stripDialogParam("dialog");
@@ -129,7 +125,7 @@ function CreateForm({
   return (
     <AuthForm form={form} onSubmit={() => void submit()}>
       <p className="text-muted text-sm">{t("invites.create.text")}</p>
-      <PhoneField name="phone" autoComplete="off" value={phone} {...form.bind("phone", setPhone)} isDisabled={pending} />
+      <PhoneField name="phone" autoComplete="off" value={phone} {...form.bind("phone", setPhone)} isDisabled={pending} description={t("invites.create.phoneHint")} />
       <LocaleSegment label={t("invites.create.locale")} value={locale} onChange={setLocale} isDisabled={pending} />
       <IntegerField
         name="ttl_hours"
@@ -146,19 +142,6 @@ function CreateForm({
         error={form.fieldMessage("ttl_hours")}
         invalidMessage={t("invites.create.ttlRange", {max: INVITE_TTL_MAX_HOURS})}
       />
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-col">
-          <span className="text-sm font-medium">{t("invites.create.sendSms")}</span>
-          <span className="text-muted text-xs">{t("invites.create.sendSmsHint")}</span>
-        </div>
-        <Switch name="send_sms" aria-label={t("invites.create.sendSms")} isSelected={sendSms} onChange={setSendSms} isDisabled={pending}>
-          <Switch.Content>
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Content>
-        </Switch>
-      </div>
       {lost ? (
         <Alert status="warning" data-testid="create-lost">
           <Alert.Indicator />

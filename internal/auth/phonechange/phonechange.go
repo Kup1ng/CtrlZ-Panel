@@ -109,7 +109,7 @@ func (s *Service) Start(ctx context.Context, in StartInput) (Started, error) {
 	if in.NewPhone == current {
 		return Started{}, ErrSamePhone
 	}
-	newCh, err := s.OTP.RequestNewPhone(ctx, in.NewPhone, in.Locale, in.IP)
+	newCh, err := s.OTP.RequestNewPhone(ctx, in.Tenant, in.NewPhone, in.Locale, in.IP)
 	if err != nil {
 		return Started{}, err
 	}

@@ -58,9 +58,7 @@ const (
 	TOTPSession        Scope = "totp_session"           // tenant session id; the second factor asked of a bare session cookie
 	ResetPasskeyUser   Scope = "reset_passkey_user"     // user id of a reset ticket; the passkey step of a reset
 	OTPVerifyNet       Scope = "otp_verify_net"         // source network
-	InviteNet          Scope = "invite_net"             // source network, bad invite tokens only
-	InviteNet48        Scope = "invite_net48"           // IPv6 /48, bad invite tokens only
-	InviteUse          Scope = "invite_use"             // invite id, live invite tokens
+	InviteUse          Scope = "invite_use"             // invite id inside a link whose signature checked (stored under the database scope invite_net)
 	OTPVerifyChallenge Scope = "otp_verify_challenge"   // OTP challenge id whose tag checked
 
 	AdminLogin       Scope = "admin_login"        // username + source network
@@ -120,7 +118,7 @@ type Who struct {
 	Admin     uuid.UUID
 	Session   uuid.UUID // a session of the service that is live (principal.SessionID, tenant or admin)
 	Marker    string    // the id inside a device marker whose seal and subject checked
-	Invite    uuid.UUID // an invite that exists and is live
+	Invite    uuid.UUID // the id inside an invite link whose signature checked
 	Challenge uuid.UUID // an OTP challenge whose tag checked (the row id)
 }
 
@@ -606,31 +604,23 @@ func (s *Service) OTPVerifyRefund(ctx context.Context, ip netip.Addr, challenge 
 	return s.Refund(ctx, OTPVerifyNet, Who{IP: ip})
 }
 
-// InviteHit counts one use of an invite token (lookup, code request, register). live is
-// the id of the invite when the token turned out to be live, and uuid.Nil when it was
-// unknown, used, revoked or expired.
+// InviteHit counts one use of an invite link (lookup, code request, register) on the invite id inside it. The
+// caller has opened the link (internal/auth/invite, signature checked, no I/O), so the id is a claim of the admin
+// process and not a guess of a stranger: every use of it counts here BEFORE the row is read, whether the row is
+// live, used, revoked or gone, and whatever network it comes from. A holder of a dead link therefore buys at most
+// invite_use's limit of reads in a window and spends nobody else's budget (D67, rule budget-keying).
 //
-// A live invite is a proof, and its uses count on the invite itself whatever network they
-// come from: an honest invitee behind a carrier NAT shares nothing with strangers, and
-// whoever holds the token and moves networks gets no fresh budget. Anything else is a
-// request that proved nothing and counts on the network. The network scope is never
-// charged by a live token and so never refuses one (rule budget-keying; rounds 1 to 3
-// chose this charge point per route and each choice let somebody spend what an honest
-// invitee needed). One entry point decides, so a route cannot choose the other.
-func (s *Service) InviteHit(ctx context.Context, ip netip.Addr, live uuid.UUID) error {
+// A link that does not open never reaches this function: it is refused in process, with no throttle row and no
+// database read (D67), so there is no scope for a bad token and no network count of one. A nil id is a caller
+// that did not open anything and is refused.
+func (s *Service) InviteHit(ctx context.Context, ip netip.Addr, id uuid.UUID) error {
 	if netkey.Net(ip) == "" {
 		return errNoClientAddress
 	}
-	if live != uuid.Nil {
-		return s.Charge(ctx, InviteUse, Who{IP: ip, Invite: live})
+	if id == uuid.Nil {
+		return errEmptyKeyPart
 	}
-	// The /48 first, and its refusal ends the charge: a rotator through the /64s of one allocation spends the /48 and
-	// then writes no row per /64 (round 11, tenant-r11-4). An IPv4 address has no /48 and Charge skips the scope.
-	w := Who{IP: ip}
-	if err := s.Charge(ctx, InviteNet48, w); err != nil {
-		return err
-	}
-	return s.Charge(ctx, InviteNet, w)
+	return s.Charge(ctx, InviteUse, Who{IP: ip, Invite: id})
 }
 
 // AdminLoginHits counts an admin login attempt (4.5, 10.2). markerID is the id of
@@ -799,7 +789,7 @@ func (s *Service) WithCeilingHook(f func(Scope)) *Service {
 func (s Scope) Valid() bool {
 	switch s {
 	case LoginPhoneNet, LoginPhone, LoginNet, LoginNet48, LoginMarker, TOTPUser, TOTPSMS, TOTPMarker, RecoveryUser, RecoverySMS, RecoveryMarker, ReauthPasskey, ReauthSession, TOTPSession, ResetPasskeyUser,
-		OTPVerifyNet, OTPVerifyChallenge, InviteNet, InviteNet48, InviteUse, AdminLogin, AdminLoginUser, AdminLoginNet, AdminLoginMarker, AdminReauth, AdminTOTP, AdminTOTPSession:
+		OTPVerifyNet, OTPVerifyChallenge, InviteUse, AdminLogin, AdminLoginUser, AdminLoginNet, AdminLoginMarker, AdminReauth, AdminTOTP, AdminTOTPSession:
 		return true
 	}
 	return false

@@ -49,3 +49,16 @@ named:
   # functions) sees all rows; ctrlz_worker sees the rows that were sealed for sending, marked at insert.
   - {table: otp_challenges, name: auth_challenges, cmd: ALL, role: ctrlz_auth, qual: "true", with_check: "true"}
   - {table: otp_challenges, name: worker_deliverable_rows, cmd: ALL, role: ctrlz_worker, qual: "deliverable", with_check: "deliverable"}
+  # Question 15 (0061, db-r18-17). auth_tickets and announcements have row-level security on so that a function
+  # owned by ctrlz_scoped meets a policy of its own and not the table-level reach of the role. Every role that
+  # already worked on them keeps what it did: ctrlz_auth (the ticket functions) sees all tickets, the admin
+  # manages announcements and the worker reads them. ctrlz_scoped has scoped_tenant on these two tables and on
+  # otp_challenges, and nowhere else (catalog check 10, ScopedPolicyFindings). One policy per table is enough
+  # (FOR ALL where the role may write, FOR SELECT where it only reads), so the name scoped_tenant_write that
+  # check 10 also accepts is not used.
+  - {table: auth_tickets, name: auth_tickets_all, cmd: ALL, role: ctrlz_auth, qual: "true", with_check: "true"}
+  - {table: announcements, name: announcements_admin, cmd: ALL, role: ctrlz_admin, qual: "true", with_check: "true"}
+  - {table: announcements, name: announcements_worker, cmd: SELECT, role: ctrlz_worker, qual: "true", with_check: null}
+  - {table: auth_tickets, name: scoped_tenant, cmd: ALL, role: ctrlz_scoped, qual: "(subject_tenant = ctrlz.current_tenant_id())", with_check: "(subject_tenant = ctrlz.current_tenant_id())"}
+  - {table: announcements, name: scoped_tenant, cmd: SELECT, role: ctrlz_scoped, qual: "((ctrlz.current_tenant_id() IS NOT NULL) AND ((audience = 'all'::text) OR (tenant_id = ctrlz.current_tenant_id())))", with_check: null}
+  - {table: otp_challenges, name: scoped_tenant, cmd: SELECT, role: ctrlz_scoped, qual: "(tenant_id = ctrlz.current_tenant_id())", with_check: null}

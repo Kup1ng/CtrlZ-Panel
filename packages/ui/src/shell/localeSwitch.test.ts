@@ -15,18 +15,19 @@ describe("the language switch carries a fragment that the page offers", () => {
     expect(source.indexOf("carriedFragment ?")).toBeLessThan(source.indexOf("window.location.replace"));
   });
 
-  it("the invite page offers its code and does not hold the switch off before the confirm step", () => {
+  it("the invite page offers its token and does not hold the switch off before the confirm step", () => {
     const source = read("../auth/InviteFlow.tsx");
     expect(source).toMatch(/useCarryAcrossLocaleSwitch\(/);
     expect(source).not.toMatch(/useReportAuthHolding/);
   });
 
-  // wp8-r21-3: a code the visitor typed must never reach a URL, so the offer is conditioned on the code having come
-  // from the link, and typing or restarting clears that.
-  it("the invite page offers only the code of a link, and typing over it takes the offer back", () => {
+  // wp8-r21-3: a token the visitor pasted must never reach a URL, so the offer is conditioned on the token having come
+  // from the link, and pasting another or restarting clears that.
+  it("the invite page offers only the token of a link, and pasting over it takes the offer back", () => {
     const source = read("../auth/InviteFlow.tsx");
     expect(source).toMatch(/useCarryAcrossLocaleSwitch\(fromLink && /);
     expect(source).toMatch(/setFromLink\(true\)/);
-    expect(source.match(/setFromLink\(false\)/g)).toHaveLength(2);
+    // Pasting another, starting again, and a fragment that is not a token (the token that came from a link is gone, webi-r1-8).
+    expect(source.match(/setFromLink\(false\)/g)).toHaveLength(3);
   });
 });

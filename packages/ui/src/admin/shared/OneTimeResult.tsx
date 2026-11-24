@@ -13,7 +13,7 @@ import {CopyButton} from "./CopyButton.tsx";
 import {restoreFocusLater} from "./restoreFocus.ts";
 
 // Spec 13.1 and 13.2: the result panel of a create call that returns a value shown once (a user's one-time password,
-// an invite's code and link). It is state-only: a secret never joins the URL (the `dialog=` parameter of the form that
+// an invite's link). It is state-only: a secret never joins the URL (the `dialog=` parameter of the form that
 // made it was removed before this opened), it lives in the props of this component and goes when the panel closes.
 //
 // Closing with the value unread asks to confirm. "Read" means the admin pressed Copy or ticked "I have saved it": a

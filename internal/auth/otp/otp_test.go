@@ -356,7 +356,7 @@ func TestUnavailableGatewayRefusesBeforeAnyCap(t *testing.T) {
 	if _, err := r.svc.RequestForSession(r.env.Ctx, otp.ForPhoneOld, r.env.A.Phone, "fa", ip); !errors.Is(err, otp.ErrSMSUnavailable) {
 		t.Errorf("phone old: %v", err)
 	}
-	if _, err := r.svc.RequestNewPhone(r.env.Ctx, "+989127770000", "fa", ip); !errors.Is(err, otp.ErrSMSUnavailable) {
+	if _, err := r.svc.RequestNewPhone(r.env.Ctx, r.env.A.Tenant, "+989127770000", "fa", ip); !errors.Is(err, otp.ErrSMSUnavailable) {
 		t.Errorf("phone new: %v", err)
 	}
 	var n int
@@ -504,11 +504,11 @@ func TestSessionBoundRequests(t *testing.T) {
 
 	// The new number: a free one gets a real message, one that belongs to someone
 	// else gets a decoy, so no SMS reaches a third party and the answers match.
-	free, err := r.svc.RequestNewPhone(r.env.Ctx, "+989127770000", "fa", ip)
+	free, err := r.svc.RequestNewPhone(r.env.Ctx, r.env.A.Tenant, "+989127770000", "fa", ip)
 	if err != nil {
 		t.Fatal(err)
 	}
-	taken, err := r.svc.RequestNewPhone(r.env.Ctx, r.env.B.Phone, "fa", ip)
+	taken, err := r.svc.RequestNewPhone(r.env.Ctx, r.env.A.Tenant, r.env.B.Phone, "fa", ip)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -192,6 +192,15 @@ func (s *Server) readTenant(ctx context.Context, tenant uuid.UUID, fn func(store
 	return apiError(s.d.Store.WithTenant(ctx, tenant, store.TxOpts{ReadOnly: true}, fn))
 }
 
+// readTenantSnapshot is readTenant at REPEATABLE READ: every statement of fn sees the one snapshot the first one
+// took. A read that is made of several statements which must agree (the notification list asks for the page, the
+// counts and the notices shown apart, and each leaves out what another shows) uses it, so a notice made or read
+// between two of them cannot fall out of the response or be in it twice (review dec-c-r2-2). A read-only
+// transaction at this level cannot fail with a serialization error, so no retry is owed.
+func (s *Server) readTenantSnapshot(ctx context.Context, tenant uuid.UUID, fn func(store.Tx) error) error {
+	return apiError(s.d.Store.WithTenant(ctx, tenant, store.TxOpts{ReadOnly: true, Isolation: store.RepeatableRead}, fn))
+}
+
 // ---------------------------------------------------------------------------
 // Pagination (spec 14.2)
 

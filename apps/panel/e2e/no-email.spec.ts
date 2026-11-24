@@ -3,7 +3,7 @@ import {installApiMock} from "@ctrlz/api-client/testing/mock.ts";
 import type {Page} from "@playwright/test";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 
-import {allowAuthErrors, field, gotoForm, inviteInfoFixture, LANGS, openAnonymous, submit, typeWhenFocused} from "./auth-support.ts";
+import {INVITE_TOKEN, allowAuthErrors, field, gotoForm, inviteInfoFixture, LANGS, openAnonymous, submit, typeWhenFocused} from "./auth-support.ts";
 
 // Spec 17.3 `no-email.spec.ts` (T-111), the auth screens' part: the product has no email address anywhere,
 // so no screen asks for one, names one, or invites a browser to fill one in. It reads the visible text, the
@@ -99,7 +99,7 @@ for (const {lang} of LANGS) {
 
       await gotoForm(page, `/${lang}/invite`);
       await expectNoEmail(page, "invite code");
-      await page.goto(`/${lang}/invite#ABCDEFGHJKMNPQRSTVWX`);
+      await page.goto(`/${lang}/invite#${INVITE_TOKEN}`);
       await expect(page.locator("bdi", {hasText: "+98912***4567"})).toBeVisible();
       await expectNoEmail(page, "invite lookup");
 

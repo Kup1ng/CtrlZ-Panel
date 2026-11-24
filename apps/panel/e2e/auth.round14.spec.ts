@@ -3,6 +3,7 @@ import {otpChallengeId} from "@ctrlz/api-client/testing/fixtures.ts";
 import {expect, test} from "@ctrlz/ui/testing/guard.ts";
 
 import {
+  INVITE_TOKEN,
   allowAuthErrors,
   callsTo,
   err,
@@ -175,7 +176,7 @@ for (const {lang, dir} of LANGS) {
         "POST /auth/invites/lookup": {body: {phone_masked: "+98912***4567", expires_at: "2026-11-20T10:00:00Z"}},
         "POST /auth/otp/request": issued,
       });
-      await page.goto(`/${lang}/invite#ABCDEFGHJKMNPQRSTVWX`);
+      await page.goto(`/${lang}/invite#${INVITE_TOKEN}`);
       await submit(page).click();
       await expect(field(page, "code")).toBeFocused();
 

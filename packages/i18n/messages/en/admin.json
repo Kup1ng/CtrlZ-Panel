@@ -20,7 +20,7 @@
     },
     "invites": {
       "title": "Invites",
-      "subtitle": "Invitation codes and who they were made for"
+      "subtitle": "Invite links and who they were made for"
     },
     "sms": {
       "title": "SMS",
@@ -149,7 +149,7 @@
     },
     "sms_down": {
       "title": "Text messages cannot be sent",
-      "text": "No gateway can send right now. Sign-in by SMS code and invites by SMS are down."
+      "text": "No gateway can send right now. Sign-in by SMS code and registration by SMS code are down."
     },
     "sms_outbox_cap": {
       "title": "The daily SMS outbox cap was reached",
@@ -220,24 +220,20 @@
     "create": {
       "open": "Create invite",
       "title": "Create an invite",
-      "text": "The invite holds a code and a link. You see them once, after you create it.",
+      "text": "An invite is one link for one phone number. You see it once, after you create it. Nothing is sent by SMS.",
+      "phoneHint": "The invite works only for this number.",
       "locale": "Language",
       "ttl": "Valid for (hours)",
       "ttlHint": "At most {max, number} hours.",
       "ttlRange": "Enter a whole number of hours from 1 to {max, number}.",
-      "sendSms": "Send it by SMS",
-      "sendSmsHint": "The link is texted to the number. You can still copy it.",
       "submit": "Create",
-      "lost": "No answer came, so the invite may now exist with a code you did not see. It cannot be shown again. Check the list, and revoke it before you make another."
+      "lost": "No answer came, so the invite may now exist with a link you did not see. It cannot be shown again. Check the list, and revoke it before you make another."
     },
     "result": {
       "title": "Invite created",
-      "intro": "Share the code or the link with the person.",
-      "introTexted": "The link is being texted. You can also share the code or the link yourself.",
-      "code": "Code",
-      "link": "Link",
-      "copyCode": "Copy the code",
-      "copyLink": "Copy the link"
+      "intro": "Nothing is sent by SMS. Copy the link and give it to the person yourself. If you lose it, revoke the invite and make a new one.",
+      "link": "Invite link",
+      "copyLink": "Copy the invite link"
     },
     "revoke": {
       "action": "Revoke",
@@ -260,7 +256,7 @@
   "fieldErrors": {
     "body": {
       "invalid": "The text was refused. Check the number of placeholders, and remove any link.",
-      "too_long": "The text needs more than one billed part. A login-code text must fit one part."
+      "too_long": "The text needs more than one billed part. A login-code text or a security notice must fit one part."
     },
     "rp_id": {
       "invalid": "This is not a valid RP ID. Use the host name only: no spaces, no https:// and no port."
@@ -381,6 +377,11 @@
       },
       "otpTooLongFa": "A login-code text must fit one billed part: at most {limit} characters in Persian, with the code filled in. Shorten it.",
       "otpTooLongEn": "A login-code text must fit one billed part: at most {limit} characters in English, with the code filled in. Shorten it.",
+      "noticeHint": "One line, with no link and no placeholder. A security notice carries no value, so a test send takes none.",
+      "noticeTooLongFa": "A security notice must fit one billed part: at most {limit} characters in Persian. Shorten it.",
+      "noticeTooLongEn": "A security notice must fit one billed part: at most {limit} characters in English. Shorten it.",
+      "noticeNotGsm": "An English security notice may use only GSM characters. One other letter (an accent outside the GSM set, a Persian letter, an emoji) makes it a Unicode message of 70 characters per part.",
+      "noticeNoCode": "A security notice carries no value. Remove the placeholder.",
       "otpNotGsm": "An English login-code text may use only GSM characters. One other letter (an accent outside the GSM set, a Persian letter, an emoji) makes it a Unicode message of 70 characters per part.",
       "save": "Save text",
       "saved": "Text saved.",
@@ -493,7 +494,7 @@
       },
       "modeText": {
         "closed": "Nobody can register. Only an admin can create a user.",
-        "invite": "A person needs an invite code to register.",
+        "invite": "A person needs an invite link to register.",
         "open": "Anyone with a phone number can register."
       },
       "grace": "Grace period (days)",

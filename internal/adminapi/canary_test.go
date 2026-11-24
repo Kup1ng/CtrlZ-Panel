@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/totp"
@@ -11,7 +12,7 @@ import (
 // tenant half is internal/api/canary_test.go, which uses the same sinks): the
 // admin password, the TOTP seed and codes, the one-time password that
 // POST /users returns, the one the re-issue route returns (the generator is the
-// test's, so both are known), an invite code, an SMS API key and a Melipayamak
+// test's, so both are known), an invite link token, an SMS API key and a Melipayamak
 // password. None of them may be in the process log, in any sink table or in the
 // Postgres server log. The bootstrap and reset-password output have their own
 // test in internal/admincli (TestCLIOutputCanaries) and in the Compose smoke.
@@ -45,12 +46,16 @@ func TestAdminCanaries(t *testing.T) {
 	canaries = append(canaries, u.Password, got.Password)
 	canaries = append(canaries, r.once.issued()...)
 
-	// An invite code and the phone of the invitee.
+	// The token of an invite link (D67) and the phone of the invitee.
 	var inv struct {
-		Code string `json:"code"`
+		Link string `json:"link"`
 	}
-	b.post("/invites", map[string]any{"phone": "09125559191", "send_sms": false}).want(201, "").json(&inv)
-	canaries = append(canaries, inv.Code, "+989125559191")
+	b.post("/invites", map[string]any{"phone": "09125559191"}).want(201, "").json(&inv)
+	_, linkToken, _ := strings.Cut(inv.Link, "#")
+	if len(linkToken) < 100 {
+		t.Fatalf("the link has no token: %d characters", len(linkToken))
+	}
+	canaries = append(canaries, linkToken, "+989125559191")
 
 	// SMS credentials.
 	b.put("/sms/gateways/sms_ir", map[string]any{"credentials": map[string]string{"api_key": apiKey}, "cost_per_message": "10"}).want(200, "")
