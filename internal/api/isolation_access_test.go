@@ -230,3 +230,26 @@ func (e *isoEnv) accessFixtures() map[string]isolation.Fixture {
 			}},
 	}
 }
+
+// cleanEndpointTables puts the Endpoint tables of the tenant back to the seed's Endpoint alone: the harness resets the tables it
+// knows, and an Endpoint case leaves its groups, clients, windows and Endpoints (with the authorized rows, hosts and claims hung on
+// them) behind, one side changed by the call and the other not. Both tenants are cleaned the same way, so the next case starts from
+// one state whatever it is.
+func (e *isoEnv) cleanEndpointTables(w isolation.Who) {
+	f := e.f
+	s := f.env.A
+	if w == isolation.B {
+		s = f.env.B
+	}
+	// One statement each: a statement with parameters is prepared, and a prepared statement is one command.
+	for _, sql := range []string{
+		`DELETE FROM ctrlz.policy_outbox WHERE tenant_id = $1`,
+		`DELETE FROM ctrlz.idempotency_keys WHERE tenant_id = $1`,
+		`DELETE FROM ctrlz.endpoint_groups WHERE tenant_id = $1`,
+		`DELETE FROM ctrlz.clients WHERE tenant_id = $1 AND source = 'manual'`,
+		`DELETE FROM ctrlz.schedule_windows WHERE tenant_id = $1`,
+	} {
+		f.env.Exec(f.t, sql, s.Tenant)
+	}
+	f.env.Exec(f.t, `DELETE FROM ctrlz.endpoints WHERE tenant_id = $1 AND id <> $2`, s.Tenant, s.Endpoint)
+}

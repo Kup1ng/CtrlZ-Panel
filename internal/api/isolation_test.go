@@ -106,6 +106,9 @@ func (e *isoEnv) reset(w isolation.Who) {
 		before = `DELETE FROM ctrlz.auth_throttle; TRUNCATE ctrlz.sms_counters;`
 	}
 	e.db.Reset(w, before)
+	// What an Endpoint case left (a group, a client, an Endpoint of its own, the rows hung on it) is not a table the harness resets, and a
+	// call that changes B only would leave A and B in different states for the next case, whatever that case is (isolation_access_test.go).
+	e.cleanEndpointTables(w)
 	// The phone is back, so a number the change moved to is free again.
 	*n = tn{who: w, pw: n.pw, newPhone: n.newPhone, invPhone: n.invPhone}
 }
