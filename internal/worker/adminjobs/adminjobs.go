@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -69,6 +70,9 @@ type Config struct {
 	// tenants. Nothing in production sets them.
 	BeforeStart func(store.AdminJob)
 	AfterPage   func(tenantsDone int)
+	// SweepBudget bounds the tenants one periodic registration sweep walks; default 50,000. A test seam as well: the next run
+	// resumes after the last tenant of the one before.
+	SweepBudget int
 }
 
 // Runner polls admin_jobs and runs what it finds.
@@ -83,6 +87,13 @@ type Runner struct {
 	now      func() time.Time
 	failures map[uuid.UUID]failure
 	holder   string // this worker's name in the lease of the periodic sweep
+
+	// sweepBudget and sweepAfter are the periodic sweep's bound and where the last bounded run stopped (Nil when it ended the list). They
+	// live in memory like failures: a restarted worker starts at the first tenant, which costs one repeated slice, and a worker that
+	// holds the lease takes up from where it left off, so every tenant is reached within a few runs.
+	sweepBudget int
+	sweepMu     sync.Mutex
+	sweepAfter  uuid.UUID
 
 	beforeStart func(store.AdminJob)
 	afterPage   func(int)
@@ -102,12 +113,15 @@ func New(c Config) (*Runner, error) {
 		return nil, errors.New("adminjobs: store and log are required")
 	}
 	r := &Runner{db: c.Store, log: c.Log, poll: c.Poll, maxFail: c.MaxFailures, page: c.Page, failures: map[uuid.UUID]failure{}, holder: sweepHolder(), backoff: c.Backoff, now: c.Now,
-		beforeStart: c.BeforeStart, afterPage: c.AfterPage}
+		beforeStart: c.BeforeStart, afterPage: c.AfterPage, sweepBudget: c.SweepBudget}
 	if r.poll <= 0 {
 		r.poll = 5 * time.Second
 	}
 	if r.maxFail < 1 {
 		r.maxFail = 5
+	}
+	if r.sweepBudget < 1 {
+		r.sweepBudget = sweepTenantBudget
 	}
 	if r.page < 1 {
 		r.page = 100
@@ -341,33 +355,55 @@ var errBadParams = errors.New("adminjobs: bad parameters")
 // reporting after every page. A tenant that fails stops the walk with the error:
 // the job is left running and the whole walk runs again, which is safe.
 func (r *Runner) forEachTenant(ctx context.Context, fn func(store.Tx) error, after func(done int)) error {
-	return r.forEachTenantWith(ctx, store.TxOpts{}, 0, fn, after)
+	_, _, err := r.forEachTenantWith(ctx, store.TxOpts{}, walk{}, fn, after)
+	return err
 }
 
-// forEachTenantWith is forEachTenant with the options of each tenant's transaction (the sweep gives them one batch id) and a bound on
-// the tenants of one run (0 for none): a run that stops at its bound leaves the rest to the next one.
-func (r *Runner) forEachTenantWith(ctx context.Context, opts store.TxOpts, bound int, fn func(store.Tx) error, after func(done int)) error {
-	cursor := uuid.Nil
+// walk shapes one pass over the tenants.
+type walk struct {
+	// After is the tenant the pass starts after (Nil for the first).
+	After uuid.UUID
+	// Bound is the most tenants the pass runs (0 for none).
+	Bound int
+	// SkipRetry lets a tenant whose transaction lost a race or a lock (store.ErrRetry) be passed over, so one tenant that keeps
+	// failing does not stop every tenant after it in id order. The pass still ends with that error once it has walked what it
+	// should, so a job that must reach every tenant is not reported as done and runs again.
+	SkipRetry bool
+}
+
+// forEachTenantWith is forEachTenant with the options of each tenant's transaction (the sweep gives them one batch id) and the
+// shape of w. It returns the last tenant it ran, and more when it stopped at its bound with tenants left: the caller keeps last
+// and starts there next time, so a bound never leaves the same tenants for every run.
+func (r *Runner) forEachTenantWith(ctx context.Context, opts store.TxOpts, w walk, fn func(store.Tx) error, after func(done int)) (last uuid.UUID, more bool, err error) {
+	cursor := w.After
+	last = w.After
 	done := 0
+	var retried error
 	for {
 		var ids []uuid.UUID
 		if err := r.db.WithGlobal(ctx, store.TxOpts{ReadOnly: true}, func(g store.GlobalTx) (err error) {
 			ids, err = g.TenantIDs(cursor, r.page)
 			return err
 		}); err != nil {
-			return err
+			return last, false, err
 		}
 		if len(ids) == 0 {
-			return nil
+			return last, false, retried
 		}
 		for _, id := range ids {
 			if err := r.db.WithTenant(ctx, id, opts, fn); err != nil {
-				return err
+				if !w.SkipRetry || !errors.Is(err, store.ErrRetry) || ctx.Err() != nil {
+					return last, false, err
+				}
+				if retried == nil {
+					retried = err
+				}
 			}
+			last = id
 			done++
-			if bound > 0 && done >= bound {
+			if w.Bound > 0 && done >= w.Bound {
 				after(done)
-				return nil
+				return last, true, retried
 			}
 		}
 		after(done)

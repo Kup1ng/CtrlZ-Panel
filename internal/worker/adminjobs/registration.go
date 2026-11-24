@@ -2,6 +2,7 @@ package adminjobs
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,7 +26,8 @@ const (
 	SweepEvery = 10 * time.Minute
 	// sweepLease is how long a worker holds the lease of the periodic sweep: a worker that died leaves it for the next to take.
 	sweepLease = 9 * time.Minute
-	// sweepTenantBudget bounds the tenants one run walks; the rest is the next run's, which takes a new batch.
+	// sweepTenantBudget bounds the tenants one periodic run walks; the next run starts after the last one this run reached (and
+	// wraps at the end of the list), so no tenant waits for ever behind the first sweepTenantBudget ids. A job walks them all.
 	sweepTenantBudget = 50000
 	// leaseName is the row of ctrlz.leases the periodic sweep holds.
 	leaseName = "registration_sweep"
@@ -70,7 +72,15 @@ func (r *Runner) sweepClaims(ctx context.Context, job uuid.UUID, report Report) 
 	if err != nil {
 		return prog, err
 	}
-	err = r.forEachTenantWith(ctx, store.TxOpts{Batch: batch}, sweepTenantBudget, func(tx store.Tx) error {
+	w := walk{SkipRetry: true}
+	if job == uuid.Nil {
+		// The periodic sweep is bounded and resumes where the last one stopped. A job is not: it ends as done only when it has
+		// walked every tenant (it ends the walk with the error of a tenant it had to pass over, and then runs again).
+		r.sweepMu.Lock()
+		defer r.sweepMu.Unlock()
+		w.After, w.Bound = r.sweepAfter, r.sweepBudget
+	}
+	last, more, err := r.forEachTenantWith(ctx, store.TxOpts{Batch: batch}, w, func(tx store.Tx) error {
 		if job != uuid.Nil {
 			held, err := tx.AdminJobHold(job)
 			if err != nil {
@@ -118,6 +128,14 @@ func (r *Runner) sweepClaims(ctx context.Context, job uuid.UUID, report Report) 
 		prog.Tenants = done
 		report(prog)
 	})
+	if job == uuid.Nil && (err == nil || errors.Is(err, store.ErrRetry)) {
+		// A pass that stopped at its bound is resumed after its last tenant; one that reached the end of the list starts over.
+		// A walk that ended in an error other than a passed-over tenant leaves the place as it was.
+		r.sweepAfter = uuid.Nil
+		if more {
+			r.sweepAfter = last
+		}
+	}
 	return prog, err
 }
 
@@ -138,7 +156,14 @@ func (r *Runner) runSweepOnce(ctx context.Context) {
 	if err := r.db.WithGlobal(ctx, store.TxOpts{}, func(g store.GlobalTx) (err error) {
 		ok, err = g.LeaseTake(leaseName, r.holder, int(sweepLease.Seconds()))
 		return err
-	}); err != nil || !ok {
+	}); err != nil {
+		// Not winning the lease is silent, but a lease that cannot be read is not: the sweep keeps open registration correct when a
+		// job was missed, and a broken grant or statement would otherwise stop it with nothing in the log.
+		if ctx.Err() == nil {
+			r.log.Warn("registration sweep lease failed", logattr.Enum("error_class", errClass(err)))
+		}
+		return
+	} else if !ok {
 		return
 	}
 	if _, err := r.SweepClaims(ctx); err != nil && ctx.Err() == nil {

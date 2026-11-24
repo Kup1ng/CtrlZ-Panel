@@ -381,6 +381,22 @@ func (t Tx) ClaimGet(endpoint, id uuid.UUID) (ClaimRow, bool, error) {
 	return c, ok, err
 }
 
+const qClaimOverlapsSuspended = `SELECT EXISTS (
+  SELECT 1 FROM ctrlz.ip_claims c
+  JOIN ctrlz.ip_claims o ON o.tenant_id = c.tenant_id AND o.state = 'suspended' AND o.cidr && c.cidr AND o.id <> c.id
+  WHERE c.tenant_id = $1 AND c.id = $2)`
+
+// ClaimOverlapsSuspended says whether another suspended claim of the tenant overlaps this one. ip_claim_open_challenge refuses
+// such a claim without saying why, and no wait ends it: only an admin clears the suspended claim, so the caller answers
+// ip_suspended (the same answer ip_claim_request and ip_claim_take give for the state) and not a retry.
+func (t Tx) ClaimOverlapsSuspended(claim uuid.UUID) (bool, error) {
+	var yes bool
+	if err := t.tx.QueryRow(t.ctx, qClaimOverlapsSuspended, t.tenant, claim).Scan(&yes); err != nil {
+		return false, sanitize(err)
+	}
+	return yes, nil
+}
+
 const qClaimChallengeRetry = `SELECT COALESCE(GREATEST(1, ceil(extract(epoch FROM (min(x.expires_at) - now())))), 60)::int
 FROM ctrlz.ip_proof_challenges x WHERE x.tenant_id = $1 AND x.claim_id = $2 AND x.expires_at > now()`
 

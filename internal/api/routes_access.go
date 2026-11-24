@@ -185,7 +185,7 @@ func (s *Server) AddAuthorizedIps(ctx context.Context, req gen.AddAuthorizedIpsR
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.ep.AddAuthorized(ctx, s.d.Store, pr.TenantID, epWrite(), uuid.UUID(req.Id), req.Body.Cidrs)
+	rows, err := s.ep.AddAuthorized(ctx, s.d.Store, pr.TenantID, epWrite(), uuid.UUID(req.Id), req.Body.Cidrs, httpx.ClientIPFrom(ctx))
 	if err != nil {
 		return nil, profileError(err)
 	}

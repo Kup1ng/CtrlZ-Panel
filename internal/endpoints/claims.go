@@ -147,12 +147,19 @@ func (e *Env) OpenChallenge(ctx context.Context, st *store.Store, tenant uuid.UU
 		if c.State == "suspended" {
 			return &Error{Kind: KindIPSuspended}
 		}
+		// The function says nothing of why it opened none. A claim that overlaps another suspended claim of the tenant is refused
+		// too, and no wait ends that (only an admin does), so it is told apart from the caps and answers 409 as the take does.
+		overlap, err := tx.ClaimOverlapsSuspended(claim)
+		if err != nil {
+			return err
+		}
+		if overlap {
+			return &Error{Kind: KindIPSuspended}
+		}
 		secs, err := tx.ClaimChallengeRetry(claim)
 		if err != nil {
 			return err
 		}
-		// The function says nothing of why it opened none. A suspended claim was told apart above; a claim that overlaps another
-		// suspended claim of the tenant is refused here too and gets the same wait, which is the honest answer the table of 4.3 has.
 		return &Error{Kind: KindTooManyChallenges, RetryAfter: secs}
 	})
 	return out, err

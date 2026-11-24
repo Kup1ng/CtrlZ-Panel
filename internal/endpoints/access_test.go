@@ -89,7 +89,7 @@ func TestCheckDDNSHostname(t *testing.T) {
 
 func (f *fx) addAuthorized(t *testing.T, tenant, ep uuid.UUID, cidrs ...string) []store.AuthorizedRow {
 	t.Helper()
-	rows, err := f.env.AddAuthorized(f.ctx, f.st, tenant, opts, ep, cidrs)
+	rows, err := f.env.AddAuthorized(f.ctx, f.st, tenant, opts, ep, cidrs, netip.Addr{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,21 +142,21 @@ func TestAuthorizedRules(t *testing.T) {
 		t.Errorf("an add of two rows marked %d times", n)
 	}
 	// The request is judged whole, each refusal at its index.
-	_, err = f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, ep.ID, []string{"198.19.0.0/16", "203.0.113.5", "198.18.0.0/15", "bad", "198.19.0.0/16"})
+	_, err = f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, ep.ID, []string{"198.19.0.0/16", "203.0.113.5", "198.18.0.0/15", "bad", "198.19.0.0/16"}, netip.Addr{})
 	e := refusal(t, err)
 	for name, code := range map[string]string{"/cidrs/2": endpoints.CodeOutOfRange, "/cidrs/3": endpoints.CodeInvalid, "/cidrs/4": endpoints.CodeDuplicate} {
 		if !hasField(e, name, code) {
 			t.Errorf("%s %s missing from %v", name, code, e)
 		}
 	}
-	_, err = f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, ep.ID, []string{"198.19.0.0/16", "203.0.113.5"})
+	_, err = f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, ep.ID, []string{"198.19.0.0/16", "203.0.113.5"}, netip.Addr{})
 	if e := refusal(t, err); !hasField(e, "/cidrs/1", endpoints.CodeExists) {
 		t.Errorf("a prefix the Endpoint has: %v", e)
 	}
 	if n := f.count(t, `SELECT count(*) FROM ctrlz.authorized_ips WHERE endpoint_id = $1`, ep.ID); n != 2 {
 		t.Errorf("a refused add left %d rows", n)
 	}
-	if _, err := f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, ep.ID, make([]string, 101)); refusal(t, err).Kind != endpoints.KindValidation {
+	if _, err := f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, ep.ID, make([]string, 101), netip.Addr{}); refusal(t, err).Kind != endpoints.KindValidation {
 		t.Error("101 prefixes")
 	}
 
@@ -225,7 +225,7 @@ func TestAuthorizedAnotherTenantsRows(t *testing.T) {
 	a := f.auth(f.A.Tenant, v)
 	bBefore := f.count(t, `SELECT count(*) FROM ctrlz.authorized_ips WHERE tenant_id = $1`, f.B.Tenant)
 
-	if _, err := f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, theirs.ID, []string{"203.0.113.10"}); refusal(t, err).Kind != endpoints.KindNotFound {
+	if _, err := f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, theirs.ID, []string{"203.0.113.10"}, netip.Addr{}); refusal(t, err).Kind != endpoints.KindNotFound {
 		t.Error("add on another tenant's Endpoint")
 	}
 	if err := f.env.DeleteAuthorized(f.ctx, f.st, f.A.Tenant, opts, a, theirs.ID, ids(bRows[0]), netip.Addr{}); refusal(t, err).Kind != endpoints.KindNotFound {
@@ -250,7 +250,7 @@ func TestAuthorizedCap(t *testing.T) {
 	have := f.count(t, `SELECT count(*) FROM ctrlz.authorized_ips WHERE tenant_id = $1 AND source = 'manual'`, f.A.Tenant)
 	f.exec(t, `UPDATE ctrlz.tenant_entitlements SET max_authorized_ips = $2 WHERE tenant_id = $1`, f.A.Tenant, have+2)
 	f.exec(t, `INSERT INTO ctrlz.authorized_ips (tenant_id, endpoint_id, cidr, source) VALUES ($1, $2, '203.0.113.200/32', 'secure_dns')`, f.A.Tenant, ep.ID)
-	_, err := f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, ep.ID, []string{"203.0.113.1", "203.0.113.2", "203.0.113.3"})
+	_, err := f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, ep.ID, []string{"203.0.113.1", "203.0.113.2", "203.0.113.3"}, netip.Addr{})
 	if e := refusal(t, err); !hasField(e, "max_authorized_ips", endpoints.CodeExceeded) {
 		t.Errorf("three into two free slots: %v", e)
 	}
@@ -594,5 +594,48 @@ func TestClaimsInOpenMode(t *testing.T) {
 	f.exec(t, `UPDATE ctrlz.ip_claims SET approved_by_admin = true WHERE id = $1`, w.Claim.ID)
 	if tk, err := f.env.TakeClaim(f.ctx, f.st, f.A.Tenant, opts, ep.ID, w.Claim.ID, ""); err != nil || tk.Outcome != "active" {
 		t.Errorf("an approved wide claim: %v %+v", err, tk)
+	}
+}
+
+// The answer of an add marks the row that holds the caller's address, as the list does (p3-D3-r1-7): a client that sees
+// is_current false would offer to delete the row it is on.
+func TestAddAuthorizedMarksTheCurrentRow(t *testing.T) {
+	f := newFx(t)
+	ep := f.create(t, f.A.Tenant, f.A.Profile, "e")[0]
+	me := netip.MustParseAddr("203.0.113.5")
+	rows, err := f.env.AddAuthorized(f.ctx, f.st, f.A.Tenant, opts, ep.ID, []string{"203.0.113.5", "198.18.0.0/16"}, me)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("%d rows added", len(rows))
+	}
+	for _, r := range rows {
+		if want := r.CIDR.String() == "203.0.113.5/32"; r.IsCurrent != want {
+			t.Errorf("%s: is_current %v, want %v", r.CIDR, r.IsCurrent, want)
+		}
+	}
+}
+
+// A challenge refused because another suspended claim of the tenant overlaps the claim is 409 ip_suspended, not a wait that never
+// ends (p3-D3-r1-2, p3-D3-r1-6). The state is made by hand: the request function refuses to make it.
+func TestChallengeForClaimOverlappingASuspendedOne(t *testing.T) {
+	f := newFx(t)
+	ep := f.create(t, f.A.Tenant, f.A.Profile, "e")[0]
+	wide, narrow := "203.0.113.64/28", "203.0.113.200/32"
+	x, err := f.env.RequestClaim(f.ctx, f.st, f.A.Tenant, opts, ep.ID, endpoints.ClaimAsk{Cidr: &wide})
+	if err != nil {
+		t.Fatal(err)
+	}
+	y, err := f.env.RequestClaim(f.ctx, f.st, f.A.Tenant, opts, ep.ID, endpoints.ClaimAsk{Cidr: &narrow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The wide claim leaves the exclusion of active claims first, then the narrow one moves into it as pending.
+	f.exec(t, `UPDATE ctrlz.ip_claims SET state = 'suspended' WHERE id = $1`, x.Claim.ID)
+	f.exec(t, `UPDATE ctrlz.ip_claims SET cidr = '203.0.113.70/32', state = 'pending_proof' WHERE id = $1`, y.Claim.ID)
+	_, err = f.env.OpenChallenge(f.ctx, f.st, f.A.Tenant, opts, ep.ID, y.Claim.ID)
+	if e := refusal(t, err); e.Kind != endpoints.KindIPSuspended {
+		t.Errorf("a challenge over a suspended claim: %v", e)
 	}
 }

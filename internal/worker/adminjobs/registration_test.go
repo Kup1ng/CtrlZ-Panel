@@ -184,3 +184,37 @@ func TestSweepLease(t *testing.T) {
 		t.Error("a lease that ran out was not taken")
 	}
 }
+
+// A sweep that stops at its tenant bound is resumed after its last tenant by the next one, and the one after that starts over
+// (p3-D3-r1-1, p3-D3-r1-5). Before, every run walked the same first tenants and the later ones were never swept.
+func TestSweepResumesAfterItsBound(t *testing.T) {
+	r := newRig(t, adminjobs.Config{SweepBudget: 1})
+	r.mode("open")
+	if p := r.sweep(); p.Tenants != 1 || p.Graced != 1 {
+		t.Fatalf("the first run: %+v", p)
+	}
+	if got := r.states(); got["grace"] != 1 || got["active"] != 1 {
+		t.Fatalf("after the first run: %v", got)
+	}
+	if p := r.sweep(); p.Tenants != 1 || p.Graced != 1 {
+		t.Fatalf("the second run walked the first tenant again: %+v", p)
+	}
+	if got := r.states(); got["grace"] != 2 || got["active"] != 0 {
+		t.Fatalf("after the second run: %v", got)
+	}
+	// The third starts over at the first tenant: nothing is left to change.
+	if p := r.sweep(); p.Tenants != 1 || p.Graced != 0 {
+		t.Fatalf("the third run: %+v", p)
+	}
+}
+
+// The job is not bounded: it walks every tenant, so it never ends as done with tenants left.
+func TestRegistrationJobIgnoresTheSweepBound(t *testing.T) {
+	r := newRig(t, adminjobs.Config{SweepBudget: 1})
+	r.mode("open")
+	id := r.queue(adminjobs.KindRegistrationTransition, map[string]any{"from": "closed", "to": "open", "grace_days": 7})
+	r.runOnce()
+	if state, p := r.job(id); state != "done" || p["tenants"] != float64(2) || p["graced"] != float64(2) {
+		t.Errorf("%s %v", state, p)
+	}
+}

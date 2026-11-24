@@ -60,8 +60,9 @@ func ParseAuthorized(s string) (netip.Prefix, string) {
 
 // AddAuthorized adds manual prefixes to an Endpoint (spec 5). The request is judged whole: any refused prefix refuses all,
 // each field named by its index. The tenant-wide cap of manual rows is decided by the statement that adds them, under the
-// quota lock; the Endpoint's row orders the rows' writers. Adding a row turns nobody away, so no lock password is asked.
-func (e *Env) AddAuthorized(ctx context.Context, st *store.Store, tenant uuid.UUID, opts store.TxOpts, endpoint uuid.UUID, cidrs []string) ([]store.AuthorizedRow, error) {
+// quota lock; the Endpoint's row orders the rows' writers. current is the caller's address: the answer marks the row that holds
+// it (is_current), as the list does, so a client does not offer to delete the row it is on. Adding a row turns nobody away, so no lock password is asked.
+func (e *Env) AddAuthorized(ctx context.Context, st *store.Store, tenant uuid.UUID, opts store.TxOpts, endpoint uuid.UUID, cidrs []string, current netip.Addr) ([]store.AuthorizedRow, error) {
 	if len(cidrs) == 0 {
 		return nil, invalid(Field{"/cidrs", CodeRequired})
 	}
@@ -120,7 +121,7 @@ func (e *Env) AddAuthorized(ctx context.Context, st *store.Store, tenant uuid.UU
 		if err := store.MarkDirty(tx, store.AggregateEndpointSet, tx.TenantID()); err != nil {
 			return err
 		}
-		out, err = tx.AuthorizedByIDs(endpoint, ids, netip.Addr{})
+		out, err = tx.AuthorizedByIDs(endpoint, ids, current)
 		return err
 	})
 	if err != nil {
