@@ -1,0 +1,72 @@
+/* Global rules that are neither tokens nor shell layout. Unlayered, so they win over HeroUI. */
+
+/*
+ * Persian never takes letter-spacing: any tracking breaks the joining of the
+ * letters (DESIGN.md, spec 4.6). The tokens are zeroed as well, because HeroUI's
+ * compiled CSS reads `var(--tracking-wider, .05em)` and would otherwise ask for it.
+ */
+:lang(fa) {
+  letter-spacing: 0;
+  --tracking-tighter: 0em;
+  --tracking-tight: 0em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0em;
+  --tracking-wider: 0em;
+  --tracking-widest: 0em;
+
+  /*
+   * Dana's Arabic-script ink runs from 0.84em above the baseline to 0.47em below,
+   * which is 1.31em, and its line box is 1.43em (docs/licences/dana.md). The stock
+   * text-xs line is 1.33em and the display sizes are 1.0em, so marks of two lines
+   * touch or overlap. Persian gets more leading at those sizes only.
+   */
+  --text-xs--line-height: 1.5;
+  --text-5xl--line-height: 1.35;
+  --text-6xl--line-height: 1.35;
+  --text-7xl--line-height: 1.35;
+  --text-8xl--line-height: 1.35;
+  --text-9xl--line-height: 1.35;
+}
+
+/* The stock section label is uppercase with wide tracking. Neither exists in Persian. */
+.sidebar__menu-header {
+  text-transform: none;
+}
+
+/* The page colour, painted on the canvas. */
+body {
+  background-color: var(--background);
+}
+
+/*
+ * The theme controller sets this attribute for one frame while it swaps classes,
+ * so nothing animates between two palettes. This is what next-themes'
+ * disableTransitionOnChange does, without injecting a <style> element (spec 5.1).
+ */
+html[data-theme-switching] *,
+html[data-theme-switching] *::before,
+html[data-theme-switching] *::after {
+  transition: none !important;
+}
+
+/*
+ * D39 Q4: the accent ring alone is 2.14:1 against the light page, under the 3:1
+ * that a focus indicator needs. HeroUI draws the ring as a 2px gap in the
+ * background colour followed by a 2px ring. In light mode the gap becomes
+ * `foreground`, so the ring reads as a dark line with an accent line outside it
+ * (16.24:1 against the page). Dark mode is 8.45:1 and is left alone.
+ */
+html.light :is(:focus-visible, [data-focus-visible="true"]) {
+  --tw-ring-offset-color: var(--foreground);
+}
+
+/*
+ * Dark mode: an off switch is a white thumb on a dark track, which is the highest-contrast
+ * and most eye-catching state in the row, so it read as "on" (T-485 lab finding). The off
+ * thumb is a mid grey instead, about 5:1 against the track. The on state keeps the dark
+ * thumb on the accent track. Light mode is a white thumb on a light track and needs no change.
+ */
+html.dark .switch:not([data-selected="true"], [aria-checked="true"]) .switch__thumb {
+  background-color: color-mix(in oklab, var(--foreground) 45%, var(--default));
+  box-shadow: none;
+}
