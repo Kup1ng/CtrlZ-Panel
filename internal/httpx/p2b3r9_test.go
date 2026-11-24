@@ -11,6 +11,7 @@ import (
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/admission"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 // Round 9 of package B3: the refusals of a heavy request after its body step, over a real http.Server whose WriteTimeout is
@@ -52,7 +53,7 @@ func TestAQueueRefusalReachesAClientPastTheServersWriteTimeout(t *testing.T) {
 	}
 	defer hold()
 	srv := realServer(t, rig, 150*time.Millisecond)
-	resp, err := http.DefaultClient.Do(realImport(t, srv, "t1-a", "k-late", strings.NewReader(bodyHead+bodyTail)))
+	resp, err := http.DefaultClient.Do(realImport(t, srv, "t1-a", "k-late", strings.NewReader(bodyHead+strings.Repeat("A", 6<<20-len(bodyHead+bodyTail))+bodyTail)))
 	if err != nil {
 		t.Fatalf("the refusal never reached the client: %v", err)
 	}
@@ -90,13 +91,11 @@ func TestAStalledBodyIsBadRequestOnARealServer(t *testing.T) {
 	if got := rig.remainingDay(t, "t1"); got != 199 {
 		t.Fatalf("%d tokens left, want 199: a cut body keeps its token spent", got)
 	}
-	if places, pool := rig.adm.Held(); places != 0 || pool != 0 {
-		// The place is given back when the handler returns, a moment after the client has its answer.
-		time.Sleep(200 * time.Millisecond)
-		if places, pool = rig.adm.Held(); places != 0 || pool != 0 {
-			t.Fatalf("%d places and %d bytes held after a cut body", places, pool)
-		}
-	}
+	// The place is given back when the handler returns, a moment after the client has its answer: wait for that.
+	testwait.Until(t, 10*time.Second, "the place of a cut body to be given back", func() bool {
+		places, pool := rig.adm.Held()
+		return places == 0 && pool == 0
+	})
 }
 
 // TestAnUploadHasTheWeightOfAnExportWhateverItsBody: an Upload merges into the whole profile, so a body of a few bytes is

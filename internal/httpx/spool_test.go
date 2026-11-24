@@ -379,7 +379,7 @@ func largestFileBody(t *testing.T, rulesOnly bool) string {
 		for i := range rules {
 			// A distinct key for each rule, so that no later step can fold them into one.
 			rules[i] = profiles.DocRule{Pattern: strconv.Itoa(i) + long(pattern, "p"), Action: "redirect", Target: target,
-				ExpiresAt: "2030-01-01T00:00:00.000000000+00:00", Comment: long(64, "c")}
+				ExpiresAt: "2030-01-01T00:00:00.000000+00:00", Comment: long(64, "c")}
 		}
 		if rulesOnly {
 			raw = profiles.RulesDocument{Format: profiles.RulesFormat, Version: profiles.DocVersion, Rules: rules}.Encode()
@@ -455,7 +455,7 @@ func longestProfile() profiles.Document {
 	}
 	for i := 0; i < 10000; i++ {
 		d.Rules = append(d.Rules, profiles.DocRule{Pattern: long(260, "p"), Folder: long(32, "f"), Action: "redirect", Target: target,
-			ExpiresAt: "2030-01-01T00:00:00.000000000+00:00", Comment: long(64, "c")})
+			ExpiresAt: "2030-01-01T00:00:00.000000+00:00", Comment: long(64, "c")})
 	}
 	return d
 }

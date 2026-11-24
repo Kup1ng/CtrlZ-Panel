@@ -28,6 +28,11 @@ const (
 	writeBase = 30 * time.Second
 )
 
+// connNow is the one reading of the machine's clock the answers of this package take for the deadlines of a connection (the
+// fresh deadline of a refusal, the start of a spilled answer). A deadline is a length counted from now and is never stored or
+// compared with a stamp, which is why the clock rule lists it and not appclock.
+func connNow() time.Time { return time.Now() }
+
 // earnedDeadline is start + base + one second for each spoolChunk of n.
 func earnedDeadline(start time.Time, base time.Duration, n int64) time.Time {
 	return start.Add(base + time.Duration(n/spoolChunk)*time.Second)

@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -637,7 +636,7 @@ func (a *API) serveHeavy(w http.ResponseWriter, r *http.Request, next http.Handl
 	// it a 503 after the 120 s queue wait, or a 400 after a slow body, is written past the deadline and the client sees a
 	// closed connection and no status (p2-B3-r9-1, r9-5). The answer written from the file sets its own, earned one.
 	refuse := func(e *Error) {
-		setWrite(earnedDeadline(time.Now(), writeBase, 0))
+		setWrite(earnedDeadline(connNow(), writeBase, 0))
 		a.refuse(w, r, e)
 	}
 	if res.Tenant == "" {
@@ -694,7 +693,7 @@ func (a *API) serveHeavy(w http.ResponseWriter, r *http.Request, next http.Handl
 				refuseBusy()
 			case errors.As(err, &mbe):
 				refuse(New(http.StatusRequestEntityTooLarge, CodeTooLarge))
-			case errors.Is(err, os.ErrDeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()):
+			case errors.As(err, &ne) && ne.Timeout():
 				// A body cut by its own read deadline is 400 (6.5 property 3). It comes before the context check: net/http
 				// cancels the request context when a read of the connection fails, so a stalled client would else be a
 				// 499 that nobody reads (p2-B3-r9-1).

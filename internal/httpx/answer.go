@@ -158,7 +158,7 @@ func (a *answerWriter) Write(p []byte) (int, error) {
 func (a *answerWriter) finish(api *API, r *http.Request, setWrite func(time.Time)) {
 	if a.sp == nil {
 		if a.err != nil {
-			setWrite(earnedDeadline(time.Now(), writeBase, 0))
+			setWrite(earnedDeadline(connNow(), writeBase, 0))
 			api.refuse(a.w, r, answerRefusal(a.err))
 			return
 		}
@@ -168,7 +168,7 @@ func (a *answerWriter) finish(api *API, r *http.Request, setWrite func(time.Time
 		return
 	}
 	defer a.sp.close()
-	start := time.Now()
+	start := connNow()
 	setWrite(earnedDeadline(start, writeBase, 0))
 	if a.err != nil {
 		api.refuse(a.w, r, answerRefusal(a.err))
