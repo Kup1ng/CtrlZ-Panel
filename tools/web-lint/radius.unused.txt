@@ -1,0 +1,12 @@
+# HeroUI selectors that use the field radius (rounded-field or --radius-field) and have no row in
+# packages/ui/tokens/radius.table.ts. One selector per line, then " # reason". A selector with no
+# reason fails tools/web-lint/check-rounded-field.mjs, so every line says why the stock corner is
+# acceptable. These were listed in spec 6.3 on 2026-11-07 (WP1); none of them is drawn by a P1 screen yet.
+.date-picker__trigger # P1 builds no date input. A row is needed with the first date picker, measured in a browser
+.date-range-picker__trigger # same as .date-picker__trigger
+.input-group__input # inner part: its group (.input-group, which has a row) clips it and the input has no background or border. Check a focus ring in a group once a screen uses one
+.input-group__input:autofill:active # the autofill state of the same inner input
+.input-group__prefix # inner part: only its inline-start corner is rounded, inside the group, which has a row and clips it
+.input-group__suffix # inner part: only its inline-end corner is rounded, inside the group, which has a row and clips it
+.number-field__increment-button # inner part of .number-field__group, which has a row and clips it (overflow hidden)
+.number-field__decrement-button # inner part of .number-field__group, which has a row and clips it (overflow hidden)
