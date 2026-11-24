@@ -2,6 +2,7 @@ package batchjobs_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,12 @@ func (f *fx) profilesNamed(t *testing.T, tenant uuid.UUID, name string) int {
 // TestARescueNeverComesBeforeTheTimeout: a live job slowed to just under its timeout is never rescued, because River's stuck
 // bound is above the bound that stops the run (spec 3.5, 10.5): it completes with one attempt and no second run.
 func TestARescueNeverComesBeforeTheTimeout(t *testing.T) {
+	// The bounds River really gets, read from the configuration the runner builds, and not the constants beside it: a literal in
+	// that configuration would pass a comparison of the constants and still let a live job be rescued and run twice.
+	timeout, rescue := batchjobs.RiverBounds(batchjobs.Config{})
+	if timeout != batchjobs.JobTimeout || rescue != batchjobs.RescueAfter || rescue <= timeout {
+		t.Fatalf("River stops a run after %v and rescues a job after %v, want %v and %v with the rescue the later", timeout, rescue, batchjobs.JobTimeout, batchjobs.RescueAfter)
+	}
 	if batchjobs.RescueAfter <= batchjobs.JobTimeout {
 		t.Fatalf("River rescues a job after %v and stops a run after %v: a live job could be run twice at once", batchjobs.RescueAfter, batchjobs.JobTimeout)
 	}
@@ -243,8 +250,8 @@ func TestAJobIsNotLostWhenPostgresStopsDuringIt(t *testing.T) {
 }
 
 // TestALockSecretReachesNoJobRowAndNoRiverRow: the lock hash of a profile that a Duplicate job reads, and the text of a job that
-// fails, are in no column of batch_jobs, job_outbox, idempotency_keys or River's table (spec 10.5, lock secrets). The new
-// profile is not locked and holds no hash.
+// fails on that very source, are in no column of batch_jobs, job_outbox, idempotency_keys or River's table, and not in the log of
+// the runner (spec 10.5, lock secrets). The new profile is not locked and holds no hash.
 func TestALockSecretReachesNoJobRowAndNoRiverRow(t *testing.T) {
 	const canary = "Canary-Job-Lock-Hash-98765-Cedar"
 	f := newFx(t)
@@ -267,6 +274,14 @@ func TestALockSecretReachesNoJobRowAndNoRiverRow(t *testing.T) {
 	if s, _ := f.state(t, failing); s != "failed" {
 		t.Fatalf("the failing import is %s", s)
 	}
+	// A Duplicate of the same locked source that fails: the source now holds a grandfathered Iranian Redirect, which a Duplicate
+	// refuses (spec 3.7), so the job that read the locked row is the one that ends failed.
+	f.exec(t, `INSERT INTO ctrlz.rules (tenant_id, profile_id, rule_key, match_kind, action, target_kind, target_host) VALUES ($1, $2, 'later.ir', 'domain', 'redirect', 'host', 'proxy.example.net')`, f.A.Tenant, src)
+	refused := f.queue(t, f.A.Tenant, profiles.JobDuplicate, uuid.Nil, 4, profiles.DuplicateInput{Source: src, Name: "Refused copy"})
+	s, e := f.untilEnded(t, refused)
+	if s != "failed" || !strings.Contains(e, "iranian_name") {
+		t.Fatalf("the duplicate of a source with a grandfathered Iranian Redirect is %s (%s), want failed with iranian_name", s, e)
+	}
 	for _, table := range []string{"batch_jobs", "job_outbox", "idempotency_keys"} {
 		var n int
 		f.scan(t, `SELECT count(*) FROM ctrlz.`+table+` t WHERE strpos(t::text, $1) > 0 OR strpos(t::text, encode(convert_to($1, 'UTF8'), 'hex')) > 0`, []any{canary}, &n)
@@ -278,6 +293,9 @@ func TestALockSecretReachesNoJobRowAndNoRiverRow(t *testing.T) {
 	f.scan(t, `SELECT count(*) FROM river.river_job t WHERE strpos(t::text, $1) > 0 OR strpos(t::text, encode(convert_to($1, 'UTF8'), 'hex')) > 0`, []any{canary}, &n)
 	if n != 0 {
 		t.Error("the lock hash is in river.river_job")
+	}
+	if strings.Contains(f.logs.String(), canary) {
+		t.Error("the lock hash is in the log of the runner")
 	}
 	f.scan(t, `SELECT count(*) FROM ctrlz.profiles WHERE tenant_id = $1 AND name = 'Copy of locked' AND lock_state = 'unlocked' AND lock_password_hash IS NULL`, []any{f.A.Tenant}, &n)
 	if n != 1 {

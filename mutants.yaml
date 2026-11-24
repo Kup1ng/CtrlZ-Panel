@@ -16674,3 +16674,80 @@ mutants:
     must_fail:
       - pkg: ./internal/api
         tests: [TestADecoyFloodDoesNotRefuseARealOTPRequest]
+  - id: tests-that-cannot-fail-a-write-of-rules-from-a-method-with-no-profile-write
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r1-2
+    why: A new method of the store deletes rules by a statement of its own and takes no ProfileWrite and names no profile, which is a writer outside the list of spec 10.2 S1; the lint over the real tree must name it.
+    edits:
+      - file: internal/store/profiles.go
+        old: |-
+          const qProfileDisable = `UPDATE ctrlz.profiles SET disabled_until = $3 WHERE tenant_id = $1 AND id = $2`
+        new: |-
+          const qSweepRulesPlanted = `DELETE FROM ctrlz.rules WHERE expires_at < now()`
+
+          func (t Tx) SweepRulesPlanted() error {
+          	_, err := t.tx.Exec(t.ctx, qSweepRulesPlanted)
+          	return sanitize(err)
+          }
+
+          const qProfileDisable = `UPDATE ctrlz.profiles SET disabled_until = $3 WHERE tenant_id = $1 AND id = $2`
+    must_fail:
+      - pkg: ./internal/lint
+        tests: [TestProfileWritesTakeAProfileWrite]
+  - id: tests-that-cannot-fail-an-entry-of-the-system-writers-that-matches-nothing
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r1-2
+    why: The list of system writers gains an entry whose statement does not exist; spec 10.2 S1 says an entry that matches nothing fails, so the lint over the real tree must report it.
+    edits:
+      - file: internal/lint/p2sql_test.go
+        old: |-
+          func p2SystemWriters() map[string]p2SystemWriter { return map[string]p2SystemWriter{} }
+        new: |-
+          func p2SystemWriters() map[string]p2SystemWriter {
+          	return map[string]p2SystemWriter{"qGonePlanted": {table: "rules", reason: "planted", shape: "planted", digest: "planted"}}
+          }
+    must_fail:
+      - pkg: ./internal/lint
+        tests: [TestProfileWritesTakeAProfileWrite]
+  - id: tests-that-cannot-fail-the-lock-state-cleared-from-the-rename
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r1-2
+    why: The statement of ProfileRename also sets lock_state, which would unlock a profile from a method that is neither Lock nor Unlock (spec 10.2 S9).
+    edits:
+      - file: internal/store/profiles.go
+        old: |-
+          const qProfileRename = `UPDATE ctrlz.profiles SET name = $3 WHERE tenant_id = $1 AND id = $2`
+        new: |-
+          const qProfileRename = `UPDATE ctrlz.profiles SET name = $3, lock_state = 'unlocked' WHERE tenant_id = $1 AND id = $2`
+    must_fail:
+      - pkg: ./internal/lint
+        tests: [TestProfileWritesTakeAProfileWrite]
+  - id: tests-that-cannot-fail-the-guard-returns-the-whole-profile-row
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r1-2
+    why: The guard returns RETURNING *, which carries lock_password_hash out of the one statement every write of a profile passes through (spec 10.2 S9).
+    edits:
+      - file: internal/store/profiles.go
+        old: |-
+          AND lock_state = 'unlocked'
+          RETURNING id`
+        new: |-
+          AND lock_state = 'unlocked'
+          RETURNING *`
+    must_fail:
+      - pkg: ./internal/lint
+        tests: [TestProfileWritesTakeAProfileWrite]
+  - id: tests-that-cannot-fail-the-drain-takes-the-tenant-from-the-args-of-its-row
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r1-2
+    docker: true
+    why: The drain reads the tenant of a job from a member of the args of its outbox row when there is one, and not from the tenant column, so a row of one tenant could run another tenant's job (spec 10.1).
+    edits:
+      - file: internal/store/worker_jobs.go
+        old: |-
+          RETURNING tenant_id, id, kind, args ->> 'job_id'`
+        new: |-
+          RETURNING COALESCE((args ->> 'tenant_id')::uuid, tenant_id), id, kind, args ->> 'job_id'`
+    must_fail:
+      - pkg: ./internal/worker/batchjobs
+        tests: [TestAnOutboxRowNamingAnotherTenantsJobTouchesNothing]

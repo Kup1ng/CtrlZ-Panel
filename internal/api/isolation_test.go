@@ -831,7 +831,7 @@ func idLocations(doc *openapi3.T, needsSession map[string]bool) map[string][]str
 					// A path value the document itself marks x-ctrlz-rowref false is the key of a global catalog row (a
 					// filter id, a service slug) and no tenant owns it, so there is no id of "another tenant" to put there
 					// (P2, B8). A path value with no mark, or marked true, is a place a row id is taken.
-					if v, marked := rowRefMarked(pr.Value.Schema); marked && !v {
+					if v, marked := rowRefMarked(pr.Value.Schema); marked && !v && !isUUIDSchema(pr.Value.Schema) {
 						continue
 					}
 					locs = append(locs, base)

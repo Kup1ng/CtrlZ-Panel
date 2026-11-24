@@ -1,11 +1,13 @@
 package batchjobs_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,6 +38,7 @@ type fx struct {
 	env    *profiles.Env
 	now    time.Time
 	runner *batchjobs.Runner
+	logs   *syncBuf // what the runner and River logged, so a case can look for a secret in it
 }
 
 func newFx(t *testing.T) *fx {
@@ -49,7 +52,7 @@ func newFx(t *testing.T) *fx {
 		t.Fatal(err)
 	}
 	defer func() { _ = super.Close(context.Background()) }()
-	f := &fx{ctx: ctx, db: db, A: catalogtest.NewSeedIDs(1), B: catalogtest.NewSeedIDs(2), now: time.Now().UTC().Truncate(time.Second)}
+	f := &fx{ctx: ctx, db: db, logs: &syncBuf{}, A: catalogtest.NewSeedIDs(1), B: catalogtest.NewSeedIDs(2), now: time.Now().UTC().Truncate(time.Second)}
 	if err := catalogtest.SeedGlobal(ctx, super); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +71,7 @@ func newFx(t *testing.T) *fx {
 	f.tenant = db.Store(ctx, t, store.RoleTenant)
 	f.worker = db.Store(ctx, t, store.RoleWorker)
 	f.env = &profiles.Env{Catalog: locations.Store{}, Clock: appclock.Func(func() time.Time { return f.now })}
-	r, err := batchjobs.New(batchjobs.Config{Store: f.worker, Env: f.env, Log: slog.New(slog.DiscardHandler), Poll: 100 * time.Millisecond, Now: appclock.Func(func() time.Time { return f.now })})
+	r, err := batchjobs.New(batchjobs.Config{Store: f.worker, Env: f.env, Log: slog.New(slog.NewTextHandler(f.logs, &slog.HandlerOptions{Level: slog.LevelDebug})), Poll: 100 * time.Millisecond, Now: appclock.Func(func() time.Time { return f.now })})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +234,9 @@ func TestAnOutboxRowNamingAnotherTenantsJobTouchesNothing(t *testing.T) {
 	aJob := f.queueImport(t, f.A.Tenant, "A's import", 3)
 	// Take A's outbox row away and plant one of B that names A's job.
 	f.exec(t, `DELETE FROM ctrlz.job_outbox`)
-	f.exec(t, `INSERT INTO ctrlz.job_outbox (tenant_id, kind, args) VALUES ($1, 'batch_job', jsonb_build_object('job_id', $2::text))`, f.B.Tenant, aJob.String())
+	// The args name A as the tenant too: a drain that read the tenant from them, and not from the column, would run A's job.
+	f.exec(t, `INSERT INTO ctrlz.job_outbox (tenant_id, kind, args) VALUES ($1, 'batch_job', jsonb_build_object('job_id', $2::text, 'tenant_id', $3::text))`,
+		f.B.Tenant, aJob.String(), f.A.Tenant.String())
 	f.start(t)
 	testwait.Until(t, 60*time.Second, "the outbox to drain", func() bool {
 		var n int
@@ -318,4 +323,22 @@ func TestTheSweepKeepsAJobPastTheFirstPageOfRiverJobs(t *testing.T) {
 	if s, _ := f.state(t, id); s != "queued" {
 		t.Fatalf("the live row is %s after the second sweep", s)
 	}
+}
+
+// syncBuf is a log sink the runner's goroutines write to and a test reads.
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }

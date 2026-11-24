@@ -243,10 +243,28 @@ func TestWritesOnOneProfileUnderAPoolSmallerThanTheirNumber(t *testing.T) {
 			codes[i] = c.do("PATCH", "/profiles/"+p.ID.String(), map[string]any{"name": fmt.Sprintf("Name %d", i)}).Code
 		}()
 	}
+	// The writers must be in the wait before the other tenant asks: a GET made before they queued would prove nothing.
+	waiting := func() int {
+		var n int
+		f.env.Scan(t, `SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()`, nil, &n)
+		return n
+	}
+	for until := time.Now().Add(10 * time.Second); waiting() == 0; {
+		if time.Now().After(until) {
+			t.Fatal("no writer ever waited on the held profile")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// Another tenant's reads are answered, with 200, inside the 3 seconds of the spec, each of several asked while the writers
+	// hold the pool; a 503 here would be the pool taken whole by one tenant's writes.
 	other := f.fresh(B.Tenant, B.User)
-	start := time.Now()
-	r := other.get("/me")
-	took := time.Since(start)
+	for i := 0; i < 3; i++ {
+		start := time.Now()
+		r := other.get("/me")
+		if took := time.Since(start); r.Code != 200 || took > 3*time.Second {
+			t.Errorf("another tenant's GET /me %d answered %d in %v while 16 writes queued on one profile", i, r.Code, took)
+		}
+	}
 	wg.Wait()
 	close(release)
 	if err := <-done; err != nil {
@@ -256,13 +274,6 @@ func TestWritesOnOneProfileUnderAPoolSmallerThanTheirNumber(t *testing.T) {
 		if code != 503 && code != 200 {
 			t.Errorf("write %d answered %d", i, code)
 		}
-	}
-	// The 3 seconds of the spec are the acquire timeout of the store plus the work; the answer may also be the 503 of the full pool.
-	if took > 3*time.Second+cfg.AcquireTimeout {
-		t.Errorf("another tenant's GET /me took %v while 16 writes queued on one profile", took)
-	}
-	if r.Code != 200 && r.Code != 503 {
-		t.Errorf("another tenant's GET /me answered %d", r.Code)
 	}
 }
 
@@ -368,4 +379,113 @@ func TestLockCyclesFromManySessionsStopAtTheTenantsBudget(t *testing.T) {
 		f.reauthed(B.Tenant, B.User).post(basea+"/unlock", map[string]any{"password": "cycle-guess"}).want(404, "not_found")
 	}
 	f.reauthed(A.Tenant, A.User).post(basea+"/unlock", map[string]any{"password": "cycle-password"}).want(204, "")
+}
+
+// TestTheSameKeyOfTwoTenantsIsTwoIndependentEffects: an Idempotency-Key is looked up inside its tenant, so the same key and the
+// same request from tenant A and tenant B make one profile each, each gets the answer of its own request, and a replay by one is
+// never the answer of the other (spec 3.5, 10.1).
+func TestTheSameKeyOfTwoTenantsIsTwoIndependentEffects(t *testing.T) {
+	f := newFrig(t, frigOpts{})
+	A, B := f.env.A, f.env.B
+	key := "shared-" + uuid.NewString()[:8]
+	body := map[string]any{"document": b64(profileDoc)}
+	count := func(tenant uuid.UUID) int {
+		return f.count(`SELECT count(*) FROM ctrlz.profiles WHERE tenant_id = $1 AND name = 'Imported'`, tenant)
+	}
+	ra := f.fresh(A.Tenant, A.User).do("POST", "/profiles:import", body, idem(key)).want(201, "")
+	rb := f.fresh(B.Tenant, B.User).do("POST", "/profiles:import", body, idem(key)).want(201, "")
+	if count(A.Tenant) != 1 || count(B.Tenant) != 1 {
+		t.Fatalf("the same key made %d profiles for A and %d for B, want one each", count(A.Tenant), count(B.Tenant))
+	}
+	if sameJSON(ra.Body, rb.Body) {
+		t.Errorf("A and B were given the same answer to one key: %s", ra.Body)
+	}
+	// A replay of each is its own first answer, and makes nothing.
+	if r := f.fresh(A.Tenant, A.User).do("POST", "/profiles:import", body, idem(key)).want(201, ""); !sameJSON(r.Body, ra.Body) {
+		t.Errorf("A's replay gave another answer:\n%s\n%s", r.Body, ra.Body)
+	}
+	if r := f.fresh(B.Tenant, B.User).do("POST", "/profiles:import", body, idem(key)).want(201, ""); !sameJSON(r.Body, rb.Body) {
+		t.Errorf("B's replay gave another answer:\n%s\n%s", r.Body, rb.Body)
+	}
+	if count(A.Tenant) != 1 || count(B.Tenant) != 1 {
+		t.Errorf("a replay made a profile: A %d, B %d", count(A.Tenant), count(B.Tenant))
+	}
+}
+
+// TestS5TheOtherRoutesOnAnEmptySetAndAFlaggedRow: with no location in the set, a service, a Folder Rule and a group edit that
+// need one are refused as a rule is, an upload keeps an Auto rule and flags it, and a rule that is already flagged can still be
+// switched off, commented, moved and removed, because those leave its checked values alone (spec 4.2, 3.7, 10.2 S5).
+func TestS5TheOtherRoutesOnAnEmptySetAndAFlaggedRow(t *testing.T) {
+	f := newFrig(t, frigOpts{})
+	A := f.env.A
+	f.env.Exec(t, `DELETE FROM ctrlz.location_availability`)
+	c := func() *client { return f.fresh(A.Tenant, A.User) }
+	p := c().mustProfile("Empty set walk", "custom")
+	base := "/profiles/" + p.ID.String()
+	auto := map[string]any{"kind": "auto"}
+	digest := func() string {
+		var s string
+		f.env.Scan(t, `SELECT (SELECT coalesce(md5(string_agg(x::text, '|' ORDER BY x::text)), '') FROM ctrlz.rules x WHERE tenant_id = $1) || '/' ||
+			(SELECT coalesce(md5(string_agg(x::text, '|' ORDER BY x::text)), '') FROM ctrlz.profile_services x WHERE tenant_id = $1) || '/' ||
+			(SELECT coalesce(md5(string_agg(x::text, '|' ORDER BY x::text)), '') FROM ctrlz.rule_folders x WHERE tenant_id = $1)`, []any{A.Tenant}, &s)
+		return s
+	}
+	var fold struct {
+		ID uuid.UUID `json:"id"`
+	}
+	c().post(base+"/folders", map[string]any{"name": "Inbox", "kind": "standard"}).want(201, "").json(&fold)
+	rule1 := `{"pattern":"vpn.example","action":"redirect","target":{"kind":"auto"}}`
+
+	// The item routes refuse what a document would flag.
+	before := digest()
+	for name, r := range map[string]*resp{
+		"a service":       c().do("PUT", base+"/services/youtube", map[string]any{"enabled": true, "action": "redirect", "target": auto}),
+		"a service batch": c().post(base+"/services:batch", map[string]any{"op": "set", "slugs": []string{"youtube", "netflix"}, "enabled": true, "action": "redirect", "target": auto}),
+		"a Folder Rule":   c().post(base+"/folders", map[string]any{"name": "Auto", "kind": "standard", "action": "redirect", "target": auto}),
+	} {
+		if r.Code != 422 || r.code() != "validation_failed" {
+			t.Errorf("%s with Auto on an empty set: %d %s, want 422 validation_failed", name, r.Code, r.Body)
+		}
+	}
+	c().post(base+"/rules", map[string]any{"patterns": []string{"plain.example"}, "action": "block"}).want(201, "")
+	var plain string
+	f.env.Scan(t, `SELECT id::text FROM ctrlz.rules WHERE profile_id = $1 AND rule_key = 'plain.example'`, []any{p.ID}, &plain)
+	if r := c().do("POST", base+"/rules:batch", map[string]any{"op": "edit", "ids": []string{plain}, "set": map[string]any{"action": "redirect", "target": auto}}, idem(uuid.NewString())); r.Code != 422 || r.code() != "validation_failed" {
+		t.Errorf("a group edit to Auto on an empty set: %d %s, want 422 validation_failed", r.Code, r.Body)
+	}
+	c().do("DELETE", base+"/rules/"+plain, nil).want(204, "")
+	if after := digest(); after != before {
+		t.Errorf("a refused write changed the tenant's rules, services or folders")
+	}
+
+	// An upload keeps the Auto rule and counts it as flagged.
+	var up struct {
+		Flagged int `json:"flagged"`
+	}
+	c().do("POST", base+"/folders/"+fold.ID.String()+":upload",
+		map[string]any{"document": b64(`{"format":"ctrlz-rules","version":1,"rules":[` + rule1 + `]}`)}, idem(uuid.NewString())).want(200, "").json(&up)
+	if up.Flagged != 1 {
+		t.Errorf("an upload of an Auto rule on an empty set flagged %d, want 1", up.Flagged)
+	}
+	var id string
+	var flagged bool
+	f.env.Scan(t, `SELECT id::text, location_unavailable FROM ctrlz.rules WHERE profile_id = $1 AND rule_key = 'vpn.example'`, []any{p.ID}, &id, &flagged)
+	if !flagged {
+		t.Fatal("the uploaded Auto rule is not flagged")
+	}
+	// The unchanged-value writes succeed on the flagged row.
+	rule := base + "/rules/" + id
+	for name, r := range map[string]*resp{
+		"switch off":     c().do("PATCH", rule, map[string]any{"enabled": false}),
+		"a comment":      c().do("PATCH", rule, map[string]any{"comment": "kept"}),
+		"an expiry":      c().do("PATCH", rule, map[string]any{"expires_in": "1d"}),
+		"a group enable": c().do("POST", base+"/rules:batch", map[string]any{"op": "enable", "ids": []string{id}}, idem(uuid.NewString())),
+		"a group move":   c().do("POST", base+"/rules:batch", map[string]any{"op": "move", "ids": []string{id}, "dest_root": true}, idem(uuid.NewString())),
+		"the same Auto":  c().do("PATCH", rule, map[string]any{"action": "redirect", "target": auto}),
+	} {
+		if r.Code != 200 {
+			t.Errorf("%s on a flagged rule: %d %s, want 200", name, r.Code, r.Body)
+		}
+	}
+	c().do("DELETE", rule, nil).want(204, "")
 }

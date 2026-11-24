@@ -77,7 +77,7 @@ var (
 	reCountAll = regexp.MustCompile(`count\(\s*\*\s*\)`)
 	reInsertC  = regexp.MustCompile(`\binsert into (?:ctrlz\.)?(\w+)\s*(?:as \w+\s*)?\(([^)]*)\)`)
 	reInsertT  = regexp.MustCompile(`\binsert into (?:ctrlz\.)?(\w+)\b`)
-	reUpdateT  = regexp.MustCompile(`(?:^|[\s(;])update (?:only )?(?:ctrlz\.)?(\w+)(?: (?:as )?(\w+))? set (.*)`)
+	reUpdateT  = regexp.MustCompile(`(?:^|[\s(;])update (?:only )?(?:ctrlz\.)?(\w+)(?: (?:as )?(\w+))? set `)
 	reDeleteT  = regexp.MustCompile(`\bdelete from (?:only )?(?:ctrlz\.)?(\w+)`)
 	reDoUpdate = regexp.MustCompile(`\bon conflict\b.*?\bdo update set (.*)`)
 	reProfiles = regexp.MustCompile(`\b(?:from|join|update|into|using)\s+(?:only\s+)?(?:ctrlz\.)?profiles(?:\s+(?:as\s+)?(\w+))?\b`)
@@ -161,8 +161,15 @@ func p2Writes(norm string) []p2Write {
 			out = append(out, p2Write{"insert", m[1], nil})
 		}
 	}
-	for _, m := range reUpdateT.FindAllStringSubmatch(norm, -1) {
-		out = append(out, p2Write{"update", m[1], setColumns(m[3])})
+	// Each UPDATE has its own SET list, which runs to the next UPDATE or to the end of the statement and is cut at its WHERE,
+	// FROM or RETURNING by setColumns. A greedy match took the first UPDATE only, so a second one (the CTE form) went unseen.
+	ups := reUpdateT.FindAllStringSubmatchIndex(norm, -1)
+	for i, m := range ups {
+		end := len(norm)
+		if i+1 < len(ups) {
+			end = ups[i+1][0]
+		}
+		out = append(out, p2Write{"update", norm[m[2]:m[3]], setColumns(norm[m[1]:end])})
 	}
 	for _, m := range reDoUpdate.FindAllStringSubmatch(norm, -1) {
 		table := ""
@@ -346,6 +353,10 @@ func wholeProfileRow(norm string) string {
 			return n + ".*"
 		case regexp.MustCompile(`\b(?:to_jsonb|to_json|row_to_json|jsonb_agg|json_agg|row|jsonb_build_array|array_agg)\s*\(\s*` + q + `\s*(?:\)|,)`).MatchString(s):
 			return "a function of the row " + n
+		case regexp.MustCompile(`\(\s*` + q + `\s*\)\s*\.\s*\*`).MatchString(s):
+			return "the star of the row " + n
+		case regexp.MustCompile(`(?:^|[^\w.])` + q + `\s*::\s*\w+`).MatchString(s):
+			return "a cast of the row " + n
 		case regexp.MustCompile(`\bselect\s+(?:distinct\s+)?` + q + `\s+from\b`).MatchString(s), regexp.MustCompile(`\breturning\s+` + q + `\b\s*(?:$|;|\))`).MatchString(s):
 			return "the row reference " + n
 		case regexp.MustCompile(`\bselect\s+(?:[\w.]+\s*,\s*)+`+q+`\s*(?:,|\bfrom\b)`).MatchString(s) && n != "profiles" && n != "ctrlz.profiles":
@@ -407,6 +418,11 @@ func TestP2SQLLintsCanFail(t *testing.T) {
 		{"Lock", `func ProfileLock() { db.Exec(ctx, "UPDATE ctrlz.profiles SET lock_state = 'locked', lock_password_hash = $3, lock_message = $4, locked_by = $5, locked_at = now() WHERE tenant_id = $1 AND id = $2 AND lock_state = 'unlocked' RETURNING id") }`, 0},
 		{"the lock state cleared from another method", `func Reopen(w ProfileWrite) { db.Exec(ctx, "UPDATE ctrlz.profiles SET lock_state = 'unlocked' WHERE tenant_id = $1 AND id = $2") }`, 1},
 		{"the lock written in a CTE of another method", `func Other() { db.Exec(ctx, "WITH x AS (UPDATE ctrlz.profiles SET locked_by = NULL WHERE tenant_id = $1 RETURNING id) SELECT 1") }`, 1},
+		{"the lock cleared by the second UPDATE of a CTE", `func Other(w ProfileWrite) { db.Exec(ctx, "WITH x AS (UPDATE ctrlz.rules SET enabled = false WHERE tenant_id = $1 AND profile_id = $2 RETURNING id) UPDATE ctrlz.profiles SET lock_state = 'unlocked' WHERE tenant_id = $1 AND id = $2") }`, 1},
+		{"a content write in the second UPDATE of a CTE with no permission", `func Other() { db.Exec(ctx, "WITH x AS (UPDATE ctrlz.profiles SET lock_state = 'unlocked' WHERE tenant_id = $1 AND id = $2 RETURNING id) UPDATE ctrlz.rules SET enabled = false WHERE tenant_id = $1 AND profile_id = $2") }`, 2},
+		{"the row cast to text", `func Get() { db.Query(ctx, "SELECT p::text FROM ctrlz.profiles p WHERE p.tenant_id = $1") }`, 1},
+		{"the star of a parenthesised row", `func Get() { db.Query(ctx, "SELECT (p).* FROM ctrlz.profiles p WHERE p.tenant_id = $1") }`, 1},
+		{"a column cast is not the row", `func Get() { db.Query(ctx, "SELECT p.id::text FROM ctrlz.profiles p WHERE p.tenant_id = $1") }`, 0},
 		{"the hash read by a route", `func Show() { db.Query(ctx, "SELECT lock_password_hash FROM ctrlz.profiles WHERE tenant_id = $1 AND id = $2") }`, 1},
 		{"the hash read by Unlock's helper", `func ProfileLockHash() { db.Query(ctx, "SELECT lock_password_hash FROM ctrlz.profiles WHERE tenant_id = $1 AND id = $2 AND lock_state = 'locked'") }`, 0},
 		{"a whole row", `func Get() { db.Query(ctx, "SELECT * FROM ctrlz.profiles WHERE tenant_id = $1") }`, 1},

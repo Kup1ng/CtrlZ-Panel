@@ -89,9 +89,12 @@ type JobRequest struct {
 	Profile uuid.UUID
 	Total   int
 	Input   []byte // the validated request
-	// Dest is set for a copy: Profile is then only read, so its lock does not refuse the job, and the profile written is
-	// the one named here (spec 3.1, 7.3).
+	// Dest is the second profile of a transfer. For a copy Profile is only read, so its lock does not refuse the job, and
+	// the profile written is the one named here (spec 3.1, 7.3). For a move to another profile (Move set) both are written.
 	Dest uuid.UUID
+	// Move says Dest is the destination of a move: the path profile is written too, so it must be unlocked, and Dest must
+	// exist and be unlocked, as the inline Move checks them (spec 10.2 S1).
+	Move bool
 }
 
 // QueueJob checks what needs no row work (the path profile exists and is unlocked), then records the job and its
@@ -100,23 +103,36 @@ type JobRequest struct {
 func (e *Env) QueueJob(tx store.Tx, r JobRequest) (uuid.UUID, error) {
 	if r.Profile != uuid.Nil {
 		// A copy reads its source under the path profile: that one must exist, the one written must not be locked.
-		written := r.Profile
-		if r.Dest != uuid.Nil {
+		// The profiles the work writes: the path profile, or the destination of a copy, or both for a move. Every one
+		// must exist before any is judged by its lock, so a locked one never shows that another is missing. The path
+		// profile of a copy is only read: it must exist, its lock does not refuse.
+		written := []uuid.UUID{r.Profile}
+		switch {
+		case r.Dest != uuid.Nil && r.Move:
+			written = append(written, r.Dest)
+		case r.Dest != uuid.Nil:
 			if _, found, err := tx.ProfileLocked(r.Profile); err != nil {
 				return uuid.Nil, err
 			} else if !found {
 				return uuid.Nil, notFound()
 			}
-			written = r.Dest
+			written = []uuid.UUID{r.Dest}
 		}
-		locked, found, err := tx.ProfileLocked(written)
-		switch {
-		case err != nil:
-			return uuid.Nil, err
-		case !found:
-			return uuid.Nil, notFound()
-		case locked:
-			return uuid.Nil, &Error{Kind: KindLocked}
+		locks := make([]bool, len(written))
+		for i, id := range written {
+			locked, found, err := tx.ProfileLocked(id)
+			if err != nil {
+				return uuid.Nil, err
+			}
+			if !found {
+				return uuid.Nil, notFound()
+			}
+			locks[i] = locked
+		}
+		for _, locked := range locks {
+			if locked {
+				return uuid.Nil, &Error{Kind: KindLocked}
+			}
 		}
 	}
 	id, err := tx.JobQueue(r.Kind, r.Profile, r.Total, r.Input)
