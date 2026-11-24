@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/safego"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 type unit string
@@ -128,18 +129,32 @@ func TestRunWithANilLogStillKeepsThePanic(t *testing.T) {
 // signalWriter is a log sink that is safe to read while a goroutine writes, and tells the test the
 // moment the first line arrives, so the test waits on that line and not on a clock (rule 33).
 type signalWriter struct {
-	mu   sync.Mutex
-	buf  bytes.Buffer
-	once sync.Once
-	got  chan struct{}
+	mu    sync.Mutex
+	buf   bytes.Buffer
+	once  sync.Once
+	got   chan struct{}
+	lines int
 }
 
 func (w *signalWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	n, err := w.buf.Write(p)
+	w.lines++
 	w.mu.Unlock()
 	w.once.Do(func() { close(w.got) })
 	return n, err
+}
+
+// writesAgain reports whether a second line arrives within limit. A test that expects exactly one line reads the text after the first
+// line signals it, and a mutant that logs a panic twice writes the second line a moment after the first, which a read straight after
+// the signal can miss (a mutant survived on a loaded runner). The test looks for the second line through testwait.Holds, so the clock
+// is only the limit of the look and a build that logs twice is seen the moment it does.
+func (w *signalWriter) writesAgain(limit time.Duration) bool {
+	return testwait.Holds(limit, time.Millisecond, func() bool {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		return w.lines >= 2
+	})
 }
 
 func (w *signalWriter) text() string {
@@ -163,6 +178,9 @@ func TestGoCountsDownAUnitThatPanickedAndTheProcessLives(t *testing.T) {
 	})
 	wg.Wait() // a count-down that did not run would hang here until the test timeout
 	<-w.got
+	if w.writesAgain(200 * time.Millisecond) {
+		t.Error("the panic was logged twice")
+	}
 	got := w.text()
 	if strings.Count(got, safego.Msg) != 1 || !strings.Contains(got, `"unit":"a"`) {
 		t.Errorf("the panic was not logged once with its unit: %s", got)
@@ -195,6 +213,9 @@ func TestAfterAndOnDoneKeepThePanicOfTheirCallback(t *testing.T) {
 		})
 		<-ran
 		<-w.got
+		if w.writesAgain(200 * time.Millisecond) {
+			t.Errorf("%s: the panic was logged twice", name)
+		}
 		got := w.text()
 		if strings.Count(got, safego.Msg) != 1 || !strings.Contains(got, `"unit":"a"`) {
 			t.Errorf("%s: the panic was not logged once with its unit: %s", name, got)
