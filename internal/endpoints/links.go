@@ -35,8 +35,9 @@ const (
 	// DefaultShareHours and MaxShareHours bound ttl_hours of a share link.
 	DefaultShareHours = 24
 	MaxShareHours     = 168
-	// DownloadLife is how long an Apple profile download link lives (D31).
-	DownloadLife = 15 * time.Minute
+	// DownloadLife is how long an Apple profile download link lives (D31). The store holds the value, because its sweep keeps a
+	// share row for that long after its expiry.
+	DownloadLife = store.DownloadLife
 )
 
 // ---------------------------------------------------------------------------
@@ -379,16 +380,23 @@ func (e *Env) OpenShare(ctx context.Context, st *store.Store, opts store.TxOpts,
 		if len(found) != 1 {
 			return notFound()
 		}
+		// The view is read and judged before the use is spent, as the Apple route does: a setup that is not ready shows a person
+		// nothing, so it is the 409 of every route that generates, which rolls back and leaves the use for the day it is ready
+		// (p3-D4-r2-3). The link's client and expiry come from the lookup; the consume below is the decision that counts, and it
+		// answers 404 for a link that died since.
+		v, row, err := e.ResolverFor(tx, info.EndpointID, info.Client)
+		if err != nil {
+			return err
+		}
+		if !v.Ready {
+			return &Error{Kind: KindSetupUnavailable}
+		}
 		c, won, err := tx.ShareLinkConsume(id, info.EndpointID, now)
 		if err != nil {
 			return err
 		}
 		if !won.Yes() {
 			return notFound()
-		}
-		v, row, err := e.ResolverFor(tx, info.EndpointID, c.Client)
-		if err != nil {
-			return err
 		}
 		out = ShareView{Name: row.Name, Type: row.Type, Resolvers: v, ExpiresAt: c.ExpiresAt}
 		return nil
@@ -494,6 +502,12 @@ func (e *Env) DownloadApple(ctx context.Context, st *store.Store, opts store.TxO
 	if info.TenantStatus != "active" || info.UsesLeft <= 0 || !info.ExpiresAt.After(now) {
 		return Profile{}, false, notFound()
 	}
+	// The one refusal that needs no read is decided before a connection is taken: while the panel's private root is not trusted by
+	// devices the builder is off for every link, so a holder of a live link could otherwise ask for it as often as public-link
+	// allows and have each request lock the Endpoint for nothing (p3-D4-r2-2).
+	if e.Trust != nil && e.Trust.Mode() == mobileconfig.TrustPrivateDisabled {
+		return Profile{}, false, &Error{Kind: KindSetupUnavailable}
+	}
 	err = e.Plain(ctx, st, info.TenantID, opts, func(tx store.Tx) error {
 		out = Profile{}
 		found, err := tx.EndpointsLock([]uuid.UUID{info.EndpointID})
@@ -503,11 +517,14 @@ func (e *Env) DownloadApple(ctx context.Context, st *store.Store, opts store.TxO
 		if len(found) != 1 {
 			return notFound()
 		}
-		c, won, err := tx.DownloadLinkConsume(id, info.EndpointID, now)
+		// What the stored request and the Endpoint's current values allow is decided, and the profile built, before the use is spent,
+		// and the spend is the last write: a refusal here rolls back having written nothing, where the consume first would write a row
+		// to undo (p3-D4-r2-2). The Endpoint's row is held, so the use that the read finds is the one the consume takes.
+		c, ok, err := tx.DownloadLinkRead(id, info.EndpointID, now)
 		if err != nil {
 			return err
 		}
-		if !won.Yes() {
+		if !ok {
 			return notFound()
 		}
 		params, err := appleprofile.ParseParams(c.Params)
@@ -536,6 +553,13 @@ func (e *Env) DownloadApple(ctx context.Context, st *store.Store, opts store.TxO
 				return &Error{Kind: KindSetupUnavailable}
 			}
 			return err
+		}
+		_, won, err := tx.DownloadLinkConsume(id, info.EndpointID, now)
+		if err != nil {
+			return err
+		}
+		if !won.Yes() {
+			return notFound()
 		}
 		if err := tx.AppleProfileDownloaded(info.EndpointID, now); err != nil {
 			return err

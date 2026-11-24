@@ -31,6 +31,11 @@ const MaxShareLinksPerEndpoint = 10
 // the INSERT, under the tenant quota lock.
 const MaxDownloadLinksPerTenant = 20
 
+// DownloadLife is how long an Apple profile download link lives (D31). It lives here and not in internal/endpoints because the
+// sweep needs it: a download link made in the last moment of a share link's life outlives the share link by this much, and the
+// share row, which owns it by a cascading key, must not be purged before then (p3-D4-r2-1).
+const DownloadLife = 15 * time.Minute
+
 // ---------------------------------------------------------------------------
 // Share links.
 
@@ -75,12 +80,17 @@ type ShareLinkRow struct {
 	CreatedAt time.Time
 }
 
+// The live ones come first (at most MaxShareLinksPerEndpoint, so always inside the page), then the rest newest first. A used-up
+// row is not live and stays until its expiry, so up to 200 creates a day could push an older live link out of a page of the
+// newest 100, and the owner could neither see it nor, with no id, revoke it (p3-D4-r2-5).
 const qShareLinkList = `SELECT id, client, expires_at, uses, max_uses, revoked_at IS NOT NULL, created_at FROM ctrlz.setup_share_tokens
-WHERE tenant_id = $1 AND endpoint_id = $2 ORDER BY created_at DESC, id DESC LIMIT 100`
+WHERE tenant_id = $1 AND endpoint_id = $2
+ORDER BY (revoked_at IS NULL AND uses < max_uses AND expires_at > $3::timestamptz) DESC, created_at DESC, id DESC LIMIT 100`
 
-// ShareLinkList reads the share links of an Endpoint, newest first.
-func (t Tx) ShareLinkList(endpoint uuid.UUID) ([]ShareLinkRow, error) {
-	rows, err := t.tx.Query(t.ctx, qShareLinkList, t.tenant, endpoint)
+// ShareLinkList reads the share links of an Endpoint: the live ones first, then the others, each group newest first. now is the
+// application time that decides which are live.
+func (t Tx) ShareLinkList(endpoint uuid.UUID, now time.Time) ([]ShareLinkRow, error) {
+	rows, err := t.tx.Query(t.ctx, qShareLinkList, t.tenant, endpoint, now)
 	if err != nil {
 		return nil, sanitize(err)
 	}
@@ -220,6 +230,25 @@ func (t Tx) DownloadLinkConsume(id, endpoint uuid.UUID, now time.Time) (Download
 	return c, w, nil
 }
 
+const qDownloadLinkRead = `SELECT params::text, params_hash FROM ctrlz.profile_download_tokens
+WHERE tenant_id = $1 AND id = $2 AND endpoint_id = $3 AND uses < max_uses AND expires_at > $4::timestamptz`
+
+// DownloadLinkRead reads what DownloadLinkConsume would return, spending nothing: the same row under the same test, found is false
+// for every refusal. A download decides what the stored request and the Endpoint's current values allow before it spends the use,
+// so a refusal it can tell in advance writes nothing. The caller holds the Endpoint's row, which orders every spender of its
+// links, so the use that was there at the read is there at the consume.
+func (t Tx) DownloadLinkRead(id, endpoint uuid.UUID, now time.Time) (DownloadConsumed, bool, error) {
+	var c DownloadConsumed
+	var params string
+	err := t.tx.QueryRow(t.ctx, qDownloadLinkRead, t.tenant, id, endpoint, now).Scan(&params, &c.ParamsHash)
+	ok, err := notFound(err)
+	if err != nil || !ok {
+		return DownloadConsumed{}, false, err
+	}
+	c.Params = []byte(params)
+	return c, true, nil
+}
+
 const qAppleProfileDownloaded = `UPDATE ctrlz.endpoints SET apple_profile_generated_at = $3::timestamptz, apple_profile_pair_version = pair_version,
   apple_profile_resolver_id = resolver_id WHERE tenant_id = $1 AND id = $2`
 
@@ -283,7 +312,9 @@ func collectStrings(rows pgx.Rows) ([]string, error) {
 }
 
 // ---------------------------------------------------------------------------
-// The sweep (7.1): rows past their expiry or revoked, in batches.
+// The sweep (7.1): rows past their expiry or revoked, in batches. A share row goes DownloadLife after its expiry and not at it,
+// because the download links made through it go with it (ON DELETE CASCADE) and a link made in the last moment of the share's life
+// still has its own 15 minutes (7.3); a revoked share row goes at once, as its revoke already deleted its download links.
 
 const (
 	qSweepShareIDs = `SELECT id FROM ctrlz.setup_share_tokens WHERE tenant_id = $1 AND (expires_at < $3::timestamptz OR revoked_at IS NOT NULL) ORDER BY id LIMIT $2`
@@ -295,9 +326,15 @@ const (
 // sweepLinks is the body of the two link steps of SweepTenantBatch.
 func (t Tx) sweepLinks(share bool, limit int, now time.Time) (int64, error) {
 	if share {
+		// The cutoff, not the time itself: the expiry of a share row is compared with it.
+		shareCutoff := now.Add(-DownloadLife)
 		return sweepKeyed(
-			func() (pgx.Rows, error) { return t.tx.Query(t.ctx, qSweepShareIDs, t.tenant, int32(limit), now) },
-			func(id uuid.UUID) (pgconn.CommandTag, error) { return t.tx.Exec(t.ctx, qSweepShare, t.tenant, id, now) })
+			func() (pgx.Rows, error) {
+				return t.tx.Query(t.ctx, qSweepShareIDs, t.tenant, int32(limit), shareCutoff)
+			},
+			func(id uuid.UUID) (pgconn.CommandTag, error) {
+				return t.tx.Exec(t.ctx, qSweepShare, t.tenant, id, shareCutoff)
+			})
 	}
 	return sweepKeyed(
 		func() (pgx.Rows, error) { return t.tx.Query(t.ctx, qSweepDownIDs, t.tenant, int32(limit), now) },

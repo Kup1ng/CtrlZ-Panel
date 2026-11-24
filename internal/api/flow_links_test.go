@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/bearer"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/mobileconfig"
 )
 
 // The Resolver view, the generators, the share links and the Apple profile end to end (docs/specs/p3-endpoints.md 7, 8, 11.2 E4,
@@ -642,3 +643,102 @@ func TestLinkCreateIsBoundedPerTenantPerDay(t *testing.T) {
 
 // within says a time left is d, to the second the expiry of a link is cut to.
 func within(got, d time.Duration) bool { return got <= d && got > d-time.Second }
+
+// A share link opened while the setup is not ready shows nothing, so it is the 409 of every route that generates and it spends no
+// use (p3-D4-r2-3): the person asks again when the owner has set the zone, and the link still has its uses.
+func TestOpenShareWhileNotReadySpendsNoUse(t *testing.T) {
+	r := newLinkRig(t)
+	f := r.f
+	made := r.share(map[string]any{})
+	value := valueOf(t, made.URL)
+	uses := func() int {
+		var n int
+		f.env.Scan(t, `SELECT uses FROM ctrlz.setup_share_tokens WHERE id = $1`, []any{made.Link.ID}, &n)
+		return n
+	}
+	f.env.Exec(t, `UPDATE ctrlz.domain_settings SET dns_zone = NULL`)
+	for i := 0; i < 3; i++ {
+		r.open(value).want(409, "setup_unavailable")
+		f.ck.add(2 * time.Second)
+	}
+	if n := uses(); n != 0 {
+		t.Fatalf("%d uses spent by opens that showed nothing", n)
+	}
+	f.env.Exec(t, `UPDATE ctrlz.domain_settings SET dns_zone = $1`, linkZone)
+	var view pShareView
+	r.open(value).want(200, "").json(&view)
+	if !view.Resolvers.Ready {
+		t.Errorf("view %+v", view.Resolvers)
+	}
+	if n := uses(); n != 1 {
+		t.Errorf("uses %d after the one open that showed the values, want 1", n)
+	}
+}
+
+// While the panel's private root is not trusted by devices the builder is off for every link, which is decided before a connection
+// is taken: a holder of a live link asking for the profile again and again costs the lookup of the value and nothing more, and the
+// link keeps its uses (p3-D4-r2-2).
+func TestDownloadWhileTheBuilderIsOffTakesNoTransaction(t *testing.T) {
+	r := newLinkRig(t)
+	f := r.f
+	var link pLinkURL
+	r.apple(map[string]any{"protocol": "doh"}).want(201, "").json(&link)
+	value := valueOf(t, link.URL)
+	// The price of the lookup alone is measured on a value that screens and names no row, which is all of the work such a request has.
+	ghost, err := f.srv.bearer.Mint(bearer.DownloadLink, uuid.New(), f.ck.now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := f.st.Asked()
+	f.client().get("/public/apple-profile/"+ghost.Reveal()).want(404, "not_found")
+	lookup := f.st.Asked() - before
+	if lookup == 0 {
+		t.Fatal("a value that screens cost no lookup")
+	}
+	f.srv.ep.Trust = mobileconfig.StaticTrust{M: mobileconfig.TrustPrivateDisabled}
+	t.Cleanup(func() { f.srv.ep.Trust = nil })
+	r.download(value).want(409, "setup_unavailable")
+	f.ck.add(2 * time.Second)
+	before = f.st.Asked()
+	r.download(value).want(409, "setup_unavailable")
+	if n := f.st.Asked() - before; n != lookup {
+		t.Errorf("a refused download took %d pool connections, want the lookup's %d", n, lookup)
+	}
+	var uses int
+	f.env.Scan(t, `SELECT uses FROM ctrlz.profile_download_tokens WHERE tenant_id = $1 AND token_hash = $2`,
+		[]any{f.env.A.Tenant, bearer.Hash(value)}, &uses)
+	if uses != 0 {
+		t.Errorf("%d uses spent by refused downloads", uses)
+	}
+	// With the builder back on, the same link still builds.
+	f.srv.ep.Trust = nil
+	r.download(value).want(200, "")
+}
+
+// An older live share link stays in the owner's list however many used-up links are newer (p3-D4-r2-5), so it can still be revoked.
+func TestShareListShowsTheLiveLinkAmongSpentOnes(t *testing.T) {
+	r := newLinkRig(t)
+	f, a := r.f, r.a
+	path := "/endpoints/" + r.ep.ID.String() + "/share-links"
+	live := r.share(map[string]any{"ttl_hours": 168})
+	f.env.Exec(t, `INSERT INTO ctrlz.setup_share_tokens (tenant_id, endpoint_id, token_hash, expires_at, uses, created_at)
+		SELECT $1, $2, convert_to('spent-' || g, 'UTF8'), now() + interval '1 day', 10, now() + g * interval '1 second' FROM generate_series(1, 120) g`,
+		f.env.A.Tenant, r.ep.ID)
+	var list pShareLinks
+	a.get(path).want(200, "").json(&list)
+	found := false
+	for i, l := range list.Links {
+		if l.ID == live.Link.ID {
+			found = true
+			if i != 0 {
+				t.Errorf("the live link is at position %d", i)
+			}
+		}
+	}
+	if !found || len(list.Links) != 100 {
+		t.Fatalf("%d links listed, the live one found: %v", len(list.Links), found)
+	}
+	// And the owner can end it by the id the list gave.
+	a.do("DELETE", path+"/"+list.Links[0].ID.String(), nil).want(204, "")
+	r.open(valueOf(t, live.URL)).want(404, "not_found")
+}

@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
@@ -61,20 +63,53 @@ func (s *Server) ticketProof(tok string) (id, subject string, ok bool) {
 	return id, subject, true
 }
 
+// maxProofMembers is how many top-level members bodyField looks at. The bodies it reads are the proof routes' and the public link
+// routes', whose documents allow two members at most and refuse any other, so a body of more is junk whatever it holds.
+const maxProofMembers = 8
+
 // bodyField reads one string field of a JSON body without taking the body away from the schema check. A body that is not
 // an object with that field as a string has no value here, and the check that follows refuses it as it always did.
+//
+// It walks the top level of the object and keeps no member but the one asked for, and it gives up after maxProofMembers: the
+// earlier form decoded the whole body into a map, which for 64 KiB of tiny members cost about 10 ms and 1.7 MB, before any bucket,
+// on routes that have none until the value screens (p3-D4-r2-4). A later member of the same name wins, as it does for the decoder
+// that follows; a body with something after the closing brace has no value, as it did.
 func bodyField(r *http.Request, name string) string {
 	raw, ok := httpx.PeekBody(r)
 	if !ok {
 		return ""
 	}
-	var m map[string]json.RawMessage
-	if json.Unmarshal(raw, &m) != nil {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
 		return ""
 	}
-	var v string
-	if json.Unmarshal(m[name], &v) != nil {
+	var found string
+	for n := 0; dec.More(); n++ {
+		if n == maxProofMembers {
+			return ""
+		}
+		t, err := dec.Token()
+		key, isKey := t.(string)
+		if err != nil || !isKey {
+			return ""
+		}
+		if key == name {
+			found = ""
+			if dec.Decode(&found) != nil {
+				return ""
+			}
+			continue
+		}
+		var skip json.RawMessage
+		if dec.Decode(&skip) != nil {
+			return ""
+		}
+	}
+	if t, err := dec.Token(); err != nil || t != json.Delim('}') {
 		return ""
 	}
-	return v
+	if _, err := dec.Token(); err != io.EOF {
+		return ""
+	}
+	return found
 }

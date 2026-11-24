@@ -132,7 +132,7 @@ func (s *Server) ListShareLinks(ctx context.Context, req gen.ListShareLinksReque
 		} else if !ok {
 			return httpx.NotFound()
 		}
-		rows, err := tx.ShareLinkList(uuid.UUID(req.Id))
+		rows, err := tx.ShareLinkList(uuid.UUID(req.Id), s.now())
 		for _, r := range rows {
 			out.Links = append(out.Links, shareLinkOut(r))
 		}

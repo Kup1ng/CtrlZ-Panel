@@ -27,8 +27,9 @@ info:
       last 10 minutes);
     - `x-ctrlz-rate`: the rate class of spec 14.1.
 
-    A third, optional, `x-ctrlz-max-body`, raises the request body limit above the
-    16 KiB default; the passkey finish routes and the bulk routes of P2 use it. An
+    A third, optional, `x-ctrlz-max-body`, sets the request body limit: above the
+    16 KiB default for the passkey finish routes and the bulk routes of P2, and below it for a public route whose only
+    valid body is a few dozen bytes (`openShare`), so that junk costs a read of that size and no more. An
     operation whose limit is above 64 KiB takes the bulk gate (a byte-weighted pool,
     one tenant's share of it) after its session resolved and before its body is read.
 
@@ -2530,10 +2531,12 @@ paths:
       summary: Open a share link
       description: |
         Spends one use. A value that is junk, unknown, expired, revoked, used up, of a deleted Endpoint or of a tenant that is not
-        active is the same `404 not_found`. The value is in the body and never in a query.
+        active is the same `404 not_found`. While no domain or no pair is set the answer is `409 setup_unavailable` and no use is
+        spent. The value is in the body and never in a query.
       security: []
       x-ctrlz-auth: none
       x-ctrlz-rate: public-link
+      x-ctrlz-max-body: 256
       x-ctrlz-token: none
       x-ctrlz-lock: none
       x-ctrlz-outbox: none
