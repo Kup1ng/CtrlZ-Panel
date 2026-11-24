@@ -333,6 +333,37 @@ func (t Tx) RecoveryCodesReplace(user uuid.UUID, hashes [][]byte) error {
 	return sanitize(err)
 }
 
+// qHadRecoveryCodes reads the fact "this account was issued a set of recovery codes before" from two sources that
+// cover the two ways a set is lost, and needs no column of its own:
+//   - the codes themselves, used or not: the operator path (keytool_totp_declare_lost, a lost key) clears the seed
+//     but leaves the rows, so an account in that state still holds a set whatever the age of its enrolment, and the
+//     audit log may by then have forgotten it. Only a disable deletes them, and that writes the row below.
+//   - the audit log of the two actions that touch a TOTP in force, the confirm that made it (totp.enable) and the
+//     disable that deleted the set (totp.disable). ctrlz_tenant holds SELECT and INSERT on the log and only the
+//     retention sweep deletes, past 365 days (qSweepAudit). A thief who disables TOTP leaves a totp.disable row a
+//     moment before they confirm a new one, so for the 365 days after the disable it holds whatever the age of
+//     the enrolment it ended. A thief who disables and then waits past the retention with no second factor on the
+//     account finds the log swept and the codes already deleted, and their confirm reads as a first enrolment:
+//     the same state as an account that never had TOTP, which is the owner's open question.
+//
+// user_id is the author of the audit row; for these two actions it is the account itself.
+const qHadRecoveryCodes = `SELECT EXISTS (SELECT 1 FROM ctrlz.recovery_codes WHERE tenant_id = $1 AND user_id = $2)
+OR EXISTS (SELECT 1 FROM ctrlz.tenant_audit_log
+WHERE tenant_id = $1 AND user_id = $2 AND action IN ('totp.enable', 'totp.disable'))`
+
+// HadRecoveryCodes says whether the account was ever issued recovery codes that a later set replaces: the confirm
+// of a TOTP set-up is then a regeneration of the codes and tells the owner so (spec 12.3, D70), and the confirm
+// of an account that never had any is a first enrolment and tells nobody. Call it BEFORE the confirm writes its
+// own audit row, which would otherwise answer yes, and under the user lock the confirm already holds, so two
+// confirms of one account cannot both read "never".
+func (t Tx) HadRecoveryCodes(user uuid.UUID) (bool, error) {
+	var had bool
+	if err := t.tx.QueryRow(t.ctx, qHadRecoveryCodes, t.tenant, user).Scan(&had); err != nil {
+		return false, sanitize(err)
+	}
+	return had, nil
+}
+
 const qRecoveryUse = `UPDATE ctrlz.recovery_codes SET used_at = now()
 WHERE tenant_id = $1 AND used_at IS NULL AND id = ANY (ARRAY(SELECT id FROM ctrlz.recovery_codes WHERE tenant_id = $1 AND user_id = $2 AND code_hash = $3 AND used_at IS NULL` + orderedUpdate + `))`
 

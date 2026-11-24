@@ -384,6 +384,8 @@ func (s *Server) TotpConfirm(ctx context.Context, req gen.TotpConfirmRequestObje
 		return nil, apiError(err)
 	}
 	ip := httpx.ClientIPFrom(ctx)
+	// Asked before the transaction, like the regeneration's: the cache may read the database (see wantNoticeSMS).
+	smsNotice := s.wantNoticeSMS(ctx)
 	var (
 		codes   []string
 		ended   int
@@ -416,6 +418,15 @@ func (s *Server) TotpConfirm(ctx context.Context, req gen.TotpConfirmRequestObje
 		if _, err := s.secondFactor(tx, fc, p.UserID, b.Code, ""); err != nil {
 			return err
 		}
+		// An account that had a set of codes and lost it to a disable gets a new set here, and that is a
+		// regeneration (D70, spec 12.3): a thief with a session and the password reaches the same end through
+		// disable, set-up and confirm as through the regeneration route, and must not do it without a trace. The
+		// first enrolment of an account that never had codes tells nobody. Read before the audit row of this
+		// confirm exists, under the user lock taken above.
+		replaces, err := tx.HadRecoveryCodes(p.UserID)
+		if err != nil {
+			return err
+		}
 		if ok, err := tx.TOTPEnable(p.UserID); err != nil {
 			return err
 		} else if !ok {
@@ -435,6 +446,10 @@ func (s *Server) TotpConfirm(ctx context.Context, req gen.TotpConfirmRequestObje
 		ended, cookies = out.Ended, issuedCookies(out)
 		for _, c := range set.Codes {
 			codes = append(codes, c.Reveal())
+		}
+		if replaces {
+			// totp.enable first, then the regeneration row the daily cap of the SMS counts (once for this confirm).
+			return recoveryCodesReplaced(tx, p.UserID, len(codes), smsNotice, audit.TOTPEnable{Left: len(codes)})
 		}
 		return audit.Tenant(tx, p.UserID, ip, audit.TOTPEnable{Left: len(codes)})
 	})
@@ -542,20 +557,9 @@ func (s *Server) RegenerateRecoveryCodes(ctx context.Context, _ gen.RegenerateRe
 			codes = append(codes, c.Reveal())
 		}
 		// Replacing the codes does not move credential_gen, so a thief who passed reauth could mint a set only
-		// they hold. The notice is what lets the owner learn of it (tenant-r18-14, D64 passkey-add-notice). It
-		// belongs here and not to the first enable: that one shows the owner their own first codes. In rank
-		// order: after the session event, before the audit row.
-		noticeID, err := tx.SecurityNoticeAdd("recovery_codes_regenerated")
-		if err != nil {
-			return err
-		}
-		if err := audit.Tenant(tx, p.UserID, httpx.ClientIPFrom(tx.Context()), audit.RecoveryRegenerate{Left: len(codes)}); err != nil {
-			return err
-		}
-		if smsNotice {
-			return noticeSMS(tx, p.UserID, noticeID)
-		}
-		return nil
+		// they hold. The notice is what lets the owner learn of it (tenant-r18-14, D64 passkey-add-notice). In
+		// rank order: after the session event, before the audit row.
+		return recoveryCodesReplaced(tx, p.UserID, len(codes), smsNotice)
 	})
 	if err != nil {
 		return nil, err

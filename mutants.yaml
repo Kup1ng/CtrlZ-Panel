@@ -15304,10 +15304,10 @@ mutants:
   - id: credential-generation-new-recovery-codes-tell-nobody
     rule: credential-generation
     finding: tenant-r18-14
-    why: Regenerating the recovery codes writes no notice (the line sat in the TOTP enable route first, where the mutant was killed while the regeneration route stayed silent).
+    why: Replacing the recovery codes writes no notice (the line sat in the TOTP enable route first, where the mutant was killed while the regeneration route stayed silent; since D70 it is one helper that the regeneration and the confirm after a disable share).
     docker: true
     edits:
-      - file: internal/api/routes_totp.go
+      - file: internal/api/notice.go
         old: |-
           noticeID, err := tx.SecurityNoticeAdd("recovery_codes_regenerated")
         new: |-

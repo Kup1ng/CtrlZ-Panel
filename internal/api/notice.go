@@ -5,7 +5,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/audit"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/caps"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
 )
 
@@ -28,4 +30,34 @@ func (s *Server) wantNoticeSMS(ctx context.Context) bool {
 func noticeSMS(tx store.Tx, user, notice uuid.UUID) error {
 	_, err := tx.SecurityNoticeSMS(user, notice, caps.MaxNoticeSMS)
 	return err
+}
+
+// recoveryCodesReplaced is what a set of recovery codes that takes the place of another leaves behind: the security
+// notice, the audit row recovery.regenerate, and the SMS, in the transaction that stored the codes. Two routes make
+// such a set, the regeneration and the confirm of a TOTP set-up of an account that had codes before (spec 12.3, D70),
+// and a thief who passes either holds a set only they know, so both must tell the owner the same way. Replacing the
+// codes does not move credential_gen, which is why a notice is the only sign.
+//
+// with are the audit rows of the change itself that belong before the regeneration row (the confirm's totp.enable).
+// They are written here, after the notice, because the lock order puts notifications before the audit log
+// (internal/lockrank), and the SMS comes after every audit row because the cap counts the recovery.regenerate row
+// this call writes: one replaced set is one row, so it is counted once whatever else the route audits.
+func recoveryCodesReplaced(tx store.Tx, user uuid.UUID, left int, sms bool, with ...audit.TenantEvent) error {
+	noticeID, err := tx.SecurityNoticeAdd("recovery_codes_regenerated")
+	if err != nil {
+		return err
+	}
+	ip := httpx.ClientIPFrom(tx.Context())
+	for _, ev := range with {
+		if err := audit.Tenant(tx, user, ip, ev); err != nil {
+			return err
+		}
+	}
+	if err := audit.Tenant(tx, user, ip, audit.RecoveryRegenerate{Left: left}); err != nil {
+		return err
+	}
+	if sms {
+		return noticeSMS(tx, user, noticeID)
+	}
+	return nil
 }

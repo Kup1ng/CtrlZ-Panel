@@ -38,6 +38,7 @@ func TestTOTP(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	var recoveryCodes []string // shared between the steps below
 	A := f.env.A
+	f.dropSeedCodes(A.Tenant, A.User) // a first enrolment starts with no code, as in production
 
 	other, c := f.client(), f.client()
 	other.mustLogin(A.Phone, pwA)
