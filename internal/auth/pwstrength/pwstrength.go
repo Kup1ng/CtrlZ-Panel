@@ -22,7 +22,6 @@ import (
 
 	"github.com/ccojocar/zxcvbn-go"
 	"github.com/ccojocar/zxcvbn-go/match"
-	"github.com/ccojocar/zxcvbn-go/scoring"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/digits"
@@ -313,25 +312,35 @@ func (c *Checker) check(ctx context.Context, pw password.Prepared, in Input, kin
 // (round 26, primitives-r26-4). It lives for one Check and is used by one goroutine, so it needs no lock.
 type zxMemo struct {
 	inputs  []string
-	seen    map[string]scoring.MinEntropyMatch
+	seen    map[string]zxVerdict
 	lookups int // how many strings were asked for, repeats included
 	scored  int // how many readings of the password were scored
 	runs    int // how many times zxcvbn really ran, for the test that holds the reuse
 }
 
 func newZxMemo(inputs []string) *zxMemo {
-	return &zxMemo{inputs: inputs, seen: map[string]scoring.MinEntropyMatch{}}
+	return &zxMemo{inputs: inputs, seen: map[string]zxVerdict{}}
 }
 
-func (z *zxMemo) strength(s string) scoring.MinEntropyMatch {
+func (z *zxMemo) strength(s string) zxVerdict {
 	z.lookups++
 	if m, ok := z.seen[s]; ok {
 		return m
 	}
 	z.runs++
-	m := zxcvbn.PasswordStrength(s, z.inputs)
+	r := zxcvbn.PasswordStrength(s, z.inputs)
+	m := zxVerdict{Score: r.Score, Entropy: r.Entropy, Seq: r.MatchSequence, Length: len(r.Password)}
 	z.seen[s] = m
 	return m
+}
+
+// zxVerdict is the part of zxcvbn's answer that a check reads. It is a type of our own so that the memo
+// does not need an import of the scorer's scoring package (internal/lint imports.yaml lists the reviewed ones).
+type zxVerdict struct {
+	Score   int
+	Entropy float64
+	Seq     []match.Match
+	Length  int
 }
 
 // reading is the verdict on one reading of the password.
@@ -356,7 +365,7 @@ func (c *Checker) scoreReading(text string, z *zxMemo, persianOnly bool, finglis
 		return reading{score: ps, length: len(head), fold: fold, persian: hit}
 	}
 	hs := z.strength(string(head))
-	r := reading{score: hs.Score, seq: hs.MatchSequence, length: len(hs.Password), fold: fold}
+	r := reading{score: hs.Score, seq: hs.Seq, length: hs.Length, fold: fold}
 	if ps, hit := persianScore(string(head), z, finglish); hit && ps < r.score {
 		r.score, r.persian = ps, true
 	}
