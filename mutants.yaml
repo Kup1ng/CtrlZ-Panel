@@ -1085,7 +1085,7 @@ mutants:
     docker: true
     why: The issue function counts on the one row 'all' again, so every request, real or decoy, queues on one counter row and a flood of decoys refuses the real requests with 503 (db-r18-2).
     edits:
-      - file: migrations/postgres/0055_review_round18_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           v_gkey   := CASE WHEN pg_catalog.random() < 1.0 / 16 THEN 'all'
                              ELSE 'all:' || (1 + pg_catalog.floor(pg_catalog.random() * 15))::integer END;
@@ -1116,9 +1116,9 @@ mutants:
     edits:
       - file: internal/store/catalogtest/checks.go
         old: |-
-          = 'ctrlz_scoped') = ANY (p.polroles))`)
+          = 'ctrlz_scoped') = ANY (p.polroles))
         new: |-
-          = 'ctrlz_scoped') = ANY (p.polroles) AND false)`)
+          = 'ctrlz_scoped') = ANY (p.polroles) AND false)
     must_fail:
       - pkg: ./internal/store/catalogtest
         tests: [TestDefinerOwnerListCanFail]
@@ -1669,7 +1669,7 @@ mutants:
     docker: true
     why: auth_phone_mark_verified stops binding the code to the phone of the locked row, so an OTP login or a reset ticket made from a code for a number the user has left survives a phone change (db-r6-5, db-r6-7).
     edits:
-      - file: migrations/postgres/0029_review_round6_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           WHERE o.id = p_otp_id AND o.phone_e164 = v_phone AND o.purpose IN ('login', 'reset')
         new: |-
@@ -5993,7 +5993,7 @@ mutants:
     docker: true
     why: auth_otp_issue sends pg_notify again (as 0047 did for every accepted request), so the day a stalled listener and a flooding sender fill the cluster's notification queue no OTP can be issued for any tenant; the catalog check reads the function, and the full-queue test shows the commit failing.
     edits:
-      - file: migrations/postgres/0055_review_round18_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           RETURNING ctrlz.otp_challenges.id INTO v_id;
         new: |-
@@ -7998,7 +7998,7 @@ mutants:
     docker: true
     why: The decoy of auth_otp_issue stops probing and locking the one global counter row, so a phone with an account waits behind every real send while a phone without one is answered at once, and the wait tells them apart.
     edits:
-      - file: migrations/postgres/0055_review_round18_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           FOR i IN 1 .. pg_catalog.array_length(v_keys, 1) LOOP
         new: |-
@@ -16682,13 +16682,13 @@ mutants:
     docker: true
     why: Every request counts on the one row 'all' again and holds it for a tenth of a second (the issue transaction does more than one short statement), so the flood of decoys queues past lock_timeout and refuses real requests with 503.
     edits:
-      - file: migrations/postgres/0055_review_round18_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           v_gkey   := CASE WHEN pg_catalog.random() < 1.0 / 16 THEN 'all'
                              ELSE 'all:' || (1 + pg_catalog.floor(pg_catalog.random() * 15))::integer END;
         new: |-
           v_gkey   := 'all';
-      - file: migrations/postgres/0055_review_round18_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           END LOOP;
           

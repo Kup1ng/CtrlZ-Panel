@@ -201,7 +201,7 @@ security_definer:
     ranks: [otp_challenges]
     no_trail: "login code state; the outcome goes to the caller who holds the code"
   - name: auth_otp_issue
-    isolation: key
+    isolation: tenant
     args: "p_phone text, p_purpose text, p_code_hash bytea, p_delivery_ct bytea, p_ip inet, p_trusted boolean"
     returns: "TABLE(id uuid, allowed boolean)"
     owner: auth

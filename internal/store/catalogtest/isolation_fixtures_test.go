@@ -31,7 +31,11 @@ type fnFix struct {
 	own     string // the rows the success call answers, as fnCtx.summary prints them
 	cross   string // the rows the cross call answers; "*" accepts any answer
 	noCross bool   // the function takes no id: the tenant setting is its only selector
-	effect  string
+	// settingOptional marks a tenant function that serves callers with no setting as well (auth_otp_issue: a login code is
+	// issued before any tenant is known, and the setting only stamps the code of a phone change, question 15), so the case
+	// that calls it with no setting and expects a refusal does not apply.
+	settingOptional bool
+	effect          string
 }
 
 // fnCtx is the transaction a case runs in. It is rolled back, so no case leaves a trace.
@@ -243,7 +247,7 @@ func (h *harness) fnFixtures() map[string]fnFix {
 		"auth_otp_consume": {arrange: otp(false, login, own, "otp"), call: `SELECT outcome FROM ctrlz_fn.auth_otp_consume($1, $2, 'login', '\x01'::bytea)`,
 			args: nil, own: "(ok)", cross: "(invalid)", effect: fxChanges},
 		"auth_otp_issue": {call: `SELECT allowed FROM ctrlz_fn.auth_otp_issue($1, 'login', '\x01'::bytea, '\x02'::bytea, '198.51.100.7'::inet, false)`,
-			args: func(caller, _ catalogtest.SeedIDs) []any { return []any{caller.Phone} }, own: "(true)", noCross: true, effect: fxChanges},
+			args: func(caller, _ catalogtest.SeedIDs) []any { return []any{caller.Phone} }, own: "(true)", noCross: true, effect: fxChanges, settingOptional: true},
 		"auth_ticket_peek": {arrange: ticket, call: `SELECT subject_tenant FROM ctrlz_fn.auth_ticket_peek(` + ticketHash("tk") + `, 'mfa')`,
 			args: ticketArgs, own: "(B.tenant)", noCross: true, effect: fxChanges},
 		"auth_ticket_take": {arrange: ticket, call: `SELECT subject_tenant FROM ctrlz_fn.auth_ticket_take(` + ticketHash("tk") + `, 'mfa')`,

@@ -324,10 +324,17 @@ func scanOTPIssued(r pgx.Row) (v OTPIssued, err error) {
 // The caller is the tenant API, so the refusals of the caps and the cooldown are answered as for OTPIssue (Allowed
 // false, nothing stored) and the transaction commits with nothing in it.
 func (a AuthLookups) OTPIssueForTenant(ctx context.Context, tenant uuid.UUID, phone, purpose string, codeHash, deliveryCT []byte, ip netip.Addr, trusted bool) (OTPIssued, error) {
+	// The same refusal as every single-statement call (one): a request holds one connection at a time, and this call
+	// opens a transaction of its own, so a context that already belongs to one (or to a busy request scope) is refused
+	// before the tenant is even looked at.
+	if ctx.Value(txMarker{}) != nil || scopeBusy(ctx) {
+		return OTPIssued{}, ErrNested
+	}
 	var out OTPIssued
 	err := a.s.WithTenant(ctx, tenant, TxOpts{}, func(tx Tx) error {
 		var err error
-		out, err = scanOTPIssued(tx.tx.QueryRow(tx.ctx, qOTPIssue, phone, purpose, codeHash, deliveryCT, addrArg(ip), trusted))
+		args := []any{phone, purpose, codeHash, deliveryCT, addrArg(ip), trusted}
+		out, err = scanOTPIssued(tx.tx.QueryRow(tx.ctx, qOTPIssue, args...))
 		return sanitize(err)
 	})
 	return out, err
