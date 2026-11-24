@@ -1,11 +1,14 @@
 package api
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/google/uuid"
 
+	apidoc "github.com/Kup1ng/CtrlZ-Panel/api"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/passkey/passkeytest"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/session"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/caps"
@@ -194,6 +197,21 @@ func TestSecurityNoticesAreShownApart(t *testing.T) {
 		t.Fatalf("the read security notice is not in items as a read, security notice: %+v", all.Items)
 	}
 
+	// A security notice that is already read is history: any session may mark it again and nothing changes, so the
+	// flag says markable and the endpoint agrees (review dec-c-r1-1). n2 is in the future of this session, so the
+	// session could not have marked it while it was unread.
+	f.env.Exec(t, `UPDATE ctrlz.notifications SET read_at = now() WHERE id = $1`, n2)
+	var again bool
+	for _, it := range a.notices("?limit=100").Items {
+		if it.ID == n2 {
+			again = it.Security && it.ReadAt != nil && it.Markable
+		}
+	}
+	if !again {
+		t.Fatal("a read security notice of the future of the session is not listed as markable")
+	}
+	a.post("/notifications/"+n2+"/read", nil).want(204, "")
+
 	// Tenant B sees its own notice and none of A's.
 	pb := b.notices("")
 	if len(pb.SecurityItems) != 1 || pb.SecurityUnread != 1 {
@@ -292,7 +310,7 @@ func TestASecurityNoticeQueuesOneSMSToTheAccountPhone(t *testing.T) {
 		t.Fatalf("%d messages after the repeated and cross calls, want 1", n)
 	}
 
-	// The daily cap: three messages a day for the tenant, whichever of the two changes made them.
+	// The daily cap: three messages a day for the tenant, for each of the two kinds of change on its own.
 	a.addKey(pwA)
 	a.addKey(pwA)
 	if n := f.outboxNotices(A.Phone); n != caps.MaxNoticeSMS {
@@ -304,6 +322,45 @@ func TestASecurityNoticeQueuesOneSMSToTheAccountPhone(t *testing.T) {
 	}
 	if n := f.count(`SELECT count(*) FROM ctrlz.notifications WHERE tenant_id = $1 AND kind = 'passkey_added'`, A.Tenant); n != 4 {
 		t.Fatalf("%d notices, want one for each of the four changes", n)
+	}
+
+	// The cap is per kind (review dec-c-r1-6): A's passkey messages are spent, and the notices of replaced recovery
+	// codes still have their own three. A holder of the session who spent one kind to silence the other would find
+	// the other still sent. The change is made as the route makes it (notice, audit row, then the SMS) because the
+	// route needs an authenticator app of its own; the routes' own SMS is checked in the TOTP flow test.
+	regenerate := func() (queued bool) {
+		err := f.st.WithTenant(f.env.Ctx, A.Tenant, store.TxOpts{}, func(tx store.Tx) error {
+			if _, ok, err := tx.UserLock(A.User); err != nil || !ok {
+				return fmt.Errorf("user lock: %v %v", ok, err)
+			}
+			notice, err := tx.SecurityNoticeAdd("recovery_codes_regenerated")
+			if err != nil {
+				return err
+			}
+			if _, err := tx.DB().Exec(tx.Context(), `INSERT INTO ctrlz.tenant_audit_log (tenant_id, user_id, action) VALUES ($1, $2, 'recovery.regenerate')`, tx.TenantID(), A.User); err != nil {
+				return err
+			}
+			queued, err = tx.SecurityNoticeSMS(A.User, notice, caps.MaxNoticeSMS)
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return queued
+	}
+	for i := 1; i <= caps.MaxNoticeSMS; i++ {
+		if !regenerate() {
+			t.Fatalf("recovery notice %d of the day was not sent after the passkey messages were spent", i)
+		}
+	}
+	if regenerate() {
+		t.Fatal("a fourth recovery notice in a day was sent")
+	}
+	if n := f.count(`SELECT count(*) FROM ctrlz.sms_outbox WHERE phone_e164 = $1 AND template_key = 'notice_recovery'`, A.Phone); n != caps.MaxNoticeSMS {
+		t.Fatalf("%d recovery messages, want %d", n, caps.MaxNoticeSMS)
+	}
+	if n := f.count(`SELECT count(*) FROM ctrlz.sms_outbox WHERE phone_e164 = $1 AND template_key = 'notice_passkey'`, A.Phone); n != caps.MaxNoticeSMS {
+		t.Fatalf("%d passkey messages after the recovery ones, want %d", n, caps.MaxNoticeSMS)
 	}
 
 	// Tenant B counts on its own: verified now, its first message goes out in English, though A has spent its day.
@@ -333,5 +390,99 @@ func TestASecurityNoticeWithNoGatewayQueuesNothing(t *testing.T) {
 	n1 := f.noticeID(A.Tenant, "passkey_added")
 	if got := a.notices("").SecurityItems; len(got) != 1 || got[0].ID != n1 {
 		t.Fatalf("the notice does not stand in the panel: %+v", got)
+	}
+}
+
+// TestTheSecurityNoticesShownApartAreBoundedAndNoneIsLeftOutOfEveryResponse is review dec-c-r1-2 and dec-c-r1-7. The
+// unread security notices shown apart are the newest SecurityNoticeListLimit, and that number is the document's own
+// maxItems. A thief can make that many in minutes (a regeneration is ten a minute and the reauth window keeps going),
+// so a notice older than the newest fifty must not fall out of every response: it stays in the list, where paging
+// reaches it, and in its count, marked as a security notice that this session may mark. Tenant B is untouched.
+func TestTheSecurityNoticesShownApartAreBoundedAndNoneIsLeftOutOfEveryResponse(t *testing.T) {
+	f := newFrig(t, frigOpts{})
+	A, B := f.env.A, f.env.B
+	doc, err := openapi3.NewLoader().LoadFromData(apidoc.Tenant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := doc.Components.Schemas["NotificationPage"].Value.Properties["security_items"].Value.MaxItems; got == nil || *got != uint64(store.SecurityNoticeListLimit) {
+		t.Fatalf("the document bounds NotificationPage.security_items at %v and the store at %d: they are one number", got, store.SecurityNoticeListLimit)
+	}
+	a, b := f.client(), f.client()
+	a.mustLogin(A.Phone, pwA)
+	b.mustLogin(B.Phone, pwB)
+
+	// The passkey notice is the oldest; 51 notices of regenerated codes come after it, each a minute apart, all
+	// before the session of `a` (the database's clock on both sides), so the session may mark every one.
+	f.env.Exec(t, `INSERT INTO ctrlz.notifications (tenant_id, kind, severity, created_at) VALUES ($1, 'passkey_added', 'info', now() - interval '2 days')`, A.Tenant)
+	oldest := f.noticeID(A.Tenant, "passkey_added")
+	f.env.Exec(t, `INSERT INTO ctrlz.notifications (tenant_id, kind, severity, created_at)
+		SELECT $1, 'recovery_codes_regenerated', 'info', now() - interval '1 day' + make_interval(mins => g) FROM generate_series(1, $2) g`,
+		A.Tenant, store.SecurityNoticeListLimit+1)
+	f.env.Exec(t, `INSERT INTO ctrlz.notifications (tenant_id, kind, severity, created_at) VALUES ($1, 'passkey_added', 'info', now() - interval '1 hour')`, B.Tenant)
+
+	total := store.SecurityNoticeListLimit + 2
+	p1 := a.notices("?limit=2")
+	if len(p1.SecurityItems) != store.SecurityNoticeListLimit {
+		t.Fatalf("%d security items, want the bound %d", len(p1.SecurityItems), store.SecurityNoticeListLimit)
+	}
+	if p1.SecurityUnread != total {
+		t.Fatalf("security unread %d, want every one of the %d", p1.SecurityUnread, total)
+	}
+	for i, it := range p1.SecurityItems {
+		if it.ID == oldest {
+			t.Fatal("the oldest notice is among the newest fifty")
+		}
+		if !it.Security || !it.Markable {
+			t.Fatalf("security item %d = %+v", i, it)
+		}
+	}
+	// Walk every page of the list: the oldest passkey notice and the one regeneration past the fifty are in it, as
+	// unread security notices that the session may mark, and the badge counts them (the welcome notice and the two).
+	seen := map[string]noticeItem{}
+	cursor := ""
+	for pages := 0; ; pages++ {
+		if pages > 10 {
+			t.Fatal("the list does not end")
+		}
+		q := "?limit=2"
+		if cursor != "" {
+			q += "&cursor=" + cursor
+		}
+		p := a.notices(q)
+		if p.Unread != 3 {
+			t.Fatalf("unread %d, want the welcome notice and the 2 left out of security_items", p.Unread)
+		}
+		for _, it := range p.Items {
+			seen[it.ID] = it
+		}
+		if p.Next == "" {
+			break
+		}
+		cursor = p.Next
+	}
+	it, ok := seen[oldest]
+	if !ok || !it.Security || !it.Markable || it.ReadAt != nil {
+		t.Fatalf("the oldest passkey notice reaches no page, or reaches it wrong: %+v (found %v)", it, ok)
+	}
+	var left int
+	for _, it := range seen {
+		if it.Security {
+			left++
+		}
+	}
+	if left != 2 {
+		t.Fatalf("%d security notices in the list past the fifty, want 2", left)
+	}
+	// It can be read from where it is listed, and then it is history.
+	a.post("/notifications/"+oldest+"/read", nil).want(204, "")
+	after := a.notices("")
+	if after.SecurityUnread != total-1 || after.Unread != 2 {
+		t.Fatalf("after the mark: security unread %d and unread %d, want %d and 2", after.SecurityUnread, after.Unread, total-1)
+	}
+
+	pb := b.notices("")
+	if len(pb.SecurityItems) != 1 || pb.SecurityUnread != 1 || pb.Unread != 1 {
+		t.Fatalf("B sees %+v, want its own one security notice and its welcome", pb)
 	}
 }

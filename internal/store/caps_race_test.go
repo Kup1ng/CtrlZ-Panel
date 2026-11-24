@@ -1253,4 +1253,26 @@ func driveNoticeSMS(t *testing.T, e *raceEnv) {
 			t.Errorf("tenant %d has %d notices, want one for each of the %d changes, sent or not", i+1, n, spenders)
 		}
 	}
+	// The cap is per kind: a tenant whose passkey messages are spent is still told of a replaced set of recovery
+	// codes (review dec-c-r1-6), which is what a thief who spends one kind to silence the other would try.
+	for i, who := range []catalogtest.SeedIDs{e.A, e.B} {
+		var sent bool
+		err := e.tenant.WithTenant(e.ctx, who.Tenant, store.TxOpts{}, func(tx store.Tx) error {
+			if _, ok, err := tx.UserLock(who.User); err != nil || !ok {
+				return fmt.Errorf("user lock: %v %v", ok, err)
+			}
+			notice, err := tx.SecurityNoticeAdd("recovery_codes_regenerated")
+			if err != nil {
+				return err
+			}
+			if _, err := tx.DB().Exec(tx.Context(), `INSERT INTO ctrlz.tenant_audit_log (tenant_id, user_id, action) VALUES ($1, $2, 'recovery.regenerate')`, tx.TenantID(), who.User); err != nil {
+				return err
+			}
+			sent, err = tx.SecurityNoticeSMS(who.User, notice, caps.MaxNoticeSMS)
+			return err
+		})
+		if err != nil || !sent {
+			t.Errorf("tenant %d: a recovery notice after its passkey messages were spent was not sent: %v %v", i+1, sent, err)
+		}
+	}
 }

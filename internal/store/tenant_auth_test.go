@@ -336,7 +336,7 @@ func TestTenantMethodsDoNotReachAnotherTenant(t *testing.T) {
 		// Notices.
 		read, err := tx.NotificationRead(aNotification, uuid.Must(uuid.NewV7()))
 		falsy("NotificationRead", read != store.NoticeUnknown, err)
-		if l, err := tx.NotificationsPage(store.Cursor{}, 50); err != nil || len(l) != 1 {
+		if l, err := tx.NotificationsPage(store.Cursor{}, 50, uuid.Must(uuid.NewV7())); err != nil || len(l) != 1 {
 			t.Errorf("NotificationsPage: %d rows, %v (B has its own seed row only)", len(l), err)
 		} else if l[0].ID == aNotification {
 			t.Error("NotificationsPage returned A's notification")
@@ -817,12 +817,12 @@ VALUES ($1, $2, 'login', '\x01', now() + interval '5 minutes', now())`, loginOTP
 				t.Fatal(err)
 			}
 		}
-		page1, err := tx.NotificationsPage(store.Cursor{}, 4)
+		page1, err := tx.NotificationsPage(store.Cursor{}, 4, uuid.Must(uuid.NewV7()))
 		if err != nil || len(page1) != 4 {
 			t.Fatalf("page 1: %d %v", len(page1), err)
 		}
 		last := page1[len(page1)-1]
-		page2, err := tx.NotificationsPage(store.Cursor{At: last.CreatedAt, ID: last.ID}, 4)
+		page2, err := tx.NotificationsPage(store.Cursor{At: last.CreatedAt, ID: last.ID}, 4, uuid.Must(uuid.NewV7()))
 		if err != nil || len(page2) != 2 {
 			t.Fatalf("page 2: %d %v (6 rows in all)", len(page2), err)
 		}

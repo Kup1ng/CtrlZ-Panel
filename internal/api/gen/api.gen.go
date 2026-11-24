@@ -501,7 +501,7 @@ type NotificationPage struct {
 	Items      []Notification `json:"items"`
 	NextCursor *string        `json:"next_cursor,omitempty"`
 
-	// SecurityItems The unread security notices, newest first, the same on every page. They are not in `items` or `unread_count`.
+	// SecurityItems The unread security notices, newest first, the same on every page. They are not in `items` or `unread_count`, except the ones older than the newest 50, which stay in the list so that no unread notice is left out of every response.
 	SecurityItems       []Notification `json:"security_items"`
 	SecurityUnreadCount int            `json:"security_unread_count"`
 	UnreadCount         int            `json:"unread_count"`

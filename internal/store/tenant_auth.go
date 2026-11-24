@@ -1056,18 +1056,31 @@ func (c Cursor) args() (any, any) {
 	return c.At, c.ID
 }
 
-// An unread security notice is shown apart (SecurityNotices), so the ordinary list leaves it out; a read one is
-// history like any other and stays in the list.
-const qNotificationsPage = `SELECT id, kind, severity, params, COALESCE(link, ''), read_at, created_at
-FROM ctrlz.notifications
-WHERE tenant_id = $1 AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
-  AND NOT (read_at IS NULL AND kind = ANY ($5::text[]))
-ORDER BY created_at DESC, id DESC LIMIT $4`
+// qApartSet is the ids of the unread security notices that SecurityNotices returns: the newest
+// SecurityNoticeListLimit of them. The page and the count leave out exactly this set, so a notice is left out
+// of the list ONLY when it is shown in security_items. An unread security notice older than the newest fifty (a
+// thief can make that many in minutes) stays in the list, reachable by paging, and is not in a place that no
+// response carries (review dec-c-r1-7). $1 tenant, $2 the kinds, $3 the limit.
+const qApartSet = `SELECT a.id FROM ctrlz.notifications a
+  WHERE a.tenant_id = $1 AND a.read_at IS NULL AND a.kind = ANY ($2::text[])
+  ORDER BY a.created_at DESC, a.id DESC LIMIT $3`
 
-// NotificationsPage returns up to limit ordinary notices (and read security ones), newest first, after the cursor.
-func (t Tx) NotificationsPage(after Cursor, limit int) ([]Notification, error) {
+// A security notice that is read, or that is past the fifty shown apart, is in the list like any other. Its
+// markable flag is the rule of qNotificationRead for the asking session $7: an ordinary or a read notice is
+// markable, a security notice that is unread only from a session made after it.
+const qNotificationsPage = `SELECT n.id, n.kind, n.severity, n.params, COALESCE(n.link, ''), n.read_at, n.created_at,
+  (NOT (n.kind = ANY ($2::text[])) OR n.read_at IS NOT NULL
+   OR EXISTS (SELECT 1 FROM ctrlz.sessions s WHERE s.tenant_id = $1 AND s.id = $7 AND s.created_at > n.created_at))
+FROM ctrlz.notifications n
+WHERE n.tenant_id = $1 AND ($4::timestamptz IS NULL OR (n.created_at, n.id) < ($4::timestamptz, $5::uuid))
+  AND n.id NOT IN (` + qApartSet + `)
+ORDER BY n.created_at DESC, n.id DESC LIMIT $6`
+
+// NotificationsPage returns up to limit notices that are not shown apart, newest first, after the cursor, with
+// Markable set for the asking session.
+func (t Tx) NotificationsPage(after Cursor, limit int, session uuid.UUID) ([]Notification, error) {
 	at, id := after.args()
-	rows, err := t.tx.Query(t.ctx, qNotificationsPage, t.tenant, at, id, int32(limit), SecurityNoticeKinds())
+	rows, err := t.tx.Query(t.ctx, qNotificationsPage, t.tenant, SecurityNoticeKinds(), int32(SecurityNoticeListLimit), at, id, int32(limit), session)
 	if err != nil {
 		return nil, sanitize(err)
 	}
@@ -1075,21 +1088,23 @@ func (t Tx) NotificationsPage(after Cursor, limit int) ([]Notification, error) {
 	var out []Notification
 	for rows.Next() {
 		var n Notification
-		if err := rows.Scan(&n.ID, &n.Kind, &n.Severity, &n.Params, &n.Link, &n.ReadAt, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.Kind, &n.Severity, &n.Params, &n.Link, &n.ReadAt, &n.CreatedAt, &n.Markable); err != nil {
 			return nil, sanitize(err)
 		}
-		n.Security, n.Markable = isSecurityNotice(n.Kind), true
+		n.Security = isSecurityNotice(n.Kind)
 		out = append(out, n)
 	}
 	return out, sanitize(rows.Err())
 }
 
-const qNotificationsUnread = `SELECT count(*) FROM ctrlz.notifications WHERE tenant_id = $1 AND read_at IS NULL AND NOT (kind = ANY ($2::text[]))`
+// The unread count is the one of the list: every unread notice that is not shown apart.
+const qNotificationsUnread = `SELECT count(*) FROM ctrlz.notifications n
+WHERE n.tenant_id = $1 AND n.read_at IS NULL AND n.id NOT IN (` + qApartSet + `)`
 
-// NotificationsUnread counts unread ordinary notices over all rows, not one page.
+// NotificationsUnread counts the unread notices that are not shown apart, over all rows, not one page.
 func (t Tx) NotificationsUnread() (int, error) {
 	var n int
-	if err := t.tx.QueryRow(t.ctx, qNotificationsUnread, t.tenant, SecurityNoticeKinds()).Scan(&n); err != nil {
+	if err := t.tx.QueryRow(t.ctx, qNotificationsUnread, t.tenant, SecurityNoticeKinds(), int32(SecurityNoticeListLimit)).Scan(&n); err != nil {
 		return 0, sanitize(err)
 	}
 	return n, nil
@@ -1154,10 +1169,12 @@ const (
 
 // The condition is in the one UPDATE and not in the handler, so a caller that forgot to ask cannot mark a
 // security notice from the wrong session. The session must be made after the notice (sessions.created_at is the
-// database's and a rotation or a refresh keeps it).
+// database's and a rotation or a refresh keeps it). A security notice that is already read is marked again from
+// any session and nothing changes, as for an ordinary one: the page says markable for it, so the endpoint must
+// agree (review dec-c-r1-1).
 const qNotificationRead = `UPDATE ctrlz.notifications n SET read_at = COALESCE(n.read_at, now())
 WHERE n.tenant_id = $1 AND n.id = $2
-  AND (NOT (n.kind = ANY ($4::text[]))
+  AND (NOT (n.kind = ANY ($4::text[])) OR n.read_at IS NOT NULL
        OR EXISTS (SELECT 1 FROM ctrlz.sessions s WHERE s.tenant_id = $1 AND s.id = $3 AND s.created_at > n.created_at))`
 
 const qNotificationExists = `SELECT EXISTS (SELECT 1 FROM ctrlz.notifications WHERE tenant_id = $1 AND id = $2)`

@@ -61,9 +61,10 @@ const MaxPasskeys = 20
 // live row for ever, and the session list and the pool paid for a loop of logins.
 const MaxSessions = 50
 
-// MaxNoticeSMS is how many SMS of security notices one tenant may queue in 24 hours (question 19, D31 numbers are
+// MaxNoticeSMS is how many SMS of ONE kind of security notice one tenant may queue in 24 hours (question 19, D31 numbers are
 // provisional). It is a cap and not an input bound: ctrlz_fn.tenant_notice_sms compares it with ctrlz.cap_reached over
-// the audit rows of the tenant, under the user row lock the two routes already hold, so two changes at once cannot
+// the audit rows of the action of that notice, so a thief cannot spend the messages of one kind to silence the other
+// (review dec-c-r1-6), under the user row lock the two routes already hold, so two changes at once cannot
 // both take the last message. The notice is still written past it; only the SMS is not queued.
 const MaxNoticeSMS = 3
 

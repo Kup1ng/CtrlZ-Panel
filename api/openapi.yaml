@@ -1539,7 +1539,7 @@ components:
         security_items:
           type: array
           maxItems: 50
-          description: The unread security notices, newest first, the same on every page. They are not in `items` or `unread_count`.
+          description: The unread security notices, newest first, the same on every page. They are not in `items` or `unread_count`, except the ones older than the newest 50, which stay in the list so that no unread notice is left out of every response.
           items: {$ref: "#/components/schemas/Notification"}
         security_unread_count: {type: integer, minimum: 0, maximum: 2147483647}
     Announcement:
