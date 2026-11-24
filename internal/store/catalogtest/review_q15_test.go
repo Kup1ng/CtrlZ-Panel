@@ -176,13 +176,14 @@ func TestAPhoneChangeCannotBorrowTheChallengesOfAnotherTenant(t *testing.T) {
 			oldID, newID, req := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 			exec(`DELETE FROM ctrlz.phone_change_requests WHERE tenant_id = $1`, A.Tenant)
 			// The phones are A's: the old code is for A's number and the new one for the number A asked to move to.
-			// The request is an hour old, so a code consumed a minute ago comes after it, as the body demands.
+			// The request is nine minutes old (the table allows it 15 minutes of life at most), so a code consumed a minute ago
+			// comes after it, as the body demands.
 			exec(`INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at, tenant_id) VALUES
 				($1, $3, 'phone_old', '\x01', now() + interval '5 minutes', now() - interval '1 minute', $5),
 				($2, $4, 'phone_new', '\x01', now() + interval '5 minutes', now() - interval '1 minute', $6)`,
 				oldID, newID, A.Phone, newPhone(A), tenantOf[c.old], tenantOf[c.new])
 			exec(`INSERT INTO ctrlz.phone_change_requests (tenant_id, id, user_id, new_phone_e164, old_otp_id, new_otp_id, created_at, expires_at)
-				VALUES ($1, $2, $3, $4, $5, $6, now() - interval '1 hour', now() + interval '10 minutes')`,
+				VALUES ($1, $2, $3, $4, $5, $6, now() - interval '9 minutes', now() + interval '4 minutes')`,
 				A.Tenant, req, A.User, newPhone(A), oldID, newID)
 			exec("SET LOCAL ROLE ctrlz_tenant")
 			exec("SELECT pg_catalog.set_config('ctrlz.tenant_id', $1, true)", A.Tenant.String())
