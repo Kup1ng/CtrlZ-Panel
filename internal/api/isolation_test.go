@@ -731,6 +731,10 @@ func TestIsolation(t *testing.T) {
 			}
 			// A session that satisfies the class of the operation, so only the tenant's state can refuse it.
 			c := e.session(e.n[isolation.B], op.Auth == apispec.Reauth)
+			// A user holds at most MaxSessions live sessions and a login past it ends the oldest, which would be the remembered browser
+			// of this case (its refresh cookie is the last step): the session made for one operation is gone before the next is made, so
+			// the number of operations of the document is no bound on the case.
+			sessionOfTheCall := e.latestSessionID(e.n[isolation.B])
 			var body any
 			if base.Body != nil {
 				body = base.Body
@@ -750,6 +754,7 @@ func TestIsolation(t *testing.T) {
 					t.Errorf("%s %s (%s) for a suspended tenant: %d %s, want 403 account_suspended", op.Method, op.Path, op.ID, r.Code, r.Body)
 				}
 			}
+			f.env.Exec(t, `DELETE FROM ctrlz.sessions WHERE id = $1`, sessionOfTheCall)
 			f.ck.add(time.Minute)
 		}
 
