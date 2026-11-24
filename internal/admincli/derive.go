@@ -111,8 +111,10 @@ func deriveAll(env Env, dir string, root secret.Bytes, newRoot bool) error {
 	for _, d := range keyring.PublicDomains() {
 		// Read, not looked at: a key tool does not decide from a file being there (rule key-identity), and the text
 		// it reads here is judged by nobody, since the public file is rewritten from the key file whatever it says.
-		if _, err := os.ReadFile(filepath.Join(dir, keyring.PublicFileName(d))); errors.Is(err, os.ErrNotExist) {
+		if probe, err := secret.BytesFromFile(filepath.Join(dir, keyring.PublicFileName(d))); errors.Is(err, os.ErrNotExist) {
 			missingPublic = append(missingPublic, d)
+		} else if err == nil {
+			probe.Wipe()
 		}
 	}
 	if len(refused) > 0 {
@@ -212,9 +214,13 @@ func refreshPublic(env Env, dir, domain string) error {
 		return fmt.Errorf("%s: %w", keyring.FileName(domain), err)
 	}
 	path := filepath.Join(dir, keyring.PublicFileName(domain))
-	if have, err := os.ReadFile(path); err == nil && bytes.Equal(have, want) {
-		fmt.Fprintf(env.Stdout, "kept %s\n", keyring.PublicFileName(domain))
-		return nil
+	if have, err := secret.BytesFromFile(path); err == nil {
+		same := bytes.Equal(have.Reveal(), want)
+		have.Wipe()
+		if same {
+			fmt.Fprintf(env.Stdout, "kept %s\n", keyring.PublicFileName(domain))
+			return nil
+		}
 	}
 	// The text holds no secret, but the writer is the key file's, with the same mode and the same rename.
 	text := secret.NewBytes(want)

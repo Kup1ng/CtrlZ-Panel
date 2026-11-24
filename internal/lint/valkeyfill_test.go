@@ -459,15 +459,18 @@ func maintMemory(t *testing.T, name string) (used, limit int) {
 // keys need on this host. Paced, getting there takes the pass that scans the 40,000 keys it keeps and then deletes
 // at a fifth of the server's time, about three times as long.
 func TestValkeySweepCutsAFloodThatFillsTheInstanceWithoutPausing(t *testing.T) {
-	const n = 100000
-	f := startValkeyFill(t, "16mb")
+	// The sweep must not trim the zone while the flood is still coming in: on a fast host it keeps pace with it and the
+	// instance never passes half. So the loop sits idle for a minute after its first pass, and the flood, which is written
+	// in a few seconds, is what the next pass finds.
+	const n = 90000
+	f := startValkeyFill(t, "16mb", "-e", "MAINT_INTERVAL=60")
 	cost, err := hostCallCost()
 	if err != nil {
 		t.Fatalf("measuring the host's redis.call cost: %v", err)
 	}
 	// Per batch of 200 keys: seven calls a deleted key at the host's cost, and 70 ms for the start of valkey-cli.
 	batch := 70*time.Millisecond + time.Duration(200*7*cost)*time.Microsecond
-	wait := time.Duration(n/200)*batch*3/2 + 60*time.Second
+	wait := time.Duration(n/200)*batch*3/2 + 60*time.Second + 60*time.Second // the idle minute before the pass
 	floodKeys(t, f, "api", n)
 	floodedAt := time.Now()
 	name := f.zones["api"].name
