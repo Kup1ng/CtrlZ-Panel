@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -177,14 +178,19 @@ func TestDockerfileHasTheAdminLinkAndCABundle(t *testing.T) {
 	}
 }
 
-// The Caddyfile writes X-Forwarded-For itself for both API upstreams.
+// The Caddyfile writes X-Forwarded-For itself for every proxy to a Go service.
 func TestCaddyWritesForwardedFor(t *testing.T) {
 	cf := readDeploy(t, "caddy", "Caddyfile")
 	if strings.Contains(cf, "trusted_proxies") {
 		t.Error("trusted_proxies is set: a client-written X-Forwarded-For could pass")
 	}
-	if n := strings.Count(cf, "header_up X-Forwarded-For {remote_host}"); n != 2 {
-		t.Errorf("%d upstreams overwrite X-Forwarded-For, want 2 (panel and admin)", n)
+	// Every proxy to a Go service writes the header, whatever number of routes reaches it: the panel's /api, the panel's /p download
+	// links (P3 7.1) and the admin's /api. Counting the proxies and the writes against each other, and not a fixed number, means a
+	// route added later cannot forward a client-written value, and a route removed cannot leave the test passing on its own count.
+	proxies := len(regexp.MustCompile(`(?m)^\s*reverse_proxy (api|admin):\d+`).FindAllString(cf, -1))
+	writes := strings.Count(cf, "header_up X-Forwarded-For {remote_host}")
+	if proxies < 3 || writes != proxies {
+		t.Errorf("%d proxies to a Go service and %d that overwrite X-Forwarded-For, want the same number and at least 3 (panel api, panel download, admin)", proxies, writes)
 	}
 }
 
