@@ -1,0 +1,51 @@
+/*
+ * The Flat set (D17, spec 5.3, DESIGN.md "Flat set"): opaque surfaces and no blur. This is the
+ * only set. The owner chose it on 2026-11-07, and the Glass stylesheet is no longer imported.
+ *
+ * Everything that is not a surface (accent, status colours, borders, radii, spacing, Dana) is in
+ * tokens.css. These variables are the surface layer: the Glass look composited over the page
+ * background, so each surface is an opaque colour. Hex values come from DESIGN.md's Flat table.
+ *
+ * `--pinned-surface` and `--pinned-surface-secondary` feed the DataGrid rules in
+ * glass-carryover.css, which read them with no fallback: an undefined value would turn the pinned
+ * cells transparent. A pinned cell is opaque so scrolled cells do not show through it, and the
+ * rows are opaque too, so the pinned cell takes the row's own colour and the column does not read
+ * as a lighter stripe.
+ */
+
+html.flat-light {
+  --surface: #ffffff;
+  --overlay: #ffffff;
+  --field-background: #ffffff;
+  --default: #ebebec;
+  --surface-secondary: #f0f1f2;
+  /* Left open in DESIGN.md. Starts equal to secondary, so the owner can see if a third step is wanted. */
+  --surface-tertiary: var(--surface-secondary);
+
+  /* What the stock theme does not set for Flat, written out here as opaque values. */
+  --background: oklch(97% 0.0029 264.54);
+  --separator: oklch(0% 0 0 / 0.1);
+  --field-border: oklch(0% 0 0 / 0.04);
+  --backdrop: oklch(77.21% 0.0036 247.87 / 0.6);
+  --surface-shadow: 0 0px 0px 0 #0000;
+  --field-shadow: 0 0px 0px 0 #0000;
+  --overlay-shadow: 0 2px 8px 0 #0000000f, 0 -6px 12px 0 #00000008, 0 14px 28px 0 #00000014;
+  --pinned-surface: var(--surface);
+  --pinned-surface-secondary: var(--surface-secondary);
+}
+
+html.flat-dark {
+  --surface: #141516;
+  --overlay: #161718;
+  --field-background: #1e1f1f;
+  --default: #272728;
+  --surface-secondary: #222324;
+  --surface-tertiary: var(--surface-secondary);
+
+  --background: oklch(15% 0.003 240);
+  --separator: oklch(100% 0 0 / 0.12);
+  --field-border: oklch(100% 0 0 / 0.04);
+  --backdrop: oklch(0% 0 0 / 0.3);
+  --pinned-surface: var(--surface);
+  --pinned-surface-secondary: var(--surface-secondary);
+}
