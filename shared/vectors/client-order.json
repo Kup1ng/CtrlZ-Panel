@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "group": "client-order",
+  "fixture": "base",
+  "cases": [
+    {"id": "client-001", "why": "No client: the schedule window (all week) replaces the base stack, so the window's Bypass applies", "endpoint": "e-client", "client": "",
+     "req": {"qname": "c.example", "qtype": "A", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
+     "upstream": {"c.example/A": {"answer": ["c.example. 60 IN A 93.184.216.34"]}},
+     "expect": {"action": "bypass", "stage": "rule", "ref": "clw"}},
+    {"id": "client-002", "why": "A client with its own profile always wins and ignores the schedule", "endpoint": "e-client", "client": "kid",
+     "req": {"qname": "c.example", "qtype": "A", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
+     "upstream": {},
+     "expect": {"pre_done": true, "action": "block", "stage": "default"}},
+    {"id": "client-003", "why": "A client label with no profile of its own falls back to the window", "endpoint": "e-client", "client": "guest",
+     "req": {"qname": "c.example", "qtype": "A", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
+     "upstream": {"c.example/A": {"answer": ["c.example. 60 IN A 93.184.216.34"]}},
+     "expect": {"action": "bypass", "stage": "rule", "ref": "clw"}},
+    {"id": "client-004", "why": "The client profile applies at any time of the week", "endpoint": "e-client", "client": "kid",
+     "req": {"qname": "anything.example", "qtype": "A", "now": "2026-11-08T21:00:00Z", "src": "5.160.0.1", "protocol": "dot"},
+     "upstream": {},
+     "expect": {"pre_done": true, "action": "block", "stage": "default"}}
+  ]
+}
