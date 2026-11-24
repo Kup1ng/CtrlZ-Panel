@@ -104,19 +104,25 @@ var _ gen.StrictServerInterface = (*Server)(nil)
 // router, mounted at /api. health serves /healthz and /readyz and everything
 // else outside /api.
 func New(d Deps, health httpx.Health) (http.Handler, error) {
+	h, _, err := build(d, health)
+	return h, err
+}
+
+// build is New that also hands back the Server, which a test reads the proof decisions of (tokenProof) off.
+func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	if d.Now == nil {
 		d.Now = appclock.Now
 	}
 	if d.Keys == nil || d.Hasher == nil {
-		return nil, errors.New("api: Keys and Hasher are required")
+		return nil, nil, errors.New("api: Keys and Hasher are required")
 	}
 	if d.Log == nil {
 		// The caches say their own failures to it (cachex.Config.Log is required, round 16).
-		return nil, errors.New("api: Log is required")
+		return nil, nil, errors.New("api: Log is required")
 	}
 	ops, err := apispec.Parse(api.Tenant(), ratelimit.Tenant)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	auth := d.Store.Auth()
 	cfg := newConfigCache(auth.PublicConfig, d.Now, d.Log)
@@ -127,7 +133,7 @@ func New(d Deps, health httpx.Health) (http.Handler, error) {
 	capLog := throttle.CapRefusalLog(d.Log, refusals)
 	otpSvc, err := otp.New(auth, d.Keys, cfg.Get, append([]otp.Option{otp.WithClock(d.Now), otp.WithCapRefusalHook(func() { capLog(budget.CapOTPIssue) })}, d.OTPOptions...)...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	markers := marker.New(d.Keys, d.Now)
 	strength := d.Strength
@@ -140,7 +146,7 @@ func New(d Deps, health httpx.Health) (http.Handler, error) {
 	}
 	inviteRead, ok := budget.FindNetPool(budget.Tenant, "invite-read")
 	if !ok {
-		return nil, errors.New("api: the invite-read pool is not in the budget registry")
+		return nil, nil, errors.New("api: the invite-read pool is not in the budget registry")
 	}
 	after := d.After
 	if after == nil {
@@ -167,7 +173,7 @@ func New(d Deps, health httpx.Health) (http.Handler, error) {
 	}
 	built, err := pl.Build()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	strict := gen.NewStrictHandlerWithOptions(s, nil, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: built.RequestError, ResponseErrorHandlerFunc: built.ResponseError,
@@ -180,7 +186,7 @@ func New(d Deps, health httpx.Health) (http.Handler, error) {
 	root := chi.NewRouter()
 	root.Mount("/api", built.Router)
 	root.Handle("/*", health.Handler())
-	return root, nil
+	return root, s, nil
 }
 
 // ---------------------------------------------------------------------------

@@ -35,14 +35,14 @@ import (
 
 var credentialStatements = []struct{ Const, Pkg, Digest, What string }{
 	{"qSMSGatewayStageCredentials", "internal/store", "4822eae97f89d56c", "WRITES credentials_pending_ct only: what a PUT saves carries nothing"},
-	{"qSMSGatewayDiscardPending", "internal/store", "6b199988bdf3ffa6", "WRITES credentials_pending_ct to NULL: drops the pair that waits, called from the console only (a route that could discard and stage would put the silent overwrite back)"},
-	{"qSMSGatewayConfirm", "internal/store", "4d19ba3b16870902", "WRITES credentials_ct from the pending pair: the one activation, called from the console only"},
+	{"qSMSGatewayDiscardPending", "internal/store", "541b9e454964f133", "WRITES credentials_pending_ct to NULL: drops the pair that waits, called from the console only (a route that could discard and stage would put the silent overwrite back)"},
+	{"qSMSGatewayConfirm", "internal/store", "1b2912a6d91e6208", "WRITES credentials_ct from the pending pair, only for the hint and the fingerprint of the staging PUT: the one activation, called from the console only"},
 	{"qSMSCredentialsReplace", "internal/store", "45d0f48ad69fc4fb", "WRITES credentials_ct with the re-seal of the same plaintext, compare-first (rekey)"},
 	{"qSMSPendingCredentialsReplace", "internal/store", "31372e497a9c24fe", "WRITES credentials_pending_ct with the re-seal of the same plaintext, compare-first (rekey)"},
 	{"qSMSCredentialsSealed", "internal/store", "16462972de9a1d61", "reads both sealed columns for rekey, keys status and declare-lost"},
 	{"qSMSGatewayByProvider", "internal/store", "2591913c0ed5958e", "reads whether active credentials exist"},
 	{"qSMSGateways", "internal/store", "c2a28d3a9626afa3", "reads whether active and pending credentials exist, for the page"},
-	{"qSMSPendingGateways", "internal/store", "a4a50e733f239afc", "reads which providers wait for a confirmation, for the console"},
+	{"qSMSPendingGateways", "internal/store", "96b98e5203d35da8", "reads which providers wait for a confirmation, for the console"},
 	{"qSMSRoutingAssign", "internal/store", "32bc927d2d66ed5b", "gives a role only to a gateway with ACTIVE credentials: the routing cannot reach an unconfirmed gateway"},
 	{"qWorkerGateways", "internal/store", "c13f2ed43a96f200", "the worker reads the active credentials to send"},
 	{"qGatewayHold", "internal/store", "2391ba82e9ef37fd", "the worker holds a gateway for the credentials it used"},

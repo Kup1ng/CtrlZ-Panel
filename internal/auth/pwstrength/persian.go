@@ -7,7 +7,6 @@ import (
 	"sync"
 	"unicode"
 
-	"github.com/ccojocar/zxcvbn-go"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -61,7 +60,8 @@ const (
 	// persianMaxWord bounds the pieces looked up, and the work of one scan.
 	persianMaxWord = 24
 	// persianMinInRun is the shortest word of the list that counts inside a longer run of Persian
-	// letters; a word of persianMinWord letters counts only when it is the whole run.
+	// letters on its own; a word of persianMinWord letters counts only when it is the whole run or
+	// touches another word piece.
 	persianMinInRun = 3
 	// finglishTopRank and finglishMinTyped bound the Finglish spellings: the commonest words only, and
 	// a run of at least four Latin letters (a shorter run is in every text).
@@ -331,15 +331,24 @@ type piece struct {
 	kind byte // 'w' a word of the list, 'f' a Finglish spelling, 'c' one character
 }
 
+// finglishMode says how far a run of Latin letters may be read as a spelling of a Persian word.
+type finglishMode uint8
+
+const (
+	// finglishOff: never. A text that is itself the Persian layer's reading of Latin keys has no Finglish.
+	finglishOff finglishMode = iota
+	// finglishFree: a spelling counts wherever it sits in the text. Every reading of the password is scored
+	// this way, the key-position reading of a Persian layout included (primitives-r23-3).
+	finglishFree
+)
+
 // persianEntropy cuts text (already folded) into the cheapest pieces. It returns the entropy in bits
 // of the cut and whether any piece is a word of the list or a Finglish spelling; a text with none is
 // not this layer's to judge. The residue of characters that are not Persian letters is scored by
 // zxcvbn once, as the text a guesser would try after the words.
 //
-// finglish says whether a run of Latin letters may be read as a spelling of a Persian word. It is false
-// for a reading made from key positions (primitives-r19-3): the Latin letters of that reading are what
-// the keys of Persian text happen to type, so a match there is chance, not a habit.
-func persianEntropy(text string, inputs []string, finglish bool) (bits float64, hit bool) {
+// finglish says whether, and how far, a run of Latin letters may be read as a spelling of a Persian word.
+func persianEntropy(text string, z *zxMemo, finglish finglishMode) (bits float64, hit bool) {
 	rs := []rune(text)
 	n := len(rs)
 	if n == 0 {
@@ -353,18 +362,20 @@ func persianEntropy(text string, inputs []string, finglish bool) (bits float64, 
 	}
 	for i := 0; i < n; i++ {
 		// One character at brute-force cost.
-		if c := best[i] + charBits(rs[i]); c < best[i+1] {
-			best[i+1], from[i+1] = c, piece{from: i, bits: charBits(rs[i]), kind: 'c'}
+		if cb := charBits(rs[i]); best[i]+cb < best[i+1] {
+			best[i+1], from[i+1] = best[i]+cb, piece{from: i, bits: cb, kind: 'c'}
 		}
-		// A word of the list. A word of two letters counts only as a whole run: inside a longer run it
-		// is a chance match (primitives-r19-3), and a random run of Persian letters is full of them.
+		// A word of the list. A word of two letters is in every random run (primitives-r19-3), so it
+		// counts only as a whole run or next to another word piece (primitives-r20-3): Persian is typed
+		// without spaces, and a phrase of the commonest two-letter words is one run.
 		if isPersianLetter(rs[i]) {
 			for l := persianMinWord; l <= min(persianMaxWord, n-i) && isPersianLetter(rs[i+l-1]); l++ {
-				if l < persianMinInRun && !spansWholeRun(rs, i, i+l) {
-					continue
-				}
 				rank, ok := d.rank[string(rs[i:i+l])]
 				if !ok {
+					continue
+				}
+				if l < persianMinInRun && !spansWholeRun(rs, i, i+l) &&
+					!(i > 0 && from[i].kind == 'w') && !wordStartsAt(d, rs, i+l) {
 					continue
 				}
 				cost := math.Log2(float64(rank)) + 1
@@ -374,7 +385,7 @@ func persianEntropy(text string, inputs []string, finglish bool) (bits float64, 
 			}
 		}
 		// A Finglish spelling: a run of at least finglishMinTyped Latin letters.
-		if finglish && isLatinLetter(rs[i]) {
+		if finglish != finglishOff && isLatinLetter(rs[i]) {
 			for l := finglishMinTyped; l <= min(persianMaxWord, n-i) && isLatinLetter(rs[i+l-1]); l++ {
 				skel, vowels, spelled := latinSkeleton(lowerLatin(rs[i : i+l]))
 				if !spelled {
@@ -420,9 +431,20 @@ func persianEntropy(text string, inputs []string, finglish bool) (bits float64, 
 		for i, j := 0, len(residue)-1; i < j; i, j = i+1, j-1 {
 			residue[i], residue[j] = residue[j], residue[i]
 		}
-		bits += zxcvbn.PasswordStrength(string(residue), inputs).Entropy
+		bits += z.strength(string(residue)).Entropy
 	}
 	return bits, true
+}
+
+// wordStartsAt says whether a word of the list of at least persianMinInRun letters starts at i: the
+// right-hand neighbour that lets a two-letter word before it count.
+func wordStartsAt(d *persianDict, rs []rune, i int) bool {
+	for l := persianMinInRun; l <= min(persianMaxWord, len(rs)-i) && isPersianLetter(rs[i+l-1]); l++ {
+		if _, ok := d.rank[string(rs[i:i+l])]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func isLatinLetter(r rune) bool { return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' }
@@ -518,8 +540,8 @@ func foldedHead(text string) string {
 // The text is cut after the fold, not before: NFKC expands a compatibility character into several, and
 // the scoring bound (scoredRunes) is there because zxcvbn is superlinear in the length it is given
 // (primitives-r19-4).
-func persianScore(text string, inputs []string, finglish bool) (score int, hit bool) {
-	bits, hit := persianEntropy(foldedHead(text), inputs, finglish)
+func persianScore(text string, z *zxMemo, finglish finglishMode) (score int, hit bool) {
+	bits, hit := persianEntropy(foldedHead(text), z, finglish)
 	if !hit {
 		return maxScore, false
 	}
@@ -549,4 +571,15 @@ func isPersianLetterText(t string) bool {
 		}
 	}
 	return false
+}
+
+// lowerASCII lower-cases the ASCII capitals of s and nothing else: a layout reading treats a capital as the
+// shifted key, and the same key unshifted is what a person who typed a Persian word blind meant.
+func lowerASCII(s string) string {
+	return strings.Map(func(r rune) rune {
+		if isUpperLatin(r) {
+			return r + ('a' - 'A')
+		}
+		return r
+	}, s)
 }

@@ -106,21 +106,40 @@ func TestANilSubjectIsRefusedAtMintAndAtOpen(t *testing.T) {
 	}
 }
 
-func TestPhoneSubjectIsStableKeyedAndNamespacedApartFromUsers(t *testing.T) {
+func TestAChallengeAndAUserIdNeverShareABucketKey(t *testing.T) {
 	now := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
 	s := signer(t, &now)
-	a, b := s.PhoneSubject("+989121234567"), s.PhoneSubject("+989121234568")
-	if a == b || a != s.PhoneSubject("+989121234567") || a == uuid.Nil {
-		t.Fatal("the phone subject is not a stable per-phone value")
-	}
-	if other := signer(t, &now).PhoneSubject("+989121234567"); other == a {
-		t.Fatal("the phone subject does not depend on the key")
-	}
-	v := mint(t, s, Challenge, a, now.Add(time.Minute))
+	id := uuid.New()
+	v := mint(t, s, Challenge, id, now.Add(time.Minute))
 	body, _ := s.Open(Challenge, v)
-	user := Body{Subject: a}
+	user := Body{Subject: id}
 	if body.SubjectKey(Challenge) == user.SubjectKey(Ticket) {
 		t.Fatal("a challenge subject and a user id share a bucket key")
+	}
+}
+
+// tenant-r20-1: a value that was issued here and has run out is told apart from one that never was, without opening it.
+func TestLapsedIsTrueOnlyForAGenuineValuePastItsExpiryOfTheSameKind(t *testing.T) {
+	now := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	s := signer(t, &now)
+	v := mint(t, s, Challenge, uuid.New(), now.Add(5*time.Minute))
+	if s.Lapsed(Challenge, v) {
+		t.Fatal("a live value is lapsed")
+	}
+	now = now.Add(5*time.Minute + time.Second)
+	if _, ok := s.Open(Challenge, v); ok {
+		t.Fatal("a value past its expiry opens")
+	}
+	if !s.Lapsed(Challenge, v) {
+		t.Fatal("a genuine value past its expiry is not lapsed")
+	}
+	if s.Lapsed(Ticket, v) {
+		t.Fatal("a challenge is lapsed as a ticket")
+	}
+	raw, _ := base64.RawURLEncoding.DecodeString(v)
+	raw[3] ^= 1
+	if s.Lapsed(Challenge, base64.RawURLEncoding.EncodeToString(raw)) || s.Lapsed(Challenge, "short") || s.Lapsed(Challenge, "") {
+		t.Fatal("a value that does not check is lapsed")
 	}
 }
 

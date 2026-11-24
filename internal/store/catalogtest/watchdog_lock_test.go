@@ -102,7 +102,7 @@ func TestTheWatchdogEndsALockThatIsHandedOverNotOnlyAnOldTransaction(t *testing.
 	if _, err := a.Exec(ctx, lockRowOfA, h.A.Tenant); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(5 * time.Second) // A is old; B and the owner are younger than the bound of stage 1
+	time.Sleep(5 * time.Second) // A is old; B and the owner are younger than the bound of stage 1 (6 s: a sweep is a docker exec, and on a loaded machine B was past the old 4 s bound, a flake on main)
 
 	b := zeroedTenantTx(t, h)
 	bDone := make(chan error, 1)
@@ -122,7 +122,7 @@ func TestTheWatchdogEndsALockThatIsHandedOverNotOnlyAnOldTransaction(t *testing.
 	time.Sleep(2500 * time.Millisecond) // both have now waited longer than the block bound of stage 2
 
 	// Stage 1: only the age rule. A is the one old transaction.
-	if got := sweep("4", "3600"); got != "1" {
+	if got := sweep("6", "3600"); got != "1" {
 		t.Fatalf("the age rule ended %q backends, want exactly 1 (the old holder)", got)
 	}
 	select {

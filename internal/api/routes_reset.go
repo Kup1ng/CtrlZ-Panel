@@ -81,7 +81,7 @@ func (s *Server) ResetVerify(ctx context.Context, req gen.ResetVerifyRequestObje
 			return gen.ResetVerified{}, errInvalidPhone()
 		}
 		if !tagged {
-			return gen.ResetVerified{}, otp.ErrInvalid // what a challenge the database does not know gets
+			return gen.ResetVerified{}, s.untaggedChallenge(b.ChallengeId)
 		}
 		if err := s.otp.Check(ctx, challenge.ID, e164, otp.Reset, b.Code); err != nil {
 			return gen.ResetVerified{}, err

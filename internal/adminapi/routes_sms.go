@@ -156,6 +156,7 @@ func (s *Server) PutSmsGateway(ctx context.Context, req gen.PutSmsGatewayRequest
 		return nil, errValidation("body", "empty")
 	}
 	var row gen.SmsGatewayRow
+	var fingerprint string
 	err = s.global(ctx, func(g store.GlobalTx) error {
 		// The admin rows come first, then the gateway, and the audit lock last: the one
 		// lock order of internal/lockrank (users and admin_users, then the settings
@@ -183,6 +184,7 @@ func (s *Server) PutSmsGateway(ctx context.Context, req gen.PutSmsGatewayRequest
 			if err != nil {
 				return err
 			}
+			fingerprint = store.SMSCredentialsFingerprint(ct)
 			if !staged {
 				// A pair already waits for the console (db-r19-2). Replacing it would let a later PUT
 				// (a thief's) take the place of the one the owner is about to confirm by a hint the
@@ -218,6 +220,11 @@ func (s *Server) PutSmsGateway(ctx context.Context, req gen.PutSmsGatewayRequest
 	})
 	if err != nil {
 		return nil, err
+	}
+	if fingerprint != "" {
+		// Only this response carries it (admin-r20-3): the console confirms a pair by it, so a pair that
+		// someone else staged first cannot be confirmed by an owner who never saw it.
+		row.PendingFingerprint = &fingerprint
 	}
 	return gen.PutSmsGateway200JSONResponse(row), nil
 }

@@ -98,7 +98,10 @@ type Body struct {
 // the refresh cookie of the owner from any network (P1 auth review round 19, tenant-r19-6; rule budget-keying). The id
 // is a hash of the reference, so the key, which lives in Valkey, holds no part of the credential. What a holder who
 // gathers many values can spend is the proof-network bucket (SubjectKey), which is per network and account. A challenge
-// is charged to its own id, and its subject is a phone's hash, which anybody can ask a challenge for.
+// is charged to its own id, and its subject is that id too: a subject that named the phone (a keyed hash of it, as round
+// 19 had) was shared by every challenge of one number, so a stranger who asked for challenges for the owner's number
+// spent the owner's bucket, and the token showed the same bytes for every challenge of one phone, an equality oracle on a
+// number (P1 auth review round 20, tenant-r20-2 and tenant-r20-4).
 func (b *Body) ProofID(k Kind) string {
 	if k == Challenge {
 		id, _ := uuid.FromBytes(b.Ref[:16])
@@ -108,9 +111,10 @@ func (b *Body) ProofID(k Kind) string {
 	return string(rune(k)) + ":" + hex.EncodeToString(h[:16])
 }
 
-// SubjectKey is the account (or, for a challenge, the phone's hash) the proof-network bucket is keyed with: a source
-// that rotates values of ONE subject meets its ceiling, and the other accounts of its address group keep theirs.
-// A user id and a phone's hash can never meet, whatever the bytes are.
+// SubjectKey is the account (or, for a challenge, the challenge itself) the proof-network bucket is keyed with: a source
+// that rotates values of ONE subject meets its ceiling, and the other accounts of its address group keep theirs. What a
+// source gathers of challenges is bounded by what otp-send lets its network mint. A user id and a challenge id never
+// meet in a key, whatever the bytes are.
 func (b *Body) SubjectKey(k Kind) string {
 	if k == Challenge {
 		return "s:" + b.Subject.String()
@@ -155,6 +159,24 @@ func expiryOf(t time.Time) uint32 {
 // Open checks the shape, the tag and the expiry of a value of kind k, with no I/O. ok is false for anything that is
 // not a value this service issued under that kind, or one past its expiry.
 func (s *Signer) Open(k Kind, text string) (Body, bool) {
+	b, ok := s.read(k, text)
+	if !ok || s.now().Unix() > b.Expires.Unix() {
+		return Body{}, false
+	}
+	return b, true
+}
+
+// Lapsed reports whether text is a value this service issued under kind k whose expiry has passed. Only this service can
+// make a tag that checks, so saying "expired" for it tells a stranger nothing a forger could use, and it lets a route
+// answer a challenge past its life as the database answers one (otp_expired) and not as a made-up one (P1 auth review
+// round 20, tenant-r20-1). A lapsed value is no proof: the route still charges the network for it.
+func (s *Signer) Lapsed(k Kind, text string) bool {
+	b, ok := s.read(k, text)
+	return ok && s.now().Unix() > b.Expires.Unix()
+}
+
+// read is Open without the expiry check: the shape, the tag and the subject.
+func (s *Signer) read(k Kind, text string) (Body, bool) {
 	if len(text) != Len {
 		return Body{}, false
 	}
@@ -164,9 +186,6 @@ func (s *Signer) Open(k Kind, text string) (Body, bool) {
 		return Body{}, false
 	}
 	exp := binary.BigEndian.Uint32(raw[subjectLen+RefLen : bodyLen])
-	if s.now().Unix() > int64(exp) {
-		return Body{}, false
-	}
 	var b Body
 	copy(b.Subject[:], raw[:subjectLen])
 	if b.Subject == uuid.Nil {
@@ -175,13 +194,4 @@ func (s *Signer) Open(k Kind, text string) (Body, bool) {
 	b.Ref = append([]byte(nil), raw[subjectLen:subjectLen+RefLen]...)
 	b.Expires = time.Unix(int64(exp), 0)
 	return b, true
-}
-
-// PhoneSubject is the subject of an OTP challenge: a keyed hash of the phone, so a decoy challenge (a phone with no
-// account) carries one exactly like a real one and the tag tells a stranger nothing about the account. It is not a
-// user id and is namespaced apart from one by Body.Key.
-func (s *Signer) PhoneSubject(phone string) uuid.UUID {
-	var u uuid.UUID
-	copy(u[:], s.ring.MAC(keyring.DomainAuthMAC, keyring.LabelProof, []byte{'p'}, []byte(phone)))
-	return u
 }

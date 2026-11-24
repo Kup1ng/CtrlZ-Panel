@@ -50,6 +50,12 @@ const (
 // restart at the removal (round 9, primitives-r9-2).
 const throttleRemoved = "nothing: counters are made under the newest key only, so they restarted at the rotation, and the long ceilings refilled then"
 
+// otpRotated is what a key rotation costs an OTP code hash (round 26, primitives-r26-2). Ring.MAC always uses the
+// newest key and the database compares the stored hash with the one made now, so a code sent before the
+// containers were recreated no longer matches, whether or not the old line is still in the ring. Throttle rows
+// are the same case (throttleRemoved).
+const otpRotated = "a live code stops matching when the containers are recreated with the new line, not at the removal: a hash is made and checked under the newest key only, so the user asks for a new code"
+
 // Use is one use of a domain key whose values outlive a restart or sit outside the
 // database: a tag on a cookie, a window of rows, a short-lived sealed row.
 type Use struct {
@@ -80,7 +86,7 @@ func Uses() []Use {
 			"a login or reset step in progress starts again, and a Remember me browser signs in again"},
 		{DomainAuthMAC, LabelThrottle, "throttle rows", LifeThrottle, throttleRemoved},
 		{DomainAuthMAC, LabelOTP, "OTP code hashes", LifeOTP,
-			"a live code no longer matches"},
+			otpRotated},
 		{DomainAuthMAC, LabelCeremony, "passkey login tickets", LifeCeremony,
 			"a passkey login in progress starts again"},
 		{DomainAdminMAC, LabelAdminDevice, "admin device markers", LifeAdminDevice,

@@ -9,10 +9,24 @@ import (
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/sms"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
 )
 
 // plantPending plants what PUT /sms/gateways/sms_ir leaves behind for a gateway that has active
 // credentials: the owner's in credentials_ct, the new ones, with their hint, in the pending pair.
+// confirmArgs is the console's confirmation of the sms_ir pair that waits, as the owner who staged it
+// types it: the hint and the fingerprint the PUT returned (admin-r20-3).
+func (r *rig) confirmArgs(hint string) []string {
+	return []string{"sms", "confirm", "sms_ir", "--hint", hint, "--fingerprint", r.pendingFP()}
+}
+
+// pendingFP is the fingerprint of the sms_ir pair that waits, or of nothing when none does.
+func (r *rig) pendingFP() string {
+	var ct []byte
+	r.env.Scan(r.t, `SELECT credentials_pending_ct FROM ctrlz.sms_gateways WHERE provider = 'sms_ir'`, nil, &ct)
+	return store.SMSCredentialsFingerprint(ct)
+}
+
 func plantPending(t *testing.T, r *rig, hint string) (active, pending []byte) {
 	t.Helper()
 	gw := uuid.New()
@@ -51,13 +65,16 @@ func TestSMSConfirmIsTheOnlyWayToActivatePendingCredentials(t *testing.T) {
 
 	// A usage error and a wrong hint change nothing and write no row.
 	rows := r.count(`SELECT count(*) FROM ctrlz.audit_log`)
+	fp := r.pendingFP()
 	for _, args := range [][]string{
-		{"sms", "confirm", "sms_ir"},                        // the hint is required
-		{"sms", "confirm", "noop", "--hint", "2222"},        // no credentials to confirm
-		{"sms", "confirm", "--hint", "2222"},                // no provider
-		{"sms", "confirm", "sms_ir", "--hint", "9999"},      // not the pending pair
-		{"sms", "confirm", "melipayamak", "--hint", "2222"}, // nothing pending there
-		{"sms", "confirm", "sms_ir", "melipayamak", "--hint", "2222"},
+		{"sms", "confirm", "sms_ir", "--fingerprint", fp},                                   // the hint is required
+		{"sms", "confirm", "sms_ir", "--hint", "2222"},                                      // the fingerprint is required (admin-r20-3)
+		{"sms", "confirm", "sms_ir", "--hint", "2222", "--fingerprint", "0000000000000000"}, // not the staged pair's fingerprint
+		{"sms", "confirm", "noop", "--hint", "2222", "--fingerprint", fp},                   // no credentials to confirm
+		{"sms", "confirm", "--hint", "2222", "--fingerprint", fp},                           // no provider
+		{"sms", "confirm", "sms_ir", "--hint", "9999", "--fingerprint", fp},                 // not the pending pair
+		{"sms", "confirm", "melipayamak", "--hint", "2222", "--fingerprint", fp},            // nothing pending there
+		{"sms", "confirm", "sms_ir", "melipayamak", "--hint", "2222", "--fingerprint", fp},
 	} {
 		if code := r.run(args...); code == 0 {
 			t.Fatalf("%v succeeded", args)
@@ -67,7 +84,7 @@ func TestSMSConfirmIsTheOnlyWayToActivatePendingCredentials(t *testing.T) {
 		}
 	}
 
-	if code := r.run("sms", "confirm", "sms_ir", "--hint", "2222"); code != 0 {
+	if code := r.run(r.confirmArgs("2222")...); code != 0 {
 		t.Fatalf("confirm: exit %d, %q", code, r.errb.String())
 	}
 	if !bytes.Equal(activeNow(), pending) {
@@ -83,7 +100,7 @@ func TestSMSConfirmIsTheOnlyWayToActivatePendingCredentials(t *testing.T) {
 		t.Fatalf("%d confirmation rows", n)
 	}
 	// It is once: nothing pends now.
-	if code := r.run("sms", "confirm", "sms_ir", "--hint", "2222"); code == 0 {
+	if code := r.run(r.confirmArgs("2222")...); code == 0 {
 		t.Fatal("a second confirmation succeeded")
 	}
 	if code := r.run("sms", "pending"); code != 0 || !strings.Contains(r.out.String(), "no gateway credentials wait") {
@@ -137,7 +154,7 @@ func TestConfirmCommitsWithItsAuditRowOrNotAtAll(t *testing.T) {
 	  IF NEW.action = 'sms.gateway_change' THEN RAISE EXCEPTION 'injected fault'; END IF; RETURN NEW; END $$`)
 	r.env.Exec(t, `CREATE TRIGGER test_fail_confirm_audit BEFORE INSERT ON ctrlz.audit_log FOR EACH ROW EXECUTE FUNCTION ctrlz.test_fail_confirm_audit()`)
 	rows := r.count(`SELECT count(*) FROM ctrlz.audit_log`)
-	if code := r.run("sms", "confirm", "sms_ir", "--hint", "2222"); code == 0 {
+	if code := r.run(r.confirmArgs("2222")...); code == 0 {
 		t.Fatal("the confirmation succeeded although its audit row could not be written")
 	}
 	var ct, pend []byte
@@ -152,7 +169,7 @@ func TestConfirmCommitsWithItsAuditRowOrNotAtAll(t *testing.T) {
 		t.Fatal("the database's error text reached the operator's output")
 	}
 	r.env.Exec(t, `DROP TRIGGER test_fail_confirm_audit ON ctrlz.audit_log`)
-	if code := r.run("sms", "confirm", "sms_ir", "--hint", "2222"); code != 0 {
+	if code := r.run(r.confirmArgs("2222")...); code != 0 {
 		t.Fatalf("the repeat without the fault: exit %d, %q", code, r.errb.String())
 	}
 	r.env.Scan(t, `SELECT credentials_ct FROM ctrlz.sms_gateways WHERE provider = 'sms_ir'`, nil, &ct)
@@ -193,7 +210,7 @@ func TestSMSDiscardDropsThePendingPairAndKeepsTheActiveOne(t *testing.T) {
 	if n := r.count(`SELECT count(*) FROM ctrlz.audit_log WHERE action = 'sms.gateway_change' AND params->'fields' ? 'credentials_discarded'`); n != 1 {
 		t.Fatalf("%d discard rows", n)
 	}
-	if code := r.run("sms", "confirm", "sms_ir", "--hint", "2222"); code == 0 {
+	if code := r.run(r.confirmArgs("2222")...); code == 0 {
 		t.Fatal("a confirmation promoted a discarded pair")
 	}
 }

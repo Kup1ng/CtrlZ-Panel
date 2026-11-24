@@ -226,7 +226,7 @@ func usageTo(w io.Writer) {
   audit-note <key.rotated|key.declared_lost> --domain D --key-number N
   audit verify                                 walk the audit hash chain
   sms pending                                  list gateway credentials saved in the panel that wait for you
-  sms confirm <provider> --hint H              make those credentials the active ones (the panel cannot)
+  sms confirm <provider> --hint H --fingerprint F   make those credentials the active ones (the panel cannot); F is what the PUT that saved them returned
   sms discard <provider>                       drop those credentials (the panel refuses a new pair while one waits)
 `)
 }

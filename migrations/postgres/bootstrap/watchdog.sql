@@ -48,7 +48,7 @@
 -- then waited fifty milliseconds on a row read as a five-second waiter, and an honest holder that had
 -- merely paused between two statements was named the blocker of a long wait that had not happened.
 --
---  (d) It HOLDS a table lock above RowExclusive (db-r18-10). Postgres lets a role that holds UPDATE,
+--  (d) It HOLDS OR HAS REQUESTED a table lock above RowExclusive (db-r18-10, db-r20-2). Postgres lets a role that holds UPDATE,
 --      DELETE, TRUNCATE or MAINTAIN on a table (a table-level privilege, a column grant does not count)
 --      run LOCK TABLE in any mode, and an ACCESS EXCLUSIVE lock stops every statement on the table, reads
 --      and the definer functions included, for every tenant, before any privilege or policy is looked at.
@@ -60,6 +60,15 @@
 --      backend that holds any other mode is not an honest one and is ended at the next sweep, however
 --      young it is. The class is the mode and not the table or the role, so a table or role added later
 --      is covered by the same line.
+--
+-- A queued request is judged like a held lock (db-r20-2). The first form of (d) looked only at granted
+-- locks, so N connections of one role that each ask for ACCESS EXCLUSIVE on sessions while one of them
+-- holds it (and stays active in pg_sleep, which no age rule reaches for hold_secs) passed the lock from
+-- one to the next, one per sweep: Postgres queues every later conflicting request, the definer functions
+-- that read sessions on every request included, behind a waiting ACCESS EXCLUSIVE request, so every
+-- reader failed at its lock_timeout for as long as the role kept reconnecting. A request for a mode no
+-- honest statement takes is as dishonest as the lock, and ending the whole queue in one sweep leaves an
+-- honest statement at most one sweep interval of latency.
 --
 -- Variables (psql -v): db_name, max_secs, block_secs, hold_secs (whole seconds, validated by the
 -- caller). It prints one number, how many backends it ended. It names no role, query or value.
@@ -106,11 +115,12 @@ WITH service AS (
   UNION
   SELECT st.pid FROM stuck st
   UNION
-  -- (d): a table lock no honest statement takes, held by a service backend (db-r18-10).
+  -- (d): a table lock no honest statement takes, held or queued for by a service backend
+  -- (db-r18-10, db-r20-2).
   SELECT s.pid
   FROM service s
   WHERE EXISTS (SELECT 1 FROM pg_catalog.pg_locks tl
-                WHERE tl.pid = s.pid AND tl.locktype = 'relation' AND tl.granted
+                WHERE tl.pid = s.pid AND tl.locktype = 'relation'
                   AND tl.mode NOT IN ('AccessShareLock', 'RowShareLock', 'RowExclusiveLock'))
   UNION
   SELECT k.pid

@@ -184,9 +184,10 @@ func (s *Service) hash(phone string, p Purpose, code string) []byte {
 // Challenge is the answer to an accepted request. The fields are the 202 body.
 type Challenge struct {
 	ID uuid.UUID
-	// Token is what the client holds and sends back as challenge_id: the id under a tag that names the phone's hash and the
-	// expiry (proofmac, D64 nat-proof-tag). A decoy challenge carries one like a real one, so the tag says nothing about the
-	// account. Every public route takes the Token; ID is the row the database knows.
+	// Token is what the client holds and sends back as challenge_id: the id under a tag that names the challenge's own row
+	// id and the expiry (proofmac, D64 nat-proof-tag; never the phone, which would be an equality oracle). A decoy
+	// carries one like a real one, so the tag says nothing about the account. Every public route takes the Token; ID is
+	// the row the database knows.
 	Token       string
 	ExpiresIn   time.Duration
 	ResendAfter time.Duration
@@ -226,7 +227,7 @@ func (s *Service) issue(ctx context.Context, cooldown time.Duration, phone strin
 		}
 		return Challenge{}, &LimitedError{RetryAfter: resendAfter(cooldown)}
 	}
-	tok, err := s.tags.Mint(proofmac.Challenge, s.tags.PhoneSubject(phone), challengeRef(res.ID), s.now().Add(Life))
+	tok, err := s.tags.Mint(proofmac.Challenge, res.ID, challengeRef(res.ID), s.now().Add(Life))
 	if err != nil {
 		return Challenge{}, err
 	}
@@ -250,8 +251,8 @@ type ChallengeRef struct {
 }
 
 // OpenChallenge reads the challenge_id of a request with no I/O. ok is false for a text this service did not issue or one
-// past its life; the route answers it as it answers a challenge the database does not know (otp_invalid), and charges the
-// network, as for any request that proved nothing.
+// past its life; the route charges the network, as for any request that proved nothing, and answers with
+// ChallengeLapsed's verdict: otp_expired for a genuine id past its life, otp_invalid for anything else.
 func (s *Service) OpenChallenge(text string) (ChallengeRef, bool) {
 	b, ok := s.tags.Open(proofmac.Challenge, text)
 	if !ok {
@@ -262,6 +263,13 @@ func (s *Service) OpenChallenge(text string) (ChallengeRef, bool) {
 		return ChallengeRef{}, false
 	}
 	return ChallengeRef{ID: id, ProofID: b.ProofID(proofmac.Challenge), Subject: b.SubjectKey(proofmac.Challenge)}, true
+}
+
+// ChallengeLapsed reports whether text is a challenge_id this service issued whose life has run out. The tag expiry is
+// taken after the row is written, so it is never earlier than the row's own, and a lapsed id is what the database would
+// answer otp_expired for (5.4; P1 auth review round 20, tenant-r20-1).
+func (s *Service) ChallengeLapsed(text string) bool {
+	return s.tags.Lapsed(proofmac.Challenge, text)
 }
 
 // available is the check that runs before any lookup or cap (5.4).

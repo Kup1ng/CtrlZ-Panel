@@ -424,7 +424,7 @@ func (s *Server) LoginOtp(ctx context.Context, req gen.LoginOtpRequestObject) (g
 			return login.Result{}, errInvalidPhone()
 		}
 		if !tagged {
-			return login.Result{}, otp.ErrInvalid // what a challenge the database does not know gets
+			return login.Result{}, s.untaggedChallenge(b.ChallengeId)
 		}
 		res, err := s.login.OTPLogin(ctx, login.OTPLoginInput{
 			Phone: e164, ChallengeID: challenge.ID, Code: b.Code, Remember: deref(b.RememberMe),
@@ -526,7 +526,7 @@ func (s *Server) register(ctx context.Context, b gen.RegisterRequest) (login.Res
 		},
 		Check: func(ctx context.Context) error {
 			if !tagged {
-				return otp.ErrInvalid // what a challenge the database does not know gets, with no database call
+				return s.untaggedChallenge(b.ChallengeId) // with no database call
 			}
 			return s.login.PeekRegisterCode(ctx, in)
 		},

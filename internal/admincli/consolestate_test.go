@@ -263,7 +263,7 @@ var consoleSamples = map[string][]consoleSample{
 	},
 	"sms": {
 		{"pending", func(t *testing.T, r *rig) { plantPending(t, r, "1234") }, []string{"sms", "pending"}, 0, false},
-		{"confirm", func(t *testing.T, r *rig) { plantPending(t, r, "1234") }, []string{"sms", "confirm", "sms_ir", "--hint", "1234"}, 0, true},
+		{"confirm", func(t *testing.T, r *rig) { plantPending(t, r, "1234") }, []string{"sms", "confirm", "sms_ir", "--hint", "1234", "--fingerprint", "{fp}"}, 0, true},
 		{"discard", func(t *testing.T, r *rig) { plantPending(t, r, "1234") }, []string{"sms", "discard", "sms_ir"}, 0, true},
 	},
 	"audit": {
@@ -297,7 +297,13 @@ func TestEveryNonThrottleConsoleCommandKeepsItsKind(t *testing.T) {
 				}
 				r.seedLockOutState()
 				state0, audit0 := r.consoleStateSnapshot()
-				if code := r.run(s.args...); code != s.code {
+				args := append([]string(nil), s.args...)
+				for i, a := range args {
+					if a == "{fp}" {
+						args[i] = r.pendingFP() // the fingerprint of the pair the setup planted
+					}
+				}
+				if code := r.run(args...); code != s.code {
 					t.Fatalf("exit %d, want %d; stderr %q", code, s.code, r.errb.String())
 				}
 				state1, audit1 := r.consoleStateSnapshot()

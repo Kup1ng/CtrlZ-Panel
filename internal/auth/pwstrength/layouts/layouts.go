@@ -176,6 +176,84 @@ func (l Layout) Entries() ([]Entry, error) {
 	return out, nil
 }
 
+// Press is what one key press types, read as the US character on the key and in the same shift state
+// (round 24, primitives-r24-2). Entries reads a Persian letter as the unshifted key, which is the
+// right reading for a walk and loses the shift: the shifted P of ISIRI 9147 types "[", the shifted R of
+// the legacy layout types the four letters of "rial", and neither is a letter Entries reads. A Persian
+// layout left on while a person types the Latin text "Persepolis1@" types exactly the outputs listed
+// here, so reading each of them as its legend gives that Latin text back (pwstrength lower-cases a letter, and leaves a single Persian letter to its own table).
+type Press struct {
+	Text string
+	// Key is the US character of the key in the shift state that typed Text.
+	Key rune
+	// Where is the scan code and legend, for the generated comment.
+	Where string
+}
+
+// Presses lists them, longest text first (a macro is matched before a character of it), then by text. An
+// output that is the very legend of its key is left out (it is the Latin text already), and a space or a
+// control character is not a key press that carries strength. The same text on two keys with different legends is an
+// error, as in Entries.
+func (l Layout) Presses() ([]Press, error) {
+	seen := map[string]Press{}
+	add := func(text string, k Key, legend rune, shifted bool) error {
+		where := fmt.Sprintf("%s %q", k.Scan, k.US)
+		if shifted {
+			where = fmt.Sprintf("%s shift %q", k.Scan, k.USShift)
+		}
+		p := Press{Text: text, Key: legend, Where: where}
+		if old, ok := seen[text]; ok {
+			// The zero-width non-joiner is on Shift+B and on Shift+Space of ISIRI 9147; the letter is the
+			// reading that matters, a space carries no strength.
+			if old.Key == legend || legend == ' ' {
+				return nil
+			}
+			if old.Key == ' ' {
+				seen[text] = p
+				return nil
+			}
+			return fmt.Errorf("layouts: %s: %q is on %s and on %s", l.Name, text, old.Where, p.Where)
+		}
+		seen[text] = p
+		return nil
+	}
+	for _, k := range l.Keys {
+		for _, c := range []struct {
+			out, legend string
+			shifted     bool
+		}{{k.Normal, k.US, false}, {k.Shift, k.USShift, true}} {
+			legend := []rune(c.legend)
+			raw := []rune(c.out)
+			if len(legend) != 1 || len(raw) == 0 || c.out == c.legend {
+				continue
+			}
+			if len(raw) == 1 && (raw[0] <= 0x20 || raw[0] == 0x7f) {
+				continue
+			}
+			if err := add(c.out, k, legend[0], c.shifted); err != nil {
+				return nil, err
+			}
+			// A macro is also read after NFKC, because a client may normalise what it sends.
+			if nf := norm.NFKC.String(c.out); len(raw) > 1 && nf != c.out {
+				if err := add(nf, k, legend[0], c.shifted); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	out := make([]Press, 0, len(seen))
+	for _, p := range seen {
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if len(out[i].Text) != len(out[j].Text) {
+			return len(out[i].Text) > len(out[j].Text)
+		}
+		return out[i].Text < out[j].Text
+	})
+	return out, nil
+}
+
 // Grid places a key on the keyboard from its scan code (set 1, the same on every
 // layout): row 1 is the number row, 2 the top letter row, 3 the home row and 4 the
 // bottom row, and a column is the key's index in its row. The rows are contiguous

@@ -9135,7 +9135,7 @@ mutants:
     edits:
       - file: scripts/compose-net-test.sh
         old: |-
-          bb=$(awk '/^  web-panel:/ {f=1; next} f && /^    image:/ {print $2; exit}' "$file")
+          bb=$(awk '/^  caddy-init:/ {f=1; next} f && /^    image:/ {print $2; exit}' "$file")
         new: |-
           bb="busybox:1.37"
     must_fail:
@@ -9187,9 +9187,9 @@ mutants:
     edits:
       - file: internal/lint/imagepin_test.go
         old: |-
-          check(path, nonComment(text))
+          check(path, body)
         new: |-
-          _, _ = path, nonComment(text)
+          _, _ = path, body
     must_fail:
       - pkg: ./internal/lint
         tests: [TestImagePinLintCanFail]
@@ -9415,6 +9415,11 @@ mutants:
           PONG) : >"$alive" ;;
         new: |-
           PONG) ;;
+      - file: deploy/compose/valkey/maintain.sh
+        old: |-
+          : >"$alive" # a well-formed answer
+        new: |-
+          : # a well-formed answer
     must_fail:
       - pkg: ./internal/lint
         tests: [TestValkeyServicesCannotSubmitAScript]
@@ -10107,7 +10112,7 @@ mutants:
     edits:
       - file: internal/lint/deploy_test.go
         old: |-
-          logs := l.logsWhen(func(s string) bool { return strings.Contains(s, wantLogger) })
+          logs := l.logsWhen(holds)
         new: |-
           time.Sleep(time.Second)
           logs := l.docker("logs", l.name)
@@ -12936,9 +12941,41 @@ mutants:
     edits:
       - file: deploy/compose/docker-compose.yml
         old: |-
+          TestComposeKeysAreAnAllowList hold this.
             pull_policy: never
         new: |-
+          TestComposeKeysAreAnAllowList hold this.
             pull_policy: missing
+    must_fail:
+      - pkg: ./internal/lint
+        tests: [TestEveryImageIsPinnedByDigest, TestComposeKeysAreAnAllowList]
+  - id: images-are-pinned-the-web-panel-image-may-be-pulled
+    rule: images-are-pinned
+    finding: merge-r2-16
+    why: The web-panel image has a pull policy that lets docker compose pull and up fetch it, so whoever owns docker.io/ctrlz serves the dashboard and sees every sign-in.
+    edits:
+      - file: deploy/compose/docker-compose.yml
+        old: |-
+          image: ${CTRLZ_WEB_PANEL_IMAGE:-ctrlz/web-panel:dev}
+              pull_policy: never
+        new: |-
+          image: ${CTRLZ_WEB_PANEL_IMAGE:-ctrlz/web-panel:dev}
+              pull_policy: missing
+    must_fail:
+      - pkg: ./internal/lint
+        tests: [TestEveryImageIsPinnedByDigest, TestComposeKeysAreAnAllowList]
+  - id: images-are-pinned-the-web-admin-image-may-be-pulled
+    rule: images-are-pinned
+    finding: merge-r2-16
+    why: The web-admin image has a pull policy that lets docker compose pull and up fetch it, so whoever owns docker.io/ctrlz serves the admin dashboard.
+    edits:
+      - file: deploy/compose/docker-compose.yml
+        old: |-
+          image: ${CTRLZ_WEB_ADMIN_IMAGE:-ctrlz/web-admin:dev}
+              pull_policy: never
+        new: |-
+          image: ${CTRLZ_WEB_ADMIN_IMAGE:-ctrlz/web-admin:dev}
+              pull_policy: missing
     must_fail:
       - pkg: ./internal/lint
         tests: [TestEveryImageIsPinnedByDigest, TestComposeKeysAreAnAllowList]
@@ -14532,9 +14569,9 @@ mutants:
     edits:
       - file: internal/auth/pwstrength/persian.go
         old: |-
-          if finglish && isLatinLetter(rs[i]) {
+          if finglish != finglishOff && isLatinLetter(rs[i]) {
         new: |-
-          if false && finglish && isLatinLetter(rs[i]) {
+          if false && finglish != finglishOff && isLatinLetter(rs[i]) {
     must_fail:
       - pkg: ./internal/auth/pwstrength
         tests: [TestPersianPasswordsAreRefusedWithAReason]
@@ -15427,7 +15464,7 @@ mutants:
           if err := error(nil); err != nil {
     must_fail:
       - pkg: ./internal/store
-        tests: [TestCapsRaceHarness]
+        tests: [TestSessionsTrimWaitsForTheUserLock]
   - id: proof-before-work-a-package-level-var-must-be-a-literal
     rule: proof-before-work
     finding: tenant-r18-15
@@ -16101,7 +16138,7 @@ mutants:
         old: |-
           staged, err := g.SMSGatewayStageCredentials(id, ct, hint)
         new: |-
-          if _, _, err := g.SMSGatewayConfirmCredentials(prov, hint); err != nil {
+          if _, _, err := g.SMSGatewayConfirmCredentials(prov, hint, store.SMSCredentialsFingerprint(ct)); err != nil {
               return err
           }
           staged, err := g.SMSGatewayStageCredentials(id, ct, hint)
@@ -16497,14 +16534,35 @@ mutants:
           			if _, err := g.AdminNoticeAppendAll(adminnotice.Notice{Kind: adminnotice.SMSGatewayChanged, At: env.Now()}); err != nil {
           				return err
           			}
-          			id, ok, err := g.SMSGatewayConfirmCredentials(provider, *hint)
+          			// A pair that the ring cannot open would be activated into a gateway that every sender judges
+          			// unusable, so a pair sealed under a key that was lost is refused here, and the operator is sent to
+          			// discard it (admin-r20-4). The console holds sms_cred; the text names no value.
+          			sealed, err := g.SMSCredentialsSealed()
+          			if err != nil {
+          				return err
+          			}
+          			for _, r := range sealed {
+          				if r.Pending && r.Provider == provider && !opensWith(sms.OpenCredentials(t.Keys, r.ID, r.Provider, r.CT)) {
+          					return errors.New("the pending credentials do not open with the key ring of this container (a key was lost or replaced): run `ctrlz-admin sms discard` for this provider and enter the credentials again")
+          				}
+          			}
+          			id, ok, err := g.SMSGatewayConfirmCredentials(provider, *hint, fp)
         new: |-
           var confirmed uuid.UUID
           		if err := t.Store.WithGlobal(ctx, store.TxOpts{}, func(g store.GlobalTx) error {
           			if _, err := g.AdminNoticeAppendAll(adminnotice.Notice{Kind: adminnotice.SMSGatewayChanged, At: env.Now()}); err != nil {
           				return err
           			}
-          			id, ok, err := g.SMSGatewayConfirmCredentials(provider, *hint)
+          			sealed, err := g.SMSCredentialsSealed()
+          			if err != nil {
+          				return err
+          			}
+          			for _, r := range sealed {
+          				if r.Pending && r.Provider == provider && !opensWith(sms.OpenCredentials(t.Keys, r.ID, r.Provider, r.CT)) {
+          					return errors.New("the pending credentials do not open")
+          				}
+          			}
+          			id, ok, err := g.SMSGatewayConfirmCredentials(provider, *hint, fp)
           			if err != nil {
           				return err
           			}

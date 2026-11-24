@@ -86,3 +86,64 @@ func TestPersianLayerBoundIsAfterTheFold(t *testing.T) {
 		t.Errorf("the layer scores %d runes of an expanding text, want 24", got)
 	}
 }
+
+// TestFinglishTypedOnAPersianKeyboardIsRefused is primitives-r20-2: a Finglish phrase meant as a Latin
+// password but typed with the Persian layout active reaches the checker as Persian letters, whose key
+// positions read back as the Finglish phrase. Round 19 switched the Finglish matching off for those
+// readings, and these phrases (zxcvbn scores each 3 or 4) were accepted at both floors. The matching
+// runs there again, and counts only when it explains the whole run of Latin letters.
+func TestFinglishTypedOnAPersianKeyboardIsRefused(t *testing.T) {
+	c := pwstrength.New()
+	in := pwstrength.Input{Phone: "+989121234567", Username: "ali"}
+	for _, latin := range []string{"doostdaramtoro", "khodahafez2024", "mamnunamazshoma", "madaremmehraban"} {
+		for i, typed := range pwstrength.OnPersianKeyboard(c, latin) {
+			if typed == latin {
+				t.Fatalf("%s: layout %d typed the Latin text itself, the test would not reach the key reading", latin, i)
+			}
+			if r := check(c, typed, in, password.User); r.OK || r.Reason != pwstrength.TooCommon {
+				t.Errorf("%s on Persian layout %d (%q), user: %+v, want too_common", latin, i, typed, r)
+			}
+			if r := check(c, typed, in, password.Admin); r.OK {
+				t.Errorf("%s on Persian layout %d (%q), admin: accepted: %+v", latin, i, typed, r)
+			}
+		}
+	}
+}
+
+// TestShortPersianWordsInAPhraseCount is primitives-r20-3: a word of two letters (من, تو) is in every
+// random run, so it counts only as a whole run or next to another piece, and Persian is typed without
+// spaces, so the phrase "I am in love with you" is one run. It was priced as random letters and passed.
+func TestShortPersianWordsInAPhraseCount(t *testing.T) {
+	c := pwstrength.New()
+	in := pwstrength.Input{Phone: "+989121234567", Username: "ali"}
+	for _, pw := range []string{"منعاشقتوهستم", "منوتوباهمیم"} {
+		if r := check(c, pw, in, password.User); r.OK || r.Reason != pwstrength.TooCommon {
+			t.Errorf("%q: %+v, want too_common", pw, r)
+		}
+	}
+}
+
+// TestFinglishWithAnExtraLetterOnAPersianKeyboardIsRefused is primitives-r21-1: one Latin letter that no
+// spelling explains switched the whole-run Finglish matching off, so the four phrases of r20-2 with a
+// letter added before, after or in the middle were accepted on a Persian layout while the same Latin
+// text is refused. The answer must not depend on which layout was on: a text is refused on the Persian
+// layouts at a floor exactly when its Latin form is refused there.
+func TestFinglishWithAnExtraLetterOnAPersianKeyboardIsRefused(t *testing.T) {
+	c := pwstrength.New()
+	in := pwstrength.Input{Phone: "+989121234567", Username: "ali"}
+	for _, base := range []string{"doostdaramtoro", "khodahafez2024", "mamnunamazshoma", "madaremmehraban"} {
+		mid := len(base) / 2
+		for _, latin := range []string{"x" + base, base + "x", base[:mid] + "x" + base[mid:], base + "q"} {
+			for _, kind := range []password.Kind{password.User, password.Admin} {
+				if check(c, latin, in, kind).OK {
+					continue // the Latin form passes at this floor, so there is nothing to hold the Persian layouts to
+				}
+				for i, typed := range pwstrength.OnPersianKeyboard(c, latin) {
+					if r := check(c, typed, in, kind); r.OK {
+						t.Errorf("%s on Persian layout %d (%q), kind %v: accepted (%+v), but the Latin text is refused", latin, i, typed, kind, r)
+					}
+				}
+			}
+		}
+	}
+}

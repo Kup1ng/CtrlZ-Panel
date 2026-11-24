@@ -14,6 +14,6 @@ func activate(g store.GlobalTx, id uuid.UUID, provider string, ct []byte, hint s
 	if ok, err := g.SMSGatewayStageCredentials(id, ct, hint); err != nil || !ok {
 		return false, err
 	}
-	_, ok, err := g.SMSGatewayConfirmCredentials(provider, hint)
+	_, ok, err := g.SMSGatewayConfirmCredentials(provider, hint, store.SMSCredentialsFingerprint(ct))
 	return ok, err
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/otp"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/session"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/ticket"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
@@ -40,6 +41,16 @@ func (s *Server) tokenProof(r *http.Request, op apispec.Operation) (id, subject 
 		}
 	}
 	return "", "", false
+}
+
+// untaggedChallenge is the answer for a challenge_id that is no proof: otp_expired for an id this service issued whose life
+// has run out, as the database answers it, and otp_invalid for anything else, which is what a challenge the database does
+// not know gets. Either way the request was charged to the network and costs no database call (tenant-r20-1).
+func (s *Server) untaggedChallenge(challengeID string) error {
+	if s.otp.ChallengeLapsed(challengeID) {
+		return otp.ErrExpired
+	}
+	return otp.ErrInvalid
 }
 
 func (s *Server) ticketProof(tok string) (id, subject string, ok bool) {

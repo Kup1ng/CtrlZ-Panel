@@ -71,7 +71,16 @@ var (
 // exempt reference needs `pull_policy: never` (imagePullProblems), and every docker run, create and pull of a
 // script says --pull never unless its image is a pinned reference (dockerLineProblems).
 var imageExempt = map[string]string{
-	"ctrlz/panel:dev": "the Panel image, built from deploy/docker/Dockerfile by the stack itself and never pulled",
+	"ctrlz/panel:dev":     "the Panel image, built from deploy/docker/Dockerfile by the stack itself and never pulled",
+	"ctrlz/web-panel:dev": "the panel dashboard, built from deploy/docker/web.Dockerfile and never pulled",
+	"ctrlz/web-admin:dev": "the admin dashboard, built from deploy/docker/web.Dockerfile and never pulled",
+}
+
+// imageCopyExempt are the files that may repeat a reference of the Compose file, with the reason. Only the exact
+// pinned reference of the Compose file is let through, so a copy whose digest has drifted still fails (that is the
+// drift rule 3 exists for). A stale entry (a file that holds no copy any more) fails, like imageSecondPlaceExempt.
+var imageCopyExempt = map[string]string{
+	"deploy/compose/e2e-offline.yml": "the one-shot container that cuts Caddy's route: an override file cannot read the reference out of docker-compose.yml",
 }
 
 // imageSecondPlaceExempt are the files that name a reference on purpose, with the reason. A stale entry (a
@@ -285,7 +294,17 @@ func imagePinProblems(s imageSources) []string {
 		check(path, lits)
 	}
 	for path, text := range s.others {
-		check(path, nonComment(text))
+		body := nonComment(text)
+		if _, ok := imageCopyExempt[path]; ok {
+			// Only the pinned references of the Compose file and the Dockerfiles are removed before the scan, so a
+			// copy with another digest, or a reference that nothing here runs, is still a second place.
+			for _, ref := range refs {
+				if pinnedImageRe.MatchString(ref) {
+					body = strings.ReplaceAll(body, ref, "")
+				}
+			}
+		}
+		check(path, body)
 		switch {
 		case strings.HasSuffix(path, ".sh"):
 			out = append(out, dockerImageProblems(path, text)...)
@@ -411,6 +430,16 @@ func TestEveryImageIsPinnedByDigest(t *testing.T) {
 			t.Errorf("the exemption for %s is stale: it names no image any more", path)
 		}
 	}
+	// An imageCopyExempt entry whose file holds no copy is an exemption that somebody may use unseen.
+	for path := range imageCopyExempt {
+		held := false
+		for _, ref := range realImageRefs(t, s) {
+			held = held || strings.Contains(s.others[path], ref)
+		}
+		if !held {
+			t.Errorf("imageCopyExempt lists %s, which holds no copy of a pinned reference any more: remove the entry", path)
+		}
+	}
 	// A pullAllowed entry whose file no longer pulls is a pull that somebody may bring back unseen.
 	for path := range pullAllowed {
 		if !strings.Contains(s.others[path], "docker pull") {
@@ -430,7 +459,7 @@ func TestImagePinLintCanFail(t *testing.T) {
 	pin := func(repo, tag string) string { return repo + ":" + tag + "@" + d }
 	good := func() imageSources {
 		return imageSources{
-			compose:     "services:\n  a:\n    image: " + pin("valkey/valkey", "8.1") + "\n  b:\n    image: ${CTRLZ_IMAGE:-ctrlz/panel:dev}\n    pull_policy: never\n  c:\n    image: " + pin("caddy", "2.10") + "\n",
+			compose:     "services:\n  a:\n    image: " + pin("valkey/valkey", "8.1") + "\n  b:\n    image: ${CTRLZ_IMAGE:-ctrlz/panel:dev}\n    pull_policy: never\n  c:\n    image: " + pin("caddy", "2.10") + "\n  w:\n    image: ${CTRLZ_WEB_PANEL_IMAGE:-ctrlz/web-panel:dev}\n    pull_policy: never\n",
 			dockerfiles: map[string]string{"deploy/docker/Dockerfile": "FROM " + pin("golang", "1.27.4") + " AS build\nFROM scratch\nCOPY --from=build /a /b\n"},
 			goFiles: map[string]string{
 				"x/x.go": "package x\nfunc F() string { return deployImage(\"A_IMAGE\") }\n",
@@ -452,7 +481,12 @@ func TestImagePinLintCanFail(t *testing.T) {
 					"dc() { docker compose -p x \"$@\"; }\ndc up -d\ndc exec -T api true\ndc run -T --rm admin ctrlz-admin x\n",
 				// The one kind of pull a script may have: the placeholder, in a file of pullAllowed.
 				"scripts/compose-smoke.sh": "bb=\"$(sed -n p deploy/compose/docker-compose.yml)\"\ndocker pull -q \"$bb\"\n",
-				"ci/ok.yml":                "jobs:\n  a:\n    container:\n      image: " + pin("alpine", "3.20") + "\n    steps:\n      - image: ${X}\n",
+				// An indented wrapper, a variable that holds the -f pairs, a function with a fixed compose command that a
+				// trap calls, and the one build that says --pull=false (ci-web.sh, web-deps-stamp.sh).
+				"scripts/w.sh": "if true; then\n  files=\"-f a.yml -f b.yml\"\n  w() {\n    docker compose -p x $files \"$@\"\n  }\n  w up -d\n  cleanup() {\n    docker compose -p x $files down\n  }\n  trap cleanup EXIT\nfi\ndocker build --pull=false -q -t x .\n",
+				// An override file that repeats a pinned reference of the Compose file (imageCopyExempt).
+				"deploy/compose/e2e-offline.yml": "services:\n  cut:\n    image: " + pin("caddy", "2.10") + "\n",
+				"ci/ok.yml":                      "jobs:\n  a:\n    container:\n      image: " + pin("alpine", "3.20") + "\n    steps:\n      - image: ${X}\n",
 			},
 		}
 	}
@@ -577,6 +611,36 @@ func TestImagePinLintCanFail(t *testing.T) {
 		},
 		"a script run in a command substitution that may pull": func(s *imageSources) {
 			s.others["scripts/s.sh"] += "out=$(docker run --rm -i \"$image\" cat)\n"
+		},
+		"a web image with no pull policy": func(s *imageSources) {
+			s.compose = strings.Replace(s.compose, "ctrlz/web-panel:dev}\n    pull_policy: never\n", "ctrlz/web-panel:dev}\n", 1)
+		},
+		"a web image that may be pulled when missing": func(s *imageSources) {
+			s.compose = strings.Replace(s.compose, "ctrlz/web-panel:dev}\n    pull_policy: never", "ctrlz/web-panel:dev}\n    pull_policy: missing", 1)
+		},
+		"a web image that is a bare tag no exemption names": func(s *imageSources) {
+			s.compose = strings.Replace(s.compose, "${CTRLZ_WEB_PANEL_IMAGE:-ctrlz/web-panel:dev}", "ctrlz/web-panel:latest", 1)
+		},
+		"a copy of a reference in a file that is not on the exemption list": func(s *imageSources) {
+			s.others["ci/y.yml"] = "services:\n  cut:\n    image: " + pin("caddy", "2.10") + "\n"
+		},
+		"a copy with another digest in the exempt file": func(s *imageSources) {
+			s.others["deploy/compose/e2e-offline.yml"] = "services:\n  cut:\n    image: caddy" + ":2.10@sha256:" + strings.Repeat("b", 64) + "\n"
+		},
+		"an indented wrapper pulls": func(s *imageSources) {
+			s.others["scripts/w.sh"] += "if true; then\n  w pull\nfi\n"
+		},
+		"a variable of -f pairs that holds a subcommand": func(s *imageSources) {
+			s.others["scripts/w.sh"] = strings.Replace(s.others["scripts/w.sh"], "files=\"-f a.yml -f b.yml\"", "files=\"-f a.yml pull\"", 1)
+		},
+		"a build that pulls": func(s *imageSources) {
+			s.others["scripts/w.sh"] += "docker build --pull=true -q -t x .\n"
+		},
+		"a bare --pull on a build": func(s *imageSources) {
+			s.others["scripts/w.sh"] += "docker build --pull -q -t x .\n"
+		},
+		"a run that says --pull=false": func(s *imageSources) {
+			s.others["scripts/w.sh"] += "docker run --pull=false --rm \"$image\" true\n"
 		},
 		"no image in the compose file": func(s *imageSources) {
 			s.compose = "services: {}\n"
@@ -734,9 +798,26 @@ func imagePullProblems(doc any) []string {
 		policy, has := s["pull_policy"]
 		switch {
 		case exempt && policy != "never":
-			out = append(out, n+" runs the Panel image, a bare name a registry would resolve, and its pull_policy is not never: docker compose pull and up would fetch it")
+			out = append(out, n+" runs an image built here (a bare name a registry would resolve), and its pull_policy is not never: docker compose pull and up would fetch it")
 		case !exempt && has:
-			out = append(out, n+" has a pull_policy: only the Panel image is never pulled, and every other image is pinned by digest and pulled by design")
+			out = append(out, n+" has a pull_policy: only the images built here are never pulled, and every other image is pinned by digest and pulled by design")
+		}
+	}
+	return out
+}
+
+// realImageRefs are the pinned references the Compose file names, for the staleness check of imageCopyExempt.
+func realImageRefs(t *testing.T, s imageSources) []string {
+	t.Helper()
+	var doc any
+	if err := yaml.Unmarshal([]byte(s.compose), &doc); err != nil {
+		t.Fatal(err)
+	}
+	var images, out []string
+	walkImages(doc, &images)
+	for _, im := range images {
+		if pinnedImageRe.MatchString(im) {
+			out = append(out, im)
 		}
 	}
 	return out

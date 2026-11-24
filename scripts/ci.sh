@@ -139,14 +139,15 @@ fi
 # time floors and the Argon2 gate) and ran into 40 minutes at -p 4 on a loaded machine,
 # panicking with a test that was only 6 s in. Nothing hung; the budget was too small.
 # Raise it again here, not per test: the oracle states must not be made parallel, as
-# they compare durations and contention would manufacture differences.
+# they compare durations and contention would manufacture differences. After the Valkey sweep tests
+# (auth-valkey-sweep) internal/lint alone took 51 minutes on a quiet machine and 116 on a loaded one, so 180.
 # -p: each container package starts its own Postgres (and Valkey); at the default
 # of one package per CPU Docker Desktop timed out starting them (A7). Raise it on
 # a bigger machine with CTRLZ_TEST_PACKAGES.
 # CTRLZ_CI makes a test that needs something of the host (a second address) fail and not skip, so a
 # host that lacks it cannot read as a pass (rule 28, admin-r12-2).
 export CTRLZ_CI=1
-go test -count=1 -timeout "${CTRLZ_TEST_TIMEOUT:-100m}" -p "${CTRLZ_TEST_PACKAGES:-4}" $short ./...
+go test -count=1 -timeout "${CTRLZ_TEST_TIMEOUT:-180m}" -p "${CTRLZ_TEST_PACKAGES:-4}" $short ./...
 
 # Rule tests-that-cannot-fail (P1 auth review, round 5): break the code with each edit of
 # mutants.yaml in a scratch copy of the tree and require the named tests to fail. A mutant

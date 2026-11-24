@@ -35,6 +35,7 @@ type Wiring struct {
 func StartWiring(ctx context.Context, repoRoot string, env map[string]string) (*Wiring, error) {
 	// The reaper testcontainers starts beside this container holds the Docker socket and is named by tag alone:
 	// make the local copy of that tag the reviewed bytes first (admin-r17-2, -8).
+	deploy.RemoveStaleTestContainers()
 	if err := deploy.PinReaper(ctx); err != nil {
 		return nil, err
 	}
@@ -81,7 +82,7 @@ func StartWiring(ctx context.Context, repoRoot string, env map[string]string) (*
 	})
 	if err != nil {
 		if ctr != nil {
-			_ = ctr.Terminate(ctx)
+			terminateFresh(ctx, ctr)
 		}
 		return nil, fmt.Errorf("start wiring container: %w", err)
 	}

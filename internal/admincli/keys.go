@@ -176,7 +176,7 @@ func runKeysStatus(ctx context.Context, env Env, args []string) error {
 // runDeclareLost is `keys declare-lost <domain>` (8.5): the key for a domain is
 // gone with its root, so what it protected cannot be opened. It records the
 // operator's declaration, after proving what it can: for sms_cred it opens the
-// credentials that name the number and refuses while one opens. The admin does not
+// credentials that name the number and refuses only when every one of them opens. The admin does not
 // hold user_totp, so for that domain the record is all it can do.
 //
 // Clearing the sealed user_totp seeds is not done here (review round 3, db-r3-1,
@@ -221,40 +221,81 @@ func runDeclareLost(ctx context.Context, env Env, args []string) error {
 		// role (the tools container makes the same check there), and the other domains store
 		// nothing to open.
 		var named, opened int
-		if domain == keyring.DomainSMSCred {
-			if err := t.Store.WithGlobal(ctx, store.TxOpts{ReadOnly: true}, func(g store.GlobalTx) error {
+		// stranded are the PENDING pairs that name the lost key and do not open (admin-r20-4), with the
+		// ciphertext that was judged. A PUT is refused while a pair waits, so the recovery below could not
+		// start until the pair is discarded, and confirming it would activate ciphertext nothing can open.
+		type strandedPair struct {
+			provider string
+			ct       []byte
+		}
+		var stranded []strandedPair
+		// The transaction is READ COMMITTED, and the discard names the ciphertext that was judged
+		// (db-r21-2): a `sms discard` and a new PUT between the read and the discard must not have this
+		// command drop a valid pair it never looked at. A snapshot transaction (REPEATABLE READ) is not
+		// the answer, because the audit rows below are written in it and the chain head they read would
+		// be the snapshot's, so a row committed meanwhile forks the chain (admin-r22-1).
+		opts := store.TxOpts{}
+		// The declaration is audited before the tools container changes anything: that run clears one
+		// tenant at a time, so a row written after it would be missing if it failed part way (13.1). The
+		// row records the operator's act, which is true whether or not the clearing finishes. The stranded
+		// pending pairs are dropped in the same transaction: the gateway rows come before the audit chain
+		// in the lock order, so every pair is discarded first and the rows are written after, each drop
+		// with its own row like `sms discard` (admin-r22-2).
+		if err := t.Store.WithGlobal(ctx, opts, func(g store.GlobalTx) error {
+			if domain == keyring.DomainSMSCred {
 				rows, err := g.SMSCredentialsSealed()
+				if err != nil {
+					return err
+				}
 				for _, r := range rows {
 					if n, ok := keyring.KeyNumber(r.CT); ok && int(n) == *keyNo {
 						named++
 						if opensWith(sms.OpenCredentials(t.Keys, r.ID, r.Provider, r.CT)) {
 							opened++
+						} else if r.Pending {
+							stranded = append(stranded, strandedPair{r.Provider, r.CT})
 						}
 					}
 				}
-				return err
-			}); err != nil {
-				return err
+				if named > 0 && opened == named {
+					return fmt.Errorf("key %d of sms_cred is loaded and all %d gateway credentials under it open, so they are not lost; run `rekey sms_cred` instead", *keyNo, named)
+				}
 			}
-			if named > 0 && opened == named {
-				return fmt.Errorf("key %d of sms_cred is loaded and all %d gateway credentials under it open, so they are not lost; run `rekey sms_cred` instead", *keyNo, named)
+			var discarded []uuid.UUID
+			for _, p := range stranded {
+				id, ok, err := g.SMSGatewayDiscardPending(p.provider, p.ct)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					// The pair is gone or was replaced since it was judged: nothing is written, and a rerun
+					// judges what is there now.
+					return errDeclareLostChanged
+				}
+				discarded = append(discarded, id)
 			}
-		}
-		// The declaration is audited first, before the tools container changes anything:
-		// that run clears one tenant at a time, so a row written after it would be missing
-		// if it failed part way (13.1). The row records the operator's act, which is
-		// true whether or not the clearing finishes.
-		if err := t.Store.WithGlobal(ctx, store.TxOpts{}, func(g store.GlobalTx) error {
+			for _, id := range discarded {
+				if _, err := audit.Admin(g, env.Now(), uuid.Nil, netip.Addr{},
+					audit.SMSGatewayChange{Gateway: id, Fields: []audit.Field{audit.FieldCredentialsDiscarded}}); err != nil {
+					return err
+				}
+			}
 			_, err := audit.Admin(g, env.Now(), uuid.Nil, netip.Addr{}, audit.KeyDeclaredLost{Domain: audit.KeyDomainOf(domain), KeyNumber: *keyNo})
 			return err
 		}); err != nil {
+			if errors.Is(err, store.ErrRetry) || errors.Is(err, errDeclareLostChanged) {
+				return errors.New("a gateway changed while the declaration ran, so nothing was written: run the command again")
+			}
 			return err
 		}
 		switch domain {
 		case keyring.DomainUserTOTP:
 			fmt.Fprintf(env.Stdout, "declared lost: recorded. Now clear the seeds from the tools container, which holds the user_totp keys:\n  docker compose --profile tools run --rm rekey declare-lost user_totp --key-number %d --yes\n", *keyNo)
 		case keyring.DomainSMSCred:
-			fmt.Fprintln(env.Stdout, "declared lost: make a new key, then enter the gateway credentials again on the SMS page, then run `ctrlz-admin sms pending` and `ctrlz-admin sms confirm <provider> --hint H` on the server: credentials entered on the page carry no code until they are confirmed")
+			fmt.Fprintln(env.Stdout, "declared lost: make a new key, then enter the gateway credentials again on the SMS page (the PUT returns a fingerprint; keep it), then run `ctrlz-admin sms pending` and `ctrlz-admin sms confirm <provider> --hint H --fingerprint F` on the server: credentials entered on the page carry no code until they are confirmed. A PUT is refused while a pending pair waits: if `sms pending` lists a pair you did not just stage, run `ctrlz-admin sms discard <provider>` first")
+			for _, p := range stranded {
+				fmt.Fprintf(env.Stdout, "%s: the credentials that were waiting for a confirmation were sealed under key %d and cannot be opened; they were discarded (`ctrlz-admin sms discard` is the same step)\n", p.provider, *keyNo)
+			}
 			if opened > 0 {
 				fmt.Fprintf(env.Stdout, "%d of the %d gateway credentials under key %d still open and need nothing; `rekey sms_cred` moves them to the newest key\n", opened, named, *keyNo)
 			}
@@ -583,7 +624,6 @@ func runAudit(ctx context.Context, env Env, args []string) error {
 // left the old seeds with no command that could clear them. The database function clears a row only
 // while it still holds the ciphertext the tool read, and writes the tenant's notice and audit row
 // itself.
-// tenant's notice and audit row itself.
 func RunDeclareLost(ctx context.Context, args []string, env Env) int {
 	env = env.withDefaults()
 	return finish(env, runDeclareLostUser(ctx, env, args))
@@ -747,3 +787,7 @@ func opensWith(plain secret.Bytes, err error) bool {
 	plain.Wipe()
 	return true
 }
+
+// errDeclareLostChanged is the discard that found its pair gone or replaced (admin-r22-1). It rolls the
+// transaction back and is reported like a serialization failure: nothing was written, run it again.
+var errDeclareLostChanged = errors.New("admincli: a pending pair changed after it was judged")

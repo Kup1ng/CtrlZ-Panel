@@ -1,6 +1,8 @@
 package store
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"time"
 
 	"github.com/google/uuid"
@@ -97,20 +99,27 @@ func (g GlobalTx) SMSGatewayStageCredentials(id uuid.UUID, credentialsCT []byte,
 // qSMSGatewayDiscardPending drops the pending pair without activating it. It is the console's way to
 // free a gateway for a new PUT, which refuses while a pair waits. Like the activation it is the
 // console's alone: a route that could discard and stage again would put the silent overwrite back
-// with two lines.
+// with two lines. A non-NULL $2 names the ciphertext the caller judged, so a pair that changed
+// after the judgement is left alone: at READ COMMITTED the update waits for a row lock and then
+// evaluates this predicate against the newest version of the row (admin-r22-1).
 const qSMSGatewayDiscardPending = `UPDATE ctrlz.sms_gateways SET credentials_pending_ct = NULL, pending_hint = NULL
-WHERE id = $1 AND credentials_pending_ct IS NOT NULL
+WHERE id = $1 AND credentials_pending_ct IS NOT NULL AND ($2::bytea IS NULL OR credentials_pending_ct = $2::bytea)
 RETURNING id`
 
 // SMSGatewayDiscardPending removes the pending credentials of a provider and leaves the active ones.
-// It returns the gateway's id, and false when nothing was pending.
-func (g GlobalTx) SMSGatewayDiscardPending(provider string) (uuid.UUID, bool, error) {
+// It returns the gateway's id, and false when nothing was pending. A non-nil judgedCT is the ciphertext
+// the caller judged, and the pair is removed only while it is still that one: the discard of a pair
+// that was replaced since returns false and changes nothing. The caller that judges runs at READ
+// COMMITTED: it writes an audit row in the same transaction, and a snapshot transaction reads a stale
+// head of the audit chain and forks it (admin-r22-1), so the guard is the ciphertext and not the
+// isolation level. nil discards whatever waits (`sms discard`).
+func (g GlobalTx) SMSGatewayDiscardPending(provider string, judgedCT []byte) (uuid.UUID, bool, error) {
 	gw, _, found, err := g.SMSGatewayByProvider(provider)
 	if err != nil || !found {
 		return uuid.Nil, false, err
 	}
 	var id uuid.UUID
-	if err := g.tx.QueryRow(g.ctx, qSMSGatewayDiscardPending, gw).Scan(&id); err != nil {
+	if err := g.tx.QueryRow(g.ctx, qSMSGatewayDiscardPending, gw, judgedCT).Scan(&id); err != nil {
 		if err == pgx.ErrNoRows {
 			return uuid.Nil, false, nil
 		}
@@ -119,10 +128,24 @@ func (g GlobalTx) SMSGatewayDiscardPending(provider string) (uuid.UUID, bool, er
 	return id, true, nil
 }
 
-// qSMSGatewayConfirm copies the pending pair over the active one, only while the hint the operator
-// typed is the pending one. The hint guards against confirming the wrong gateway's pair by a typo;
-// it is not what stops a thief's later PUT, which cannot replace a pending pair at all
-// (qSMSGatewayStageCredentials, db-r19-2). New credentials close the
+// SMSCredentialsFingerprint names a sealed pair by the first 8 bytes of the SHA-256 of its ciphertext,
+// in hex. A PUT that staged a pair returns it to the session that sent the PUT and to no one else, and
+// the console's confirmation needs it (admin-r20-3): the hint is chosen by whoever stages and can be
+// read from the active hint of the page, so it cannot tell the owner's pair from a thief's. An owner
+// whose own PUT was refused holds no fingerprint and can only discard. It reveals nothing of the
+// credentials: the ciphertext carries a random nonce, and the digest is not reversible. The statement
+// that confirms computes the same value in SQL (qSMSGatewayConfirm).
+func SMSCredentialsFingerprint(ct []byte) string {
+	sum := sha256.Sum256(ct)
+	return hex.EncodeToString(sum[:8])
+}
+
+// qSMSGatewayConfirm copies the pending pair over the active one, only while the hint and the
+// fingerprint the operator typed are the pending pair's. The hint guards against confirming the wrong
+// gateway's pair by a typo; it is not what stops a thief's later PUT, which cannot replace a pending
+// pair at all (qSMSGatewayStageCredentials, db-r19-2), and it is chosen by whoever stages, so it does
+// not stop a thief who stages first either: the fingerprint does, because only the session whose PUT
+// staged the pair was told it (admin-r20-3). New credentials close the
 // breaker: the old failures were about the old ones. The worker's judgement that no sender can be
 // built (unusable_ct_sum) is NOT written here (sms-r17-9): it names the digest of the ciphertext it was
 // made for, so new credentials end it with no write, and a second writer of the column would break the
@@ -132,12 +155,14 @@ const qSMSGatewayConfirm = `UPDATE ctrlz.sms_gateways SET credentials_ct = crede
   credentials_pending_ct = NULL, pending_hint = NULL, consecutive_failures = 0, breaker_open_until = NULL,
   held_ct_sum = NULL, held_code = NULL
 WHERE id = $1 AND credentials_pending_ct IS NOT NULL AND pending_hint IS NOT DISTINCT FROM $2
+  AND encode(substr(sha256(credentials_pending_ct), 1, 8), 'hex') = $3
 RETURNING id`
 
 // SMSGatewayConfirmCredentials makes the pending credentials of a provider the active ones. It
-// returns the gateway's id, and false when the provider has nothing pending or the hint is not the
-// pending one. It is the console's act (D12): no route of the admin API calls it.
-func (g GlobalTx) SMSGatewayConfirmCredentials(provider, hint string) (uuid.UUID, bool, error) {
+// returns the gateway's id, and false when the provider has nothing pending or the hint or the
+// fingerprint is not the pending pair's. It is the console's act (D12): no route of the admin API
+// calls it.
+func (g GlobalTx) SMSGatewayConfirmCredentials(provider, hint, fingerprint string) (uuid.UUID, bool, error) {
 	// The row is named by id: a statement that names it by provider could touch several rows as far as the
 	// lock-order lint can tell (the provider is unique, but the unique index is not what it reads).
 	gw, _, found, err := g.SMSGatewayByProvider(provider)
@@ -145,7 +170,7 @@ func (g GlobalTx) SMSGatewayConfirmCredentials(provider, hint string) (uuid.UUID
 		return uuid.Nil, false, err
 	}
 	var id uuid.UUID
-	if err := g.tx.QueryRow(g.ctx, qSMSGatewayConfirm, gw, emptyNull(hint)).Scan(&id); err != nil {
+	if err := g.tx.QueryRow(g.ctx, qSMSGatewayConfirm, gw, emptyNull(hint), fingerprint).Scan(&id); err != nil {
 		if err == pgx.ErrNoRows {
 			return uuid.Nil, false, nil
 		}
@@ -155,14 +180,16 @@ func (g GlobalTx) SMSGatewayConfirmCredentials(provider, hint string) (uuid.UUID
 }
 
 // SMSPendingGateway is a gateway that waits for the owner's confirmation, as `ctrlz-admin sms
-// pending` shows it: the provider and the hint, never the credentials.
+// pending` shows it: the provider and the hint, never the credentials. ID names the gateway in the
+// audit row that staged the pair.
 type SMSPendingGateway struct {
+	ID        uuid.UUID
 	Provider  string
 	Hint      string
 	HasActive bool
 }
 
-const qSMSPendingGateways = `SELECT provider, COALESCE(pending_hint, ''), credentials_ct IS NOT NULL
+const qSMSPendingGateways = `SELECT id, provider, COALESCE(pending_hint, ''), credentials_ct IS NOT NULL
 FROM ctrlz.sms_gateways WHERE credentials_pending_ct IS NOT NULL ORDER BY provider`
 
 // SMSPendingGateways lists what waits for a confirmation.
@@ -175,7 +202,7 @@ func (g GlobalTx) SMSPendingGateways() ([]SMSPendingGateway, error) {
 	var out []SMSPendingGateway
 	for rows.Next() {
 		var r SMSPendingGateway
-		if err := rows.Scan(&r.Provider, &r.Hint, &r.HasActive); err != nil {
+		if err := rows.Scan(&r.ID, &r.Provider, &r.Hint, &r.HasActive); err != nil {
 			return nil, sanitize(err)
 		}
 		out = append(out, r)

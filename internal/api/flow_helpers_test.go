@@ -91,6 +91,7 @@ type frig struct {
 	deps   Deps
 	after  *afterwork.Queue // the production queue of work owed after a floor; a test waits on it before it reads the rows
 	health httpx.Health
+	srv    *Server // the server behind h, for the tests that read a decision off it directly
 }
 
 type frigOpts struct {
@@ -139,11 +140,11 @@ func (f *frig) setLimiter(l *ratelimit.Limiter) {
 	f.t.Helper()
 	d := f.deps
 	d.Limiter = l
-	h, err := New(d, f.health)
+	h, srv, err := build(d, f.health)
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.h = h
+	f.h, f.srv = h, srv
 }
 
 func (f *frig) setPassword(tenant, user uuid.UUID, pw string) {

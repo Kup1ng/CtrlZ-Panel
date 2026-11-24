@@ -292,8 +292,10 @@ func runValkeyZone(t *testing.T, zone string, secretContent []byte, wantHealthy 
 	if err := os.WriteFile(secretFile, secretContent, 0o444); err != nil {
 		t.Fatal(err)
 	}
+	deploy.RemoveStaleTestContainers()
 	name = fmt.Sprintf("ctrlz-valkey-acl-%016x", rand.Uint64())
-	args := []string{"-d", "--name", name, "--read-only", "--cap-drop", "ALL", "--user", "999:999",
+	removeOnCleanup(t, name)
+	args := []string{"-d", "--name", name, "--label", testContainerLabel, "--read-only", "--cap-drop", "ALL", "--user", "999:999",
 		"--tmpfs", "/tmp:size=1m,mode=0700,uid=999,gid=999", "--tmpfs", "/data:uid=999,gid=999", "-p", "127.0.0.1::6379",
 		"-e", "VK_ZONE=" + zone,
 		"-v", secretFile + ":/run/secrets/valkey_password_" + zone + ":ro",
@@ -304,12 +306,17 @@ func runValkeyZone(t *testing.T, zone string, secretContent []byte, wantHealthy 
 		"-v", abs("internal", "ratelimit", "lua") + ":/etc/valkey/lua:ro"}
 	// dockerArgs is how a test sets what Compose sets from the profile (VK_MAXMEMORY) without a copy of the start line.
 	args = append(args, dockerArgs...)
-	args = append(args, "--entrypoint", v.Command[0])
-	out, err := deploy.DockerRun(context.Background(), image, args, v.Command[1:]...).CombinedOutput()
+	// A container that the test reads after it stopped (the start file refusing a secret) cannot be --rm; it keeps
+	// the label and the lifetime, and the janitor removes it once it is old.
+	if wantHealthy {
+		args = append(args, "--rm")
+	}
+	// The command of the Compose file runs under timeout (see testLifetime): the container ends by itself.
+	args = append(args, "--entrypoint", "timeout")
+	out, err := deploy.DockerRun(context.Background(), image, args, append([]string{testLifetime, v.Command[0]}, v.Command[1:]...)...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("docker run: %v\n%s", err, out)
 	}
-	t.Cleanup(func() { _ = deploy.Docker(context.Background(), "rm", "-f", name).Run() })
 
 	if wantHealthy {
 		waitHealthy(t, name, probe)
@@ -396,9 +403,14 @@ func TestValkeyACLUsersKeepToTheirOwnKeys(t *testing.T) {
 
 	api, admin := raw(apiAddr, "api", apiPW), raw(adminAddr, "admin", adminPW)
 	// What the services do, through the real limiter and the real client handshake.
-	apiLimiter := ratelimit.New(ratelimit.Config{Service: ratelimit.Tenant, Backend: ratelimit.NewValkey(ratelimit.ValkeyConfig{Addr: apiAddr, Username: "api", Password: secret.New(apiPW)})})
+	// The limiter's own timeout (250 ms) is the production one and not this test's subject: on the Hyper-V host a first
+	// call that dials and signs in, or one stalled by the VM, can pass it, and the limiter then marks the backend down
+	// and answers from its in-process bucket for three seconds. That reads as "the api limiter let 20 through a class
+	// of 10" or as an admin index that is empty because the writes never reached the server (2 runs in 8, on the commit
+	// before the sweep change as well). Ten seconds keeps the test about the ACL.
+	apiLimiter := ratelimit.New(ratelimit.Config{Service: ratelimit.Tenant, Timeout: 10 * time.Second, Backend: ratelimit.NewValkey(ratelimit.ValkeyConfig{Addr: apiAddr, Username: "api", Password: secret.New(apiPW)})})
 	adminValkey := ratelimit.NewValkey(ratelimit.ValkeyConfig{Addr: adminAddr, Username: "admin", Password: secret.New(adminPW), IndexKey: ratelimit.IndexKey(ratelimit.Admin)})
-	adminLimiter := ratelimit.New(ratelimit.Config{Service: ratelimit.Admin, Backend: adminValkey})
+	adminLimiter := ratelimit.New(ratelimit.Config{Service: ratelimit.Admin, Timeout: 10 * time.Second, Backend: adminValkey})
 	sens, _ := ratelimit.Lookup(ratelimit.Tenant, "sensitive")
 	login, _ := ratelimit.Lookup(ratelimit.Admin, "admin-login")
 	spend := func(l *ratelimit.Limiter, c ratelimit.Class, s ratelimit.Subject) (allowed int) {
@@ -496,6 +508,7 @@ var valkeyUserCommands = map[string]map[string]string{
 		"type": "the sweep checks a key is a hash (a zset for the index)", "pttl": "the sweep checks a key has a bounded lifetime",
 		"hlen": "the sweep checks a hash has the two fields the limiter writes", "zcard": "the sweep bounds the admin's index",
 		"memory|usage": "the sweep bounds the bytes of a key", "unlink": "the sweep deletes what is not a limiter key",
+		"info": "the sweep reads used_memory and maxmemory to tell the loop the instance is over half full (no pause then); the maintenance user is the one that may name no key, like SCAN",
 	},
 	"api": limiterCommands(),
 	"admin": withCommands(limiterCommands(), map[string]string{
@@ -754,6 +767,17 @@ func composeMaintACL(t *testing.T) string {
 // short idle timeout).
 func maintainedValkeyWith(t *testing.T, luaDir string, restart bool, serverArgs string) (name, addr string) {
 	t.Helper()
+	return maintainedValkeyEvery(t, luaDir, restart, serverArgs, "1")
+}
+
+// maintainedValkeyEvery is maintainedValkeyWith with the loop's MAINT_INTERVAL given: "1" is what the tests of the
+// loop use so they do not wait, and "" leaves the variable unset, which is the production default (2 s).
+func maintainedValkeyEvery(t *testing.T, luaDir string, restart bool, serverArgs, interval string) (name, addr string) {
+	t.Helper()
+	intervalEnv := ""
+	if interval != "" {
+		intervalEnv = " MAINT_INTERVAL=" + interval
+	}
 	if testing.Short() {
 		t.Skip("-short: container tests skipped")
 	}
@@ -772,25 +796,40 @@ func maintainedValkeyWith(t *testing.T, luaDir string, restart bool, serverArgs 
 	if err != nil {
 		t.Fatal(err)
 	}
+	deploy.RemoveStaleTestContainers()
 	name = fmt.Sprintf("ctrlz-valkey-maint-%016x", rand.Uint64())
+	removeOnCleanup(t, name)
 	start := `printf 'user default off\nuser loop on nopass ~* +@all\nuser maint on >maintpw ` + composeMaintACL(t) + `\n' > /tmp/users.acl
 printf maintpw > /tmp/maint.pw
-MAINT_USER=maint MAINT_INTERVAL=1 sh /etc/valkey/maintain.sh &
+MAINT_USER=maint` + intervalEnv + ` sh /etc/valkey/maintain.sh &
 exec valkey-server --aclfile /tmp/users.acl --busy-reply-threshold 500 --appendonly no --save "" ` + serverArgs
 	sweep, err := filepath.Abs(filepath.Join(repoRoot(t), "deploy", "compose", "valkey", "sweep.lua"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"-d", "--name", name, "--read-only", "--cap-drop", "ALL", "--tmpfs", "/tmp:size=1m,mode=0700",
+	args := []string{"-d", "--name", name, "--label", testContainerLabel, "--read-only", "--cap-drop", "ALL", "--tmpfs", "/tmp:size=1m,mode=0700",
 		"--tmpfs", "/data", "-p", "127.0.0.1::6379", "-v", maint + ":/etc/valkey/maintain.sh:ro", "-v", sweep + ":/etc/valkey/sweep.lua:ro", "-v", luaDir + ":/etc/valkey/lua:ro"}
 	if restart {
+		// A restart policy and --rm do not go together, so this one carries the label and no more: `timeout` ending
+		// the process group makes the container exit and the policy starts it again, so the lifetime is no bound
+		// here. Its keyspace is empty after each start, so a leaked one idles, and the janitor removes it once it has
+		// run three hours.
 		args = append(args, "--restart", "unless-stopped")
+	} else {
+		args = append(args, "--rm")
 	}
-	args = append(args, "--entrypoint", "/bin/sh")
-	if out, err := deploy.DockerRun(context.Background(), image, args, "-c", start).CombinedOutput(); err != nil {
+	args = append(args, "--entrypoint", "timeout")
+	// The start text goes in as a file and not as an argument of `sh -c`: the command line of the first process
+	// is `timeout`, and it would hold the test password for the life of the container, which the password test
+	// (TestMaintainScriptKeepsItsPasswordOutOfEveryLongRunningProcess) rightly refuses.
+	startFile := filepath.Join(t.TempDir(), "start.sh")
+	if err := os.WriteFile(startFile, []byte(start), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	args = append(args, "-v", startFile+":/test-start.sh:ro")
+	if out, err := deploy.DockerRun(context.Background(), image, args, testLifetime, "/bin/sh", "/test-start.sh").CombinedOutput(); err != nil {
 		t.Fatalf("docker run: %v\n%s", err, out)
 	}
-	t.Cleanup(func() { _ = deploy.Docker(context.Background(), "rm", "-f", name).Run() })
 	portOut, err := deploy.Docker(context.Background(), "port", name, "6379/tcp").CombinedOutput()
 	if err != nil {
 		t.Fatalf("docker port: %v\n%s", err, portOut)
@@ -1048,12 +1087,12 @@ func TestValkeyServicesCannotRunAnyLoadedScript(t *testing.T) {
 			// does not read changes that number and fails here.
 			waitLog(t, name, fmt.Sprintf("the limiter scripts are loaded (%d files)", len(scripts)), 40*time.Second)
 
-			// A key the sweep would keep and that a service could never be allowed to lose to a sweep it ran.
+			// A key the sweep would keep and that a service could never be allowed to lose to a sweep it ran. It is written
+			// by the limiter's own script, in one call: an HSET and then a PEXPIRE leave the key with no lifetime for a round
+			// trip, which is the very thing the sweep deletes, and a pass of the container's loop that landed in that gap took
+			// the marker and failed the test once in a while (a race of the test, not of the sweep).
 			marker := "ctrlz:rl:" + zone + ":marker:60"
-			if err := c.Do(ctx, c.B().Hset().Key(marker).FieldValue().FieldValue("tokens", "1").FieldValue("at", "1").Build()).Error(); err != nil {
-				t.Fatal(err)
-			}
-			if err := c.Do(ctx, c.B().Pexpire().Key(marker).Milliseconds(600000).Build()).Error(); err != nil {
+			if err := c.Do(ctx, c.B().Evalsha().Sha1(scripts["take.lua"]).Numkeys(1).Key(marker).Arg("100", "300000").Build()).Error(); err != nil {
 				t.Fatal(err)
 			}
 			prefix := "ctrlz:rl:" + zone + ":flood:"
@@ -1072,6 +1111,19 @@ func TestValkeyServicesCannotRunAnyLoadedScript(t *testing.T) {
 				// The sweep's own shape: a cursor and two counts. It runs a SCAN, which no service holds.
 				"the sweep's own arguments": {nil, []string{"0", "0", "0"}},
 			}
+			// What this host takes to send and parse a call of 20,000 keys at all: an EVALSHA of a digest no script has
+			// is answered NOSCRIPT after the server has read the whole command, so its time is the cost of the payload
+			// and none of a script. The bound below is 2 s above three times that (the median of three), because a
+			// fixed 2 s was passed by the payload alone on a loaded VM (2.01 s and 2.08 s for two scripts that refuse
+			// before they read a key), which says something about the host and not about a script that loops.
+			var ctl []time.Duration
+			for i := 0; i < 3; i++ {
+				t0 := time.Now()
+				_ = c.Do(ctx, c.B().Evalsha().Sha1(strings.Repeat("0", 40)).Numkeys(int64(len(keys))).Key(keys...).Arg(argv...).Build()).Error()
+				ctl = append(ctl, time.Since(t0))
+			}
+			sort.Slice(ctl, func(i, j int) bool { return ctl[i] < ctl[j] })
+			refusalBound := 2*time.Second + 3*ctl[1]
 			for file, sha := range scripts {
 				for shape, tc := range shapes {
 					start := time.Now()
@@ -1081,8 +1133,8 @@ func TestValkeyServicesCannotRunAnyLoadedScript(t *testing.T) {
 						t.Errorf("%s %s %s: the call was not refused", zone, file, shape)
 					}
 					// A script that had looped over the keys would have held the server for seconds.
-					if took > 2*time.Second {
-						t.Errorf("%s %s %s: the refusal took %v", zone, file, shape, took)
+					if took > refusalBound {
+						t.Errorf("%s %s %s: the refusal took %v, over %v (the payload alone costs %v here)", zone, file, shape, took, refusalBound, ctl[1])
 					}
 				}
 			}
@@ -1249,14 +1301,19 @@ func TestValkeyHealthcheckFailsWhenTheLoopCannotAskTheServer(t *testing.T) {
 	})
 	t.Run("the server is stuck", func(t *testing.T) {
 		name, _, _ := startValkeyACL(t, "api", valkeyPasswords["api"])
-		if out, err := deploy.Docker(context.Background(), "kill", "-s", "STOP", name).CombinedOutput(); err != nil {
-			t.Fatalf("stopping the server: %v\n%s", err, out)
+		// The server is the process to stop, not the container's first process: that one is `timeout`, the lifetime
+		// of the container (testLifetime), and stopping it would stop nothing the loop talks to.
+		signalServer := func(sig string) {
+			t.Helper()
+			script := `for p in /proc/[0-9]*; do [ "$(cat $p/comm 2>/dev/null)" = valkey-server ] && kill -` + sig + ` ${p#/proc/}; done; true`
+			if out, err := deploy.Docker(context.Background(), "exec", name, "sh", "-c", script).CombinedOutput(); err != nil {
+				t.Fatalf("signalling the server (%s): %v\n%s", sig, err, out)
+			}
 		}
+		signalServer("STOP")
 		assertHeartbeatGoverns(t, name, probe)
 		// The loop is only waiting, so a server that comes back is healthy again without a restart.
-		if out, err := deploy.Docker(context.Background(), "kill", "-s", "CONT", name).CombinedOutput(); err != nil {
-			t.Fatalf("resuming the server: %v\n%s", err, out)
-		}
+		signalServer("CONT")
 		waitHealthy(t, name, probe)
 	})
 }

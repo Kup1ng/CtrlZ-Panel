@@ -191,14 +191,13 @@ func TestEveryAuthClassOperationHasItsProofDecided(t *testing.T) {
 		"refreshSession":     "refresh cookie",
 	}
 	carriesNone := map[string]string{
-		"loginPassword":       "a phone and a password: nothing the server issued",
-		"passkeyLoginBegin":   "no subject before the assertion",
-		"passkeyLoginFinish":  "the sealed ceremony ticket names no account before the assertion verifies",
-		"lookupInvite":        "an invite code cannot carry a tag (SMS parameter limit); item 43 of section 19",
-		"getAuthConfig":       "public-read class",
-		"requestOtp":          "otp-send class",
-		"reauthOtpRequest":    "session class",
-		"someOtherPublicRead": "",
+		"loginPassword":      "a phone and a password: nothing the server issued",
+		"passkeyLoginBegin":  "no subject before the assertion",
+		"passkeyLoginFinish": "the sealed ceremony ticket names no account before the assertion verifies",
+		"lookupInvite":       "an invite code cannot carry a tag (SMS parameter limit); item 43 of section 19",
+		"getAuthConfig":      "public-read class",
+		"requestOtp":         "otp-send class",
+		"reauthOtpRequest":   "session class",
 	}
 	ops, err := apispec.Parse(apidoc.Tenant(), ratelimit.Tenant)
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/ccojocar/zxcvbn-go"
 	"github.com/ccojocar/zxcvbn-go/match"
@@ -118,7 +119,10 @@ type Checker struct {
 	// fromLatin read a US key as the Persian text the same layout types on it, in the same order; a
 	// Persian word typed blind on a Latin keyboard is scored as the word (persian.go).
 	fromLatin []func(r rune) (string, bool)
-	gate      *password.Gate
+	// presses read the outputs of a key that one letter does not explain (macros, ASCII on a key with another
+	// legend), in the same order (round 24, primitives-r24-2).
+	presses []func(s string) (key rune, size int)
+	gate    *password.Gate
 }
 
 // New builds the Checker of the signed-in and admin routes. It scores at most
@@ -144,6 +148,7 @@ func NewWithLimit(n int, wait time.Duration) *Checker {
 	return &Checker{
 		keymaps:   []keyReader{isiriKey, legacyKey},
 		fromLatin: []func(r rune) (string, bool){isiriFromLatin, legacyFromLatin},
+		presses:   []func(string) (rune, int){isiriPress, legacyPress},
 		gate:      password.NewGate(n, wait),
 	}
 }
@@ -167,21 +172,28 @@ type keyReader func(r rune) (key rune, ok bool)
 // the machinery: password.ErrBusy when no scoring slot came free (503 server_busy, the same as
 // a full Argon2 gate), or the context's error.
 func (c *Checker) Check(ctx context.Context, pw password.Prepared, in Input, kind password.Kind) (Result, error) {
+	res, _, err := c.check(ctx, pw, in, kind)
+	return res, err
+}
+
+// check is Check, and also hands back the memo, which counts the strings it asked zxcvbn to score and how many of them
+// zxcvbn really ran on, for the test of the reuse inside one check (primitives-r26-4).
+func (c *Checker) check(ctx context.Context, pw password.Prepared, in Input, kind password.Kind) (Result, *zxMemo, error) {
 	text := digits.ToASCII(pw.Normalized().Reveal())
 	if pw.Counted() < kind.MinLength() {
-		return Result{Score: 0, Reason: TooShort}, nil
+		return Result{Score: 0, Reason: TooShort}, nil, nil
 	}
 	if containsPhone(text, in.Phone) {
-		return Result{Score: 0, Reason: ContainsPhone}, nil
+		return Result{Score: 0, Reason: ContainsPhone}, nil, nil
 	}
 
 	release, err := c.gate.Acquire(ctx)
 	if err != nil {
-		return Result{}, err
+		return Result{}, nil, err
 	}
 	defer release()
 
-	inputs := userInputs(in)
+	z := newZxMemo(userInputs(in))
 	// The readings are made from the whole text, because repeats are found
 	// before the text is cut into head and tail. The layout readings start from what
 	// was typed, not from the NFKC form: NFKC puts a run of combining marks in a
@@ -196,14 +208,26 @@ func (c *Checker) Check(ctx context.Context, pw password.Prepared, in Input, kin
 	if typed != text {
 		readings = append(readings, typed)
 	}
-	// A reading made from key positions is not a text a person wrote, and the Persian layer does not
-	// read Finglish in it (primitives-r19-3): its Latin letters are what the keys of Persian text happen
-	// to type, so a match there is chance. keyed holds them, with their invisible-stripped forms.
-	keyed := map[string]bool{}
-	for _, km := range c.keymaps {
-		if mapped, changed := latinFromPersian(km, typed); changed && !slices.Contains(readings, mapped) {
+	// The key-position reading of a text typed on a Persian layout is the Latin text the person meant, byte
+	// for byte (primitives-r23-3), so it is scored exactly as that Latin text is, Finglish included. Every
+	// rule that scored it differently left a hole (four threshold patches, r20-2 to r22-2): the layout
+	// that happened to be on decided whether a refused password passed. The chance spellings in random
+	// Persian text are held back by the shape a spelling must have (latinSkeleton), not by this reading.
+	for i, km := range c.keymaps {
+		mapped, changed := latinFromPersian(km, typed)
+		if !changed {
+			continue
+		}
+		if !slices.Contains(readings, mapped) {
 			readings = append(readings, mapped)
-			keyed[mapped], keyed[stripInvisible(mapped)] = true, true
+		}
+		// A key whose output is not a Persian letter is the key all the same (round 24, primitives-r24-2): the
+		// shifted P of ISIRI 9147 types "[" and the shifted R of the legacy layout types the four letters of
+		// "rial", so "Persepolis1" typed with the layout left on has no "P" in it for the reading above. This
+		// one is added only when the text holds a character of the layout, because "[" in a Latin password
+		// is a bracket; the lowest score counts, so it can only lower a verdict.
+		if keys, _ := readKeys(km, c.presses[i], typed); !slices.Contains(readings, keys) {
+			readings = append(readings, keys)
 		}
 	}
 
@@ -218,33 +242,55 @@ func (c *Checker) Check(ctx context.Context, pw password.Prepared, in Input, kin
 		}
 	}
 
-	// A reading is Finglish-readable unless only key positions made it: the text itself and its
-	// stripped form always are.
-	readsFinglish := func(r string) bool {
-		return !keyed[r] || r == text || r == typed || r == stripInvisible(text) || r == stripInvisible(typed)
-	}
-	worst := c.scoreReading(readings[0], inputs, false, readsFinglish(readings[0]))
-	for _, r := range readings[1:] {
-		if s := c.scoreReading(r, inputs, false, readsFinglish(r)); s.score < worst.score {
+	worst := c.scoreReading(readings[0], z, false, finglishFree)
+	// consider lowers the verdict to a reading's. Nothing scores below 0, so once a reading has scored it
+	// the rest of the readings cannot change the answer, and they are not scored (round 26, primitives-r26-4:
+	// the readings multiply, and a password with many of them is the costliest to check).
+	consider := func(r string, persianOnly bool, finglish finglishMode) {
+		if worst.score == 0 {
+			return
+		}
+		if s := c.scoreReading(r, z, persianOnly, finglish); s.score < worst.score {
 			worst = s
 		}
+	}
+	for _, r := range readings[1:] {
+		consider(r, false, finglishFree)
 	}
 	// A Persian word typed on a US keyboard is read the other way: the keys as the Persian letters
 	// they type on each layout. Only the Persian layer scores these readings (zxcvbn has nothing to say
 	// about Persian text), and a reading with no word in it scores the top and changes nothing.
-	for _, from := range c.fromLatin {
-		persian, changed := persianFromLatin(from, typed)
-		if !changed {
-			continue
+	//
+	// A capital is read twice (round 25, primitives-r25-2): as the shifted key it is (Shift+H is alef with
+	// madda), and as the letter the person meant, lower-cased. A word typed blind with a capital first letter,
+	// which is what a password form asks for, is no longer the word in the first reading ("Vlcufmv" has a
+	// dagger alef the fold removes), so only the second sees it. The lowest score counts, so the extra
+	// reading can only lower a verdict.
+	//
+	// The stored password is the NFKC form, so a guesser who runs the word matches it however it was typed
+	// (round 26, primitives-r26-1): "ｓｇｈｌｓｇｈｌ1400" in fullwidth letters is "sghlsghl1400" once stored. The
+	// normalised text is a blind reading too, as the typed one is.
+	var blind []string
+	for _, t := range []string{typed, text} {
+		for _, f := range []string{t, lowerASCII(t)} {
+			if !slices.Contains(blind, f) {
+				blind = append(blind, f)
+			}
 		}
-		for _, r := range []string{persian, stripInvisible(persian)} {
-			if s := c.scoreReading(r, inputs, true, false); s.score < worst.score {
-				worst = s
+	}
+	for _, from := range c.fromLatin {
+		for _, t := range blind {
+			persian, changed := persianFromLatin(from, t)
+			if !changed {
+				continue
+			}
+			for _, r := range []string{persian, stripInvisible(persian)} {
+				consider(r, true, finglishOff)
 			}
 		}
 	}
 	if worst.score >= MinScore(kind) {
-		return Result{Score: worst.score, OK: true}, nil
+		return Result{Score: worst.score, OK: true}, z, nil
 	}
 	reason := reasonFor(worst.seq, worst.length)
 	if worst.persian {
@@ -257,7 +303,44 @@ func (c *Checker) Check(ctx context.Context, pw password.Prepared, in Input, kin
 		// The user repeated something; say so, whatever the repeated unit is.
 		reason = Repeated
 	}
-	return Result{Score: worst.score, Reason: reason}, nil
+	return Result{Score: worst.score, Reason: reason}, z, nil
+}
+
+// zxMemo remembers what zxcvbn said about a string during one check. The readings of a password share most
+// of their parts (the same tail, the same residue of digits and symbols around a Persian word), and each
+// zxcvbn run on a l33t-heavy string is the dearest step of a check, so a repeated string is scored once
+// (round 26, primitives-r26-4). It lives for one Check and is used by one goroutine, so it needs no lock.
+type zxMemo struct {
+	inputs  []string
+	seen    map[string]zxVerdict
+	lookups int // how many strings were asked for, repeats included
+	scored  int // how many readings of the password were scored
+	runs    int // how many times zxcvbn really ran, for the test that holds the reuse
+}
+
+func newZxMemo(inputs []string) *zxMemo {
+	return &zxMemo{inputs: inputs, seen: map[string]zxVerdict{}}
+}
+
+func (z *zxMemo) strength(s string) zxVerdict {
+	z.lookups++
+	if m, ok := z.seen[s]; ok {
+		return m
+	}
+	z.runs++
+	r := zxcvbn.PasswordStrength(s, z.inputs)
+	m := zxVerdict{Score: r.Score, Entropy: r.Entropy, Seq: r.MatchSequence, Length: len(r.Password)}
+	z.seen[s] = m
+	return m
+}
+
+// zxVerdict is the part of zxcvbn's answer that a check reads. It is a type of our own so that the memo
+// does not need an import of the scorer's scoring package (internal/lint imports.yaml lists the reviewed ones).
+type zxVerdict struct {
+	Score   int
+	Entropy float64
+	Seq     []match.Match
+	Length  int
 }
 
 // reading is the verdict on one reading of the password.
@@ -273,24 +356,25 @@ type reading struct {
 // scoreReading folds repeats, scores the head, and adds the tail bonus. The score is the lower of
 // zxcvbn's and the Persian layer's (persian.go); with persianOnly it is the Persian layer's alone, for a
 // reading that is Persian text made from key positions.
-func (c *Checker) scoreReading(text string, inputs []string, persianOnly, finglish bool) reading {
+func (c *Checker) scoreReading(text string, z *zxMemo, persianOnly bool, finglish finglishMode) reading {
+	z.scored++
 	runes, fold := reduceRepeats([]rune(text))
 	head := runes[:min(len(runes), scoredRunes)]
 	if persianOnly {
-		ps, hit := persianScore(string(head), inputs, false)
+		ps, hit := persianScore(string(head), z, finglishOff)
 		return reading{score: ps, length: len(head), fold: fold, persian: hit}
 	}
-	hs := zxcvbn.PasswordStrength(string(head), inputs)
-	r := reading{score: hs.Score, seq: hs.MatchSequence, length: len(hs.Password), fold: fold}
-	if ps, hit := persianScore(string(head), inputs, finglish); hit && ps < r.score {
+	hs := z.strength(string(head))
+	r := reading{score: hs.Score, seq: hs.Seq, length: hs.Length, fold: fold}
+	if ps, hit := persianScore(string(head), z, finglish); hit && ps < r.score {
 		r.score, r.persian = ps, true
 	}
 	if r.score < maxScore && len(runes)-scoredRunes >= bonusTailRunes {
 		// The tail is folded on its own too: "abababababababab" alone scores 3. It counts as more
 		// entropy only if the Persian layer finds nothing cheap in it either.
 		tail, _ := reduceRepeats(runes[scoredRunes:min(len(runes), 2*scoredRunes)])
-		if len(tail) >= bonusTailRunes && zxcvbn.PasswordStrength(string(tail), inputs).Score >= tailMinScore {
-			if ps, _ := persianScore(string(tail), inputs, finglish); ps >= tailMinScore {
+		if len(tail) >= bonusTailRunes && z.strength(string(tail)).Score >= tailMinScore {
+			if ps, _ := persianScore(string(tail), z, finglish); ps >= tailMinScore {
 				r.score++
 			}
 		}
@@ -468,10 +552,33 @@ func keepRuns(hit []bool) []bool {
 // latinFromPersian maps every character the layout types to the Latin key at its
 // position and reports whether anything changed. Each rune is put in NFKC form on
 // its own, so the characters keep the order they were typed in.
-func latinFromPersian(km keyReader, s string) (string, bool) {
+func latinFromPersian(km keyReader, s string) (string, bool) { return readKeys(km, nil, s) }
+
+// readKeys is latinFromPersian with, when press is not nil, the outputs of a key that one letter does not
+// explain read as that key, before the character-by-character lookup so that a macro is taken whole.
+func readKeys(km keyReader, press func(string) (rune, int), s string) (string, bool) {
 	changed := false
 	var b strings.Builder
-	for _, typed := range s {
+	for i := 0; i < len(s); {
+		if press != nil {
+			// A single Persian letter is left to the table: the tables (and the corpus typed through the layout
+			// data) are what vouch for the letters, and a second, independent reading of them here would
+			// hide a wrong cell of a table behind a right one. The press reading is for what the table does
+			// not carry: symbols, marks, ASCII on another key, and a macro of several letters.
+			if key, n := press(s[i:]); n > 0 {
+				first, firstSize := utf8.DecodeRuneInString(s[i:])
+				if n > firstSize || !isPersianLetter(first) {
+					// A letter is read in lower case, as every Persian letter is: a capital is the same text with
+					// a guess more to make, so the lower case reading is never the higher score, and a text typed
+					// half on shifted keys and half on plain ones reads as one case.
+					b.WriteRune(unicode.ToLower(key))
+					i += n
+					continue
+				}
+			}
+		}
+		typed, size := utf8.DecodeRuneInString(s[i:])
+		i += size
 		// The typed character first: the table holds a code point that NFKC expands into a phrase (the rial
 		// sign U+FDFC on Shift+4 of ISIRI 9147) under its own value, and after NFKC it would read as the four
 		// letters of the phrase and not as the key (round 10, primitives-r10-8).

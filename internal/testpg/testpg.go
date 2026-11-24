@@ -84,7 +84,9 @@ func RunMain(m *testing.M, use func(*Cluster)) int {
 	}
 	use(c)
 	code := m.Run()
-	_ = c.Terminate(context.Background())
+	tctx, tcancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer tcancel()
+	_ = c.Terminate(tctx)
 	return code
 }
 
@@ -150,6 +152,7 @@ func StartWithArgs(ctx context.Context, extra ...string) (*Cluster, error) {
 func start(ctx context.Context, extra []string) (*Cluster, error) {
 	// The reaper testcontainers starts beside this container holds the Docker socket and is named by tag alone:
 	// make the local copy of that tag the reviewed bytes first (admin-r17-2, -8).
+	deploy.RemoveStaleTestContainers()
 	if err := deploy.PinReaper(ctx); err != nil {
 		return nil, err
 	}
@@ -192,14 +195,14 @@ func start(ctx context.Context, extra []string) (*Cluster, error) {
 		if ctr != nil {
 			// Docker creates the container before it binds the port; a retry
 			// would otherwise leave one behind per attempt.
-			_ = ctr.Terminate(ctx)
+			terminateFresh(ctx, ctr)
 		}
 		return nil, fmt.Errorf("start container: %w", err)
 	}
 	c.container = ctr
 	host, err := ctr.Host(ctx)
 	if err != nil {
-		_ = ctr.Terminate(ctx)
+		terminateFresh(ctx, ctr)
 		return nil, err
 	}
 	// "localhost" is resolved on every new connection, and the Windows resolver
@@ -210,13 +213,13 @@ func start(ctx context.Context, extra []string) (*Cluster, error) {
 	}
 	port, err := ctr.MappedPort(ctx, "5432/tcp")
 	if err != nil {
-		_ = ctr.Terminate(ctx)
+		terminateFresh(ctx, ctr)
 		return nil, err
 	}
 	c.host, c.port = host, port.Num()
 
 	if err := c.bootstrap(ctx); err != nil {
-		_ = ctr.Terminate(ctx)
+		terminateFresh(ctx, ctr)
 		return nil, fmt.Errorf("bootstrap: %w", err)
 	}
 	return c, nil
@@ -689,4 +692,16 @@ const OTPExpiredUnsentSet = `created_at = GREATEST(now() - interval '6 minutes',
 func PlantCounters(sql string) string {
 	return "SET LOCAL session_replication_role = replica; " + strings.TrimRight(strings.TrimSpace(sql), "; ") +
 		"; SET LOCAL session_replication_role = origin"
+}
+
+// terminateFresh removes a container on an error path, or at the end of a run, with a deadline of its own. The
+// context the caller holds is the start-up context (five minutes for RunMain), and it is the one that has
+// expired when the start gave up on a wait: Terminate on it fails at once and leaves the container, and
+// the reaper of the run, behind. WithoutCancel keeps its values and drops its end.
+func terminateFresh(ctx context.Context, c interface {
+	Terminate(context.Context, ...testcontainers.TerminateOption) error
+}) {
+	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	_ = c.Terminate(tctx)
 }

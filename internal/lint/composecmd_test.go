@@ -59,8 +59,8 @@ var composeCommandTable = map[string]composeCommandRow{
 	"valkey-admin.healthcheck": {"a47cebf6fb862cf2deb16b5e330156f59019a952f17f9eba14faceb129d052bf", "the heartbeat file of the maintenance loop"},
 	"valkey-api.command":       {"21b2014a19450f5fbc6970895206dde5e461d138f2f72c35f55d8fb21e6dd236", "the start file, which reads the password from the secret"},
 	"valkey-api.healthcheck":   {"a47cebf6fb862cf2deb16b5e330156f59019a952f17f9eba14faceb129d052bf", "the heartbeat file of the maintenance loop"},
-	"web-admin.command":        {"19fb751ad36d4b2210b81cc5cfa404a9c664e48e76457d2a5c7c1561fcdfeea5", "the placeholder web server"},
-	"web-panel.command":        {"19fb751ad36d4b2210b81cc5cfa404a9c664e48e76457d2a5c7c1561fcdfeea5", "the placeholder web server"},
+	"web-admin.healthcheck":    {"2150f598117c6177835bfaefc473d8904e3c02ac090bef97e57e1fd688c17975", "node asks the Next server for /fa/login on loopback"},
+	"web-panel.healthcheck":    {"2150f598117c6177835bfaefc473d8904e3c02ac090bef97e57e1fd688c17975", "node asks the Next server for /fa/login on loopback"},
 	"worker.command":           {"892fb3f00c2598ceea720fc08111c95e22b60b697205272619be4a94ae829ffa", `the role name "worker"`},
 	"worker.healthcheck":       {"e357e4cfe5b71eef98772c3f9a19aecd77085dba0f9db23df3964eb6feac6c39", "the Go binary asks its own listener"},
 }
@@ -137,10 +137,11 @@ func TestComposeCommandLintCanFail(t *testing.T) {
 		t.Fatalf("the real file is refused: %v", p)
 	}
 	for name, c := range map[string]struct{ text, want string }{
-		"a credential flag on a command":   {plant(`command: ["sh", "/etc/valkey/start.sh"]`, `command: ["valkey-server", "--requirepass", "hunter2"]`), "valkey-admin.command is not the text that was reviewed"},
-		"a credential as an attached flag": {plant(`command: ["api"]`, `command: ["api", "--password=hunter2"]`), "api.command is not the text that was reviewed"},
-		"an entrypoint added to a service": {plant(`command: ["worker"]`, `command: ["worker"]`+"\n    entrypoint: [\"x\"]"), "worker.entrypoint has no row"},
-		"a service with a new command":     {plant("  web-panel:\n", "  web-panel:\n    entrypoint: [\"sh\", \"-c\", \"echo hunter2\"]\n"), "web-panel.entrypoint has no row"},
+		"a credential flag on a command":        {plant(`command: ["sh", "/etc/valkey/start.sh"]`, `command: ["valkey-server", "--requirepass", "hunter2"]`), "valkey-admin.command is not the text that was reviewed"},
+		"a credential as an attached flag":      {plant(`command: ["api"]`, `command: ["api", "--password=hunter2"]`), "api.command is not the text that was reviewed"},
+		"an entrypoint added to a service":      {plant(`command: ["worker"]`, `command: ["worker"]`+"\n    entrypoint: [\"x\"]"), "worker.entrypoint has no row"},
+		"a web healthcheck that asks elsewhere": {plant("http://127.0.0.1:3000/fa/login", "http://example.invalid/fa/login"), "web-panel.healthcheck is not the text that was reviewed"},
+		"a service with a new command":          {plant("  web-panel:\n", "  web-panel:\n    entrypoint: [\"sh\", \"-c\", \"echo hunter2\"]\n"), "web-panel.entrypoint has no row"},
 	} {
 		p := strings.Join(composeCommandProblems(c.text, composeCommandTable), "\n")
 		if !strings.Contains(p, c.want) {

@@ -125,8 +125,9 @@ x-valkey: &valkey
   mem_limit: ${MEM_VALKEY:-128m}
   healthcheck:
     # The container's own loop is the judge: maintain.sh signs in as the maintenance user and touches
-    # /tmp/valkey-alive after each PONG, so a server that is stuck (BUSY), down or without its scripts is
-    # unhealthy within a minute, and no client has to sign in with a password-less user (admin-r16-12).
+    # /tmp/valkey-alive after each PONG and after each sweep batch it got a reply to (a paced pass on a slow
+    # host lasts minutes), so a server that is stuck (BUSY), down or without its scripts is unhealthy within
+    # a minute, and no client has to sign in with a password-less user (admin-r16-12).
     # It also waits for the marker maintain.sh writes once every limiter script has loaded (admin-r13-5).
     # No service depends on a healthy valkey (compose_p1_test.go, spec 17.2: a Valkey outage must not
     # stop a service): a service that starts first meets NOSCRIPT and its limiter treats that as the

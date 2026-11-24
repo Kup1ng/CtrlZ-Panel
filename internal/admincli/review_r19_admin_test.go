@@ -36,10 +36,10 @@ func TestSMSConfirmLeavesTheGatewayBanner(t *testing.T) {
 	if banner() {
 		t.Fatal("a banner before any confirmation")
 	}
-	if code := r.run("sms", "confirm", "sms_ir", "--hint", "9999"); code == 0 || banner() {
+	if code := r.run(r.confirmArgs("9999")...); code == 0 || banner() {
 		t.Fatalf("a refused confirmation (exit %d) left a banner", code)
 	}
-	if code := r.run("sms", "confirm", "sms_ir", "--hint", "2222"); code != 0 {
+	if code := r.run(r.confirmArgs("2222")...); code != 0 {
 		t.Fatalf("confirm: exit %d, %q", code, r.errb.String())
 	}
 	if !banner() {
