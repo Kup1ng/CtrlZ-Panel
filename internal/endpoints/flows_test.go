@@ -682,7 +682,7 @@ func TestARequestThatNeedsMoreThanEightPasswordsIsExceeded(t *testing.T) {
 	if len(v.calls) != 0 {
 		t.Error("a request that cannot be satisfied was charged")
 	}
-	if f.endpointsOf(t, f.A.Tenant) != 1 {
+	if f.count(t, `SELECT count(*) FROM ctrlz.endpoints WHERE id = $1`, ep.ID) != 1 {
 		t.Error("the Endpoint was deleted")
 	}
 }
@@ -712,7 +712,7 @@ func TestAVerifiedPasswordIsRecordedWhenALaterOneIsWrong(t *testing.T) {
 	if len(v.used) != 1 || v.used[0] != lo || len(v.failed) != 1 || v.failed[0] != hi {
 		t.Errorf("used %v failed %v, want used [%v] failed [%v]", v.used, v.failed, lo, hi)
 	}
-	if len(v.accepted) != 0 || f.endpointsOf(t, f.A.Tenant) != 1 {
+	if len(v.accepted) != 0 || f.count(t, `SELECT count(*) FROM ctrlz.endpoints WHERE id = $1`, ep.ID) != 1 {
 		t.Error("a refused request was accepted or applied")
 	}
 }
