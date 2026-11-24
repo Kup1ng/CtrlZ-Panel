@@ -164,3 +164,83 @@ func TestTheConfirmAfterADisableIsARegenerationOfTheCodes(t *testing.T) {
 		t.Fatalf("B sees the security notices %+v", got)
 	}
 }
+
+// TestTheSourceOfWhatTheConfirmReplaces isolates each part of the rule "the account had recovery codes before"
+// (review totp-r1-1, totp-r1-2, D70): each case leaves exactly one kind of evidence behind, so removing that part of
+// the query, or the user filter, fails it. The evidence is the codes themselves, the totp.disable row, and the
+// totp.enable row. The case with none of them is a first enrolment and tells nobody, and the history of another
+// account in the same tenant does not make an account's first enrolment a regeneration. The tests set the state with
+// the superuser connection, the way the operator path and the retention sweep leave it: the operator's declare-lost
+// clears the seed and keeps the codes, and the sweep deletes audit rows past 365 days.
+func TestTheSourceOfWhatTheConfirmReplaces(t *testing.T) {
+	f := newFrig(t, frigOpts{})
+	A := f.env.A
+	f.env.Exec(t, `UPDATE ctrlz.users SET phone_verified_at = now() WHERE id = $1`, A.User)
+	a := f.client()
+	a.mustLogin(A.Phone, pwA)
+
+	notices := func() int {
+		return f.count(`SELECT count(*) FROM ctrlz.notifications WHERE tenant_id = $1 AND kind = 'recovery_codes_regenerated'`, A.Tenant)
+	}
+	// Each case counts its own notice: the unread notice of the one before is not a reason to write or not to write.
+	forget := func() { f.env.Exec(t, `DELETE FROM ctrlz.notifications WHERE tenant_id = $1`, A.Tenant) }
+	dropAudit := func(actions ...string) {
+		for _, act := range actions {
+			f.env.Exec(t, `DELETE FROM ctrlz.tenant_audit_log WHERE tenant_id = $1 AND user_id = $2 AND action = $3`, A.Tenant, A.User, act)
+		}
+	}
+	dropCodes := func() {
+		f.env.Exec(t, `DELETE FROM ctrlz.recovery_codes WHERE tenant_id = $1 AND user_id = $2`, A.Tenant, A.User)
+	}
+	// declareLost is what keytool_totp_declare_lost does to the user row: the seed goes, the codes stay.
+	declareLost := func() {
+		f.env.Exec(t, `UPDATE ctrlz.users SET totp_secret_ct = NULL, totp_enabled_at = NULL, totp_last_step = NULL, totp_pending_at = NULL
+			WHERE tenant_id = $1 AND id = $2`, A.Tenant, A.User)
+	}
+	want := func(name string, n int) {
+		t.Helper()
+		if got := notices(); got != n {
+			t.Fatalf("%s: %d recovery_codes_regenerated notices, want %d", name, got, n)
+		}
+		forget()
+	}
+
+	// The history of another account of the tenant (and of a user id that never existed) is not this account's.
+	other := uuid.New()
+	for _, act := range []string{"totp.enable", "totp.disable"} {
+		f.env.Exec(t, `INSERT INTO ctrlz.tenant_audit_log (tenant_id, user_id, action) VALUES ($1, $2, $3)`, A.Tenant, other, act)
+	}
+	seed, _ := a.enrolTOTP(A.Tenant, pwA)
+	want("a first enrolment beside another account's history", 0)
+
+	// Only the disable row remains: the enrolment it ended is gone from the log (swept, or never recorded), and the
+	// codes were deleted by the disable. A thief who disables and confirms is told on this row alone.
+	a.disableTOTP(A.Tenant, pwA, seed)
+	dropAudit("totp.enable")
+	if n := f.count(`SELECT count(*) FROM ctrlz.recovery_codes WHERE user_id = $1`, A.User); n != 0 {
+		t.Fatalf("%d recovery codes after the disable, want none", n)
+	}
+	seed, _ = a.enrolTOTP(A.Tenant, pwA)
+	want("only the totp.disable row", 1)
+
+	// Only the totp.enable row remains: no codes, no disable row, the seed cleared.
+	dropCodes()
+	dropAudit("totp.disable")
+	declareLost()
+	seed, _ = a.enrolTOTP(A.Tenant, pwA)
+	want("only the totp.enable row", 1)
+
+	// Only the codes remain: an operator declared the key lost and the enrolment is older than the retention, so the
+	// log holds neither action. The codes still work, and the confirm replaces them.
+	dropAudit("totp.enable", "totp.disable")
+	declareLost()
+	seed, _ = a.enrolTOTP(A.Tenant, pwA)
+	want("only the recovery codes", 1)
+
+	// Nothing remains: the account has no codes and the log has no trace of any, which is a first enrolment.
+	dropCodes()
+	dropAudit("totp.enable", "totp.disable")
+	declareLost()
+	a.enrolTOTP(A.Tenant, pwA)
+	want("nothing left of an earlier set", 0)
+}

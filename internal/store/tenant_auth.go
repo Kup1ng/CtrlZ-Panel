@@ -333,15 +333,20 @@ func (t Tx) RecoveryCodesReplace(user uuid.UUID, hashes [][]byte) error {
 	return sanitize(err)
 }
 
-// qHadRecoveryCodes reads the fact "this account was issued a set of recovery codes before" from the audit log of
-// the two actions that touch the set of a TOTP that is in force: the confirm that made it (totp.enable) and the
-// disable that deleted it (totp.disable). It needs no column of its own, and nothing a session can do removes the
-// rows: ctrlz_tenant holds SELECT and INSERT on the table, only the retention sweep deletes, and only past 365
-// days (qSweepAudit). The disable row is what makes it hold against a thief: a thief who disables TOTP leaves that
-// row a moment before they confirm a new one, so it is never older than the retention whatever the age of the
-// enrolment it ended. The enable row covers the account whose TOTP was cleared by the operator (a lost key) and
-// has no disable row. user_id is the author of the row; for these two actions it is the account itself.
-const qHadRecoveryCodes = `SELECT EXISTS (SELECT 1 FROM ctrlz.tenant_audit_log
+// qHadRecoveryCodes reads the fact "this account was issued a set of recovery codes before" from two sources that
+// cover the two ways a set is lost, and needs no column of its own:
+//   - the codes themselves, used or not: the operator path (keytool_totp_declare_lost, a lost key) clears the seed
+//     but leaves the rows, so an account in that state still holds a set whatever the age of its enrolment, and the
+//     audit log may by then have forgotten it. Only a disable deletes them, and that writes the row below.
+//   - the audit log of the two actions that touch a TOTP in force, the confirm that made it (totp.enable) and the
+//     disable that deleted the set (totp.disable). ctrlz_tenant holds SELECT and INSERT on the log and only the
+//     retention sweep deletes, past 365 days (qSweepAudit). A thief who disables TOTP leaves a totp.disable row a
+//     moment before they confirm a new one, so it is never older than the retention whatever the age of the
+//     enrolment it ended.
+//
+// user_id is the author of the audit row; for these two actions it is the account itself.
+const qHadRecoveryCodes = `SELECT EXISTS (SELECT 1 FROM ctrlz.recovery_codes WHERE tenant_id = $1 AND user_id = $2)
+OR EXISTS (SELECT 1 FROM ctrlz.tenant_audit_log
 WHERE tenant_id = $1 AND user_id = $2 AND action IN ('totp.enable', 'totp.disable'))`
 
 // HadRecoveryCodes says whether the account was ever issued recovery codes that a later set replaces: the confirm
