@@ -244,14 +244,26 @@ func (c *Checker) Check(ctx context.Context, pw password.Prepared, in Input, kin
 	// A Persian word typed on a US keyboard is read the other way: the keys as the Persian letters
 	// they type on each layout. Only the Persian layer scores these readings (zxcvbn has nothing to say
 	// about Persian text), and a reading with no word in it scores the top and changes nothing.
+	//
+	// A capital is read twice (round 25, primitives-r25-2): as the shifted key it is (Shift+H is alef with
+	// madda), and as the letter the person meant, lower-cased. A word typed blind with a capital first letter,
+	// which is what a password form asks for, is no longer the word in the first reading ("Vlcufmv" has a
+	// dagger alef the fold removes), so only the second sees it. The lowest score counts, so the extra
+	// reading can only lower a verdict.
+	blind := []string{typed}
+	if lower := lowerASCII(typed); lower != typed {
+		blind = append(blind, lower)
+	}
 	for _, from := range c.fromLatin {
-		persian, changed := persianFromLatin(from, typed)
-		if !changed {
-			continue
-		}
-		for _, r := range []string{persian, stripInvisible(persian)} {
-			if s := c.scoreReading(r, inputs, true, finglishOff); s.score < worst.score {
-				worst = s
+		for _, t := range blind {
+			persian, changed := persianFromLatin(from, t)
+			if !changed {
+				continue
+			}
+			for _, r := range []string{persian, stripInvisible(persian)} {
+				if s := c.scoreReading(r, inputs, true, finglishOff); s.score < worst.score {
+					worst = s
+				}
 			}
 		}
 	}

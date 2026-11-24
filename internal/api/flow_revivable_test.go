@@ -37,6 +37,8 @@ func TestARevivableSessionIsListedAndCanBeEnded(t *testing.T) {
 	// The owner signs in again, as they would after the idle limit.
 	owner = f.client()
 	owner.mustLogin(A.Phone, pwA)
+	bOwner = f.client()
+	bOwner.mustLogin(B.Phone, pwB)
 
 	listed := map[string]bool{}
 	for _, r := range owner.sessions() {

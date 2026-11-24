@@ -140,9 +140,15 @@ func TestMigration0055OnAnInstalledDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A function made after 0055 is born scoped and is not one 0055 moved: only those the database held at 0054 count.
+	held := map[string]bool{}
+	for sig := range before {
+		name, _, _ := strings.Cut(strings.TrimPrefix(sig, "ctrlz_fn."), "(")
+		held[name] = true
+	}
 	want := 0
 	for _, f := range fx.Functions.SecurityDefiner {
-		if f.Owner == "scoped" {
+		if f.Owner == "scoped" && held[f.Name] {
 			want++
 		}
 	}

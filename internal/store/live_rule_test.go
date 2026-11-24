@@ -64,8 +64,8 @@ func TestTheLiveRuleIsTheSameForTheCapTheListTheCountAndTheRefresh(t *testing.T)
 			if revoked {
 				revokedAt = now.Add(-30 * time.Minute)
 			}
-			if _, err := super.Exec(f.ctx, `INSERT INTO ctrlz.sessions (id, tenant_id, user_id, token_hash, idle_expires_at, absolute_expires_at, revoked_at, created_at, remember_me)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)`, id, tenant, user, []byte(fmt.Sprintf("%s-%s-%d", tag, label, n)), now.Add(idle), now.Add(abs), revokedAt, created); err != nil {
+			if _, err := super.Exec(f.ctx, `INSERT INTO ctrlz.sessions (id, tenant_id, user_id, token_hash, idle_expires_at, absolute_expires_at, revoked_at, created_at, last_seen_at, remember_me)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, true)`, id, tenant, user, []byte(fmt.Sprintf("%s-%s-%d", tag, label, n)), now.Add(idle), now.Add(abs), revokedAt, created); err != nil {
 				t.Fatalf("session %s: %v", label, err)
 			}
 			return id, created

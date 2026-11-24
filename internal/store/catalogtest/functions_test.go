@@ -195,6 +195,10 @@ func TestSecurityDefinerFunctions(t *testing.T) {
 	// review_r18_admin_test.go (TestTheKeyToolCanWriteTwoKindsOfAuditRowAndNothingElse), and the chain it writes is
 	// verified with the Go verifier by internal/admincli TestKeyStatusAndRekey (admin-r18-6, -7).
 	covered["keytool_audit_key_event"] = true
+	// tenant_notice_sms queues the SMS of a security notice (question 19): its two-tenant call is the fixture of
+	// TestFunctionIsolation, its refusals are in internal/api TestASecurityNoticeQueuesOneSMSToTheAccountPhone, and its
+	// cap is raced by internal/store TestCapsRaceHarness (entry notice.sms).
+	covered["tenant_notice_sms"] = true
 	for _, name := range []string{"auth_register_user", "auth_otp_issue", "auth_otp_consume", "auth_otp_check", "admin_create_user", "admin_one_time_state", "admin_reissue_one_time_password", "admin_throttle_hit", "admin_throttle_refund",
 		"admin_throttle_reset", "admin_account_bootstrap", "admin_account_reset", "admin_account_set_password", "admin_account_totp_enable", "tenant_set_password", "keytool_totp_declare_lost", "worker_passkeys_mark_stale", "worker_enforce_clear_without_live", "worker_sweep_throttle", "worker_sweep_tickets", "worker_sweep_pending_totp", "worker_sweep_sms_deliveries", "worker_sweep_sms_counters", "worker_sweep_otp_challenges", "keytool_totp_replace", "admin_totp_replace", "admin_revoke_user_sessions", "admin_sms_stats", "auth_phone_change_complete", "auth_phone_mark_verified", "auth_public_config", "auth_throttle_hit",
 		"auth_throttle_refund", "auth_throttle_reset", "auth_ticket_peek", "auth_ticket_put", "auth_ticket_take", "auth_tickets_revoke", "auth_user_flags"} {

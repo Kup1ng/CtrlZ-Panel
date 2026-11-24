@@ -124,7 +124,7 @@ func TestInvites(t *testing.T) {
 		Code string `json:"code"`
 		Link string `json:"link"`
 	}
-	b.post("/invites", map[string]any{"phone": "09125550001"}).want(201, "").json(&inv)
+	b.post("/invites", map[string]any{"phone": "09125550001", "send_sms": false}).want(201, "").json(&inv)
 	if len(strings.ReplaceAll(inv.Code, "-", "")) != 20 || inv.Link != "https://"+panelHost+"/invite#"+inv.Code {
 		t.Fatalf("invite = %+v", inv)
 	}
@@ -145,13 +145,13 @@ func TestInvites(t *testing.T) {
 	if strings.Contains(string(list.Body), inv.Code) || strings.Contains(string(list.Body), "code") {
 		t.Fatalf("the list shows a code: %s", list.Body)
 	}
-	b.post("/invites", map[string]any{"phone": r.env.A.Phone}).want(409, "phone_unavailable")
-	b.post("/invites", map[string]any{"phone": "x"}).want(422, "invalid_phone")
-	b.post("/invites", map[string]any{"phone": "09125550002", "ttl_hours": 0}).want(400, "bad_request")
-	b.post("/invites", map[string]any{"phone": "09125550002", "ttl_hours": 721}).want(400, "bad_request")
+	b.post("/invites", map[string]any{"phone": r.env.A.Phone, "send_sms": false}).want(409, "phone_unavailable")
+	b.post("/invites", map[string]any{"phone": "x", "send_sms": false}).want(422, "invalid_phone")
+	b.post("/invites", map[string]any{"phone": "09125550002", "send_sms": false, "ttl_hours": 0}).want(400, "bad_request")
+	b.post("/invites", map[string]any{"phone": "09125550002", "send_sms": false, "ttl_hours": 721}).want(400, "bad_request")
 
 	// A second invite, so the audit trail below holds two creates. Nothing is queued: an invite is never sent by SMS (D67).
-	b.post("/invites", map[string]any{"phone": "09125550003", "locale": "en", "ttl_hours": 24}).want(201, "")
+	b.post("/invites", map[string]any{"phone": "09125550003", "send_sms": false, "locale": "en", "ttl_hours": 24}).want(201, "")
 	if r.count(t, `SELECT count(*) FROM ctrlz.sms_outbox`) != 0 {
 		t.Fatal("an invite queued a message")
 	}
@@ -498,7 +498,7 @@ func TestSMSPage(t *testing.T) {
 		} `json:"items"`
 	}
 	b.get("/sms/templates").want(200, "").json(&tl)
-	if len(tl.Items) != 10 {
+	if len(tl.Items) != 12 { // the ten of 0011 less the two invite rows, plus the four of the notices (0062)
 		t.Fatalf("templates: %d", len(tl.Items))
 	}
 	b.put("/sms/templates/otp/en", map[string]any{"body": "Your Ctrl Z code is {code}."}).want(200, "")
@@ -713,7 +713,7 @@ func TestChainSurvivesTheRoutes(t *testing.T) {
 	r := newRig(t)
 	b, _ := r.admin(t)
 	b.post("/users", map[string]any{"phone": "09125550010"}).want(201, "")
-	b.post("/invites", map[string]any{"phone": "09125550011"}).want(201, "")
+	b.post("/invites", map[string]any{"phone": "09125550011", "send_sms": false}).want(201, "")
 	b.put("/sms/limits", func() map[string]any {
 		var l map[string]any
 		b.get("/sms/limits").json(&l)
@@ -847,7 +847,7 @@ func TestPanelHostSpellingsReachTheOriginAndTheLink(t *testing.T) {
 			Code string `json:"code"`
 			Link string `json:"link"`
 		}
-		b.callOn(h, adminHost, "POST", "/invites", map[string]any{"phone": "09125550077"}).want(201, "").json(&inv)
+		b.callOn(h, adminHost, "POST", "/invites", map[string]any{"phone": "09125550077", "send_sms": false}).want(201, "").json(&inv)
 		if want := c.origin + "/invite#" + inv.Code; inv.Link != want {
 			t.Errorf("%q: link = %q, want %q", c.configured, inv.Link, want)
 		}

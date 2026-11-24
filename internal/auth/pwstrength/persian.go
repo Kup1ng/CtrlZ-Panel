@@ -573,3 +573,14 @@ func isPersianLetterText(t string) bool {
 	}
 	return false
 }
+
+// lowerASCII lower-cases the ASCII capitals of s and nothing else: a layout reading treats a capital as the
+// shifted key, and the same key unshifted is what a person who typed a Persian word blind meant.
+func lowerASCII(s string) string {
+	return strings.Map(func(r rune) rune {
+		if isUpperLatin(r) {
+			return r + ('a' - 'A')
+		}
+		return r
+	}, s)
+}

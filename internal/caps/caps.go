@@ -139,7 +139,12 @@ func Entries() []Entry {
 		},
 		{Name: "passkeys.per_user", Kind: Cap, Consts: []string{"MaxPasskeys"}, Wins: []string{"Tx.PasskeyAdd"}},
 		{Name: "sessions.per_user", Kind: Cap, Consts: []string{"MaxSessions"}, Rows: []string{"Tx.SessionsTrim"}},
-		{Name: "notice.sms", Kind: Cap, Consts: []string{"MaxNoticeSMS"}, SQL: "ctrlz_fn.tenant_notice_sms"},
+		{
+			Name: "notice.sms", Kind: Cap, Consts: []string{"MaxNoticeSMS"}, SQL: "ctrlz_fn.tenant_notice_sms",
+			// The count is of the tenant's audit rows, and the lock that makes it exact is the user row lock that both
+			// routes hold, so the cap is exact for the changes of one account.
+			Slack: "the audit rows of two uncommitted transactions are not visible to each other, so changes of two different users of one tenant at the same instant can each take the last message: at most the number of users of the tenant in flight over",
+		},
 		{Name: "totp.step.user", Kind: SingleUse, Wins: []string{"Tx.TOTPStepAccept"}},
 		{Name: "totp.step.admin", Kind: SingleUse, Wins: []string{"GlobalTx.AdminTOTPStepAccept"}},
 		{Name: "recovery.code", Kind: SingleUse, Wins: []string{"Tx.RecoveryCodeUse"}},

@@ -332,6 +332,31 @@ func TestValkeySweepKeepsLimiterCallsOnTime(t *testing.T) {
 	for i := range cc {
 		cc[i] = newClientAt(ctlAddr)
 	}
+	// The keys over the budget and the foreign key are watched from here on, beside the load and not only after it: on a
+	// host where a pass takes seconds they are gone long before the window ends, and the passes are counted against the
+	// moment they went. DBSIZE and EXISTS are constant time, so the watcher costs the load nothing worth measuring.
+	type goneResult struct {
+		at time.Time
+		ok bool
+	}
+	goneCh := make(chan goneResult, 1)
+	go func() {
+		var at time.Time
+		ok := testwait.Holds(40*time.Minute, time.Second, func() bool {
+			n, err := admin.Do(ctx, admin.B().Dbsize().Build()).AsInt64()
+			if err != nil {
+				return false
+			}
+			ex, _ := admin.Do(ctx, admin.B().Exists().Key(foreign).Build()).AsInt64()
+			if n <= budget && ex == 0 {
+				at = time.Now()
+				return true
+			}
+			return false
+		})
+		goneCh <- goneResult{at, ok}
+	}()
+
 	windowStart := time.Now()
 	var ctl loadResult
 	ctlDone := make(chan struct{})
@@ -343,21 +368,10 @@ func TestValkeySweepKeepsLimiterCallsOnTime(t *testing.T) {
 	windowEnd := time.Now()
 	<-ctlDone
 
-	// After the window: wait for the keys over the budget and the foreign key to go.
-	var gone bool
-	var goneAt time.Time
-	if !testwait.Holds(40*time.Minute, 5*time.Second, func() bool {
-		n, err := admin.Do(ctx, admin.B().Dbsize().Build()).AsInt64()
-		if err != nil {
-			return false
-		}
-		ex, _ := admin.Do(ctx, admin.B().Exists().Key(foreign).Build()).AsInt64()
-		gone = n <= budget && ex == 0
-		if gone {
-			goneAt = time.Now()
-		}
-		return gone
-	}) {
+	// The watcher that started before the window has the answer, or is still waiting on a slow host.
+	watched := <-goneCh
+	gone, goneAt := watched.ok, watched.at
+	if !gone {
 		t.Errorf("the keys over the budget or the foreign key are still there after 40 minutes; log:\n%s", logsOf(name))
 	}
 	stopSampler()

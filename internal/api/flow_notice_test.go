@@ -2,6 +2,7 @@ package api
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -51,6 +52,7 @@ func (f *frig) unreadNotice(id string) bool {
 // addKey registers a new virtual authenticator with a fresh reauth, the way an owner adds a passkey.
 func (c *client) addKey(pw string) *resp {
 	c.f.t.Helper()
+	c.f.ck.add(time.Minute) // the ceremony has its own rate class: a minute on, the bucket is full again
 	c.reauthPassword(pw).want(204, "")
 	return c.addPasskey(passkeytest.New(pkOrigin, pkRP)).want(201, "")
 }
