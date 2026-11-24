@@ -348,7 +348,12 @@ func TestValkeySweepKeepsLimiterCallsOnTime(t *testing.T) {
 				return false
 			}
 			ex, _ := admin.Do(ctx, admin.B().Exists().Key(foreign).Build()).AsInt64()
-			if n <= budget && ex == 0 {
+			// The load keeps writing its own `clients` keys into the same zone, and a pass that trims the zone to the budget may
+			// delete one of them, which the next call writes again: the count then sits at the budget plus those keys until the
+			// next pass, and a watcher that asked for the budget exactly saw it only when the load stopped (the second GitHub
+			// run of question 15: 24 passes had started before it saw them gone). The 2,000 keys over the budget are what is
+			// watched, so the load's own keys are allowed on top.
+			if n <= budget+clients && ex == 0 {
 				at = time.Now()
 				return true
 			}
