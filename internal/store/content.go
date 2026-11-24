@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/caps"
 )
@@ -431,16 +432,21 @@ const qFoldersList = `SELECT ` + folderColumns + ` FROM ctrlz.rule_folders f WHE
 const qFoldersBare = `SELECT ` + folderNoCount + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 ORDER BY f.name, f.id`
 
 // Folders lists the folders of the profile, by name then id, each with its rule count.
-func (t Tx) Folders(profile uuid.UUID) ([]FolderRow, error) { return t.folders(qFoldersList, profile) }
+func (t Tx) Folders(profile uuid.UUID) ([]FolderRow, error) {
+	rows, err := t.tx.Query(t.ctx, qFoldersList, t.tenant, profile)
+	return scanFolders(rows, err)
+}
 
 // FoldersBare lists the folders without counting their rules (RuleCount is 0). A caller that reads only the
 // Folder Rule of each folder (the rules page, Export, Duplicate) uses it, so it does not pay for a count it drops.
 func (t Tx) FoldersBare(profile uuid.UUID) ([]FolderRow, error) {
-	return t.folders(qFoldersBare, profile)
+	rows, err := t.tx.Query(t.ctx, qFoldersBare, t.tenant, profile)
+	return scanFolders(rows, err)
 }
 
-func (t Tx) folders(q string, profile uuid.UUID) ([]FolderRow, error) {
-	rows, err := t.tx.Query(t.ctx, q, t.tenant, profile)
+// scanFolders reads the rows of a folder statement. The statement itself stays a constant at each Query call, which
+// the no-dynamic-SQL lint requires.
+func scanFolders(rows pgx.Rows, err error) ([]FolderRow, error) {
 	if err != nil {
 		return nil, sanitize(err)
 	}
