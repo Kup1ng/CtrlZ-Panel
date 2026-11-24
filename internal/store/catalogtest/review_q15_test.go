@@ -142,6 +142,69 @@ WHERE p.pronamespace = 'ctrlz_fn'::regnamespace AND p.proname = $1`, name).Scan(
 	}
 }
 
+// TestAPhoneChangeCannotBorrowTheChallengesOfAnotherTenant is the case the predicate test above cannot make: the
+// request and the user are the caller's own, every check of the body on the number, the purpose and the time passes,
+// and the only thing that differs is the tenant stamped on the challenge. auth_phone_change_complete has no tenant
+// predicate on otp_challenges at all (the table had no tenant column when it was written), so the policy
+// `scoped_tenant` is the whole defence, and a code stamped with the other tenant, or with none, must not be found.
+// The control row (both stamped with the caller's own tenant) completes, so the refusals are the stamp's and nothing else's.
+func TestAPhoneChangeCannotBorrowTheChallengesOfAnotherTenant(t *testing.T) {
+	h := newHarness(t, testpg.Need(t, cluster))
+	A, B := h.A, h.B
+	tenantOf := map[string]*uuid.UUID{"A": &A.Tenant, "B": &B.Tenant, "none": nil}
+	cases := []struct{ name, old, new, want string }{
+		{"both its own", "A", "A", "ok"},
+		{"the old-number code is another tenant's", "B", "A", "invalid"},
+		{"the new-number code is another tenant's", "A", "B", "invalid"},
+		{"both are another tenant's", "B", "B", "invalid"},
+		{"the new-number code has no tenant", "A", "none", "invalid"},
+		{"the old-number code has no tenant", "none", "A", "invalid"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tx, err := h.super.Begin(h.ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback(context.Background())
+			exec := func(sql string, args ...any) {
+				t.Helper()
+				if _, err := tx.Exec(h.ctx, sql, args...); err != nil {
+					t.Fatalf("%v\n%s", err, sql)
+				}
+			}
+			oldID, newID, req := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+			exec(`DELETE FROM ctrlz.phone_change_requests WHERE tenant_id = $1`, A.Tenant)
+			// The phones are A's: the old code is for A's number and the new one for the number A asked to move to.
+			// The request is an hour old, so a code consumed a minute ago comes after it, as the body demands.
+			exec(`INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at, tenant_id) VALUES
+				($1, $3, 'phone_old', '\x01', now() + interval '5 minutes', now() - interval '1 minute', $5),
+				($2, $4, 'phone_new', '\x01', now() + interval '5 minutes', now() - interval '1 minute', $6)`,
+				oldID, newID, A.Phone, newPhone(A), tenantOf[c.old], tenantOf[c.new])
+			exec(`INSERT INTO ctrlz.phone_change_requests (tenant_id, id, user_id, new_phone_e164, old_otp_id, new_otp_id, created_at, expires_at)
+				VALUES ($1, $2, $3, $4, $5, $6, now() - interval '1 hour', now() + interval '10 minutes')`,
+				A.Tenant, req, A.User, newPhone(A), oldID, newID)
+			exec("SET LOCAL ROLE ctrlz_tenant")
+			exec("SELECT pg_catalog.set_config('ctrlz.tenant_id', $1, true)", A.Tenant.String())
+			var got string
+			if err := tx.QueryRow(h.ctx, "SELECT outcome FROM ctrlz_fn.auth_phone_change_complete($1)", req).Scan(&got); err != nil {
+				t.Fatal(err)
+			}
+			if got != c.want {
+				t.Errorf("a request of A with an old code of %s and a new code of %s answered %q, want %q", c.old, c.new, got, c.want)
+			}
+			exec("RESET ROLE")
+			var phone string
+			if err := tx.QueryRow(h.ctx, "SELECT phone_e164 FROM ctrlz.users WHERE id = $1", A.User).Scan(&phone); err != nil {
+				t.Fatal(err)
+			}
+			if moved := phone == newPhone(A); moved != (c.want == "ok") {
+				t.Errorf("A's number is %s after %q", phone, got)
+			}
+		})
+	}
+}
+
 // TestAChallengeCarriesTheTenantOfItsAccount is the stamp of auth_otp_issue (0061): whatever the caller asks, the
 // tenant of a challenge is the tenant of the account of its phone for login, reset and phone_old, the tenant of the
 // transaction setting for phone_new, and nothing for signup, invite and every decoy. The worker, which sends the codes,
@@ -253,7 +316,7 @@ func TestMigration0061KeepsALoginAndAPhoneChangeInFlight(t *testing.T) {
 		t.Fatal(err)
 	}
 	tenants := []catalogtest.SeedIDs{catalogtest.NewSeedIDs(1), catalogtest.NewSeedIDs(2)}
-	type flight struct{ login, old, new, req uuid.UUID }
+	type flight struct{ login, old, new, req, pendingLogin, pendingNew uuid.UUID }
 	flights := make([]flight, len(tenants))
 	exec := func(sql string, args ...any) {
 		t.Helper()
@@ -267,17 +330,27 @@ func TestMigration0061KeepsALoginAndAPhoneChangeInFlight(t *testing.T) {
 		}
 		// The seed made a request with random challenge ids; this one is the request in flight.
 		exec(`DELETE FROM ctrlz.phone_change_requests WHERE tenant_id = $1`, s.Tenant)
-		f := flight{uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())}
+		f := flight{uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())}
 		flights[i] = f
 		newPhone := "+98913111100" + string(rune('0'+s.Index))
 		exec(`UPDATE ctrlz.users SET phone_verified_at = NULL WHERE id = $1`, s.User)
-		// A code consumed a moment ago, sent (sealed copy cleared at send, so not deliverable) and a pair of codes of
-		// the phone change, both consumed after the request was made. Rows of the issue function of 0055 carry no tenant.
+		// A code consumed a moment ago and a pair of codes of the phone change, both consumed after the request was
+		// made. These carry no sealed copy, so they are in the window by being consumed. Rows of the issue function of
+		// 0055 carry no tenant.
 		exec(`INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at) VALUES
 			($1, $4, 'login', '\x01', now() + interval '5 minutes', now()),
 			($2, $4, 'phone_old', '\x01', now() + interval '5 minutes', now() + interval '1 second'),
 			($3, $5, 'phone_new', '\x01', now() + interval '5 minutes', now() + interval '1 second')`,
 			f.login, f.old, f.new, s.Phone, newPhone)
+		// The usual state at upgrade time: a code that was sent and sits unconsumed with its sealed copy (deliverable,
+		// set at insert by the trigger of 0039), for a login and for a phone change whose request names it. They are in
+		// the window by being deliverable alone, so a backfill that asks only for consumed rows leaves them out.
+		pendingPhone := "+98913222200" + string(rune('0'+s.Index))
+		exec(`INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, delivery_ct, expires_at) VALUES
+			($1, $3, 'login', '\x01', '\x02', now() + interval '5 minutes'),
+			($2, $4, 'phone_new', '\x01', '\x02', now() + interval '5 minutes')`, f.pendingLogin, f.pendingNew, s.Phone, pendingPhone)
+		exec(`INSERT INTO ctrlz.phone_change_requests (tenant_id, id, user_id, new_phone_e164, old_otp_id, new_otp_id, expires_at)
+			VALUES ($1, $2, $3, $4, $5, $6, now() + interval '10 minutes')`, s.Tenant, uuid.Must(uuid.NewV7()), s.User, pendingPhone, f.old, f.pendingNew)
 		exec(`INSERT INTO ctrlz.phone_change_requests (tenant_id, id, user_id, new_phone_e164, old_otp_id, new_otp_id, expires_at)
 			VALUES ($1, $2, $3, $4, $5, $6, now() + interval '10 minutes')`, s.Tenant, f.req, s.User, newPhone, f.old, f.new)
 	}
@@ -302,11 +375,12 @@ func TestMigration0061KeepsALoginAndAPhoneChangeInFlight(t *testing.T) {
 	if err := super.QueryRow(ctx, "SELECT count(*) FROM ctrlz.otp_challenges WHERE tenant_id IS NOT NULL").Scan(&stamped); err != nil {
 		t.Fatal(err)
 	}
-	if stamped != 6 {
-		t.Fatalf("0061 stamped %d challenges, want the 6 of the two logins and the two phone changes", stamped)
+	if stamped != 10 {
+		t.Fatalf("0061 stamped %d challenges, want the 10 of the two tenants (a consumed and a pending login, a consumed and a pending phone change each)", stamped)
 	}
 	for i, s := range tenants {
-		for name, id := range map[string]uuid.UUID{"login": flights[i].login, "phone_old": flights[i].old, "phone_new": flights[i].new} {
+		for name, id := range map[string]uuid.UUID{"login": flights[i].login, "phone_old": flights[i].old, "phone_new": flights[i].new,
+			"pending login": flights[i].pendingLogin, "pending phone_new": flights[i].pendingNew} {
 			if got := stamp(id); got == nil || *got != s.Tenant {
 				t.Errorf("tenant %d: the %s code carries %v, want its own tenant", s.Index, name, got)
 			}

@@ -11,8 +11,13 @@ import "testing"
 //
 // The cross request is built the only way it can exist, by editing the row: B changes its number (both of its codes
 // are consumed and stamped with B), B's account goes back to its own number so the number is free, and A's request
-// is bent to point at B's consumed new-number code. A's own old-number code is real, so the old half passes and the
-// new half is the only thing that can refuse it.
+// is bent to point at B's consumed new-number code and moved back in time to before B consumed it, because the body
+// also asks that a code was consumed after its request was made, and that check alone refuses B's code (the first
+// version of this test passed for that reason, with or without the policy). A's own old-number code is real, so the
+// old half passes and the new half is the only thing that can refuse it. The old half cannot be bent the same way
+// here: a challenge of B is for a phone of B, and the body checks the phone against A's account before the policy
+// matters. TestAPhoneChangeCannotBorrowTheChallengesOfAnotherTenant (catalogtest) stamps either half with the other
+// tenant under the right phone and carries that case.
 func TestAPhoneChangeOfOneTenantCannotUseAChallengeOfAnother(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	A, B := f.env.A, f.env.B
@@ -42,7 +47,7 @@ func TestAPhoneChangeOfOneTenantCannotUseAChallengeOfAnother(t *testing.T) {
 
 	// A's request, bent: the new half is B's consumed code for B's number.
 	aReq, aOld, _ := a.startChange(aNew)
-	f.env.Exec(t, `UPDATE ctrlz.phone_change_requests SET new_otp_id = $2, new_phone_e164 = $3 WHERE id = $1`, aReq.RequestID, bNewOTP, bNew)
+	f.env.Exec(t, `UPDATE ctrlz.phone_change_requests SET new_otp_id = $2, new_phone_e164 = $3, created_at = now() - interval '1 hour' WHERE id = $1`, aReq.RequestID, bNewOTP, bNew)
 	confirm(a, aReq.RequestID, aOld, bNewCode).want(401, "otp_invalid")
 	if f.count(`SELECT count(*) FROM ctrlz.users WHERE id = $1 AND phone_e164 = $2`, A.User, A.Phone) != 1 {
 		t.Fatal("tenant A's account moved to a number proved by a code of tenant B")

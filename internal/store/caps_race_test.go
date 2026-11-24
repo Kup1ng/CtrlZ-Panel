@@ -1142,11 +1142,28 @@ func driveGatewayUnusable(t *testing.T, e *raceEnv) {
 // the others have not committed. The user row lock the trim takes is what makes the last committer count them
 // all: the account ends at exactly the cap, the newest sessions survive, the refresh tokens of the ended ones
 // end with them, and another tenant's sessions are not counted against A.
+//
+// A second barrier sits between the trim and the commit. Without it the test measured the lock only by luck of
+// timing: after the first barrier the spenders trim and commit one after another, and a spender that trims after the
+// others have committed sees them all and repairs the count, so the mutant that drops the user lock survived a run
+// (the flake of the first GitHub run of question 15). With the second barrier every trim has read its snapshot before
+// any spender commits, so without the lock the account ends at the cap plus the spenders it could not see, every
+// time. With the lock the spenders queue behind one another and never meet at it, so the first to arrive waits out
+// the timeout once and the gate stays open for the rest.
 func driveSessions(t *testing.T, e *raceEnv) {
 	live := func(user uuid.UUID) int {
 		return e.count(t, `SELECT count(*) FROM ctrlz.sessions WHERE user_id = $1 AND revoked_at IS NULL`, user)
 	}
-	open := func(tenant, user uuid.UUID, label string, hold func()) error {
+	var released atomic.Bool
+	settle := newBarrier(spenders, 3*time.Second)
+	afterTrim := func() {
+		if released.Load() {
+			return
+		}
+		settle()
+		released.Store(true)
+	}
+	open := func(tenant, user uuid.UUID, label string, hold, after func()) error {
 		return e.tenant.WithTenant(e.ctx, tenant, store.TxOpts{}, func(tx store.Tx) error {
 			now := time.Now()
 			id, err := tx.SessionCreate(store.NewSession{UserID: user, TokenHash: []byte(label), IdleExpiresAt: now.Add(time.Hour),
@@ -1158,23 +1175,26 @@ func driveSessions(t *testing.T, e *raceEnv) {
 				return err
 			}
 			hold()
-			_, err = tx.SessionsTrim(user, caps.MaxSessions, now)
-			return err
+			if _, err = tx.SessionsTrim(user, caps.MaxSessions, now); err != nil {
+				return err
+			}
+			after()
+			return nil
 		})
 	}
 	for i := live(e.A.User); i < caps.MaxSessions-3; i++ {
-		if err := open(e.A.Tenant, e.A.User, fmt.Sprintf("fill-%d", i), func() {}); err != nil {
+		if err := open(e.A.Tenant, e.A.User, fmt.Sprintf("fill-%d", i), func() {}, func() {}); err != nil {
 			t.Fatalf("filling: %v", err)
 		}
 	}
 	for i := 0; i < 3; i++ {
-		if err := open(e.B.Tenant, e.B.User, fmt.Sprintf("b-%d", i), func() {}); err != nil {
+		if err := open(e.B.Tenant, e.B.User, fmt.Sprintf("b-%d", i), func() {}, func() {}); err != nil {
 			t.Fatalf("tenant B: %v", err)
 		}
 	}
 	bLive := live(e.B.User)
 	race(spenders, func(i int, hold func()) {
-		if err := open(e.A.Tenant, e.A.User, fmt.Sprintf("race-%d", i), hold); err != nil {
+		if err := open(e.A.Tenant, e.A.User, fmt.Sprintf("race-%d", i), hold, afterTrim); err != nil {
 			t.Errorf("spender %d: %v", i, err)
 		}
 	})

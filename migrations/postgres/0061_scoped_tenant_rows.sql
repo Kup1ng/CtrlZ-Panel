@@ -25,9 +25,19 @@
 --     the same EXECUTE. ctrlz_auth loses what only they used: phone_change_requests, UPDATE of the two phone
 --     columns of users, and SELECT on announcements.
 --
--- Expand only: no signature changes and no EXECUTE changes, so an api container of the previous release keeps
--- working while this runs. A phone change that one of them starts in the window fails once and is retried by the
--- user, because its new-number code is issued with no tenant setting by the old binary.
+-- Expand only: no signature changes and no EXECUTE changes, so an api container of the previous release can still
+-- reach every function. Two things it cannot do correctly, both of which fail closed (nothing of another tenant is
+-- ever read) and neither of which leaks:
+--   * A login, reset or phone_old code that the old binary asks for WHILE THIS FILE RUNS can come out with no tenant.
+--     ALTER TABLE holds ACCESS EXCLUSIVE on otp_challenges until commit, a call that had already entered the old body
+--     waits on it and then inserts with the statement it holds, which does not name tenant_id, after the backfill
+--     below has run. The user types the code, it is consumed, and the login or reset is refused. They ask for a new
+--     code after the cooldown.
+--   * Every phone change that the old binary starts, from the migration until that container is replaced, fails: it
+--     issues the new-number code outside a tenant transaction, so the code has no tenant and the complete step
+--     answers invalid. Replace the api container right after the migration.
+-- Closing both in the database would take a BEFORE INSERT trigger that stamps on every insert for good, which is more
+-- machinery than a window of seconds is worth (D65), so the window is declared here, in the README and in the spec.
 --
 -- lock_timeout is 5 seconds for this file: ADD COLUMN takes the table lock until commit, and a migration that
 -- cannot get it must fail and be run again, not queue every request of every tenant behind itself.
@@ -44,7 +54,10 @@
 SET LOCAL search_path = pg_catalog;
 SET LOCAL lock_timeout = '5s';
 
--- 1. The column. NOT VALID and then VALIDATE: the CHECK is added without a scan under the lock and then proved.
+-- 1. The column. NOT VALID and then VALIDATE is the usual way to keep the scan short, but ADD COLUMN above already
+-- holds ACCESS EXCLUSIVE until commit, so VALIDATE scans under that lock all the same (the table is small: a row lives
+-- for minutes and the sweeper deletes it). The two steps stay because they are the form that stays safe if the column
+-- is ever added in a file of its own.
 ALTER TABLE ctrlz.otp_challenges ADD COLUMN tenant_id uuid;
 ALTER TABLE ctrlz.otp_challenges ADD CONSTRAINT otp_challenges_tenant_purpose
   CHECK (tenant_id IS NULL OR purpose IN ('login', 'reset', 'phone_old', 'phone_new')) NOT VALID;
@@ -200,6 +213,7 @@ DECLARE
   v_n      integer;
   v_stamped integer := 0;
   v_left   integer;
+  v_new    integer;
 BEGIN
   UPDATE ctrlz.otp_challenges o SET tenant_id = u.tenant_id
     FROM ctrlz.users u
@@ -220,6 +234,18 @@ BEGIN
        AND o.created_at > pg_catalog.now() - interval '1 hour';
     GET DIAGNOSTICS v_n = ROW_COUNT;
     v_stamped := v_stamped + v_n;
+
+    -- The same predicate again: a code that a request of this tenant names and that is still unstamped means the
+    -- statement above did not see the request (a setting that did not apply, a policy that changed). The check of
+    -- the account-bound purposes below cannot tell, because a new number has no account yet.
+    SELECT pg_catalog.count(*) INTO v_new
+      FROM ctrlz.otp_challenges o JOIN ctrlz.phone_change_requests p ON p.new_otp_id = o.id
+     WHERE p.tenant_id = v_t AND o.tenant_id IS NULL AND o.purpose = 'phone_new'
+       AND (o.deliverable OR o.consumed_at IS NOT NULL)
+       AND o.created_at > pg_catalog.now() - interval '1 hour';
+    IF v_new <> 0 THEN
+      RAISE EXCEPTION '0061: % new-number challenges named by requests of one tenant were not stamped', v_new;
+    END IF;
   END LOOP;
   PERFORM pg_catalog.set_config('ctrlz.tenant_id', '', true);
 
