@@ -97,22 +97,65 @@ const horizon = 366 * 24 * time.Hour
 //
 // Cost: the weekly grid has at most 336 cells, so when the windows and the zone do not change, the grid values that some
 // cell holds are the only ones to try and one evaluation per value answers the question for all 366 days. Only a change of
-// the windows or of the zone steps through the days, in 17,568 steps of a cell lookup each. E3 compares both with the
-// 30-minute reference.
+// the windows or of the zone steps through the days (cellPairs). The identities are not the unit of work either: an
+// identity is reduced to what decides its answer, the stack it owns on each side if it owns one, and one evaluation runs
+// per distinct reduction, so a thousand clients that lose the same stack cost one evaluation and not a thousand times the
+// pairs. The probe of a request that needs a password runs this uncharged, so the bound has to be in the work done here and
+// not in a rate class. E3 compares it with the 30-minute reference.
 func Needed(now time.Time, before, after *Input) []uuid.UUID {
 	removed := map[uuid.UUID]bool{}
-	pairs := cellPairs(now, before, after)
+	bs, as := newSide(before), newSide(after)
+	pairs := cellPairs(now, bs, as)
+	// The distinct grid values of each side, for an identity whose stack on the other side does not depend on the grid.
+	var bVals, aVals []int
+	bSeen, aSeen := map[int]bool{}, map[int]bool{}
+	for pr := range pairs {
+		if !bSeen[pr[0]] {
+			bSeen[pr[0]] = true
+			bVals = append(bVals, pr[0])
+		}
+		if !aSeen[pr[1]] {
+			aSeen[pr[1]] = true
+			aVals = append(aVals, pr[1])
+		}
+	}
+	type reduced struct {
+		bOwn, aOwn bool
+		b, a       Stack
+	}
+	done := map[reduced]bool{}
+	eval := func(sb, sa Stack) {
+		for i, p := range sb.list() {
+			if p == uuid.Nil {
+				continue
+			}
+			if j := sa.pos(p); j < 0 || j > i {
+				removed[p] = true
+			}
+		}
+	}
 	for _, id := range identities(before, after) {
-		for pr := range pairs {
-			sb := before.stackOf(id, pr[0])
-			sa := after.stackAfter(id, pr[1])
-			for i, p := range sb.list() {
-				if p == uuid.Nil {
-					continue
-				}
-				if j := sa.pos(p); j < 0 || j > i {
-					removed[p] = true
-				}
+		var k reduced
+		k.b, k.bOwn = bs.own(id)
+		k.a, k.aOwn = as.ownAfter(id)
+		if done[k] {
+			continue
+		}
+		done[k] = true
+		switch {
+		case k.bOwn && k.aOwn:
+			eval(k.b, k.a)
+		case k.bOwn:
+			for _, ca := range aVals {
+				eval(k.b, as.cell(ca))
+			}
+		case k.aOwn:
+			for _, cb := range bVals {
+				eval(bs.cell(cb), k.a)
+			}
+		default:
+			for pr := range pairs {
+				eval(bs.cell(pr[0]), as.cell(pr[1]))
 			}
 		}
 	}
@@ -156,58 +199,70 @@ func identities(before, after *Input) []ident {
 	return out
 }
 
-// cellStack is the stack the base or a window gives at grid value c (0 is the base).
-func (in *Input) cellStack(ws []Window, c int) Stack {
-	if c <= 0 || c > len(ws) {
-		return in.Base
-	}
-	return ws[c-1].Stack
+// side is one state of an Endpoint as Needed reads it, with its windows sorted once: the sort runs per side, not per lookup.
+type side struct {
+	in *Input
+	ws []Window
 }
 
-// stackOf is the stack of an identity when the grid value is c, in the state this input describes.
-func (in *Input) stackOf(id ident, c int) Stack {
+func newSide(in *Input) *side {
+	if in == nil {
+		return nil
+	}
+	return &side{in: in, ws: sortedWindows(in.Windows)}
+}
+
+// cell is the stack the base or a window gives at grid value c (0 is the base).
+func (s *side) cell(c int) Stack {
+	if c <= 0 || c > len(s.ws) {
+		return s.in.Base
+	}
+	return s.ws[c-1].Stack
+}
+
+// own is the stack an identity has of its own on this side, which does not depend on the grid cell. A label with no row, a
+// client with no stack of its own and the no-client identity have none: they resolve through the schedule.
+func (s *side) own(id ident) (Stack, bool) {
+	var st Stack
+	var ok bool
 	switch {
 	case id.none:
 	case id.plain != uuid.Nil:
-		if s, ok := in.Clients["default"]; ok {
-			return s
-		}
+		st, ok = s.in.Clients["default"]
 	default:
-		if s, ok := in.Clients[id.label]; ok {
-			return s
-		}
+		st, ok = s.in.Clients[id.label]
 	}
-	return in.cellStack(sortedWindows(in.Windows), c)
+	return st, ok
 }
 
-// stackAfter is stackOf for the state after the change: empty for an identity the change turns away, or that no longer
-// exists (a Plain DNS identity whose claim went, or whose Legacy DNS was switched off).
-func (in *Input) stackAfter(id ident, c int) Stack {
-	if in == nil {
-		return Stack{}
+// ownAfter is own for the state after the change. An identity the change turns away, or that no longer exists (a Plain DNS
+// identity whose claim went, or whose Legacy DNS was switched off), has the empty stack of its own whatever the grid, and so
+// has every identity of an Endpoint that is deleted (the nil side).
+func (s *side) ownAfter(id ident) (Stack, bool) {
+	if s == nil {
+		return Stack{}, true
 	}
-	switch in.Away {
+	switch s.in.Away {
 	case AwayAll:
-		return Stack{}
+		return Stack{}, true
 	case AwayEncrypted:
 		if id.plain == uuid.Nil {
-			return Stack{}
+			return Stack{}, true
 		}
 	}
-	if id.plain != uuid.Nil && !slices.Contains(in.Plain, id.plain) {
-		return Stack{}
+	if id.plain != uuid.Nil && !slices.Contains(s.in.Plain, id.plain) {
+		return Stack{}, true
 	}
-	return in.stackOf(id, c)
+	return s.own(id)
 }
 
-// cellFn maps an absolute instant to the grid value of the Endpoint at it, in the Endpoint's zone.
-func (in *Input) cellFn() func(unix int64) int {
-	ws := sortedWindows(in.Windows)
-	if len(ws) == 0 {
+// cellFn maps an absolute instant to the grid value of the side at it, in the Endpoint's zone.
+func (s *side) cellFn() func(unix int64) int {
+	if len(s.ws) == 0 {
 		return func(int64) int { return 0 }
 	}
-	g := Grid(ws)
-	loc, err := time.LoadLocation(in.Zone)
+	g := Grid(s.ws)
+	loc, err := time.LoadLocation(s.in.Zone)
 	if err != nil {
 		loc = time.UTC
 	}
@@ -231,19 +286,28 @@ func sameSchedule(a, b *Input) bool {
 	return true
 }
 
+// quarterHour is the step of the walk when the zone changes. Every zone the panel allows has an offset that is a multiple of
+// 15 minutes (Asia/Kathmandu is +5:45, Australia/Eucla +8:45, Pacific/Chatham +12:45), so its 30-minute cells start at :15
+// or :45 of UTC. A walk in 30-minute steps from a UTC half hour looks at one instant per cell of the old zone and never at
+// the other half of the cells of the new one, and a window could be cut by 15 minutes with no password asked.
+const quarterHour = 15 * 60
+
 // cellPairs are the (before, after) grid values that some instant of the horizon has. For an after that is nil or turns
 // everybody away, or a schedule that did not change, the two sides are the same grid and the pairs are its values.
-func cellPairs(now time.Time, before, after *Input) map[[2]int]struct{} {
+func cellPairs(now time.Time, before, after *side) map[[2]int]struct{} {
 	out := map[[2]int]struct{}{}
-	if after == nil || after.Away == AwayAll || sameSchedule(before, after) {
+	if after == nil || after.in.Away == AwayAll || sameSchedule(before.in, after.in) {
 		// One grid: every value of it that a cell holds. 0 is there only while some cell holds the base.
-		for _, v := range Grid(before.Windows) {
+		for _, v := range Grid(before.ws) {
 			out[[2]int{int(v), int(v)}] = struct{}{}
 		}
 		return out
 	}
 	fb, fa := before.cellFn(), after.cellFn()
 	step := int64(schedule.MinutesPerCell * 60)
+	if before.in.Zone != after.in.Zone {
+		step = quarterHour
+	}
 	start := now.Unix() - now.Unix()%step
 	end := now.Add(horizon).Unix()
 	for t := start; t <= end; t += step {

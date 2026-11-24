@@ -219,12 +219,15 @@ const MaxClientsPerSelector = 500
 
 const qClientsLockSelector = `SELECT ` + clientColumns + ` FROM ctrlz.clients c WHERE c.tenant_id = $1 AND c.endpoint_id = $2
   AND ($3::int = 0 OR c.last_seen_at < $4::timestamptz - make_interval(days => $3::int))
+  AND c.id > $6::uuid
 ORDER BY c.id LIMIT $5` + lockUpdate
 
-// ClientsLockSelector locks the clients a selector names: the inactive ones (days > 0) or all of them (days = 0), at most
-// limit of them, in id order. The caller asks for one more than it applies, to learn whether matches remain.
-func (t Tx) ClientsLockSelector(endpoint uuid.UUID, inactiveDays int, now time.Time, limit int) ([]ClientRow, error) {
-	rows, err := t.tx.Query(t.ctx, qClientsLockSelector, t.tenant, endpoint, int32(inactiveDays), now, int32(limit))
+// ClientsLockSelector locks the clients a selector names: the inactive ones (days > 0) or all of them (days = 0) whose id is
+// above after (the nil id starts at the first), at most limit of them, in id order. The caller asks for one more than it
+// applies, to learn whether matches remain, and pages with after when it skips rows a change would not alter (an edit that
+// finds a client already holding the values makes no progress by selecting it again).
+func (t Tx) ClientsLockSelector(endpoint uuid.UUID, inactiveDays int, now time.Time, after uuid.UUID, limit int) ([]ClientRow, error) {
+	rows, err := t.tx.Query(t.ctx, qClientsLockSelector, t.tenant, endpoint, int32(inactiveDays), now, int32(limit), after)
 	if err != nil {
 		return nil, sanitize(err)
 	}

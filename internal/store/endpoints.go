@@ -5,6 +5,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 )
 
 // This file is the Endpoint side of the write path (docs/specs/p3-endpoints.md 3). The rules of it, all enforced by
@@ -642,10 +644,10 @@ func (t Tx) AnyProfileLocked() (bool, error) {
 	return any, sanitize(err)
 }
 
-// LockHash is the stored hash of one locked profile.
+// LockHash is the stored hash of one locked profile, a secret.String so that a formatted value never prints it.
 type LockHash struct {
 	ID   uuid.UUID
-	Hash string
+	Hash secret.String
 }
 
 const qProfileLockHashes = `SELECT id, lock_password_hash FROM ctrlz.profiles WHERE tenant_id = $1 AND id = ANY($2::uuid[]) AND lock_state = 'locked' ORDER BY id`
@@ -665,7 +667,7 @@ func (t Tx) ProfileLockHashes(ids []uuid.UUID) ([]LockHash, error) {
 			return nil, sanitize(err)
 		}
 		if hash != nil {
-			h.Hash = *hash
+			h.Hash = secret.New(*hash)
 		}
 		out = append(out, h)
 	}

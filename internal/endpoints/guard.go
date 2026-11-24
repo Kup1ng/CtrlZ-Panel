@@ -52,6 +52,16 @@ type Verifier interface {
 	// LockPasswordFailed records a wrong password for the audit log, in a transaction of its own (the request is refused, so nothing
 	// of its own transaction is kept).
 	LockPasswordFailed(ctx context.Context, profile, endpoint uuid.UUID) error
+	// LockPasswordUsed records a verified password for the audit log, in a transaction of its own, for a request that ends
+	// without a commit: a committed write records it in its own transaction (Guard.Check). Without it, a guess that is
+	// right for one profile and wrong for the next would leave a failure row only, and the audit trail would not show which
+	// password was confirmed.
+	LockPasswordUsed(ctx context.Context, profile, endpoint uuid.UUID) error
+	// LockPasswordsAccepted is called after a write that used these passwords has committed. The unlock route clears the
+	// profile_unlock scope after a right password, since that scope counts failures (P2 7.2); a right password here must not
+	// count against the profile either, or a tenant that edits its own Endpoints with the right password runs into 429.
+	// profile_lock_tenant stays charged. It is a convenience after the commit and not a gate, so it has no error.
+	LockPasswordsAccepted(ctx context.Context, profiles []uuid.UUID)
 }
 
 // Actor is who asks.
@@ -86,7 +96,7 @@ type Guard struct {
 	e        *Env
 	actor    Actor
 	probe    bool
-	verified map[uuid.UUID]string // profile to the hash that was verified
+	verified map[uuid.UUID]secret.String // profile to the hash that was verified
 }
 
 // Begin takes step 4 of the lock order (spec 3.7): every profile the request names, key-shared in id order, and every
@@ -140,7 +150,7 @@ func (g *Guard) Begin(tx store.Tx, endpoints []uuid.UUID, named ...uuid.UUID) er
 		return err
 	}
 	for _, h := range hashes {
-		if g.verified[h.ID] != h.Hash {
+		if !g.verified[h.ID].Equal(h.Hash) {
 			return &Error{Kind: KindConflict}
 		}
 	}
@@ -309,7 +319,26 @@ func (e *Env) Run(ctx context.Context, st *store.Store, tenant uuid.UUID, opts s
 	}); err != nil {
 		return err
 	}
-	verified := map[uuid.UUID]string{}
+	verified := map[uuid.UUID]secret.String{}
+	// used lists the passwords that were verified, in the order they were checked. A write that commits records them in its
+	// own transaction (Guard.Check); a request that ends without a commit, whatever the reason, records them here, so the
+	// audit trail shows which password was confirmed even when a later one was wrong or the write was refused.
+	var used []needed
+	recordUsed := func() error {
+		for _, n := range used {
+			if err := a.Verifier.LockPasswordUsed(context.WithoutCancel(ctx), n.Profile, n.Endpoint); err != nil {
+				return err
+			}
+		}
+		used = nil
+		return nil
+	}
+	refuse := func(err error) error {
+		if aerr := recordUsed(); aerr != nil {
+			return aerr
+		}
+		return err
+	}
 	if any {
 		var pr *probeResult
 		err := withRetry(ctx, st, tenant, opts, func(tx store.Tx) error {
@@ -324,6 +353,11 @@ func (e *Env) Run(ctx context.Context, st *store.Store, tenant uuid.UUID, opts s
 		if len(pr.needed) > 0 {
 			if a.Actor.Token {
 				return &Error{Kind: KindTokenNotAllowed}
+			}
+			// More than the request can carry: no list of passwords will ever satisfy it, so it is refused as too many and
+			// not asked for the missing ones (spec 3.3), which would send the owner to supply what they cannot supply.
+			if len(pr.needed) > MaxLockPasswords {
+				return invalid(Field{"/lock_passwords", CodeExceeded})
 			}
 			var missing []Field
 			for _, n := range pr.needed {
@@ -346,7 +380,7 @@ func (e *Env) Run(ctx context.Context, st *store.Store, tenant uuid.UUID, opts s
 			}); err != nil {
 				return err
 			}
-			stored := map[uuid.UUID]string{}
+			stored := map[uuid.UUID]secret.String{}
 			for _, h := range hashes {
 				stored[h.ID] = h.Hash
 			}
@@ -357,23 +391,39 @@ func (e *Env) Run(ctx context.Context, st *store.Store, tenant uuid.UUID, opts s
 					continue
 				}
 				i := byProfile[n.Profile]
-				good, err := a.Verifier.CheckLockPassword(ctx, n.Profile, a.Passwords[i].Secret, secret.New(hash))
+				good, err := a.Verifier.CheckLockPassword(ctx, n.Profile, a.Passwords[i].Secret, hash)
 				if err != nil {
-					return err
+					return refuse(err)
 				}
 				if !good {
+					if err := recordUsed(); err != nil {
+						return err
+					}
 					if err := a.Verifier.LockPasswordFailed(context.WithoutCancel(ctx), n.Profile, n.Endpoint); err != nil {
 						return err
 					}
 					return &Error{Kind: KindInvalidCredentials, Fields: []Field{{fmt.Sprintf("/lock_passwords/%d", i), CodeInvalid}}}
 				}
 				verified[n.Profile] = hash
+				used = append(used, n)
 			}
 		}
 	}
-	return withRetry(ctx, st, tenant, opts, func(tx store.Tx) error {
+	if err := withRetry(ctx, st, tenant, opts, func(tx store.Tx) error {
 		return body(tx, &Guard{e: e, actor: a.Actor, verified: verified})
-	})
+	}); err != nil {
+		return refuse(err)
+	}
+	if len(verified) > 0 {
+		// The write has committed, and with it the used rows of its own transaction: the right passwords no longer count.
+		accepted := make([]uuid.UUID, 0, len(verified))
+		for p := range verified {
+			accepted = append(accepted, p)
+		}
+		slices.SortFunc(accepted, func(x, y uuid.UUID) int { return slices.Compare(x[:], y[:]) })
+		a.Verifier.LockPasswordsAccepted(context.WithoutCancel(ctx), accepted)
+	}
+	return nil
 }
 
 // withRetry runs one transaction, again on a deadlock or a lock timeout up to three times in all.
