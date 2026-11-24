@@ -14,9 +14,7 @@
 -- The row of sms_outbox has the id of the notice, so one notice is one message whatever is called twice, and no
 -- sealed value: a notice carries nothing a gateway has to be told but its template (the CHECK below).
 --
--- The daily cap is counted per kind: over the audit rows of the action that made this notice (passkey.add for a
--- passkey, recovery.regenerate for the codes), so a holder of the session cannot spend the messages of one kind
--- to silence the other (review dec-c-r1-6). The caller's own row is
+-- The daily cap is counted over the audit rows of the two actions of the tenant, and the caller's own row is
 -- one of them (the route writes it first), so the messages before this one are the count less one.
 -- ctrlz.cap_reached compares, as for every cap. The function is owned by ctrlz_scoped (0055), so it meets
 -- tenant_isolation on every tenant table it reads, and the INSERT into sms_outbox, a global table, is the one
@@ -106,8 +104,7 @@ BEGIN
   -- The audit row of the change that made this notice is already written, so it is one of the rows counted.
   SELECT pg_catalog.count(*) INTO v_n
     FROM ctrlz.tenant_audit_log a
-   WHERE a.tenant_id = v_tenant
-     AND a.action = CASE v_template WHEN 'notice_passkey' THEN 'passkey.add' ELSE 'recovery.regenerate' END
+   WHERE a.tenant_id = v_tenant AND a.action IN ('passkey.add', 'recovery.regenerate')
      AND a.at > pg_catalog.now() - interval '24 hours';
   IF ctrlz.cap_reached(v_n - 1, p_cap) THEN
     RETURN false;
