@@ -644,7 +644,7 @@ func TestTakeLocksTheTenantsClaimsInIDOrder(t *testing.T) {
 		if err := holder.Rollback(l.h.ctx); err != nil {
 			t.Fatal(err)
 		}
-		if out := l.await(result); out != "active" && out != "unavailable" {
+		if out := l.await(result); out != "active" && out != "unavailable" && out != "own" {
 			t.Errorf("%s: %q", c.what, out)
 		}
 		// Reset for the next case.

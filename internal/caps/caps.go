@@ -178,6 +178,15 @@ func Entries() []Entry {
 		{Name: "batch_job.claim", Kind: Ending, Wins: []string{"Tx.JobClaim"}},
 		{Name: "batch_job.finish", Kind: Ending, Wins: []string{"Tx.JobFinish", "Tx.JobFail"}},
 		{Name: "idempotency.key", Kind: SingleUse, Wins: []string{"Tx.IdempotencyBegin"}},
+
+		// P3, the Endpoint write path (docs/specs/p3-endpoints.md 3.5, 3.6). max_endpoints is decided by the statement that adds all
+		// the Endpoints of a request, under the tenant quota lock; max_clients_per_endpoint by the statement that adds a manual
+		// client, under the Endpoint's row; the group cap under the quota lock. A delete is one statement and the Endpoints it
+		// returns are the ones that went (an Endpoint a hold pins is not returned).
+		{Name: "max_endpoints", Kind: Cap, Entitlements: []string{"max_endpoints"}, Wins: []string{"Tx.EndpointsInsert"}},
+		{Name: "max_clients_per_endpoint", Kind: Cap, Entitlements: []string{"max_clients_per_endpoint"}, Wins: []string{"Tx.ClientInsert"}},
+		{Name: "endpoint_group.create", Kind: Cap, Consts: []string{"MaxGroupsPerTenant"}, Wins: []string{"Tx.GroupInsert"}},
+		{Name: "endpoint.delete", Kind: Ending, Wins: []string{"Tx.EndpointsDelete"}},
 	}
 }
 
@@ -225,5 +234,10 @@ func Bounds() []Bound {
 		{"maxFrames", "frames kept in the log line of one panic (logattr.Stack); built in memory per call, nothing shared that racing actors could spend"},
 		{"maxNameRunes", "length of one value shown on a device, checked on the value in hand (internal/mobileconfig); a size of one request, nothing shared that racing actors could spend"},
 		{"maxHostLen", "longest hostname DNS allows, checked on the one value in hand (internal/setup); a format limit, nothing shared that racing actors could spend"},
+		{"MaxNamesPerCreate", "names in one Endpoint create (D31): the items of one request, checked on the value in hand; nothing is shared between requests that racing actors could spend (max_endpoints is the cap)"},
+		{"MaxIDsPerBatch", "ids in one batch operation (D31): the items of one request, checked on the value in hand"},
+		{"MaxWindowsPerEndpoint", "windows in one schedule PUT (the grid holds one byte per cell): the items of one request; the PUT replaces the whole set under the Endpoint's row, so nothing accumulates"},
+		{"MaxLockPasswords", "lock passwords in one request (D31): the items of one request, checked before any charge"},
+		{"MaxClientsPerSelector", "clients one selector write resolves (spec 9.3): the write applies to the rows it locked and says whether more remain, so the caller repeats; a size of one request, not an amount racing actors spend"},
 	}
 }

@@ -36,6 +36,9 @@ func profileError(err error) error {
 	if err == nil {
 		return nil
 	}
+	if e, ok := endpointsError(err); ok {
+		return e
+	}
 	var pe *profiles.Error
 	if !errors.As(err, &pe) {
 		return apiError(err)
@@ -196,7 +199,7 @@ func (s *Server) ListCatalogServices(ctx context.Context, _ gen.ListCatalogServi
 // Profiles.
 
 // profileOut builds the profile of a response: the row, its counters, and the Default Rule flag of the list (T-127).
-func (s *Server) profileOut(tx store.Tx, p store.Profile, counts store.ProfileCounts, keys locationKeys) (gen.Profile, error) {
+func (s *Server) profileOut(tx store.Tx, p store.Profile, counts store.ProfileCounts, keys locationKeys, refs []store.ProfileEndpointRef) (gen.Profile, error) {
 	o, _, err := tx.Options(p.ID)
 	if err != nil {
 		return gen.Profile{}, err
@@ -204,7 +207,7 @@ func (s *Server) profileOut(tx store.Tx, p store.Profile, counts store.ProfileCo
 	out := gen.Profile{Id: openapi_types.UUID(p.ID), Name: p.Name, Kind: gen.ProfileKind(p.Kind), UpdatedAt: p.UpdatedAt, CreatedAt: p.CreatedAt,
 		Locked: p.Locked, DisabledUntil: p.DisabledUntil, LockMessage: p.LockMessage, LockedAt: p.LockedAt,
 		Counts:    gen.ProfileCounts{Endpoints: counts.Endpoints, Filters: counts.Filters, Services: counts.Services, Rules: counts.Rules, Options: counts.Options},
-		Endpoints: []gen.EndpointRef{}}
+		Endpoints: endpointRefs(refs)}
 	if o.DefaultAction == "redirect" {
 		d := &gen.DefaultRedirect{Kind: gen.DefaultRedirectKind(o.DefaultTarget.Kind)}
 		if o.DefaultTarget.Kind == "location" {
@@ -234,7 +237,11 @@ func (s *Server) profileView(tx store.Tx, id uuid.UUID) (gen.Profile, error) {
 	if err != nil {
 		return gen.Profile{}, err
 	}
-	return s.profileOut(tx, p, counts[id], keys)
+	refs, err := tx.ProfileEndpointRefs()
+	if err != nil {
+		return gen.Profile{}, err
+	}
+	return s.profileOut(tx, p, counts[id], keys, refs[id])
 }
 
 // ListProfiles is GET /profiles.
@@ -253,12 +260,16 @@ func (s *Server) ListProfiles(ctx context.Context, _ gen.ListProfilesRequestObje
 		if err != nil {
 			return err
 		}
+		refs, err := tx.ProfileEndpointRefs()
+		if err != nil {
+			return err
+		}
 		keys, err := s.locKeys(tx)
 		if err != nil {
 			return err
 		}
 		for _, p := range ps {
-			v, err := s.profileOut(tx, p, counts[p.ID], keys)
+			v, err := s.profileOut(tx, p, counts[p.ID], keys, refs[p.ID])
 			if err != nil {
 				return err
 			}
@@ -636,3 +647,16 @@ const (
 	statusAccepted = 202
 	statusLocked   = 423
 )
+
+// endpointRefs renders the Endpoints that use a profile, in the order the store gave them (by name). At most 1,000 are shown:
+// the count of them is in counts.endpoints.
+func endpointRefs(refs []store.ProfileEndpointRef) []gen.EndpointRef {
+	if len(refs) > 1000 {
+		refs = refs[:1000]
+	}
+	out := make([]gen.EndpointRef, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, gen.EndpointRef{Id: openapi_types.UUID(r.ID), Name: r.Name})
+	}
+	return out
+}

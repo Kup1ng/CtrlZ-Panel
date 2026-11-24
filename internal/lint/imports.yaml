@@ -28,8 +28,8 @@
 
 code_primitives:
   crypto/hmac:
-    why: the MAC of the key ring subkeys, the HMAC an RFC 6238 code is made of, and shared/identity ProofCode (HMAC-SHA256 of a node label and a source address under the proof key of the DNS node, a 10 character TXT proof and no authenticator code), which internal/setup reaches by importing identity for its grammar (ParseHost, ParseDoHPath, SlugClient, the Valid functions) and never calls
-    only: [internal/keyring, internal/auth/totp, shared/identity, internal/setup]
+    why: the MAC of the key ring subkeys, the HMAC an RFC 6238 code is made of, and shared/identity ProofCode (HMAC-SHA256 of a node label and a source address under the proof key of the DNS node, a 10 character TXT proof and no authenticator code), which internal/setup and internal/endpoints reach by importing identity for its grammar (ParseHost, ParseDoHPath, SlugClient, the Valid functions, NewResolverID, NewDoHToken, RIDHash, TokenHash) and never call
+    only: [internal/keyring, internal/auth/totp, shared/identity, internal/setup, internal/endpoints]
   crypto/hkdf:
     why: the per-label subkeys of the key ring; hkdf.Extract(sha1.New, msg, key) is HMAC-SHA1(key, msg)
     only: [internal/keyring]
@@ -62,6 +62,8 @@ third_party:
     why: the one definition of an Iranian name (D42), shared with the evaluator
   - path: github.com/Kup1ng/CtrlZ-Shared/rules
     why: rules.Parse and MergeUpload, the one validator of a rule token
+  - path: github.com/Kup1ng/CtrlZ-Shared/schedule
+    why: the weekly grid (Cells) and the cell of an instant in a zone, which the lock-password check of internal/endpoints evaluates the stack that applies by
   - path: github.com/ccojocar/zxcvbn-go
     why: password strength score (4.2)
   - path: github.com/ccojocar/zxcvbn-go/match

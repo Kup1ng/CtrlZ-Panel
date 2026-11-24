@@ -19,7 +19,7 @@ func TenantEvents() []TenantEvent {
 		TOTPEnable{}, TOTPDisable{}, RecoveryRegenerate{}, RecoveryUsed{},
 		PasskeyAdd{}, PasskeyRename{}, PasskeyDelete{}, PasskeyEnforce{}, PasskeyReview{}, PasskeyCloneSuspect{},
 		Register{}, TOTPLost{},
-		ProfileLock{}, ProfileUnlock{}, ProfileUnlockFailed{},
+		ProfileLock{}, ProfileUnlock{}, ProfileUnlockFailed{}, ProfileLockPasswordUsed{}, ProfileLockPasswordFailed{},
 	}
 }
 

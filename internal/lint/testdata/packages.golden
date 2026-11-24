@@ -43,6 +43,7 @@ internal/caps
 internal/clockrule
 internal/closed
 internal/credgen
+internal/endpoints
 internal/httpx
 internal/iso3166
 internal/keyring

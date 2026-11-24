@@ -52,6 +52,8 @@ tags:
     description: The signed-in user's own account.
   - name: notifications
     description: The bell and the announcement banners.
+  - name: endpoints
+    description: Endpoints, their groups, schedules and clients.
   - name: profiles
     description: Profiles, their filters, services, rules, folders and options, documents, the lock, and the batch jobs.
 # The alphabets of the string schemas below, written once so the two documents and
@@ -1896,6 +1898,485 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Job"}
         default: {$ref: "#/components/responses/Problem"}
+  /endpoint-types:
+    get:
+      tags: [endpoints]
+      operationId: listEndpointTypes
+      summary: The 30 Endpoint types, in the order of the seed
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      responses:
+        "200":
+          description: The types.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EndpointTypeList"}
+        default: {$ref: "#/components/responses/Problem"}
+  /catalog/timezones:
+    get:
+      tags: [endpoints]
+      operationId: listTimezones
+      summary: The time zones a schedule may use
+      description: The region zones of the Go time zone database the panel embeds, which the compiler resolves too.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      responses:
+        "200":
+          description: The zones.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TimezoneList"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints:
+    get:
+      tags: [endpoints]
+      operationId: listEndpoints
+      summary: The tenant's Endpoints, one page
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - name: group
+          in: query
+          required: false
+          schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        - name: type
+          in: query
+          required: false
+          schema: {type: string, minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9_-]*$', x-ctrlz-rowref: false}
+        - name: status
+          in: query
+          required: false
+          schema: {type: string, maxLength: 8, enum: [pending, active]}
+        - name: q
+          in: query
+          required: false
+          description: A case-insensitive part of the name.
+          schema: {type: string, maxLength: 64, pattern: *pasted, x-ctrlz-rowref: false}
+        - name: sort
+          in: query
+          required: false
+          description: "`created` is newest first (the default); `name` is alphabetical."
+          schema: {type: string, maxLength: 8, enum: [created, name]}
+        - {$ref: "#/components/parameters/ListCursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EndpointPage"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [endpoints]
+      operationId: createEndpoints
+      summary: Create one Endpoint per name
+      description: 'Errors: `validation_failed` (`max_endpoints` exceeded, a name, a profile), `destinations_lost`, `idempotency_key_reused`, `conflict`.'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EndpointCreate"}
+      responses:
+        "201":
+          description: The Endpoints, in the order of the names.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EndpointCreated"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/export:
+    get:
+      tags: [endpoints]
+      operationId: exportEndpoints
+      summary: The Endpoints as a CSV file
+      description: |
+        `text/csv`, UTF-8 with a byte order mark. Columns: name, type, group, profile, profile 2, status, admin state,
+        analytics, resolver id, host, Legacy DNS, last query (RFC 3339 UTC), created. Never the DoH token. A cell that
+        starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading apostrophe.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      responses:
+        "200":
+          description: The file, as `text/csv`.
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints:batch:
+    post:
+      tags: [endpoints]
+      operationId: batchEndpoints
+      summary: Move, edit or delete a selection of Endpoints
+      description: |
+        Up to 500 ids. A delete or a change that takes a locked profile away needs its lock password in `lock_passwords`.
+        Errors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `endpoint_held`, `destinations_lost`,
+        `validation_failed`, `server_busy`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      x-ctrlz-max-body: 65536
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EndpointBatch"}
+      responses:
+        "200":
+          description: How many Endpoints the operation touched.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AffectedCount"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}:
+    get:
+      tags: [endpoints]
+      operationId: getEndpoint
+      summary: One Endpoint
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "200":
+          description: The Endpoint.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Endpoint"}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [endpoints]
+      operationId: patchEndpoint
+      summary: Change an Endpoint
+      description: |
+        Errors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `destinations_lost`, `validation_failed`
+        (`needs_authorized_ip`, `same_profile`), `server_busy`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EndpointPatch"}
+      responses:
+        "200":
+          description: The Endpoint.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Endpoint"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}:delete:
+    post:
+      tags: [endpoints]
+      operationId: deleteEndpoint
+      summary: Delete an Endpoint
+      description: 'Errors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `endpoint_held`, `server_busy`.'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LockPasswordsBody"}
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}:rotate-resolver:
+    post:
+      tags: [endpoints]
+      operationId: rotateEndpointResolver
+      summary: Draw a new resolver id and DoH token
+      description: |
+        Every device must be set up again and every share and download link of the Endpoint ends. Errors:
+        `profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LockPasswordsBody"}
+      responses:
+        "200":
+          description: The Endpoint, with its new resolver id.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Endpoint"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/schedule:
+    get:
+      tags: [endpoints]
+      operationId: getEndpointSchedule
+      summary: The schedule of an Endpoint
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "200":
+          description: The zone and the windows, ordered by start.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Schedule"}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      tags: [endpoints]
+      operationId: putEndpointSchedule
+      summary: Replace the schedule of an Endpoint
+      description: |
+        The windows are in minutes of the week, Sunday 00:00 being 0, in multiples of 30. Errors: `profile_locked`,
+        `invalid_credentials`, `too_many_attempts`, `destinations_lost`, `validation_failed` (`grid`, `overlap`, `exceeded`),
+        `server_busy`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SchedulePut"}
+      responses:
+        "200":
+          description: The schedule as stored.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Schedule"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoint-groups:
+    get:
+      tags: [endpoints]
+      operationId: listEndpointGroups
+      summary: The tenant's Endpoint groups
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      responses:
+        "200":
+          description: The groups, oldest first.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GroupList"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [endpoints]
+      operationId: createEndpointGroup
+      summary: Create a group, and move Endpoints into it
+      description: 'Errors: `validation_failed` (`max_endpoint_groups` exceeded).'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/GroupCreate"}
+      responses:
+        "201":
+          description: The group.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Group"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoint-groups/{gid}:
+    patch:
+      tags: [endpoints]
+      operationId: patchEndpointGroup
+      summary: Rename a group
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/GroupId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/GroupRename"}
+      responses:
+        "200":
+          description: The group.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Group"}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [endpoints]
+      operationId: deleteEndpointGroup
+      summary: Delete a group; its Endpoints stay, with no group
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/GroupId"}
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/clients:
+    get:
+      tags: [endpoints]
+      operationId: listClients
+      summary: The clients of an Endpoint, newest first
+      description: '`count` is how many clients match the filter, whatever the page.'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - name: q
+          in: query
+          required: false
+          schema: {type: string, maxLength: 64, pattern: *pasted, x-ctrlz-rowref: false}
+        - name: group
+          in: query
+          required: false
+          schema: {type: string, minLength: 1, maxLength: 64, pattern: *nametext, x-ctrlz-rowref: false}
+        - name: inactive_days
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 3650}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ClientPage"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [endpoints]
+      operationId: createClient
+      summary: Add a custom client
+      description: |
+        The label is given or derived from the alias; `default` is the hub's own. Errors: `profile_locked`,
+        `invalid_credentials`, `too_many_attempts`, `destinations_lost`, `validation_failed` (`exists`, `reserved`,
+        `max_clients_per_endpoint` exceeded), `server_busy`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ClientCreate"}
+      responses:
+        "201":
+          description: The client.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Client"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/clients/{cid}:
+    patch:
+      tags: [endpoints]
+      operationId: patchClient
+      summary: Change a client
+      description: |
+        Errors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `destinations_lost`, `validation_failed`,
+        `server_busy`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - {$ref: "#/components/parameters/ClientId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ClientPatch"}
+      responses:
+        "200":
+          description: The client.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Client"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/clients:batch:
+    post:
+      tags: [endpoints]
+      operationId: batchClients
+      summary: Edit or delete clients by id or by a selector
+      description: |
+        Exactly one of `ids` and `selector`. A selector resolves at most 500 clients in the write; `more` says matches
+        remain, so the caller repeats. Errors: as for a change of one client.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      x-ctrlz-max-body: 65536
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ClientBatch"}
+      responses:
+        "200":
+          description: How many clients were changed, and whether matches remain.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ClientBatchResult"}
+        default: {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     session:
@@ -1961,6 +2442,22 @@ components:
       required: true
       description: 1 to 64 characters of `A-Z a-z 0-9 _ -`. A replay with the same request gives the same answer and no second effect; the same key with another request is `idempotency_key_reused`.
       schema: {type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', x-ctrlz-rowref: false}
+    ListCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque. Take it from `next_cursor`; a value that does not decode, or was made for another list order, is `bad_request`. Longer than Cursor because the position of an alphabetical page carries the name.
+      schema: {type: string, minLength: 1, maxLength: 600, pattern: '^[A-Za-z0-9_-]+$', x-ctrlz-rowref: true}
+    GroupId:
+      name: gid
+      in: path
+      required: true
+      schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    ClientId:
+      name: cid
+      in: path
+      required: true
+      schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
   requestBodies:
     LoginPassword:
       required: true
@@ -3260,6 +3757,361 @@ components:
           type: array
           maxItems: 10000
           items: {$ref: "#/components/schemas/RulesDocumentRule"}
+    EndpointType:
+      type: object
+      required: [key, name_fa, name_en, position, icon]
+      properties:
+        key: {type: string, maxLength: 32, pattern: '^[a-z][a-z0-9_-]*$'}
+        name_fa: {type: string, maxLength: 64, pattern: *prose}
+        name_en: {type: string, maxLength: 64, pattern: *text}
+        position: {type: integer, minimum: 0, maximum: 1000}
+        icon: {type: string, maxLength: 32, pattern: '^[a-z][a-z0-9-]*$'}
+    EndpointTypeList:
+      type: object
+      required: [types]
+      properties:
+        types:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/EndpointType"}
+    TimezoneList:
+      type: object
+      required: [zones]
+      properties:
+        zones:
+          type: array
+          maxItems: 1000
+          items: {type: string, maxLength: 64, pattern: '^[A-Za-z][A-Za-z0-9_+/-]*$'}
+    EndpointCounts:
+      type: object
+      required: [clients, authorized_ips, claims_waiting]
+      properties:
+        clients: {type: integer, minimum: 0, maximum: 2147483647}
+        authorized_ips: {type: integer, minimum: 0, maximum: 2147483647}
+        claims_waiting: {type: integer, minimum: 0, maximum: 2147483647}
+    Endpoint:
+      type: object
+      required: [id, name, type, resolver_id, profile_id, analytics_level, admin_state, admin_hold, status, legacy_dns,
+        authorize_secure_dns, authorize_ddns, expose_ip, prevent_deactivation, require_authorized_ips, schedule_timezone,
+        has_schedule, apple_profile_stale, created_at, updated_at, counts]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        name: {type: string, maxLength: 64, pattern: *prose}
+        type: {type: string, maxLength: 32, pattern: '^[a-z][a-z0-9_-]*$'}
+        group_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        comment: {type: string, maxLength: 255, pattern: *prose}
+        resolver_id: {type: string, maxLength: 26, pattern: '^[a-z2-7]{26}$'}
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile2_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        analytics_level: {type: string, maxLength: 8, enum: [none, some, full]}
+        admin_state: {type: string, maxLength: 16, enum: [enabled, soft_disabled, hard_disabled]}
+        admin_hold: {type: boolean}
+        status: {type: string, maxLength: 8, enum: [pending, active]}
+        legacy_dns: {type: boolean}
+        authorize_secure_dns: {type: boolean}
+        authorize_ddns: {type: boolean}
+        expose_ip: {type: boolean}
+        prevent_deactivation: {type: boolean}
+        require_authorized_ips: {type: boolean}
+        schedule_timezone: {type: string, maxLength: 64, pattern: '^[A-Za-z][A-Za-z0-9_+/-]*$'}
+        has_schedule: {type: boolean}
+        first_query_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_query_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        apple_profile_stale: {type: boolean}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        updated_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        counts: {$ref: "#/components/schemas/EndpointCounts"}
+    EndpointCreated:
+      type: object
+      required: [endpoints]
+      properties:
+        endpoints:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/Endpoint"}
+    EndpointPage:
+      type: object
+      required: [items, by_type, by_status]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/Endpoint"}
+        next_cursor: {type: string, maxLength: 600, pattern: '^[A-Za-z0-9_-]+$'}
+        by_type:
+          type: object
+          maxProperties: 100
+          additionalProperties: false
+          patternProperties:
+            '^[a-z][a-z0-9_-]{0,31}$': {type: integer, minimum: 0, maximum: 2147483647}
+        by_status:
+          type: object
+          required: [pending, active]
+          properties:
+            pending: {type: integer, minimum: 0, maximum: 2147483647}
+            active: {type: integer, minimum: 0, maximum: 2147483647}
+    LockPassword:
+      type: object
+      additionalProperties: false
+      required: [profile_id, password]
+      properties:
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        password: {type: string, maxLength: 2048, pattern: *prose, x-ctrlz-rowref: false}
+    LockPasswords:
+      type: array
+      description: The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+      maxItems: 8
+      items: {$ref: "#/components/schemas/LockPassword"}
+    LockPasswordsBody:
+      type: object
+      additionalProperties: false
+      properties:
+        lock_passwords: {$ref: "#/components/schemas/LockPasswords"}
+    EndpointCreate:
+      type: object
+      additionalProperties: false
+      required: [type, names, profile_id]
+      properties:
+        type: {type: string, minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9_-]*$', x-ctrlz-rowref: false}
+        names:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile2_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        group_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        analytics_level: {type: string, maxLength: 8, enum: [none, some, full]}
+        comment: {type: string, minLength: 1, maxLength: 255, pattern: *nameprose, x-ctrlz-rowref: false}
+        legacy_dns: {type: boolean}
+        authorize_secure_dns: {type: boolean}
+        authorize_ddns: {type: boolean}
+        expose_ip: {type: boolean}
+        prevent_deactivation: {type: boolean}
+        confirm_destinations: {type: boolean}
+    EndpointPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        type: {type: string, minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9_-]*$', x-ctrlz-rowref: false}
+        group_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile2_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        analytics_level: {type: string, maxLength: 8, enum: [none, some, full]}
+        comment: {type: string, minLength: 1, maxLength: 255, pattern: *nameprose, x-ctrlz-rowref: false}
+        legacy_dns: {type: boolean}
+        authorize_secure_dns: {type: boolean}
+        authorize_ddns: {type: boolean}
+        expose_ip: {type: boolean}
+        prevent_deactivation: {type: boolean}
+        admin_state: {type: string, maxLength: 16, enum: [enabled, soft_disabled, hard_disabled]}
+        require_authorized_ips: {type: boolean}
+        schedule_timezone: {type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z][A-Za-z0-9_+/-]*$', x-ctrlz-rowref: false}
+        lock_passwords: {$ref: "#/components/schemas/LockPasswords"}
+        confirm_destinations: {type: boolean}
+        clear:
+          type: array
+          maxItems: 3
+          items: {type: string, maxLength: 16, enum: [group_id, profile2_id, comment]}
+    EndpointBatchSet:
+      type: object
+      additionalProperties: false
+      properties:
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile2_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        analytics_level: {type: string, maxLength: 8, enum: [none, some, full]}
+        admin_state: {type: string, maxLength: 16, enum: [enabled, soft_disabled, hard_disabled]}
+    EndpointBatch:
+      type: object
+      additionalProperties: false
+      required: [ids, op]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        op: {type: string, maxLength: 8, enum: [move, edit, delete]}
+        group_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        set: {$ref: "#/components/schemas/EndpointBatchSet"}
+        clear:
+          type: array
+          maxItems: 2
+          items: {type: string, maxLength: 16, enum: [group_id, profile2_id]}
+        lock_passwords: {$ref: "#/components/schemas/LockPasswords"}
+        confirm_destinations: {type: boolean}
+    AffectedCount:
+      type: object
+      required: [affected]
+      properties:
+        affected: {type: integer, minimum: 0, maximum: 2147483647}
+    ScheduleWindow:
+      type: object
+      required: [id, start, end, profile_id]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        start: {type: integer, minimum: 0, maximum: 10050}
+        end: {type: integer, minimum: 30, maximum: 10080}
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile2_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    Schedule:
+      type: object
+      required: [timezone, windows]
+      properties:
+        timezone: {type: string, maxLength: 64, pattern: '^[A-Za-z][A-Za-z0-9_+/-]*$'}
+        windows:
+          type: array
+          maxItems: 64
+          items: {$ref: "#/components/schemas/ScheduleWindow"}
+    ScheduleWindowIn:
+      type: object
+      additionalProperties: false
+      required: [start, end, profile_id]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        start: {type: integer, minimum: 0, maximum: 10080}
+        end: {type: integer, minimum: 0, maximum: 10080}
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile2_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    SchedulePut:
+      type: object
+      additionalProperties: false
+      required: [timezone, windows]
+      properties:
+        timezone: {type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z][A-Za-z0-9_+/-]*$', x-ctrlz-rowref: false}
+        windows:
+          type: array
+          maxItems: 128
+          items: {$ref: "#/components/schemas/ScheduleWindowIn"}
+        lock_passwords: {$ref: "#/components/schemas/LockPasswords"}
+        confirm_destinations: {type: boolean}
+    Group:
+      type: object
+      required: [id, name, endpoint_count]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        name: {type: string, maxLength: 64, pattern: *prose}
+        endpoint_count: {type: integer, minimum: 0, maximum: 2147483647}
+    GroupList:
+      type: object
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/Group"}
+    GroupCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        endpoint_ids:
+          type: array
+          maxItems: 500
+          items: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    GroupRename:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+    Client:
+      type: object
+      required: [id, label, source, is_custom, first_seen_at, last_seen_at]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        label: {type: string, maxLength: 36, pattern: '^[a-z0-9]([a-z0-9-]{0,34}[a-z0-9])?$'}
+        alias: {type: string, maxLength: 64, pattern: *prose}
+        group_name: {type: string, maxLength: 64, pattern: *prose}
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile2_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        analytics_level: {type: string, maxLength: 8, enum: [none, some, full]}
+        source: {type: string, maxLength: 8, enum: [auto, manual]}
+        is_custom: {type: boolean}
+        hostname: {type: string, maxLength: 253, pattern: *text}
+        mac: {type: string, maxLength: 17, pattern: '^[0-9a-f:]*$'}
+        ip: {type: string, maxLength: 45, pattern: '^[0-9A-Fa-f:.]*$'}
+        first_seen_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_seen_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    ClientPage:
+      type: object
+      required: [items, count]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/Client"}
+        next_cursor: {type: string, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$'}
+        count: {type: integer, minimum: 0, maximum: 2147483647}
+    ClientCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        label: {type: string, minLength: 1, maxLength: 36, pattern: '^[a-z0-9]([a-z0-9-]{0,34}[a-z0-9])?$', x-ctrlz-rowref: false}
+        alias: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        group_name: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile2_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        analytics_level: {type: string, maxLength: 8, enum: [none, some, full]}
+        lock_passwords: {$ref: "#/components/schemas/LockPasswords"}
+        confirm_destinations: {type: boolean}
+    ClientPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        alias: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        group_name: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile2_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        analytics_level: {type: string, maxLength: 8, enum: [none, some, full]}
+        lock_passwords: {$ref: "#/components/schemas/LockPasswords"}
+        confirm_destinations: {type: boolean}
+        clear:
+          type: array
+          maxItems: 5
+          items: {type: string, maxLength: 16, enum: [alias, group_name, profile_id, profile2_id, analytics_level]}
+    ClientBatchSet:
+      type: object
+      additionalProperties: false
+      properties:
+        alias: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        group_name: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        profile_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        profile2_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        analytics_level: {type: string, maxLength: 8, enum: [none, some, full]}
+    ClientSelector:
+      type: object
+      additionalProperties: false
+      properties:
+        inactive_days: {type: integer, minimum: 1, maximum: 3650}
+        all: {type: boolean}
+    ClientBatch:
+      type: object
+      additionalProperties: false
+      required: [op]
+      properties:
+        op: {type: string, maxLength: 8, enum: [edit, delete]}
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        selector: {$ref: "#/components/schemas/ClientSelector"}
+        set: {$ref: "#/components/schemas/ClientBatchSet"}
+        clear:
+          type: array
+          maxItems: 5
+          items: {type: string, maxLength: 16, enum: [alias, group_name, profile_id, profile2_id, analytics_level]}
+        lock_passwords: {$ref: "#/components/schemas/LockPasswords"}
+        confirm_destinations: {type: boolean}
+    ClientBatchResult:
+      type: object
+      required: [affected, more]
+      properties:
+        affected: {type: integer, minimum: 0, maximum: 2147483647}
+        more: {type: boolean}
 security:
   - session: []
   - apiToken: []

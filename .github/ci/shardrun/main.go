@@ -80,10 +80,48 @@ type Shard struct {
 // cannot name a test (internal/lint, where a helper skips for every test that needs the workspace
 // documents) names the workspace document the skip says it lacks, a path of the workspace and not a
 // phrase of prose.
+//
+// The narrow kind of rule (cases, with reason) names the exact tests, subtests included, and the exact
+// reason they print, and holds only in the build it names: the lab cases of the golden vectors skip in
+// a release build and the release cases skip in a lab build, and neither is a by-design skip of the
+// other build. A rule may also be off while an environment variable has a value (unless): the install
+// test skips by design when CTRLZ_INSTALL_TEST is not 1, and in the job that sets it, a skip is the
+// job's failure.
 type skipRule struct {
 	pkgs  []string
 	tests []string
 	re    *regexp.Regexp
+	// cases are full test names (a subtest is TestX/group/id), judged with reason, which is what the
+	// test printed before it skipped, without the file and line.
+	cases  []string
+	reason string
+	// build is "lab" or "release": the rule holds only in a run of that build. Empty: both.
+	build string
+	// unless is "NAME=value": the rule is off while that variable has that value.
+	unless string
+}
+
+// labTag is the build tag of the lab builds (the P4 fault tests on a private network).
+const labTag = "ctrlz_lab"
+
+// labBuild says whether the tests of this run are built with the lab tag, from the GOFLAGS go itself
+// reports for dir (-tags=ctrlz_lab in the job "tests (lab)"). An error reads as a release build, where
+// the lab-only skips are not accepted: the safe side.
+func labBuild(dir string) bool {
+	out, err := goOut(dir, "env", "GOFLAGS")
+	if err != nil {
+		return false
+	}
+	for _, f := range strings.Fields(out) {
+		if v, ok := strings.CutPrefix(f, "-tags="); ok {
+			for _, tag := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' }) {
+				if tag == labTag {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // expectedSkips are the skips that are part of the design and not a defect. Every other skip fails
@@ -100,6 +138,14 @@ type skipRule struct {
 //     is the normal run.
 //   - the corpus and vector writers of the shared module (TestWriteCorpus in blob, gtable and wire,
 //     TestGenerate in vectors) are regeneration switches of the same kind, off in a CI run.
+//   - the lab cases of the pair-table vectors (ptv-050, ptv-052, ptv-053) skip in a release build, which
+//     is every job but "tests (lab)", where they run; the release cases (ptv-049, ptv-051) skip in the
+//     lab job, where the same ids run in the other jobs. They are in the shared vectors, which three
+//     packages run (internal/policy, internal/dns, shared/vectors). Two tests that are about a release
+//     build skip in a lab build (TestBootRefusesTheLabRootInAReleaseBuild, TestCheckEachPlace). Each
+//     is named with the reason it prints and the build it holds in.
+//   - TestInstallInContainer of internal/installtest needs Docker and the image, and runs in the job
+//     "install" with CTRLZ_INSTALL_TEST=1, where this rule is off, so that a skip there fails the job.
 //
 // What is NOT on the list, on purpose: the "host is too slow to measure" skip of
 // TestRotatingTheCookieDoesNotResetTheSessionClass in internal/api, which fails a shard on a loaded runner so
@@ -112,16 +158,50 @@ func expectedSkips() []skipRule {
 		{pkgs: []string{"internal/store/catalogtest"}, tests: []string{"TestOpenCatalogGolden"}},
 		{pkgs: []string{"CtrlZ-Shared/blob", "CtrlZ-Shared/gtable", "CtrlZ-Shared/wire"}, tests: []string{"TestWriteCorpus"}},
 		{pkgs: []string{"CtrlZ-Shared/vectors"}, tests: []string{"TestGenerate"}},
+		{pkgs: []string{"internal/installtest"}, tests: []string{"TestInstallInContainer"}, unless: "CTRLZ_INSTALL_TEST=1"},
+		{pkgs: []string{"internal/policy"}, build: "release", reason: "a lab case, and this is not a lab build", cases: pairLabCases("TestGoldenVectors")},
+		{pkgs: []string{"internal/dns"}, build: "release", reason: "a lab case, and this is not a lab build", cases: pairLabCases("TestGoldenVectorsThroughTheGlue")},
+		{pkgs: []string{"CtrlZ-Shared/vectors"}, build: "release", reason: "a lab case, and this is not a lab build", cases: pairLabCases("TestReferenceHarness")},
+		{pkgs: []string{"internal/policy"}, build: "lab", reason: "a release case, and this is not a release build", cases: pairReleaseCases("TestGoldenVectors")},
+		{pkgs: []string{"internal/dns"}, build: "lab", reason: "a release case, and this is not a release build", cases: pairReleaseCases("TestGoldenVectorsThroughTheGlue")},
+		{pkgs: []string{"CtrlZ-Shared/vectors"}, build: "lab", reason: "a release case, and this is not a release build", cases: pairReleaseCases("TestReferenceHarness")},
+		{pkgs: []string{"internal/agent"}, build: "lab", reason: "a lab build accepts the lab root", cases: []string{"TestBootRefusesTheLabRootInAReleaseBuild"}},
+		{pkgs: []string{"internal/labroot"}, build: "lab", reason: "lab build accepts the lab root", cases: []string{"TestCheckEachPlace"}},
 	}
+}
+
+// pairLabCases and pairReleaseCases are the cases of shared/vectors/pair-table-validate.json that carry
+// "build":"lab" and "build":"release". A new case with a build is a new skip in one of the two builds, and
+// stays unexpected until it is named here, which is the point of naming them.
+func pairLabCases(top string) []string {
+	return pairCases(top, "ptv-050", "ptv-052", "ptv-053")
+}
+
+func pairReleaseCases(top string) []string {
+	return pairCases(top, "ptv-049", "ptv-051")
+}
+
+func pairCases(top string, ids ...string) []string {
+	var out []string
+	for _, id := range ids {
+		out = append(out, top+"/pair-table-validate/"+id)
+	}
+	return out
 }
 
 // isExpectedSkip is true when a skipped test is a by-design skip of its own package: it is the test
 // a rule names, or its output holds what the rule looks for. A rule that names neither accepts
 // nothing, so an empty rule cannot become a wildcard.
-func isExpectedSkip(pkg, test, out string) bool {
+func isExpectedSkip(pkg, test, out string, lab bool) bool {
 	top, _, _ := strings.Cut(test, "/")
 	for _, r := range expectedSkips() {
 		if !inPackages(r.pkgs, pkg) {
+			continue
+		}
+		if (r.build == "lab" && !lab) || (r.build == "release" && lab) {
+			continue
+		}
+		if name, val, ok := strings.Cut(r.unless, "="); ok && os.Getenv(name) == val {
 			continue
 		}
 		for _, t := range r.tests {
@@ -131,6 +211,11 @@ func isExpectedSkip(pkg, test, out string) bool {
 		}
 		if r.re != nil && r.re.MatchString(out) {
 			return true
+		}
+		for _, c := range r.cases {
+			if c == test && r.reason != "" && skipReason(out) == r.reason {
+				return true
+			}
 		}
 	}
 	return false
@@ -392,6 +477,10 @@ func runTests(sh Shard) []string {
 	if len(wants) == 0 {
 		return []string{"the shard has no packages"}
 	}
+	lab := labBuild(sh.Dir)
+	if lab {
+		fmt.Println("shardrun: a lab build (" + labTag + "): the release-only tests skip, and the lab-only ones run")
+	}
 	timeout := innerMinutes(sh.TimeoutMinutes, 20)
 	// -count=1: container tests must run, not be replayed from the cache. The timeout stays
 	// under the job's, so a hang ends in a stack dump and a summary and not a killed job.
@@ -489,7 +578,7 @@ func runTests(sh Shard) []string {
 				raw = b.String()
 			}
 			s := skipped{pkg: ev.Package, test: ev.Test, reason: skipReason(raw)}
-			s.expected = isExpectedSkip(ev.Package, ev.Test, raw)
+			s.expected = isExpectedSkip(ev.Package, ev.Test, raw, lab)
 			for _, re := range noiseSkips() {
 				if top && re.MatchString(raw) {
 					s.noise = true

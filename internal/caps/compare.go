@@ -125,8 +125,6 @@ type PendingLimit struct {
 func PendingLimits() []PendingLimit {
 	const r = "a per-tenant ceiling whose objects do not exist in P1; the default and the override are read for the account page only"
 	return []PendingLimit{
-		{"max_endpoints", "P2", r},
-		{"max_clients_per_endpoint", "P2", r},
 		{"max_authorized_ips", "P2", r},
 		{"max_api_tokens", "P2", r},
 		// Enforced in P2 on the items of one request, in memory: no state is shared between requests, so there is

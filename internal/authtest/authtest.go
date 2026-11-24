@@ -70,7 +70,7 @@ func (e *Env) Keytool(t *testing.T) *store.Store { return e.DB.Store(e.Ctx, t, s
 // APIKeys is a key ring with the domains the api holds, on throw-away keys.
 func APIKeys(t *testing.T) *keyring.Ring {
 	t.Helper()
-	r, err := keyring.NewEphemeral(keyring.DomainUserTOTP, keyring.DomainOTPDelivery, keyring.DomainAuthMAC)
+	r, err := keyring.NewEphemeral(keyring.DomainUserTOTP, keyring.DomainOTPDelivery, keyring.DomainAuthMAC, keyring.DomainDOHToken)
 	if err != nil {
 		t.Fatal(err)
 	}

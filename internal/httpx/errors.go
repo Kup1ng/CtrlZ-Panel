@@ -64,6 +64,9 @@ const (
 	CodeProfileInUse         = "profile_in_use"
 	CodeKeyReused            = "idempotency_key_reused"
 	CodeJobRunning           = "job_running"
+	CodeEndpointHeld         = "endpoint_held"
+	CodeDestinationsLost     = "destinations_lost"
+	CodeTokenNotAllowed      = "token_not_allowed"
 )
 
 // FieldError names one invalid field. The code is a stable machine value, never

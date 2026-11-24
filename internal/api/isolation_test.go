@@ -4,6 +4,7 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"reflect"
 	"slices"
@@ -224,7 +225,7 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 	reauthed := each(func(n *tn) { n.sess = e.session(n, true) })
 	plain := each(func(n *tn) { n.sess = e.session(n, false) })
 
-	return map[string]isolation.Fixture{
+	fx := map[string]isolation.Fixture{
 		"getAuthConfig": {Effect: isolation.Shows, Status: 200, Arrange: nothing,
 			Call: func() isolation.Result { return result(anon().get("/auth/config")) }},
 		"loginPassword": {Effect: isolation.Changes, Status: 200, Arrange: nothing,
@@ -573,6 +574,9 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 			CrossStatus: 404,
 			Cross:       func() isolation.Result { return result(b().sess.post("/announcements/"+a().announceID+"/read", nil)) }},
 	}
+	// The Endpoint routes keep their fixtures in a file of their own (isolation_endpoints_test.go).
+	maps.Copy(fx, e.endpointFixtures())
+	return fx
 }
 
 // TestIsolation is T-386 and spec 18.1, rule isolation-success-coverage: one harness over

@@ -501,8 +501,10 @@ func TestTwinTakesDoNotDeadlock(t *testing.T) {
 				t.Fatalf("round %d: a take did not finish", round)
 			}
 		}
-		if got["active"] != 1 || got["unavailable"] != 1 {
-			t.Fatalf("round %d: twin takes gave %v, want one active and one unavailable", round, got)
+		// The loser waits for the winner and then finds the winner active over the same address: the tenant's own claim
+		// is in the way, which is `own` (P3 4.3), not `unavailable` (another tenant's claim, or a race).
+		if got["active"] != 1 || got["own"] != 1 {
+			t.Fatalf("round %d: twin takes gave %v, want one active and one own", round, got)
 		}
 	}
 }

@@ -199,7 +199,7 @@ func CheckP2(op Operation) error {
 		return fmt.Errorf("apispec: %s has no valid x-ctrlz-token", op.ID)
 	case !in(op.Lock, "none", "guard", "lock", "unlock"):
 		return fmt.Errorf("apispec: %s has no valid x-ctrlz-lock", op.ID)
-	case !in(op.Outbox, "none", "profile", "profile+endpoint_set"):
+	case !in(op.Outbox, "none", "profile", "profile+endpoint_set", "endpoint_set"):
 		return fmt.Errorf("apispec: %s has no valid x-ctrlz-outbox", op.ID)
 	}
 	return nil

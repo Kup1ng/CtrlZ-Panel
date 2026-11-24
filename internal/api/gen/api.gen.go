@@ -126,6 +126,180 @@ func (e CatalogServiceState) Valid() bool {
 	}
 }
 
+// Defines values for ClientAnalyticsLevel.
+const (
+	ClientAnalyticsLevelFull ClientAnalyticsLevel = "full"
+	ClientAnalyticsLevelNone ClientAnalyticsLevel = "none"
+	ClientAnalyticsLevelSome ClientAnalyticsLevel = "some"
+)
+
+// Valid indicates whether the value is a known member of the ClientAnalyticsLevel enum.
+func (e ClientAnalyticsLevel) Valid() bool {
+	switch e {
+	case ClientAnalyticsLevelFull:
+		return true
+	case ClientAnalyticsLevelNone:
+		return true
+	case ClientAnalyticsLevelSome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientSource.
+const (
+	ClientSourceAuto   ClientSource = "auto"
+	ClientSourceManual ClientSource = "manual"
+)
+
+// Valid indicates whether the value is a known member of the ClientSource enum.
+func (e ClientSource) Valid() bool {
+	switch e {
+	case ClientSourceAuto:
+		return true
+	case ClientSourceManual:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientBatchClear.
+const (
+	ClientBatchClearAlias          ClientBatchClear = "alias"
+	ClientBatchClearAnalyticsLevel ClientBatchClear = "analytics_level"
+	ClientBatchClearGroupName      ClientBatchClear = "group_name"
+	ClientBatchClearProfile2Id     ClientBatchClear = "profile2_id"
+	ClientBatchClearProfileId      ClientBatchClear = "profile_id"
+)
+
+// Valid indicates whether the value is a known member of the ClientBatchClear enum.
+func (e ClientBatchClear) Valid() bool {
+	switch e {
+	case ClientBatchClearAlias:
+		return true
+	case ClientBatchClearAnalyticsLevel:
+		return true
+	case ClientBatchClearGroupName:
+		return true
+	case ClientBatchClearProfile2Id:
+		return true
+	case ClientBatchClearProfileId:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientBatchOp.
+const (
+	ClientBatchOpDelete ClientBatchOp = "delete"
+	ClientBatchOpEdit   ClientBatchOp = "edit"
+)
+
+// Valid indicates whether the value is a known member of the ClientBatchOp enum.
+func (e ClientBatchOp) Valid() bool {
+	switch e {
+	case ClientBatchOpDelete:
+		return true
+	case ClientBatchOpEdit:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientBatchSetAnalyticsLevel.
+const (
+	ClientBatchSetAnalyticsLevelFull ClientBatchSetAnalyticsLevel = "full"
+	ClientBatchSetAnalyticsLevelNone ClientBatchSetAnalyticsLevel = "none"
+	ClientBatchSetAnalyticsLevelSome ClientBatchSetAnalyticsLevel = "some"
+)
+
+// Valid indicates whether the value is a known member of the ClientBatchSetAnalyticsLevel enum.
+func (e ClientBatchSetAnalyticsLevel) Valid() bool {
+	switch e {
+	case ClientBatchSetAnalyticsLevelFull:
+		return true
+	case ClientBatchSetAnalyticsLevelNone:
+		return true
+	case ClientBatchSetAnalyticsLevelSome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientCreateAnalyticsLevel.
+const (
+	ClientCreateAnalyticsLevelFull ClientCreateAnalyticsLevel = "full"
+	ClientCreateAnalyticsLevelNone ClientCreateAnalyticsLevel = "none"
+	ClientCreateAnalyticsLevelSome ClientCreateAnalyticsLevel = "some"
+)
+
+// Valid indicates whether the value is a known member of the ClientCreateAnalyticsLevel enum.
+func (e ClientCreateAnalyticsLevel) Valid() bool {
+	switch e {
+	case ClientCreateAnalyticsLevelFull:
+		return true
+	case ClientCreateAnalyticsLevelNone:
+		return true
+	case ClientCreateAnalyticsLevelSome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientPatchAnalyticsLevel.
+const (
+	ClientPatchAnalyticsLevelFull ClientPatchAnalyticsLevel = "full"
+	ClientPatchAnalyticsLevelNone ClientPatchAnalyticsLevel = "none"
+	ClientPatchAnalyticsLevelSome ClientPatchAnalyticsLevel = "some"
+)
+
+// Valid indicates whether the value is a known member of the ClientPatchAnalyticsLevel enum.
+func (e ClientPatchAnalyticsLevel) Valid() bool {
+	switch e {
+	case ClientPatchAnalyticsLevelFull:
+		return true
+	case ClientPatchAnalyticsLevelNone:
+		return true
+	case ClientPatchAnalyticsLevelSome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientPatchClear.
+const (
+	ClientPatchClearAlias          ClientPatchClear = "alias"
+	ClientPatchClearAnalyticsLevel ClientPatchClear = "analytics_level"
+	ClientPatchClearGroupName      ClientPatchClear = "group_name"
+	ClientPatchClearProfile2Id     ClientPatchClear = "profile2_id"
+	ClientPatchClearProfileId      ClientPatchClear = "profile_id"
+)
+
+// Valid indicates whether the value is a known member of the ClientPatchClear enum.
+func (e ClientPatchClear) Valid() bool {
+	switch e {
+	case ClientPatchClearAlias:
+		return true
+	case ClientPatchClearAnalyticsLevel:
+		return true
+	case ClientPatchClearGroupName:
+		return true
+	case ClientPatchClearProfile2Id:
+		return true
+	case ClientPatchClearProfileId:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DefaultRedirectKind.
 const (
 	DefaultRedirectKindAuto     DefaultRedirectKind = "auto"
@@ -321,6 +495,231 @@ func (e ECSOptionMode) Valid() bool {
 	case ECSOptionModeCustom:
 		return true
 	case ECSOptionModeNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointAdminState.
+const (
+	EndpointAdminStateEnabled      EndpointAdminState = "enabled"
+	EndpointAdminStateHardDisabled EndpointAdminState = "hard_disabled"
+	EndpointAdminStateSoftDisabled EndpointAdminState = "soft_disabled"
+)
+
+// Valid indicates whether the value is a known member of the EndpointAdminState enum.
+func (e EndpointAdminState) Valid() bool {
+	switch e {
+	case EndpointAdminStateEnabled:
+		return true
+	case EndpointAdminStateHardDisabled:
+		return true
+	case EndpointAdminStateSoftDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointAnalyticsLevel.
+const (
+	EndpointAnalyticsLevelFull EndpointAnalyticsLevel = "full"
+	EndpointAnalyticsLevelNone EndpointAnalyticsLevel = "none"
+	EndpointAnalyticsLevelSome EndpointAnalyticsLevel = "some"
+)
+
+// Valid indicates whether the value is a known member of the EndpointAnalyticsLevel enum.
+func (e EndpointAnalyticsLevel) Valid() bool {
+	switch e {
+	case EndpointAnalyticsLevelFull:
+		return true
+	case EndpointAnalyticsLevelNone:
+		return true
+	case EndpointAnalyticsLevelSome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointStatus.
+const (
+	EndpointStatusActive  EndpointStatus = "active"
+	EndpointStatusPending EndpointStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the EndpointStatus enum.
+func (e EndpointStatus) Valid() bool {
+	switch e {
+	case EndpointStatusActive:
+		return true
+	case EndpointStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointBatchClear.
+const (
+	EndpointBatchClearGroupId    EndpointBatchClear = "group_id"
+	EndpointBatchClearProfile2Id EndpointBatchClear = "profile2_id"
+)
+
+// Valid indicates whether the value is a known member of the EndpointBatchClear enum.
+func (e EndpointBatchClear) Valid() bool {
+	switch e {
+	case EndpointBatchClearGroupId:
+		return true
+	case EndpointBatchClearProfile2Id:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointBatchOp.
+const (
+	EndpointBatchOpDelete EndpointBatchOp = "delete"
+	EndpointBatchOpEdit   EndpointBatchOp = "edit"
+	EndpointBatchOpMove   EndpointBatchOp = "move"
+)
+
+// Valid indicates whether the value is a known member of the EndpointBatchOp enum.
+func (e EndpointBatchOp) Valid() bool {
+	switch e {
+	case EndpointBatchOpDelete:
+		return true
+	case EndpointBatchOpEdit:
+		return true
+	case EndpointBatchOpMove:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointBatchSetAdminState.
+const (
+	EndpointBatchSetAdminStateEnabled      EndpointBatchSetAdminState = "enabled"
+	EndpointBatchSetAdminStateHardDisabled EndpointBatchSetAdminState = "hard_disabled"
+	EndpointBatchSetAdminStateSoftDisabled EndpointBatchSetAdminState = "soft_disabled"
+)
+
+// Valid indicates whether the value is a known member of the EndpointBatchSetAdminState enum.
+func (e EndpointBatchSetAdminState) Valid() bool {
+	switch e {
+	case EndpointBatchSetAdminStateEnabled:
+		return true
+	case EndpointBatchSetAdminStateHardDisabled:
+		return true
+	case EndpointBatchSetAdminStateSoftDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointBatchSetAnalyticsLevel.
+const (
+	EndpointBatchSetAnalyticsLevelFull EndpointBatchSetAnalyticsLevel = "full"
+	EndpointBatchSetAnalyticsLevelNone EndpointBatchSetAnalyticsLevel = "none"
+	EndpointBatchSetAnalyticsLevelSome EndpointBatchSetAnalyticsLevel = "some"
+)
+
+// Valid indicates whether the value is a known member of the EndpointBatchSetAnalyticsLevel enum.
+func (e EndpointBatchSetAnalyticsLevel) Valid() bool {
+	switch e {
+	case EndpointBatchSetAnalyticsLevelFull:
+		return true
+	case EndpointBatchSetAnalyticsLevelNone:
+		return true
+	case EndpointBatchSetAnalyticsLevelSome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointCreateAnalyticsLevel.
+const (
+	EndpointCreateAnalyticsLevelFull EndpointCreateAnalyticsLevel = "full"
+	EndpointCreateAnalyticsLevelNone EndpointCreateAnalyticsLevel = "none"
+	EndpointCreateAnalyticsLevelSome EndpointCreateAnalyticsLevel = "some"
+)
+
+// Valid indicates whether the value is a known member of the EndpointCreateAnalyticsLevel enum.
+func (e EndpointCreateAnalyticsLevel) Valid() bool {
+	switch e {
+	case EndpointCreateAnalyticsLevelFull:
+		return true
+	case EndpointCreateAnalyticsLevelNone:
+		return true
+	case EndpointCreateAnalyticsLevelSome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointPatchAdminState.
+const (
+	EndpointPatchAdminStateEnabled      EndpointPatchAdminState = "enabled"
+	EndpointPatchAdminStateHardDisabled EndpointPatchAdminState = "hard_disabled"
+	EndpointPatchAdminStateSoftDisabled EndpointPatchAdminState = "soft_disabled"
+)
+
+// Valid indicates whether the value is a known member of the EndpointPatchAdminState enum.
+func (e EndpointPatchAdminState) Valid() bool {
+	switch e {
+	case EndpointPatchAdminStateEnabled:
+		return true
+	case EndpointPatchAdminStateHardDisabled:
+		return true
+	case EndpointPatchAdminStateSoftDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointPatchAnalyticsLevel.
+const (
+	EndpointPatchAnalyticsLevelFull EndpointPatchAnalyticsLevel = "full"
+	EndpointPatchAnalyticsLevelNone EndpointPatchAnalyticsLevel = "none"
+	EndpointPatchAnalyticsLevelSome EndpointPatchAnalyticsLevel = "some"
+)
+
+// Valid indicates whether the value is a known member of the EndpointPatchAnalyticsLevel enum.
+func (e EndpointPatchAnalyticsLevel) Valid() bool {
+	switch e {
+	case EndpointPatchAnalyticsLevelFull:
+		return true
+	case EndpointPatchAnalyticsLevelNone:
+		return true
+	case EndpointPatchAnalyticsLevelSome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EndpointPatchClear.
+const (
+	EndpointPatchClearComment    EndpointPatchClear = "comment"
+	EndpointPatchClearGroupId    EndpointPatchClear = "group_id"
+	EndpointPatchClearProfile2Id EndpointPatchClear = "profile2_id"
+)
+
+// Valid indicates whether the value is a known member of the EndpointPatchClear enum.
+func (e EndpointPatchClear) Valid() bool {
+	switch e {
+	case EndpointPatchClearComment:
+		return true
+	case EndpointPatchClearGroupId:
+		return true
+	case EndpointPatchClearProfile2Id:
 		return true
 	default:
 		return false
@@ -530,19 +929,19 @@ func (e LoginResultStatus) Valid() bool {
 
 // Defines values for MeTenantStatus.
 const (
-	Active    MeTenantStatus = "active"
-	Deleting  MeTenantStatus = "deleting"
-	Suspended MeTenantStatus = "suspended"
+	MeTenantStatusActive    MeTenantStatus = "active"
+	MeTenantStatusDeleting  MeTenantStatus = "deleting"
+	MeTenantStatusSuspended MeTenantStatus = "suspended"
 )
 
 // Valid indicates whether the value is a known member of the MeTenantStatus enum.
 func (e MeTenantStatus) Valid() bool {
 	switch e {
-	case Active:
+	case MeTenantStatusActive:
 		return true
-	case Deleting:
+	case MeTenantStatusDeleting:
 		return true
-	case Suspended:
+	case MeTenantStatusSuspended:
 		return true
 	default:
 		return false
@@ -1482,6 +1881,42 @@ func (e TargetKind) Valid() bool {
 	}
 }
 
+// Defines values for ListEndpointsParamsStatus.
+const (
+	ListEndpointsParamsStatusActive  ListEndpointsParamsStatus = "active"
+	ListEndpointsParamsStatusPending ListEndpointsParamsStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the ListEndpointsParamsStatus enum.
+func (e ListEndpointsParamsStatus) Valid() bool {
+	switch e {
+	case ListEndpointsParamsStatusActive:
+		return true
+	case ListEndpointsParamsStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListEndpointsParamsSort.
+const (
+	ListEndpointsParamsSortCreated ListEndpointsParamsSort = "created"
+	ListEndpointsParamsSortName    ListEndpointsParamsSort = "name"
+)
+
+// Valid indicates whether the value is a known member of the ListEndpointsParamsSort enum.
+func (e ListEndpointsParamsSort) Valid() bool {
+	switch e {
+	case ListEndpointsParamsSortCreated:
+		return true
+	case ListEndpointsParamsSortName:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListRulesParamsStatus.
 const (
 	ListRulesParamsStatusDisabled ListRulesParamsStatus = "disabled"
@@ -1551,6 +1986,11 @@ func (e ListRulesParamsSort) Valid() bool {
 // ActiveJob defines model for ActiveJob.
 type ActiveJob struct {
 	Job *Job `json:"job,omitempty"`
+}
+
+// AffectedCount defines model for AffectedCount.
+type AffectedCount struct {
+	Affected int `json:"affected"`
 }
 
 // Announcement defines model for Announcement.
@@ -1653,6 +2093,117 @@ type Category struct {
 type ChangePasswordRequest struct {
 	NewPassword string  `json:"new_password"`
 	TotpCode    *string `json:"totp_code,omitempty"`
+}
+
+// Client defines model for Client.
+type Client struct {
+	Alias          *string               `json:"alias,omitempty"`
+	AnalyticsLevel *ClientAnalyticsLevel `json:"analytics_level,omitempty"`
+	FirstSeenAt    time.Time             `json:"first_seen_at"`
+	GroupName      *string               `json:"group_name,omitempty"`
+	Hostname       *string               `json:"hostname,omitempty"`
+	Id             openapi_types.UUID    `json:"id"`
+	Ip             *string               `json:"ip,omitempty"`
+	IsCustom       bool                  `json:"is_custom"`
+	Label          string                `json:"label"`
+	LastSeenAt     time.Time             `json:"last_seen_at"`
+	Mac            *string               `json:"mac,omitempty"`
+	Profile2Id     *openapi_types.UUID   `json:"profile2_id,omitempty"`
+	ProfileId      *openapi_types.UUID   `json:"profile_id,omitempty"`
+	Source         ClientSource          `json:"source"`
+}
+
+// ClientAnalyticsLevel defines model for Client.AnalyticsLevel.
+type ClientAnalyticsLevel string
+
+// ClientSource defines model for Client.Source.
+type ClientSource string
+
+// ClientBatch defines model for ClientBatch.
+type ClientBatch struct {
+	Clear               *[]ClientBatchClear   `json:"clear,omitempty"`
+	ConfirmDestinations *bool                 `json:"confirm_destinations,omitempty"`
+	Ids                 *[]openapi_types.UUID `json:"ids,omitempty"`
+
+	// LockPasswords The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+	LockPasswords *LockPasswords  `json:"lock_passwords,omitempty"`
+	Op            ClientBatchOp   `json:"op"`
+	Selector      *ClientSelector `json:"selector,omitempty"`
+	Set           *ClientBatchSet `json:"set,omitempty"`
+}
+
+// ClientBatchClear defines model for ClientBatch.Clear.
+type ClientBatchClear string
+
+// ClientBatchOp defines model for ClientBatch.Op.
+type ClientBatchOp string
+
+// ClientBatchResult defines model for ClientBatchResult.
+type ClientBatchResult struct {
+	Affected int  `json:"affected"`
+	More     bool `json:"more"`
+}
+
+// ClientBatchSet defines model for ClientBatchSet.
+type ClientBatchSet struct {
+	Alias          *string                       `json:"alias,omitempty"`
+	AnalyticsLevel *ClientBatchSetAnalyticsLevel `json:"analytics_level,omitempty"`
+	GroupName      *string                       `json:"group_name,omitempty"`
+	Profile2Id     *openapi_types.UUID           `json:"profile2_id,omitempty"`
+	ProfileId      *openapi_types.UUID           `json:"profile_id,omitempty"`
+}
+
+// ClientBatchSetAnalyticsLevel defines model for ClientBatchSet.AnalyticsLevel.
+type ClientBatchSetAnalyticsLevel string
+
+// ClientCreate defines model for ClientCreate.
+type ClientCreate struct {
+	Alias               *string                     `json:"alias,omitempty"`
+	AnalyticsLevel      *ClientCreateAnalyticsLevel `json:"analytics_level,omitempty"`
+	ConfirmDestinations *bool                       `json:"confirm_destinations,omitempty"`
+	GroupName           *string                     `json:"group_name,omitempty"`
+	Label               *string                     `json:"label,omitempty"`
+
+	// LockPasswords The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+	LockPasswords *LockPasswords      `json:"lock_passwords,omitempty"`
+	Profile2Id    *openapi_types.UUID `json:"profile2_id,omitempty"`
+	ProfileId     *openapi_types.UUID `json:"profile_id,omitempty"`
+}
+
+// ClientCreateAnalyticsLevel defines model for ClientCreate.AnalyticsLevel.
+type ClientCreateAnalyticsLevel string
+
+// ClientPage defines model for ClientPage.
+type ClientPage struct {
+	Count      int      `json:"count"`
+	Items      []Client `json:"items"`
+	NextCursor *string  `json:"next_cursor,omitempty"`
+}
+
+// ClientPatch defines model for ClientPatch.
+type ClientPatch struct {
+	Alias               *string                    `json:"alias,omitempty"`
+	AnalyticsLevel      *ClientPatchAnalyticsLevel `json:"analytics_level,omitempty"`
+	Clear               *[]ClientPatchClear        `json:"clear,omitempty"`
+	ConfirmDestinations *bool                      `json:"confirm_destinations,omitempty"`
+	GroupName           *string                    `json:"group_name,omitempty"`
+
+	// LockPasswords The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+	LockPasswords *LockPasswords      `json:"lock_passwords,omitempty"`
+	Profile2Id    *openapi_types.UUID `json:"profile2_id,omitempty"`
+	ProfileId     *openapi_types.UUID `json:"profile_id,omitempty"`
+}
+
+// ClientPatchAnalyticsLevel defines model for ClientPatch.AnalyticsLevel.
+type ClientPatchAnalyticsLevel string
+
+// ClientPatchClear defines model for ClientPatch.Clear.
+type ClientPatchClear string
+
+// ClientSelector defines model for ClientSelector.
+type ClientSelector struct {
+	All          *bool `json:"all,omitempty"`
+	InactiveDays *int  `json:"inactive_days,omitempty"`
 }
 
 // CredentialDescriptors defines model for CredentialDescriptors.
@@ -1787,10 +2338,172 @@ type ECSOptionMode string
 // Empty defines model for Empty.
 type Empty = map[string]interface{}
 
+// Endpoint defines model for Endpoint.
+type Endpoint struct {
+	AdminHold            bool                   `json:"admin_hold"`
+	AdminState           EndpointAdminState     `json:"admin_state"`
+	AnalyticsLevel       EndpointAnalyticsLevel `json:"analytics_level"`
+	AppleProfileStale    bool                   `json:"apple_profile_stale"`
+	AuthorizeDdns        bool                   `json:"authorize_ddns"`
+	AuthorizeSecureDns   bool                   `json:"authorize_secure_dns"`
+	Comment              *string                `json:"comment,omitempty"`
+	Counts               EndpointCounts         `json:"counts"`
+	CreatedAt            time.Time              `json:"created_at"`
+	ExposeIp             bool                   `json:"expose_ip"`
+	FirstQueryAt         *time.Time             `json:"first_query_at,omitempty"`
+	GroupId              *openapi_types.UUID    `json:"group_id,omitempty"`
+	HasSchedule          bool                   `json:"has_schedule"`
+	Id                   openapi_types.UUID     `json:"id"`
+	LastQueryAt          *time.Time             `json:"last_query_at,omitempty"`
+	LegacyDns            bool                   `json:"legacy_dns"`
+	Name                 string                 `json:"name"`
+	PreventDeactivation  bool                   `json:"prevent_deactivation"`
+	Profile2Id           *openapi_types.UUID    `json:"profile2_id,omitempty"`
+	ProfileId            openapi_types.UUID     `json:"profile_id"`
+	RequireAuthorizedIps bool                   `json:"require_authorized_ips"`
+	ResolverId           string                 `json:"resolver_id"`
+	ScheduleTimezone     string                 `json:"schedule_timezone"`
+	Status               EndpointStatus         `json:"status"`
+	Type                 string                 `json:"type"`
+	UpdatedAt            time.Time              `json:"updated_at"`
+}
+
+// EndpointAdminState defines model for Endpoint.AdminState.
+type EndpointAdminState string
+
+// EndpointAnalyticsLevel defines model for Endpoint.AnalyticsLevel.
+type EndpointAnalyticsLevel string
+
+// EndpointStatus defines model for Endpoint.Status.
+type EndpointStatus string
+
+// EndpointBatch defines model for EndpointBatch.
+type EndpointBatch struct {
+	Clear               *[]EndpointBatchClear `json:"clear,omitempty"`
+	ConfirmDestinations *bool                 `json:"confirm_destinations,omitempty"`
+	GroupId             *openapi_types.UUID   `json:"group_id,omitempty"`
+	Ids                 []openapi_types.UUID  `json:"ids"`
+
+	// LockPasswords The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+	LockPasswords *LockPasswords    `json:"lock_passwords,omitempty"`
+	Op            EndpointBatchOp   `json:"op"`
+	Set           *EndpointBatchSet `json:"set,omitempty"`
+}
+
+// EndpointBatchClear defines model for EndpointBatch.Clear.
+type EndpointBatchClear string
+
+// EndpointBatchOp defines model for EndpointBatch.Op.
+type EndpointBatchOp string
+
+// EndpointBatchSet defines model for EndpointBatchSet.
+type EndpointBatchSet struct {
+	AdminState     *EndpointBatchSetAdminState     `json:"admin_state,omitempty"`
+	AnalyticsLevel *EndpointBatchSetAnalyticsLevel `json:"analytics_level,omitempty"`
+	Profile2Id     *openapi_types.UUID             `json:"profile2_id,omitempty"`
+	ProfileId      *openapi_types.UUID             `json:"profile_id,omitempty"`
+}
+
+// EndpointBatchSetAdminState defines model for EndpointBatchSet.AdminState.
+type EndpointBatchSetAdminState string
+
+// EndpointBatchSetAnalyticsLevel defines model for EndpointBatchSet.AnalyticsLevel.
+type EndpointBatchSetAnalyticsLevel string
+
+// EndpointCounts defines model for EndpointCounts.
+type EndpointCounts struct {
+	AuthorizedIps int `json:"authorized_ips"`
+	ClaimsWaiting int `json:"claims_waiting"`
+	Clients       int `json:"clients"`
+}
+
+// EndpointCreate defines model for EndpointCreate.
+type EndpointCreate struct {
+	AnalyticsLevel      *EndpointCreateAnalyticsLevel `json:"analytics_level,omitempty"`
+	AuthorizeDdns       *bool                         `json:"authorize_ddns,omitempty"`
+	AuthorizeSecureDns  *bool                         `json:"authorize_secure_dns,omitempty"`
+	Comment             *string                       `json:"comment,omitempty"`
+	ConfirmDestinations *bool                         `json:"confirm_destinations,omitempty"`
+	ExposeIp            *bool                         `json:"expose_ip,omitempty"`
+	GroupId             *openapi_types.UUID           `json:"group_id,omitempty"`
+	LegacyDns           *bool                         `json:"legacy_dns,omitempty"`
+	Names               []string                      `json:"names"`
+	PreventDeactivation *bool                         `json:"prevent_deactivation,omitempty"`
+	Profile2Id          *openapi_types.UUID           `json:"profile2_id,omitempty"`
+	ProfileId           openapi_types.UUID            `json:"profile_id"`
+	Type                string                        `json:"type"`
+}
+
+// EndpointCreateAnalyticsLevel defines model for EndpointCreate.AnalyticsLevel.
+type EndpointCreateAnalyticsLevel string
+
+// EndpointCreated defines model for EndpointCreated.
+type EndpointCreated struct {
+	Endpoints []Endpoint `json:"endpoints"`
+}
+
+// EndpointPage defines model for EndpointPage.
+type EndpointPage struct {
+	ByStatus struct {
+		Active  int `json:"active"`
+		Pending int `json:"pending"`
+	} `json:"by_status"`
+	ByType     map[string]interface{} `json:"by_type"`
+	Items      []Endpoint             `json:"items"`
+	NextCursor *string                `json:"next_cursor,omitempty"`
+}
+
+// EndpointPatch defines model for EndpointPatch.
+type EndpointPatch struct {
+	AdminState          *EndpointPatchAdminState     `json:"admin_state,omitempty"`
+	AnalyticsLevel      *EndpointPatchAnalyticsLevel `json:"analytics_level,omitempty"`
+	AuthorizeDdns       *bool                        `json:"authorize_ddns,omitempty"`
+	AuthorizeSecureDns  *bool                        `json:"authorize_secure_dns,omitempty"`
+	Clear               *[]EndpointPatchClear        `json:"clear,omitempty"`
+	Comment             *string                      `json:"comment,omitempty"`
+	ConfirmDestinations *bool                        `json:"confirm_destinations,omitempty"`
+	ExposeIp            *bool                        `json:"expose_ip,omitempty"`
+	GroupId             *openapi_types.UUID          `json:"group_id,omitempty"`
+	LegacyDns           *bool                        `json:"legacy_dns,omitempty"`
+
+	// LockPasswords The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+	LockPasswords        *LockPasswords      `json:"lock_passwords,omitempty"`
+	Name                 *string             `json:"name,omitempty"`
+	PreventDeactivation  *bool               `json:"prevent_deactivation,omitempty"`
+	Profile2Id           *openapi_types.UUID `json:"profile2_id,omitempty"`
+	ProfileId            *openapi_types.UUID `json:"profile_id,omitempty"`
+	RequireAuthorizedIps *bool               `json:"require_authorized_ips,omitempty"`
+	ScheduleTimezone     *string             `json:"schedule_timezone,omitempty"`
+	Type                 *string             `json:"type,omitempty"`
+}
+
+// EndpointPatchAdminState defines model for EndpointPatch.AdminState.
+type EndpointPatchAdminState string
+
+// EndpointPatchAnalyticsLevel defines model for EndpointPatch.AnalyticsLevel.
+type EndpointPatchAnalyticsLevel string
+
+// EndpointPatchClear defines model for EndpointPatch.Clear.
+type EndpointPatchClear string
+
 // EndpointRef defines model for EndpointRef.
 type EndpointRef struct {
 	Id   openapi_types.UUID `json:"id"`
 	Name string             `json:"name"`
+}
+
+// EndpointType defines model for EndpointType.
+type EndpointType struct {
+	Icon     string `json:"icon"`
+	Key      string `json:"key"`
+	NameEn   string `json:"name_en"`
+	NameFa   string `json:"name_fa"`
+	Position int    `json:"position"`
+}
+
+// EndpointTypeList defines model for EndpointTypeList.
+type EndpointTypeList struct {
+	Types []EndpointType `json:"types"`
 }
 
 // EnforcementRequest defines model for EnforcementRequest.
@@ -1869,6 +2582,29 @@ type FolderPatchAction string
 // FolderPatchClear defines model for FolderPatch.Clear.
 type FolderPatchClear string
 
+// Group defines model for Group.
+type Group struct {
+	EndpointCount int                `json:"endpoint_count"`
+	Id            openapi_types.UUID `json:"id"`
+	Name          string             `json:"name"`
+}
+
+// GroupCreate defines model for GroupCreate.
+type GroupCreate struct {
+	EndpointIds *[]openapi_types.UUID `json:"endpoint_ids,omitempty"`
+	Name        string                `json:"name"`
+}
+
+// GroupList defines model for GroupList.
+type GroupList struct {
+	Groups []Group `json:"groups"`
+}
+
+// GroupRename defines model for GroupRename.
+type GroupRename struct {
+	Name string `json:"name"`
+}
+
 // HomeCountries defines model for HomeCountries.
 type HomeCountries struct {
 	Countries []string `json:"countries"`
@@ -1937,6 +2673,21 @@ type LocationRef struct {
 type LocationSet struct {
 	AutoRandom bool          `json:"auto_random"`
 	Locations  []LocationRef `json:"locations"`
+}
+
+// LockPassword defines model for LockPassword.
+type LockPassword struct {
+	Password  string             `json:"password"`
+	ProfileId openapi_types.UUID `json:"profile_id"`
+}
+
+// LockPasswords The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+type LockPasswords = []LockPassword
+
+// LockPasswordsBody defines model for LockPasswordsBody.
+type LockPasswordsBody struct {
+	// LockPasswords The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+	LockPasswords *LockPasswords `json:"lock_passwords,omitempty"`
 }
 
 // LoginOtpRequest defines model for LoginOtpRequest.
@@ -2603,6 +3354,40 @@ type RulesUpload struct {
 // RulesUploadMode defines model for RulesUpload.Mode.
 type RulesUploadMode string
 
+// Schedule defines model for Schedule.
+type Schedule struct {
+	Timezone string           `json:"timezone"`
+	Windows  []ScheduleWindow `json:"windows"`
+}
+
+// SchedulePut defines model for SchedulePut.
+type SchedulePut struct {
+	ConfirmDestinations *bool `json:"confirm_destinations,omitempty"`
+
+	// LockPasswords The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+	LockPasswords *LockPasswords     `json:"lock_passwords,omitempty"`
+	Timezone      string             `json:"timezone"`
+	Windows       []ScheduleWindowIn `json:"windows"`
+}
+
+// ScheduleWindow defines model for ScheduleWindow.
+type ScheduleWindow struct {
+	End        int                 `json:"end"`
+	Id         openapi_types.UUID  `json:"id"`
+	Profile2Id *openapi_types.UUID `json:"profile2_id,omitempty"`
+	ProfileId  openapi_types.UUID  `json:"profile_id"`
+	Start      int                 `json:"start"`
+}
+
+// ScheduleWindowIn defines model for ScheduleWindowIn.
+type ScheduleWindowIn struct {
+	End        int                 `json:"end"`
+	Id         *openapi_types.UUID `json:"id,omitempty"`
+	Profile2Id *openapi_types.UUID `json:"profile2_id,omitempty"`
+	ProfileId  openapi_types.UUID  `json:"profile_id"`
+	Start      int                 `json:"start"`
+}
+
 // ServicesBatch defines model for ServicesBatch.
 type ServicesBatch struct {
 	Action  *ServicesBatchAction `json:"action,omitempty"`
@@ -2671,6 +3456,11 @@ type TicketOnly struct {
 	Ticket string `json:"ticket"`
 }
 
+// TimezoneList defines model for TimezoneList.
+type TimezoneList struct {
+	Zones []string `json:"zones"`
+}
+
 // TotpConfirmRequest defines model for TotpConfirmRequest.
 type TotpConfirmRequest struct {
 	Code  string `json:"code"`
@@ -2700,6 +3490,9 @@ type TotpSetup struct {
 // isolation harness asks for a Cross call that carries another tenant's value in each.
 type WebAuthnResponse = json.RawMessage
 
+// ClientId defines model for ClientId.
+type ClientId = openapi_types.UUID
+
 // Cursor defines model for Cursor.
 type Cursor = string
 
@@ -2709,6 +3502,9 @@ type FilterId = string
 // FolderId defines model for FolderId.
 type FolderId = openapi_types.UUID
 
+// GroupId defines model for GroupId.
+type GroupId = openapi_types.UUID
+
 // Id defines model for Id.
 type Id = openapi_types.UUID
 
@@ -2717,6 +3513,9 @@ type IdempotencyKey = string
 
 // Limit defines model for Limit.
 type Limit = int
+
+// ListCursor defines model for ListCursor.
+type ListCursor = string
 
 // RuleCursor defines model for RuleCursor.
 type RuleCursor = string
@@ -2777,6 +3576,46 @@ type ResetPasskeyFinishParams struct {
 type ReauthPasskeyFinishParams struct {
 	// XCtrlzTicket The ticket a begin route returned.
 	XCtrlzTicket Ticket `json:"X-Ctrlz-Ticket"`
+}
+
+// ListEndpointsParams defines parameters for ListEndpoints.
+type ListEndpointsParams struct {
+	Group  *openapi_types.UUID        `form:"group,omitempty" json:"group,omitempty"`
+	Type   *string                    `form:"type,omitempty" json:"type,omitempty"`
+	Status *ListEndpointsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Q A case-insensitive part of the name.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Sort `created` is newest first (the default); `name` is alphabetical.
+	Sort *ListEndpointsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Cursor Opaque. Take it from `next_cursor`; a value that does not decode, or was made for another list order, is `bad_request`. Longer than Cursor because the position of an alphabetical page carries the name.
+	Cursor *ListCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit      `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListEndpointsParamsStatus defines parameters for ListEndpoints.
+type ListEndpointsParamsStatus string
+
+// ListEndpointsParamsSort defines parameters for ListEndpoints.
+type ListEndpointsParamsSort string
+
+// CreateEndpointsParams defines parameters for CreateEndpoints.
+type CreateEndpointsParams struct {
+	// IdempotencyKey 1 to 64 characters of `A-Z a-z 0-9 _ -`. A replay with the same request gives the same answer and no second effect; the same key with another request is `idempotency_key_reused`.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ListClientsParams defines parameters for ListClients.
+type ListClientsParams struct {
+	Q            *string `form:"q,omitempty" json:"q,omitempty"`
+	Group        *string `form:"group,omitempty" json:"group,omitempty"`
+	InactiveDays *int    `form:"inactive_days,omitempty" json:"inactive_days,omitempty"`
+
+	// Cursor Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ListNotificationsParams defines parameters for ListNotifications.
@@ -2921,6 +3760,39 @@ type ReauthPasskeyFinishJSONRequestBody = WebAuthnResponse
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
+
+// CreateEndpointGroupJSONRequestBody defines body for CreateEndpointGroup for application/json ContentType.
+type CreateEndpointGroupJSONRequestBody = GroupCreate
+
+// PatchEndpointGroupJSONRequestBody defines body for PatchEndpointGroup for application/json ContentType.
+type PatchEndpointGroupJSONRequestBody = GroupRename
+
+// CreateEndpointsJSONRequestBody defines body for CreateEndpoints for application/json ContentType.
+type CreateEndpointsJSONRequestBody = EndpointCreate
+
+// PatchEndpointJSONRequestBody defines body for PatchEndpoint for application/json ContentType.
+type PatchEndpointJSONRequestBody = EndpointPatch
+
+// CreateClientJSONRequestBody defines body for CreateClient for application/json ContentType.
+type CreateClientJSONRequestBody = ClientCreate
+
+// PatchClientJSONRequestBody defines body for PatchClient for application/json ContentType.
+type PatchClientJSONRequestBody = ClientPatch
+
+// BatchClientsJSONRequestBody defines body for BatchClients for application/json ContentType.
+type BatchClientsJSONRequestBody = ClientBatch
+
+// PutEndpointScheduleJSONRequestBody defines body for PutEndpointSchedule for application/json ContentType.
+type PutEndpointScheduleJSONRequestBody = SchedulePut
+
+// DeleteEndpointJSONRequestBody defines body for DeleteEndpoint for application/json ContentType.
+type DeleteEndpointJSONRequestBody = LockPasswordsBody
+
+// RotateEndpointResolverJSONRequestBody defines body for RotateEndpointResolver for application/json ContentType.
+type RotateEndpointResolverJSONRequestBody = LockPasswordsBody
+
+// BatchEndpointsJSONRequestBody defines body for BatchEndpoints for application/json ContentType.
+type BatchEndpointsJSONRequestBody = EndpointBatch
 
 // CreateProfileJSONRequestBody defines body for CreateProfile for application/json ContentType.
 type CreateProfileJSONRequestBody = ProfileCreate
@@ -3107,6 +3979,66 @@ type ServerInterface interface {
 	// ListCatalogServices The service categories and the services of the catalog
 	// (GET /catalog/services)
 	ListCatalogServices(w http.ResponseWriter, r *http.Request)
+	// ListTimezones The time zones a schedule may use
+	// (GET /catalog/timezones)
+	ListTimezones(w http.ResponseWriter, r *http.Request)
+	// ListEndpointGroups The tenant's Endpoint groups
+	// (GET /endpoint-groups)
+	ListEndpointGroups(w http.ResponseWriter, r *http.Request)
+	// CreateEndpointGroup Create a group, and move Endpoints into it
+	// (POST /endpoint-groups)
+	CreateEndpointGroup(w http.ResponseWriter, r *http.Request)
+	// DeleteEndpointGroup Delete a group; its Endpoints stay, with no group
+	// (DELETE /endpoint-groups/{gid})
+	DeleteEndpointGroup(w http.ResponseWriter, r *http.Request, gid GroupId)
+	// PatchEndpointGroup Rename a group
+	// (PATCH /endpoint-groups/{gid})
+	PatchEndpointGroup(w http.ResponseWriter, r *http.Request, gid GroupId)
+	// ListEndpointTypes The 30 Endpoint types, in the order of the seed
+	// (GET /endpoint-types)
+	ListEndpointTypes(w http.ResponseWriter, r *http.Request)
+	// ListEndpoints The tenant's Endpoints, one page
+	// (GET /endpoints)
+	ListEndpoints(w http.ResponseWriter, r *http.Request, params ListEndpointsParams)
+	// CreateEndpoints Create one Endpoint per name
+	// (POST /endpoints)
+	CreateEndpoints(w http.ResponseWriter, r *http.Request, params CreateEndpointsParams)
+	// ExportEndpoints The Endpoints as a CSV file
+	// (GET /endpoints/export)
+	ExportEndpoints(w http.ResponseWriter, r *http.Request)
+	// GetEndpoint One Endpoint
+	// (GET /endpoints/{id})
+	GetEndpoint(w http.ResponseWriter, r *http.Request, id Id)
+	// PatchEndpoint Change an Endpoint
+	// (PATCH /endpoints/{id})
+	PatchEndpoint(w http.ResponseWriter, r *http.Request, id Id)
+	// ListClients The clients of an Endpoint, newest first
+	// (GET /endpoints/{id}/clients)
+	ListClients(w http.ResponseWriter, r *http.Request, id Id, params ListClientsParams)
+	// CreateClient Add a custom client
+	// (POST /endpoints/{id}/clients)
+	CreateClient(w http.ResponseWriter, r *http.Request, id Id)
+	// PatchClient Change a client
+	// (PATCH /endpoints/{id}/clients/{cid})
+	PatchClient(w http.ResponseWriter, r *http.Request, id Id, cid ClientId)
+	// BatchClients Edit or delete clients by id or by a selector
+	// (POST /endpoints/{id}/clients:batch)
+	BatchClients(w http.ResponseWriter, r *http.Request, id Id)
+	// GetEndpointSchedule The schedule of an Endpoint
+	// (GET /endpoints/{id}/schedule)
+	GetEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id)
+	// PutEndpointSchedule Replace the schedule of an Endpoint
+	// (PUT /endpoints/{id}/schedule)
+	PutEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id)
+	// DeleteEndpoint Delete an Endpoint
+	// (POST /endpoints/{id}:delete)
+	DeleteEndpoint(w http.ResponseWriter, r *http.Request, id Id)
+	// RotateEndpointResolver Draw a new resolver id and DoH token
+	// (POST /endpoints/{id}:rotate-resolver)
+	RotateEndpointResolver(w http.ResponseWriter, r *http.Request, id Id)
+	// BatchEndpoints Move, edit or delete a selection of Endpoints
+	// (POST /endpoints:batch)
+	BatchEndpoints(w http.ResponseWriter, r *http.Request)
 	// GetActiveJob The tenant's queued or running job, if any
 	// (GET /jobs/active)
 	GetActiveJob(w http.ResponseWriter, r *http.Request)
@@ -3482,6 +4414,126 @@ func (_ Unimplemented) ListCatalogFilters(w http.ResponseWriter, r *http.Request
 // ListCatalogServices The service categories and the services of the catalog
 // (GET /catalog/services)
 func (_ Unimplemented) ListCatalogServices(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListTimezones The time zones a schedule may use
+// (GET /catalog/timezones)
+func (_ Unimplemented) ListTimezones(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListEndpointGroups The tenant's Endpoint groups
+// (GET /endpoint-groups)
+func (_ Unimplemented) ListEndpointGroups(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateEndpointGroup Create a group, and move Endpoints into it
+// (POST /endpoint-groups)
+func (_ Unimplemented) CreateEndpointGroup(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteEndpointGroup Delete a group; its Endpoints stay, with no group
+// (DELETE /endpoint-groups/{gid})
+func (_ Unimplemented) DeleteEndpointGroup(w http.ResponseWriter, r *http.Request, gid GroupId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PatchEndpointGroup Rename a group
+// (PATCH /endpoint-groups/{gid})
+func (_ Unimplemented) PatchEndpointGroup(w http.ResponseWriter, r *http.Request, gid GroupId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListEndpointTypes The 30 Endpoint types, in the order of the seed
+// (GET /endpoint-types)
+func (_ Unimplemented) ListEndpointTypes(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListEndpoints The tenant's Endpoints, one page
+// (GET /endpoints)
+func (_ Unimplemented) ListEndpoints(w http.ResponseWriter, r *http.Request, params ListEndpointsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateEndpoints Create one Endpoint per name
+// (POST /endpoints)
+func (_ Unimplemented) CreateEndpoints(w http.ResponseWriter, r *http.Request, params CreateEndpointsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ExportEndpoints The Endpoints as a CSV file
+// (GET /endpoints/export)
+func (_ Unimplemented) ExportEndpoints(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetEndpoint One Endpoint
+// (GET /endpoints/{id})
+func (_ Unimplemented) GetEndpoint(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PatchEndpoint Change an Endpoint
+// (PATCH /endpoints/{id})
+func (_ Unimplemented) PatchEndpoint(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListClients The clients of an Endpoint, newest first
+// (GET /endpoints/{id}/clients)
+func (_ Unimplemented) ListClients(w http.ResponseWriter, r *http.Request, id Id, params ListClientsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateClient Add a custom client
+// (POST /endpoints/{id}/clients)
+func (_ Unimplemented) CreateClient(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PatchClient Change a client
+// (PATCH /endpoints/{id}/clients/{cid})
+func (_ Unimplemented) PatchClient(w http.ResponseWriter, r *http.Request, id Id, cid ClientId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// BatchClients Edit or delete clients by id or by a selector
+// (POST /endpoints/{id}/clients:batch)
+func (_ Unimplemented) BatchClients(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetEndpointSchedule The schedule of an Endpoint
+// (GET /endpoints/{id}/schedule)
+func (_ Unimplemented) GetEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PutEndpointSchedule Replace the schedule of an Endpoint
+// (PUT /endpoints/{id}/schedule)
+func (_ Unimplemented) PutEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteEndpoint Delete an Endpoint
+// (POST /endpoints/{id}:delete)
+func (_ Unimplemented) DeleteEndpoint(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RotateEndpointResolver Draw a new resolver id and DoH token
+// (POST /endpoints/{id}:rotate-resolver)
+func (_ Unimplemented) RotateEndpointResolver(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// BatchEndpoints Move, edit or delete a selection of Endpoints
+// (POST /endpoints:batch)
+func (_ Unimplemented) BatchEndpoints(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4531,6 +5583,635 @@ func (siw *ServerInterfaceWrapper) ListCatalogServices(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListCatalogServices(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTimezones operation middleware
+func (siw *ServerInterfaceWrapper) ListTimezones(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTimezones(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEndpointGroups operation middleware
+func (siw *ServerInterfaceWrapper) ListEndpointGroups(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEndpointGroups(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateEndpointGroup operation middleware
+func (siw *ServerInterfaceWrapper) CreateEndpointGroup(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateEndpointGroup(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteEndpointGroup operation middleware
+func (siw *ServerInterfaceWrapper) DeleteEndpointGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "gid" -------------
+	var gid GroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "gid", chi.URLParam(r, "gid"), &gid, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "gid", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteEndpointGroup(w, r, gid)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchEndpointGroup operation middleware
+func (siw *ServerInterfaceWrapper) PatchEndpointGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "gid" -------------
+	var gid GroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "gid", chi.URLParam(r, "gid"), &gid, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "gid", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchEndpointGroup(w, r, gid)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEndpointTypes operation middleware
+func (siw *ServerInterfaceWrapper) ListEndpointTypes(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEndpointTypes(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEndpoints operation middleware
+func (siw *ServerInterfaceWrapper) ListEndpoints(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListEndpointsParams
+
+	// ------------- Optional query parameter "group" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "group", r.URL.Query(), &params.Group, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "group"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "group", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEndpoints(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateEndpoints operation middleware
+func (siw *ServerInterfaceWrapper) CreateEndpoints(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateEndpointsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateEndpoints(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExportEndpoints operation middleware
+func (siw *ServerInterfaceWrapper) ExportEndpoints(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportEndpoints(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEndpoint operation middleware
+func (siw *ServerInterfaceWrapper) GetEndpoint(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEndpoint(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchEndpoint operation middleware
+func (siw *ServerInterfaceWrapper) PatchEndpoint(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchEndpoint(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListClients operation middleware
+func (siw *ServerInterfaceWrapper) ListClients(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListClientsParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "group" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "group", r.URL.Query(), &params.Group, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "group"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "group", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "inactive_days" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "inactive_days", r.URL.Query(), &params.InactiveDays, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "inactive_days"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "inactive_days", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListClients(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateClient operation middleware
+func (siw *ServerInterfaceWrapper) CreateClient(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateClient(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchClient operation middleware
+func (siw *ServerInterfaceWrapper) PatchClient(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "cid" -------------
+	var cid ClientId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "cid", chi.URLParam(r, "cid"), &cid, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cid", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchClient(w, r, id, cid)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// BatchClients operation middleware
+func (siw *ServerInterfaceWrapper) BatchClients(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.BatchClients(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEndpointSchedule operation middleware
+func (siw *ServerInterfaceWrapper) GetEndpointSchedule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEndpointSchedule(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutEndpointSchedule operation middleware
+func (siw *ServerInterfaceWrapper) PutEndpointSchedule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutEndpointSchedule(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteEndpoint operation middleware
+func (siw *ServerInterfaceWrapper) DeleteEndpoint(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteEndpoint(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RotateEndpointResolver operation middleware
+func (siw *ServerInterfaceWrapper) RotateEndpointResolver(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RotateEndpointResolver(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// BatchEndpoints operation middleware
+func (siw *ServerInterfaceWrapper) BatchEndpoints(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.BatchEndpoints(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6158,6 +7839,66 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/jobs/{id}", wrapper.GetJob)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoint-types", wrapper.ListEndpointTypes)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/catalog/timezones", wrapper.ListTimezones)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints", wrapper.ListEndpoints)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints", wrapper.CreateEndpoints)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints/export", wrapper.ExportEndpoints)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints:batch", wrapper.BatchEndpoints)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints/{id}", wrapper.GetEndpoint)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/endpoints/{id}", wrapper.PatchEndpoint)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}:delete", wrapper.DeleteEndpoint)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}:rotate-resolver", wrapper.RotateEndpointResolver)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints/{id}/schedule", wrapper.GetEndpointSchedule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/endpoints/{id}/schedule", wrapper.PutEndpointSchedule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoint-groups", wrapper.ListEndpointGroups)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoint-groups", wrapper.CreateEndpointGroup)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/endpoint-groups/{gid}", wrapper.DeleteEndpointGroup)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/endpoint-groups/{gid}", wrapper.PatchEndpointGroup)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints/{id}/clients", wrapper.ListClients)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/clients", wrapper.CreateClient)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/endpoints/{id}/clients/{cid}", wrapper.PatchClient)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/clients:batch", wrapper.BatchClients)
 	})
 
 	return r
@@ -8067,6 +9808,855 @@ func (response ListCatalogServicesdefaultJSONResponse) VisitListCatalogServicesR
 	return err
 }
 
+type ListTimezonesRequestObject struct {
+}
+
+type ListTimezonesResponseObject interface {
+	VisitListTimezonesResponse(w http.ResponseWriter) error
+}
+
+type ListTimezones200JSONResponse TimezoneList
+
+func (response ListTimezones200JSONResponse) VisitListTimezonesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTimezonesdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListTimezonesdefaultJSONResponse) VisitListTimezonesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEndpointGroupsRequestObject struct {
+}
+
+type ListEndpointGroupsResponseObject interface {
+	VisitListEndpointGroupsResponse(w http.ResponseWriter) error
+}
+
+type ListEndpointGroups200JSONResponse GroupList
+
+func (response ListEndpointGroups200JSONResponse) VisitListEndpointGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEndpointGroupsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListEndpointGroupsdefaultJSONResponse) VisitListEndpointGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEndpointGroupRequestObject struct {
+	Body *CreateEndpointGroupJSONRequestBody
+}
+
+type CreateEndpointGroupResponseObject interface {
+	VisitCreateEndpointGroupResponse(w http.ResponseWriter) error
+}
+
+type CreateEndpointGroup201JSONResponse Group
+
+func (response CreateEndpointGroup201JSONResponse) VisitCreateEndpointGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEndpointGroupdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateEndpointGroupdefaultJSONResponse) VisitCreateEndpointGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEndpointGroupRequestObject struct {
+	Gid GroupId `json:"gid"`
+}
+
+type DeleteEndpointGroupResponseObject interface {
+	VisitDeleteEndpointGroupResponse(w http.ResponseWriter) error
+}
+
+type DeleteEndpointGroup204Response struct {
+}
+
+func (response DeleteEndpointGroup204Response) VisitDeleteEndpointGroupResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteEndpointGroupdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response DeleteEndpointGroupdefaultJSONResponse) VisitDeleteEndpointGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchEndpointGroupRequestObject struct {
+	Gid  GroupId `json:"gid"`
+	Body *PatchEndpointGroupJSONRequestBody
+}
+
+type PatchEndpointGroupResponseObject interface {
+	VisitPatchEndpointGroupResponse(w http.ResponseWriter) error
+}
+
+type PatchEndpointGroup200JSONResponse Group
+
+func (response PatchEndpointGroup200JSONResponse) VisitPatchEndpointGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchEndpointGroupdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PatchEndpointGroupdefaultJSONResponse) VisitPatchEndpointGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEndpointTypesRequestObject struct {
+}
+
+type ListEndpointTypesResponseObject interface {
+	VisitListEndpointTypesResponse(w http.ResponseWriter) error
+}
+
+type ListEndpointTypes200JSONResponse EndpointTypeList
+
+func (response ListEndpointTypes200JSONResponse) VisitListEndpointTypesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEndpointTypesdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListEndpointTypesdefaultJSONResponse) VisitListEndpointTypesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEndpointsRequestObject struct {
+	Params ListEndpointsParams
+}
+
+type ListEndpointsResponseObject interface {
+	VisitListEndpointsResponse(w http.ResponseWriter) error
+}
+
+type ListEndpoints200JSONResponse EndpointPage
+
+func (response ListEndpoints200JSONResponse) VisitListEndpointsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEndpointsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListEndpointsdefaultJSONResponse) VisitListEndpointsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEndpointsRequestObject struct {
+	Params CreateEndpointsParams
+	Body   *CreateEndpointsJSONRequestBody
+}
+
+type CreateEndpointsResponseObject interface {
+	VisitCreateEndpointsResponse(w http.ResponseWriter) error
+}
+
+type CreateEndpoints201JSONResponse EndpointCreated
+
+func (response CreateEndpoints201JSONResponse) VisitCreateEndpointsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEndpointsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateEndpointsdefaultJSONResponse) VisitCreateEndpointsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExportEndpointsRequestObject struct {
+}
+
+type ExportEndpointsResponseObject interface {
+	VisitExportEndpointsResponse(w http.ResponseWriter) error
+}
+
+type ExportEndpoints200Response struct {
+}
+
+func (response ExportEndpoints200Response) VisitExportEndpointsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type ExportEndpointsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ExportEndpointsdefaultJSONResponse) VisitExportEndpointsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEndpointRequestObject struct {
+	Id Id `json:"id"`
+}
+
+type GetEndpointResponseObject interface {
+	VisitGetEndpointResponse(w http.ResponseWriter) error
+}
+
+type GetEndpoint200JSONResponse Endpoint
+
+func (response GetEndpoint200JSONResponse) VisitGetEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEndpointdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response GetEndpointdefaultJSONResponse) VisitGetEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchEndpointRequestObject struct {
+	Id   Id `json:"id"`
+	Body *PatchEndpointJSONRequestBody
+}
+
+type PatchEndpointResponseObject interface {
+	VisitPatchEndpointResponse(w http.ResponseWriter) error
+}
+
+type PatchEndpoint200JSONResponse Endpoint
+
+func (response PatchEndpoint200JSONResponse) VisitPatchEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchEndpointdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PatchEndpointdefaultJSONResponse) VisitPatchEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClientsRequestObject struct {
+	Id     Id `json:"id"`
+	Params ListClientsParams
+}
+
+type ListClientsResponseObject interface {
+	VisitListClientsResponse(w http.ResponseWriter) error
+}
+
+type ListClients200JSONResponse ClientPage
+
+func (response ListClients200JSONResponse) VisitListClientsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClientsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListClientsdefaultJSONResponse) VisitListClientsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateClientRequestObject struct {
+	Id   Id `json:"id"`
+	Body *CreateClientJSONRequestBody
+}
+
+type CreateClientResponseObject interface {
+	VisitCreateClientResponse(w http.ResponseWriter) error
+}
+
+type CreateClient201JSONResponse Client
+
+func (response CreateClient201JSONResponse) VisitCreateClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateClientdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateClientdefaultJSONResponse) VisitCreateClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchClientRequestObject struct {
+	Id   Id       `json:"id"`
+	Cid  ClientId `json:"cid"`
+	Body *PatchClientJSONRequestBody
+}
+
+type PatchClientResponseObject interface {
+	VisitPatchClientResponse(w http.ResponseWriter) error
+}
+
+type PatchClient200JSONResponse Client
+
+func (response PatchClient200JSONResponse) VisitPatchClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchClientdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PatchClientdefaultJSONResponse) VisitPatchClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BatchClientsRequestObject struct {
+	Id   Id `json:"id"`
+	Body *BatchClientsJSONRequestBody
+}
+
+type BatchClientsResponseObject interface {
+	VisitBatchClientsResponse(w http.ResponseWriter) error
+}
+
+type BatchClients200JSONResponse ClientBatchResult
+
+func (response BatchClients200JSONResponse) VisitBatchClientsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BatchClientsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response BatchClientsdefaultJSONResponse) VisitBatchClientsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEndpointScheduleRequestObject struct {
+	Id Id `json:"id"`
+}
+
+type GetEndpointScheduleResponseObject interface {
+	VisitGetEndpointScheduleResponse(w http.ResponseWriter) error
+}
+
+type GetEndpointSchedule200JSONResponse Schedule
+
+func (response GetEndpointSchedule200JSONResponse) VisitGetEndpointScheduleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEndpointScheduledefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response GetEndpointScheduledefaultJSONResponse) VisitGetEndpointScheduleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutEndpointScheduleRequestObject struct {
+	Id   Id `json:"id"`
+	Body *PutEndpointScheduleJSONRequestBody
+}
+
+type PutEndpointScheduleResponseObject interface {
+	VisitPutEndpointScheduleResponse(w http.ResponseWriter) error
+}
+
+type PutEndpointSchedule200JSONResponse Schedule
+
+func (response PutEndpointSchedule200JSONResponse) VisitPutEndpointScheduleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutEndpointScheduledefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PutEndpointScheduledefaultJSONResponse) VisitPutEndpointScheduleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEndpointRequestObject struct {
+	Id   Id `json:"id"`
+	Body *DeleteEndpointJSONRequestBody
+}
+
+type DeleteEndpointResponseObject interface {
+	VisitDeleteEndpointResponse(w http.ResponseWriter) error
+}
+
+type DeleteEndpoint204Response struct {
+}
+
+func (response DeleteEndpoint204Response) VisitDeleteEndpointResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteEndpointdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response DeleteEndpointdefaultJSONResponse) VisitDeleteEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateEndpointResolverRequestObject struct {
+	Id   Id `json:"id"`
+	Body *RotateEndpointResolverJSONRequestBody
+}
+
+type RotateEndpointResolverResponseObject interface {
+	VisitRotateEndpointResolverResponse(w http.ResponseWriter) error
+}
+
+type RotateEndpointResolver200JSONResponse Endpoint
+
+func (response RotateEndpointResolver200JSONResponse) VisitRotateEndpointResolverResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateEndpointResolverdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response RotateEndpointResolverdefaultJSONResponse) VisitRotateEndpointResolverResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BatchEndpointsRequestObject struct {
+	Body *BatchEndpointsJSONRequestBody
+}
+
+type BatchEndpointsResponseObject interface {
+	VisitBatchEndpointsResponse(w http.ResponseWriter) error
+}
+
+type BatchEndpoints200JSONResponse AffectedCount
+
+func (response BatchEndpoints200JSONResponse) VisitBatchEndpointsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BatchEndpointsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response BatchEndpointsdefaultJSONResponse) VisitBatchEndpointsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetActiveJobRequestObject struct {
 }
 
@@ -9875,6 +12465,66 @@ type StrictServerInterface interface {
 	// ListCatalogServices The service categories and the services of the catalog
 	// (GET /catalog/services)
 	ListCatalogServices(ctx context.Context, request ListCatalogServicesRequestObject) (ListCatalogServicesResponseObject, error)
+	// ListTimezones The time zones a schedule may use
+	// (GET /catalog/timezones)
+	ListTimezones(ctx context.Context, request ListTimezonesRequestObject) (ListTimezonesResponseObject, error)
+	// ListEndpointGroups The tenant's Endpoint groups
+	// (GET /endpoint-groups)
+	ListEndpointGroups(ctx context.Context, request ListEndpointGroupsRequestObject) (ListEndpointGroupsResponseObject, error)
+	// CreateEndpointGroup Create a group, and move Endpoints into it
+	// (POST /endpoint-groups)
+	CreateEndpointGroup(ctx context.Context, request CreateEndpointGroupRequestObject) (CreateEndpointGroupResponseObject, error)
+	// DeleteEndpointGroup Delete a group; its Endpoints stay, with no group
+	// (DELETE /endpoint-groups/{gid})
+	DeleteEndpointGroup(ctx context.Context, request DeleteEndpointGroupRequestObject) (DeleteEndpointGroupResponseObject, error)
+	// PatchEndpointGroup Rename a group
+	// (PATCH /endpoint-groups/{gid})
+	PatchEndpointGroup(ctx context.Context, request PatchEndpointGroupRequestObject) (PatchEndpointGroupResponseObject, error)
+	// ListEndpointTypes The 30 Endpoint types, in the order of the seed
+	// (GET /endpoint-types)
+	ListEndpointTypes(ctx context.Context, request ListEndpointTypesRequestObject) (ListEndpointTypesResponseObject, error)
+	// ListEndpoints The tenant's Endpoints, one page
+	// (GET /endpoints)
+	ListEndpoints(ctx context.Context, request ListEndpointsRequestObject) (ListEndpointsResponseObject, error)
+	// CreateEndpoints Create one Endpoint per name
+	// (POST /endpoints)
+	CreateEndpoints(ctx context.Context, request CreateEndpointsRequestObject) (CreateEndpointsResponseObject, error)
+	// ExportEndpoints The Endpoints as a CSV file
+	// (GET /endpoints/export)
+	ExportEndpoints(ctx context.Context, request ExportEndpointsRequestObject) (ExportEndpointsResponseObject, error)
+	// GetEndpoint One Endpoint
+	// (GET /endpoints/{id})
+	GetEndpoint(ctx context.Context, request GetEndpointRequestObject) (GetEndpointResponseObject, error)
+	// PatchEndpoint Change an Endpoint
+	// (PATCH /endpoints/{id})
+	PatchEndpoint(ctx context.Context, request PatchEndpointRequestObject) (PatchEndpointResponseObject, error)
+	// ListClients The clients of an Endpoint, newest first
+	// (GET /endpoints/{id}/clients)
+	ListClients(ctx context.Context, request ListClientsRequestObject) (ListClientsResponseObject, error)
+	// CreateClient Add a custom client
+	// (POST /endpoints/{id}/clients)
+	CreateClient(ctx context.Context, request CreateClientRequestObject) (CreateClientResponseObject, error)
+	// PatchClient Change a client
+	// (PATCH /endpoints/{id}/clients/{cid})
+	PatchClient(ctx context.Context, request PatchClientRequestObject) (PatchClientResponseObject, error)
+	// BatchClients Edit or delete clients by id or by a selector
+	// (POST /endpoints/{id}/clients:batch)
+	BatchClients(ctx context.Context, request BatchClientsRequestObject) (BatchClientsResponseObject, error)
+	// GetEndpointSchedule The schedule of an Endpoint
+	// (GET /endpoints/{id}/schedule)
+	GetEndpointSchedule(ctx context.Context, request GetEndpointScheduleRequestObject) (GetEndpointScheduleResponseObject, error)
+	// PutEndpointSchedule Replace the schedule of an Endpoint
+	// (PUT /endpoints/{id}/schedule)
+	PutEndpointSchedule(ctx context.Context, request PutEndpointScheduleRequestObject) (PutEndpointScheduleResponseObject, error)
+	// DeleteEndpoint Delete an Endpoint
+	// (POST /endpoints/{id}:delete)
+	DeleteEndpoint(ctx context.Context, request DeleteEndpointRequestObject) (DeleteEndpointResponseObject, error)
+	// RotateEndpointResolver Draw a new resolver id and DoH token
+	// (POST /endpoints/{id}:rotate-resolver)
+	RotateEndpointResolver(ctx context.Context, request RotateEndpointResolverRequestObject) (RotateEndpointResolverResponseObject, error)
+	// BatchEndpoints Move, edit or delete a selection of Endpoints
+	// (POST /endpoints:batch)
+	BatchEndpoints(ctx context.Context, request BatchEndpointsRequestObject) (BatchEndpointsResponseObject, error)
 	// GetActiveJob The tenant's queued or running job, if any
 	// (GET /jobs/active)
 	GetActiveJob(ctx context.Context, request GetActiveJobRequestObject) (GetActiveJobResponseObject, error)
@@ -11289,6 +13939,593 @@ func (sh *strictHandler) ListCatalogServices(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListCatalogServicesResponseObject); ok {
 		if err := validResponse.VisitListCatalogServicesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTimezones operation middleware
+func (sh *strictHandler) ListTimezones(w http.ResponseWriter, r *http.Request) {
+	var request ListTimezonesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTimezones(ctx, request.(ListTimezonesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTimezones")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTimezonesResponseObject); ok {
+		if err := validResponse.VisitListTimezonesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListEndpointGroups operation middleware
+func (sh *strictHandler) ListEndpointGroups(w http.ResponseWriter, r *http.Request) {
+	var request ListEndpointGroupsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListEndpointGroups(ctx, request.(ListEndpointGroupsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListEndpointGroups")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListEndpointGroupsResponseObject); ok {
+		if err := validResponse.VisitListEndpointGroupsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateEndpointGroup operation middleware
+func (sh *strictHandler) CreateEndpointGroup(w http.ResponseWriter, r *http.Request) {
+	var request CreateEndpointGroupRequestObject
+
+	var body CreateEndpointGroupJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateEndpointGroup(ctx, request.(CreateEndpointGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateEndpointGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateEndpointGroupResponseObject); ok {
+		if err := validResponse.VisitCreateEndpointGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteEndpointGroup operation middleware
+func (sh *strictHandler) DeleteEndpointGroup(w http.ResponseWriter, r *http.Request, gid GroupId) {
+	var request DeleteEndpointGroupRequestObject
+
+	request.Gid = gid
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteEndpointGroup(ctx, request.(DeleteEndpointGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteEndpointGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteEndpointGroupResponseObject); ok {
+		if err := validResponse.VisitDeleteEndpointGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchEndpointGroup operation middleware
+func (sh *strictHandler) PatchEndpointGroup(w http.ResponseWriter, r *http.Request, gid GroupId) {
+	var request PatchEndpointGroupRequestObject
+
+	request.Gid = gid
+
+	var body PatchEndpointGroupJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchEndpointGroup(ctx, request.(PatchEndpointGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchEndpointGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchEndpointGroupResponseObject); ok {
+		if err := validResponse.VisitPatchEndpointGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListEndpointTypes operation middleware
+func (sh *strictHandler) ListEndpointTypes(w http.ResponseWriter, r *http.Request) {
+	var request ListEndpointTypesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListEndpointTypes(ctx, request.(ListEndpointTypesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListEndpointTypes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListEndpointTypesResponseObject); ok {
+		if err := validResponse.VisitListEndpointTypesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListEndpoints operation middleware
+func (sh *strictHandler) ListEndpoints(w http.ResponseWriter, r *http.Request, params ListEndpointsParams) {
+	var request ListEndpointsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListEndpoints(ctx, request.(ListEndpointsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListEndpoints")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListEndpointsResponseObject); ok {
+		if err := validResponse.VisitListEndpointsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateEndpoints operation middleware
+func (sh *strictHandler) CreateEndpoints(w http.ResponseWriter, r *http.Request, params CreateEndpointsParams) {
+	var request CreateEndpointsRequestObject
+
+	request.Params = params
+
+	var body CreateEndpointsJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateEndpoints(ctx, request.(CreateEndpointsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateEndpoints")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateEndpointsResponseObject); ok {
+		if err := validResponse.VisitCreateEndpointsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ExportEndpoints operation middleware
+func (sh *strictHandler) ExportEndpoints(w http.ResponseWriter, r *http.Request) {
+	var request ExportEndpointsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ExportEndpoints(ctx, request.(ExportEndpointsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ExportEndpoints")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ExportEndpointsResponseObject); ok {
+		if err := validResponse.VisitExportEndpointsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetEndpoint operation middleware
+func (sh *strictHandler) GetEndpoint(w http.ResponseWriter, r *http.Request, id Id) {
+	var request GetEndpointRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEndpoint(ctx, request.(GetEndpointRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEndpoint")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEndpointResponseObject); ok {
+		if err := validResponse.VisitGetEndpointResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchEndpoint operation middleware
+func (sh *strictHandler) PatchEndpoint(w http.ResponseWriter, r *http.Request, id Id) {
+	var request PatchEndpointRequestObject
+
+	request.Id = id
+
+	var body PatchEndpointJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchEndpoint(ctx, request.(PatchEndpointRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchEndpoint")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchEndpointResponseObject); ok {
+		if err := validResponse.VisitPatchEndpointResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListClients operation middleware
+func (sh *strictHandler) ListClients(w http.ResponseWriter, r *http.Request, id Id, params ListClientsParams) {
+	var request ListClientsRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListClients(ctx, request.(ListClientsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListClients")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListClientsResponseObject); ok {
+		if err := validResponse.VisitListClientsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateClient operation middleware
+func (sh *strictHandler) CreateClient(w http.ResponseWriter, r *http.Request, id Id) {
+	var request CreateClientRequestObject
+
+	request.Id = id
+
+	var body CreateClientJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateClient(ctx, request.(CreateClientRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateClient")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateClientResponseObject); ok {
+		if err := validResponse.VisitCreateClientResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchClient operation middleware
+func (sh *strictHandler) PatchClient(w http.ResponseWriter, r *http.Request, id Id, cid ClientId) {
+	var request PatchClientRequestObject
+
+	request.Id = id
+	request.Cid = cid
+
+	var body PatchClientJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchClient(ctx, request.(PatchClientRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchClient")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchClientResponseObject); ok {
+		if err := validResponse.VisitPatchClientResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// BatchClients operation middleware
+func (sh *strictHandler) BatchClients(w http.ResponseWriter, r *http.Request, id Id) {
+	var request BatchClientsRequestObject
+
+	request.Id = id
+
+	var body BatchClientsJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.BatchClients(ctx, request.(BatchClientsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "BatchClients")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(BatchClientsResponseObject); ok {
+		if err := validResponse.VisitBatchClientsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetEndpointSchedule operation middleware
+func (sh *strictHandler) GetEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id) {
+	var request GetEndpointScheduleRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEndpointSchedule(ctx, request.(GetEndpointScheduleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEndpointSchedule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEndpointScheduleResponseObject); ok {
+		if err := validResponse.VisitGetEndpointScheduleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutEndpointSchedule operation middleware
+func (sh *strictHandler) PutEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id) {
+	var request PutEndpointScheduleRequestObject
+
+	request.Id = id
+
+	var body PutEndpointScheduleJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutEndpointSchedule(ctx, request.(PutEndpointScheduleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutEndpointSchedule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutEndpointScheduleResponseObject); ok {
+		if err := validResponse.VisitPutEndpointScheduleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteEndpoint operation middleware
+func (sh *strictHandler) DeleteEndpoint(w http.ResponseWriter, r *http.Request, id Id) {
+	var request DeleteEndpointRequestObject
+
+	request.Id = id
+
+	var body DeleteEndpointJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteEndpoint(ctx, request.(DeleteEndpointRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteEndpoint")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteEndpointResponseObject); ok {
+		if err := validResponse.VisitDeleteEndpointResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RotateEndpointResolver operation middleware
+func (sh *strictHandler) RotateEndpointResolver(w http.ResponseWriter, r *http.Request, id Id) {
+	var request RotateEndpointResolverRequestObject
+
+	request.Id = id
+
+	var body RotateEndpointResolverJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RotateEndpointResolver(ctx, request.(RotateEndpointResolverRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RotateEndpointResolver")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RotateEndpointResolverResponseObject); ok {
+		if err := validResponse.VisitRotateEndpointResolverResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// BatchEndpoints operation middleware
+func (sh *strictHandler) BatchEndpoints(w http.ResponseWriter, r *http.Request) {
+	var request BatchEndpointsRequestObject
+
+	var body BatchEndpointsJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.BatchEndpoints(ctx, request.(BatchEndpointsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "BatchEndpoints")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(BatchEndpointsResponseObject); ok {
+		if err := validResponse.VisitBatchEndpointsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -314,6 +314,7 @@ func InsertOrder() map[string]InsertKey {
 	return map[string]InsertKey{
 		"recovery_codes": {Cols: []string{"code_hash"}, Why: "the unique value the caller chooses; the id is generated and never collides"},
 		"policy_outbox":  {Cols: []string{"tenant_id"}, Why: "one row per tenant of the batch; the dedupe key leads with the tenant and the batch id is the same for the whole statement"},
+		"endpoints":      {Cols: []string{"resolver_id"}, Why: "the globally unique value the caller chooses (a resolver id is drawn at random, and two creators of one tenant are ordered by the quota lock anyway); the id is generated and never collides"},
 		"rules":          {Cols: []string{"rule_key"}, Why: "the unique value the caller chooses within a profile (tenant and profile are the same for the whole statement); the id is generated and never collides"},
 	}
 }

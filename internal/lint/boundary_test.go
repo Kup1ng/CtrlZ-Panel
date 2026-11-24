@@ -79,7 +79,7 @@ func proseField(at string) bool {
 		return true
 	}
 	switch fieldName(at) {
-	case "name", "name_fa", "comment", "message", "lock_message":
+	case "name", "name_fa", "comment", "message", "lock_message", "alias", "group_name", "names[]":
 		return p2Location(at)
 	}
 	return false
@@ -90,12 +90,16 @@ func p2Schemas() map[string]bool {
 	return map[string]bool{"CatalogFilter": true, "CatalogService": true, "CatalogServiceList": true, "Category": true, "DocFolder": true, "DocRule": true, "RulesDocument": true, "RulesDocumentRule": true,
 		"EndpointRef": true, "Folder": true, "FolderCreate": true, "FolderPatch": true, "NewFolder": true, "Profile": true, "ProfileCreate": true,
 		"ProfileDocument": true, "ProfileDuplicate": true, "ProfileLock": true, "ProfileRename": true, "Rule": true, "RuleEditSet": true,
-		"RulePatch": true, "RulesCreate": true, "ProfileList": true, "ProfileCreated": true, "RulePage": true, "RuleList": true, "FolderList": true, "Job": true}
+		"RulePatch": true, "RulesCreate": true, "ProfileList": true, "ProfileCreated": true, "RulePage": true, "RuleList": true, "FolderList": true, "Job": true,
+		// The Endpoint routes (P3 spec 3.8): the ZWNJ exception extends to an Endpoint, a group, a client alias and its group name, and a comment.
+		"Endpoint": true, "EndpointCreate": true, "EndpointCreated": true, "EndpointPage": true, "EndpointPatch": true, "EndpointType": true, "EndpointTypeList": true,
+		"Group": true, "GroupList": true, "GroupCreate": true, "GroupRename": true, "Client": true, "ClientPage": true, "ClientCreate": true, "ClientPatch": true,
+		"ClientBatch": true, "ClientBatchSet": true}
 }
 
 // p2Location says the path of the schema (at) is below an operation of /profiles or one of the components above.
 func p2Location(at string) bool {
-	if strings.Contains(at, " /profiles") {
+	if strings.Contains(at, " /profiles") || strings.Contains(at, " /endpoints") || strings.Contains(at, " /endpoint-groups") {
 		return true
 	}
 	if rest, ok := strings.CutPrefix(at, "components.schemas."); ok {

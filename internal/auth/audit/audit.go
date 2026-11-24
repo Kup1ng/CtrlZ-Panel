@@ -127,6 +127,16 @@ type (
 	ProfileUnlock struct {
 		ProfileID uuid.UUID `json:"profile_id"`
 	}
+	// ProfileLockPasswordUsed and ProfileLockPasswordFailed are a lock password presented in the request of an Endpoint write (P3 spec 3.3):
+	// the profile and the Endpoint it was needed on, never the password. Both are bounded by the throttle scopes of the unlock.
+	ProfileLockPasswordUsed struct {
+		ProfileID  uuid.UUID `json:"profile_id"`
+		EndpointID uuid.UUID `json:"endpoint_id"`
+	}
+	ProfileLockPasswordFailed struct {
+		ProfileID  uuid.UUID `json:"profile_id"`
+		EndpointID uuid.UUID `json:"endpoint_id"`
+	}
 	ProfileUnlockFailed struct {
 		ProfileID uuid.UUID `json:"profile_id"`
 	}
@@ -140,59 +150,63 @@ type (
 	}
 )
 
-func (LoginOK) Action() string             { return "login.ok" }
-func (LoginFailed) Action() string         { return "login.failed" }
-func (Logout) Action() string              { return "logout" }
-func (LogoutAll) Action() string           { return "logout.all" }
-func (SessionRevoke) Action() string       { return "session.revoke" }
-func (RefreshReuse) Action() string        { return "session.refresh_reuse" }
-func (ReauthOK) Action() string            { return "reauth.ok" }
-func (ReauthFailed) Action() string        { return "reauth.failed" }
-func (PasswordChange) Action() string      { return "password.change" }
-func (PasswordReset) Action() string       { return "password.reset" }
-func (PhoneChange) Action() string         { return "phone.change" }
-func (TOTPEnable) Action() string          { return "totp.enable" }
-func (TOTPDisable) Action() string         { return "totp.disable" }
-func (RecoveryRegenerate) Action() string  { return "recovery.regenerate" }
-func (RecoveryUsed) Action() string        { return "recovery.used" }
-func (PasskeyAdd) Action() string          { return "passkey.add" }
-func (PasskeyRename) Action() string       { return "passkey.rename" }
-func (PasskeyDelete) Action() string       { return "passkey.delete" }
-func (PasskeyEnforce) Action() string      { return "passkey.enforce" }
-func (PasskeyReview) Action() string       { return "passkey.review" }
-func (PasskeyCloneSuspect) Action() string { return "passkey.clone_suspect" }
-func (Register) Action() string            { return "register" }
-func (TOTPLost) Action() string            { return "totp.declared_lost" }
-func (ProfileLock) Action() string         { return "profile.lock" }
-func (ProfileUnlock) Action() string       { return "profile.unlock" }
-func (ProfileUnlockFailed) Action() string { return "profile.unlock_failed" }
+func (LoginOK) Action() string                   { return "login.ok" }
+func (LoginFailed) Action() string               { return "login.failed" }
+func (Logout) Action() string                    { return "logout" }
+func (LogoutAll) Action() string                 { return "logout.all" }
+func (SessionRevoke) Action() string             { return "session.revoke" }
+func (RefreshReuse) Action() string              { return "session.refresh_reuse" }
+func (ReauthOK) Action() string                  { return "reauth.ok" }
+func (ReauthFailed) Action() string              { return "reauth.failed" }
+func (PasswordChange) Action() string            { return "password.change" }
+func (PasswordReset) Action() string             { return "password.reset" }
+func (PhoneChange) Action() string               { return "phone.change" }
+func (TOTPEnable) Action() string                { return "totp.enable" }
+func (TOTPDisable) Action() string               { return "totp.disable" }
+func (RecoveryRegenerate) Action() string        { return "recovery.regenerate" }
+func (RecoveryUsed) Action() string              { return "recovery.used" }
+func (PasskeyAdd) Action() string                { return "passkey.add" }
+func (PasskeyRename) Action() string             { return "passkey.rename" }
+func (PasskeyDelete) Action() string             { return "passkey.delete" }
+func (PasskeyEnforce) Action() string            { return "passkey.enforce" }
+func (PasskeyReview) Action() string             { return "passkey.review" }
+func (PasskeyCloneSuspect) Action() string       { return "passkey.clone_suspect" }
+func (Register) Action() string                  { return "register" }
+func (TOTPLost) Action() string                  { return "totp.declared_lost" }
+func (ProfileLock) Action() string               { return "profile.lock" }
+func (ProfileUnlock) Action() string             { return "profile.unlock" }
+func (ProfileUnlockFailed) Action() string       { return "profile.unlock_failed" }
+func (ProfileLockPasswordUsed) Action() string   { return "profile.lock_password_used" }
+func (ProfileLockPasswordFailed) Action() string { return "profile.lock_password_failed" }
 
-func (LoginOK) tenantEvent()             {}
-func (LoginFailed) tenantEvent()         {}
-func (Logout) tenantEvent()              {}
-func (LogoutAll) tenantEvent()           {}
-func (SessionRevoke) tenantEvent()       {}
-func (RefreshReuse) tenantEvent()        {}
-func (ReauthOK) tenantEvent()            {}
-func (ReauthFailed) tenantEvent()        {}
-func (PasswordChange) tenantEvent()      {}
-func (PasswordReset) tenantEvent()       {}
-func (PhoneChange) tenantEvent()         {}
-func (TOTPEnable) tenantEvent()          {}
-func (TOTPDisable) tenantEvent()         {}
-func (RecoveryRegenerate) tenantEvent()  {}
-func (RecoveryUsed) tenantEvent()        {}
-func (PasskeyAdd) tenantEvent()          {}
-func (PasskeyRename) tenantEvent()       {}
-func (PasskeyDelete) tenantEvent()       {}
-func (PasskeyEnforce) tenantEvent()      {}
-func (PasskeyReview) tenantEvent()       {}
-func (PasskeyCloneSuspect) tenantEvent() {}
-func (Register) tenantEvent()            {}
-func (TOTPLost) tenantEvent()            {}
-func (ProfileLock) tenantEvent()         {}
-func (ProfileUnlock) tenantEvent()       {}
-func (ProfileUnlockFailed) tenantEvent() {}
+func (LoginOK) tenantEvent()                   {}
+func (LoginFailed) tenantEvent()               {}
+func (Logout) tenantEvent()                    {}
+func (LogoutAll) tenantEvent()                 {}
+func (SessionRevoke) tenantEvent()             {}
+func (RefreshReuse) tenantEvent()              {}
+func (ReauthOK) tenantEvent()                  {}
+func (ReauthFailed) tenantEvent()              {}
+func (PasswordChange) tenantEvent()            {}
+func (PasswordReset) tenantEvent()             {}
+func (PhoneChange) tenantEvent()               {}
+func (TOTPEnable) tenantEvent()                {}
+func (TOTPDisable) tenantEvent()               {}
+func (RecoveryRegenerate) tenantEvent()        {}
+func (RecoveryUsed) tenantEvent()              {}
+func (PasskeyAdd) tenantEvent()                {}
+func (PasskeyRename) tenantEvent()             {}
+func (PasskeyDelete) tenantEvent()             {}
+func (PasskeyEnforce) tenantEvent()            {}
+func (PasskeyReview) tenantEvent()             {}
+func (PasskeyCloneSuspect) tenantEvent()       {}
+func (Register) tenantEvent()                  {}
+func (TOTPLost) tenantEvent()                  {}
+func (ProfileLock) tenantEvent()               {}
+func (ProfileUnlock) tenantEvent()             {}
+func (ProfileUnlockFailed) tenantEvent()       {}
+func (ProfileLockPasswordUsed) tenantEvent()   {}
+func (ProfileLockPasswordFailed) tenantEvent() {}
 
 // Tenant writes the event into the transaction of the change it records, so a
 // change without its audit row cannot commit (13.1). user is the actor, the nil

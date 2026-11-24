@@ -287,6 +287,9 @@ func capDrivers() map[string]func(*testing.T, *raceEnv) {
 
 func TestCapsRaceHarness(t *testing.T) {
 	drivers := capDrivers()
+	for name, d := range p3Drivers() {
+		drivers[name] = d
+	}
 	for name, d := range p2Drivers() {
 		drivers[name] = d
 	}

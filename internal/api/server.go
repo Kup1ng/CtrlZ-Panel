@@ -29,6 +29,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/budget"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/bulkgate"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/cachex"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/endpoints"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/keyring"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/locations"
@@ -107,6 +108,7 @@ type Server struct {
 	inviteReads  *netpool.Pool    // reads of an invite for a request the otp-send bucket refused, bounded per network, per /48 and for the process (rounds 9 to 11)
 	after        afterwork.Runner // what a floored handler owes after its answer: failed-login trail rows (tenant-r13-2)
 	prof         *profiles.Env    // the one write path of a profile (spec 3)
+	ep           *endpoints.Env   // the one write path of Endpoints, groups, schedules and clients (P3 spec 3)
 	cat          locations.LocationCatalog
 	docs         *httpx.Validator // the schema check of a document (spec 6.2)
 }
@@ -179,7 +181,7 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	}
 	s := &Server{
 		after: after, gate: gate,
-		prof: &profiles.Env{Catalog: cat, Clock: d.Now}, cat: cat, docs: docs,
+		prof: &profiles.Env{Catalog: cat, Clock: d.Now}, ep: &endpoints.Env{Clock: d.Now, Keys: d.Keys, Catalog: cat}, cat: cat, docs: docs,
 		inviteReads: netpool.New(inviteRead, d.Now),
 		d:           d, cfg: cfg, auth: auth, now: d.Now, keys: d.Keys, hasher: d.Hasher, strength: strength, strengthAnon: strengthAnon,
 		throttle: throttle.NewUser(auth, d.Keys).WithCeilingHook(throttle.CeilingLog(d.Log)).WithRefusalHook(throttle.RefusalLog(d.Log, refusals)), tickets: tickets, otp: otpSvc, markers: markers,
