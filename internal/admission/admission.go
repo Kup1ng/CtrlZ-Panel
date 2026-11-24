@@ -318,6 +318,18 @@ func (a *Admission) Ordinary(ctx context.Context, tenant string) (release func()
 		a.ordinary[tenant] = t
 	}
 	t.refs++
+	// One deadline covers both waits, the tenant's and the process's, so a request is refused after OrdinaryWait in all and
+	// not after twice that (p2-B3-r14-2). It starts at the first wait and is made only then: a request that finds a free
+	// turn pays for no timer.
+	var wctx context.Context
+	var cancel context.CancelFunc = func() {}
+	defer func() { cancel() }()
+	deadline := func() context.Context {
+		if wctx == nil {
+			wctx, cancel = context.WithTimeout(ctx, a.ordWait)
+		}
+		return wctx
+	}
 	if !t.sem.TryAcquire(1) {
 		if t.waiting >= a.ordWaiting {
 			a.dropLocked(tenant, t)
@@ -326,9 +338,7 @@ func (a *Admission) Ordinary(ctx context.Context, tenant string) (release func()
 		}
 		t.waiting++
 		a.mu.Unlock()
-		wctx, cancel := context.WithTimeout(ctx, a.ordWait)
-		err = t.sem.Acquire(wctx, 1)
-		cancel()
+		err = t.sem.Acquire(deadline(), 1)
 		a.mu.Lock()
 		t.waiting--
 		if err != nil {
@@ -340,9 +350,7 @@ func (a *Admission) Ordinary(ctx context.Context, tenant string) (release func()
 		return nil, refusalOf(ctx)
 	}
 	if !a.ordTotal.TryAcquire(1) {
-		wctx, cancel := context.WithTimeout(ctx, a.ordWait)
-		err = a.ordTotal.Acquire(wctx, 1)
-		cancel()
+		err = a.ordTotal.Acquire(deadline(), 1)
 		if err != nil {
 			t.sem.Release(1)
 			a.mu.Lock()

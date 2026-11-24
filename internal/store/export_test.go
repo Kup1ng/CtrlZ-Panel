@@ -85,4 +85,6 @@ const (
 	QProfilePairs       = qProfilePairs
 	QProfileClientsLock = qProfileClientsLock
 	QProfileCountsOne   = qProfileCountsOne
+	QProfileCountsLight = qProfileCountsLight
+	QRuleCountsIn       = qRuleCountsIn
 )

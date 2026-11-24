@@ -111,6 +111,7 @@ type Server struct {
 	prof         *profiles.Env    // the one write path of a profile (spec 3)
 	cat          locations.LocationCatalog
 	docs         *httpx.Validator // the schema check of a document (spec 6.2)
+	ruleCounts   ruleCountCache   // rules of a profile at a version, for GET /profiles (p2-B3-r14-1)
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)

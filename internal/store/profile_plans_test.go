@@ -91,6 +91,11 @@ func TestProfileStatementsReadOnlyWhatNamesTheProfile(t *testing.T) {
 		t.Errorf("counters of one profile: visited %d rule rows (sequential %v), the profile holds %d", visited, seq, profileRules)
 	}
 
+	// The list's counters read no rule at all (p2-B3-r14-1): the view's rule_count is not evaluated when it is not selected.
+	if visited, _ := relVisited(e.plan(t, lit(store.QProfileCountsLight, e.A.Tenant)), "rules"); visited != 0 {
+		t.Errorf("the light counters of the list visited %d rule rows, want none", visited)
+	}
+
 	// The answers are right, and a tenant sees only its own.
 	if err := e.tenant.WithTenant(e.ctx, e.A.Tenant, store.TxOpts{}, func(tx store.Tx) error {
 		pairs, err := tx.ProfilePairs(third)
@@ -110,9 +115,14 @@ func TestProfileStatementsReadOnlyWhatNamesTheProfile(t *testing.T) {
 		if other, err := tx.ProfileCountsOf(e.B.Profile); err != nil || other != (store.ProfileCounts{}) {
 			t.Errorf("tenant A read counters of tenant B\x27s profile: %+v, %v", other, err)
 		}
-		all, err := tx.ProfileCountsAll()
-		if err != nil || all[e.A.Profile].Rules != profileRules || all[e.A.Profile2].Rules != 10000 {
-			t.Errorf("counters of all: %+v, %v", all, err)
+		all, err := tx.ProfileCountsLight()
+		if err != nil || all[e.A.Profile].Rules != 0 || all[e.A.Profile2].Rules != 0 {
+			t.Errorf("the light counters hold rule counts: %+v, %v", all, err)
+		}
+		// The rules are counted apart, for the profiles that ask, and a profile of another tenant is never counted.
+		counted, err := tx.RuleCountsIn([]uuid.UUID{e.A.Profile, e.A.Profile2, third, e.B.Profile})
+		if err != nil || counted[e.A.Profile] != profileRules || counted[e.A.Profile2] != 10000 || len(counted) != 2 {
+			t.Errorf("rule counts of the named profiles: %+v, %v (the third has none, tenant B's is not tenant A's)", counted, err)
 		}
 		if _, leaked := all[e.B.Profile]; leaked {
 			t.Errorf("the counters of all name tenant B\x27s profile")

@@ -251,9 +251,37 @@ func (s *Server) ListProfiles(ctx context.Context, _ gen.ListProfilesRequestObje
 		if err != nil {
 			return err
 		}
-		counts, err := tx.ProfileCountsAll()
+		counts, err := tx.ProfileCountsLight()
 		if err != nil {
 			return err
+		}
+		// The rules are counted only for a profile whose version the cache has not seen, in this snapshot, so the version and
+		// the count agree (rulecount_cache.go).
+		var stale []uuid.UUID
+		for _, p := range ps {
+			c := counts[p.ID]
+			if n, ok := s.ruleCounts.get(pr.TenantID, p.ID, p.Version); ok {
+				c.Rules = n
+				counts[p.ID] = c
+			} else {
+				stale = append(stale, p.ID)
+			}
+		}
+		if len(stale) > 0 {
+			n, err := tx.RuleCountsIn(stale)
+			if err != nil {
+				return err
+			}
+			versions := map[uuid.UUID]int64{}
+			for _, p := range ps {
+				versions[p.ID] = p.Version
+			}
+			for _, id := range stale {
+				c := counts[id]
+				c.Rules = n[id]
+				counts[id] = c
+				s.ruleCounts.put(pr.TenantID, id, versions[id], n[id])
+			}
 		}
 		opts, err := tx.OptionsAll()
 		if err != nil {

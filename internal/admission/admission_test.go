@@ -317,3 +317,56 @@ func TestOrdinaryWaitEndsWithTheClientAndTheProcessIsBounded(t *testing.T) {
 		t.Fatalf("a turn after the others ended: %v", err)
 	}
 }
+
+// A request that waits first for its tenant's turn and then for the process's is refused after OrdinaryWait in all, not after
+// twice that (p2-B3-r14-2). The tenant's turn comes free at 60% of the wait, the process's turn goes to another tenant's
+// waiter that was in line first, so the request has 40% of its wait left; with one fresh wait for each line it would be
+// refused only at 160%.
+func TestOrdinaryWaitIsOneDeadlineForBothLines(t *testing.T) {
+	const wait = time.Second
+	a := newAdm(t, admission.Config{OrdinaryTenant: 1, OrdinaryTotal: 1, OrdinaryWaiting: 8, OrdinaryWait: wait})
+	ctx := context.Background()
+	hold, err := a.Ordinary(ctx, "t") // holds the tenant's only turn and the process's only turn
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := make(chan func(), 1)
+	go func() {
+		rel, err := a.Ordinary(ctx, "u") // has its own turn, waits for the process in front of the request below
+		if err != nil {
+			t.Errorf("the other tenant's waiter: %v", err)
+			other <- func() {}
+			return
+		}
+		other <- rel
+	}()
+	testwait.Until(t, 5*time.Second, "the other tenant is in line", func() bool { return a.OrdinaryTenants() == 2 })
+
+	type result struct {
+		err     error
+		elapsed time.Duration
+	}
+	res := make(chan result, 1)
+	go func() {
+		start := time.Now()
+		rel, err := a.Ordinary(ctx, "t")
+		if err == nil {
+			rel()
+		}
+		res <- result{err, time.Since(start)}
+	}()
+	testwait.Until(t, 5*time.Second, "the request waits for its tenant", func() bool { return a.OrdinaryWaiting("t") == 1 })
+	time.Sleep(wait * 6 / 10)
+	hold()
+	r := <-res
+	if !errors.Is(r.err, admission.ErrOrdinaryBusy) {
+		t.Fatalf("a request that found both lines full: %v", r.err)
+	}
+	if r.elapsed < wait*9/10 || r.elapsed > wait*14/10 {
+		t.Fatalf("the refusal came after %v, want about one wait of %v for both lines", r.elapsed, wait)
+	}
+	(<-other)()
+	if n := a.OrdinaryTenants(); n != 0 {
+		t.Fatalf("%d tenants are still remembered", n)
+	}
+}

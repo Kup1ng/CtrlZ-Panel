@@ -21,8 +21,15 @@ type ProfileCounts struct {
 	Endpoints, Filters, Services, Rules, Options int
 }
 
-const qProfileCounts = `SELECT profile_id, endpoint_count, filter_count, service_count, rule_count, option_count
+// qProfileCountsLight reads every counter of the tenant's profiles except the rules. The view's rule_count is a correlated
+// count that Postgres evaluates only when the column is selected (the view is a simple one and is pulled up), so leaving it
+// out is what keeps the list from counting 200,000 index tuples on each request (20 profiles of 10,000 rules, p2-B3-r14-1).
+const qProfileCountsLight = `SELECT profile_id, endpoint_count, filter_count, service_count, 0::bigint, option_count
 FROM ctrlz.tenant_profile_counts WHERE tenant_id = $1`
+
+// qRuleCountsIn counts the rules of the named profiles in one statement; a profile with no rule has no row.
+const qRuleCountsIn = `SELECT profile_id, count(*) FROM ctrlz.rules
+WHERE tenant_id = $1 AND profile_id = ANY ($2::uuid[]) GROUP BY profile_id`
 
 // qProfileCountsOne names the profile, which the view's correlated counts need to push down: without it a read of one profile
 // counted the rules of all of them (20 profiles of 10,000 rules is 200,000 index tuples to show one, p2-B3-r13-2, r13-7).
@@ -38,9 +45,34 @@ func scanProfileCounts(rows pgx.Rows) (uuid.UUID, ProfileCounts, error) {
 	return id, ProfileCounts{Endpoints: int(e), Filters: int(f), Services: int(s), Rules: int(r), Options: int(o)}, nil
 }
 
-// ProfileCountsAll reads the counters of every profile of the tenant, by profile id: the list needs all of them.
-func (t Tx) ProfileCountsAll() (map[uuid.UUID]ProfileCounts, error) {
-	rows, err := t.tx.Query(t.ctx, qProfileCounts, t.tenant)
+// RuleCountsIn counts the rules of each named profile of the tenant; a profile with none is absent from the map. The caller
+// names the profiles whose cached count is out of date, and reads them in the transaction that read their versions, so the
+// count and the version come from one snapshot.
+func (t Tx) RuleCountsIn(profiles []uuid.UUID) (map[uuid.UUID]int, error) {
+	out := map[uuid.UUID]int{}
+	if len(profiles) == 0 {
+		return out, nil
+	}
+	rows, err := t.tx.Query(t.ctx, qRuleCountsIn, t.tenant, profiles)
+	if err != nil {
+		return nil, sanitize(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		var n int64
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, sanitize(err)
+		}
+		out[id] = int(n)
+	}
+	return out, sanitize(rows.Err())
+}
+
+// ProfileCountsLight reads the counters of every profile of the tenant, by profile id, with Rules left at zero: the list
+// takes the rule counts from RuleCountsIn, and only for the profiles whose cached count is out of date.
+func (t Tx) ProfileCountsLight() (map[uuid.UUID]ProfileCounts, error) {
+	rows, err := t.tx.Query(t.ctx, qProfileCountsLight, t.tenant)
 	if err != nil {
 		return nil, sanitize(err)
 	}
