@@ -356,7 +356,11 @@ func TestOrdinaryWaitIsOneDeadlineForBothLines(t *testing.T) {
 		res <- result{err, time.Since(start)}
 	}()
 	testwait.Until(t, 5*time.Second, "the request waits for its tenant", func() bool { return a.OrdinaryWaiting("t") == 1 })
-	time.Sleep(wait * 6 / 10)
+	// The request must still be waiting after 60% of its wait: the answer coming earlier is a failure.
+	if testwait.Holds(wait*6/10, 10*time.Millisecond, func() bool { return len(res) > 0 }) {
+		r := <-res
+		t.Fatalf("the request was answered while both lines were full: %v after %v", r.err, r.elapsed)
+	}
 	hold()
 	r := <-res
 	if !errors.Is(r.err, admission.ErrOrdinaryBusy) {

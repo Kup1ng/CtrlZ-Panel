@@ -201,6 +201,7 @@ func Bounds() []Bound {
 		{"maxStoredTime", "ceiling on a stored Argon2 parameter, read once per hash"},
 		{"maxStoredThread", "ceiling on a stored Argon2 parameter, read once per hash"},
 		{"maxInput", "length of one request field"},
+		{"ruleCountCacheMax", "size of one process's memory cache of rule counts (internal/api rulecount_cache.go): a full cache is emptied and costs a recount, nothing in the database that racing actors could spend"},
 		{"MaxTypedBytes", "length of one typed code before the fold, checked on the value in hand (digits.Typed callers)"},
 		{"nearMaxChanged", "scoring threshold of one password"},
 		{"maxScore", "scale of one password score"},
