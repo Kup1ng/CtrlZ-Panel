@@ -202,6 +202,7 @@ func Entries() []Entry {
 func Bounds() []Bound {
 	return []Bound{
 		{"maxLimit", "page size of a list route; reads only"},
+		{"maxProofMembers", "how many top-level members of one request body the proof reader looks at: in process, one request, nothing shared that racing actors could spend"},
 		{"MaxOTPUnitsFA", "length of one OTP template body in billed units, checked on the value in hand (sms.CheckBodyLength)"},
 		{"MaxOTPUnitsEN", "length of one OTP template body in billed units, checked on the value in hand (sms.CheckBodyLength)"},
 		{"maxInviteHours", "range of one request field"},
