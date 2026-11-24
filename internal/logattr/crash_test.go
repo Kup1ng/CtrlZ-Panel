@@ -126,7 +126,9 @@ func TestARuntimeThrowIgnoresGoTracebackNone(t *testing.T) {
 	if byValue := run("throw-value"); !strings.Contains(byValue, "0xde, 0xad, 0xbe") || !strings.Contains(byValue, "stack overflow") {
 		t.Errorf("a stack overflow with GOTRACEBACK=none no longer prints the arguments of its frames, so the setting covers more than the spec says:\n%.2000s", byValue)
 	}
-	if bySlice := run("throw-slice"); strings.Contains(bySlice, "0xde") || !strings.Contains(bySlice, "stack overflow") {
+	// The canary is looked for as the run of its first bytes, the way the first check reads it: the bare "0xde" also starts any hex number that begins with those two digits
+	// (a frame argument or an address, which vary with the depth of the overflow); it failed once in CI with no canary in the output shown.
+	if bySlice := run("throw-slice"); strings.Contains(bySlice, "0xde, 0xad, 0xbe") || !strings.Contains(bySlice, "stack overflow") {
 		t.Errorf("a slice argument printed its bytes, or the child did not overflow:\n%.2000s", bySlice)
 	}
 }
