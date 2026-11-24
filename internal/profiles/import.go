@@ -134,15 +134,12 @@ func (e *Env) ReadRulesDocument(tx store.Tx, profile, folder uuid.UUID) (RulesDo
 		r, ok := snap.ByID(id)
 		return r.Key, ok
 	}
-	rs, err := tx.RulesAll(profile)
+	rs, err := tx.RulesInFolder(profile, folder)
 	if err != nil {
 		return RulesDocument{}, err
 	}
 	d := RulesDocument{Format: RulesFormat, Version: DocVersion, Rules: []DocRule{}}
 	for _, r := range rs {
-		if r.FolderID != folder {
-			continue
-		}
 		dr := DocRule{Pattern: r.Key, Action: r.Action, Target: docTarget(r.Target, key), Enabled: optBool(r.Enabled), Comment: r.Comment}
 		if r.ExpiresAt != nil {
 			dr.ExpiresAt = formatExpiry(*r.ExpiresAt)

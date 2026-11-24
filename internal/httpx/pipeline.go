@@ -451,7 +451,22 @@ func (a *API) perOp(next http.Handler) http.Handler {
 				defer aw.close()
 				r = r.WithContext(context.WithValue(ctx, keyAnswer, hold))
 				_, setWrite := deadlinesOf(w)
-				next.ServeHTTP(aw, r)
+				// A turn of the tenant's ordinary requests (p2-B3-r13-1): the rate classes count for each session, so
+				// without it one account's sessions fill the 16 connections. The line holds no connection, the turn
+				// ends with the handler, and the file of a spilled answer is sent after it, so a slow reader holds neither.
+				turn, err := a.p.Admission.Ordinary(ctx, res.Tenant)
+				if err != nil {
+					if ctx.Err() != nil {
+						a.refuse(w, r, &Error{Status: StatusClientClosedRequest, Code: "client_closed_request"})
+						return
+					}
+					a.refuse(w, r, busy())
+					return
+				}
+				func() {
+					defer turn()
+					next.ServeHTTP(aw, r)
+				}()
 				aw.finish(a, r, setWrite)
 				return
 			}

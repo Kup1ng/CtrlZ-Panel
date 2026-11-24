@@ -195,12 +195,9 @@ func (s *Server) ListCatalogServices(ctx context.Context, _ gen.ListCatalogServi
 // ---------------------------------------------------------------------------
 // Profiles.
 
-// profileOut builds the profile of a response: the row, its counters, and the Default Rule flag of the list (T-127).
-func (s *Server) profileOut(tx store.Tx, p store.Profile, counts store.ProfileCounts, keys locationKeys) (gen.Profile, error) {
-	o, _, err := tx.Options(p.ID)
-	if err != nil {
-		return gen.Profile{}, err
-	}
+// profileOut builds the profile of a response: the row, its counters, and the Default Rule flag of the list (T-127). The
+// options row is the caller's to read, one for a single profile and one statement for the list (p2-B3-r13-2).
+func (s *Server) profileOut(p store.Profile, counts store.ProfileCounts, o store.OptionsRow, keys locationKeys) (gen.Profile, error) {
 	out := gen.Profile{Id: openapi_types.UUID(p.ID), Name: p.Name, Kind: gen.ProfileKind(p.Kind), UpdatedAt: p.UpdatedAt, CreatedAt: p.CreatedAt,
 		Locked: p.Locked, DisabledUntil: p.DisabledUntil, LockMessage: p.LockMessage, LockedAt: p.LockedAt,
 		Counts:    gen.ProfileCounts{Endpoints: counts.Endpoints, Filters: counts.Filters, Services: counts.Services, Rules: counts.Rules, Options: counts.Options},
@@ -226,7 +223,12 @@ func (s *Server) profileView(tx store.Tx, id uuid.UUID) (gen.Profile, error) {
 	if !ok {
 		return gen.Profile{}, httpx.NotFound()
 	}
-	counts, err := tx.ProfileCounts()
+	// The counters of this profile only: the view counts the rules of every profile it is asked for (p2-B3-r13-2).
+	counts, err := tx.ProfileCountsOf(id)
+	if err != nil {
+		return gen.Profile{}, err
+	}
+	o, _, err := tx.Options(id)
 	if err != nil {
 		return gen.Profile{}, err
 	}
@@ -234,7 +236,7 @@ func (s *Server) profileView(tx store.Tx, id uuid.UUID) (gen.Profile, error) {
 	if err != nil {
 		return gen.Profile{}, err
 	}
-	return s.profileOut(tx, p, counts[id], keys)
+	return s.profileOut(p, counts, o, keys)
 }
 
 // ListProfiles is GET /profiles.
@@ -249,7 +251,11 @@ func (s *Server) ListProfiles(ctx context.Context, _ gen.ListProfilesRequestObje
 		if err != nil {
 			return err
 		}
-		counts, err := tx.ProfileCounts()
+		counts, err := tx.ProfileCountsAll()
+		if err != nil {
+			return err
+		}
+		opts, err := tx.OptionsAll()
 		if err != nil {
 			return err
 		}
@@ -258,7 +264,7 @@ func (s *Server) ListProfiles(ctx context.Context, _ gen.ListProfilesRequestObje
 			return err
 		}
 		for _, p := range ps {
-			v, err := s.profileOut(tx, p, counts[p.ID], keys)
+			v, err := s.profileOut(p, counts[p.ID], opts[p.ID], keys)
 			if err != nil {
 				return err
 			}

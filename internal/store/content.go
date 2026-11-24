@@ -295,6 +295,27 @@ func (t Tx) RulesAll(profile uuid.UUID) ([]RuleRow, error) {
 	return out, sanitize(rows.Err())
 }
 
+const qRulesInFolder = `SELECT ` + ruleColumns + ` FROM ctrlz.rules WHERE tenant_id = $1 AND profile_id = $2 AND folder_id = $3 ORDER BY rule_key, id`
+
+// RulesInFolder reads the rules of one folder in key order, on rules_folder_idx: Export Rules reads through it, where
+// RulesAll read the whole profile (10,000 rows) to keep a few (p2-B3-r13-9).
+func (t Tx) RulesInFolder(profile, folder uuid.UUID) ([]RuleRow, error) {
+	rows, err := t.tx.Query(t.ctx, qRulesInFolder, t.tenant, profile, folder)
+	if err != nil {
+		return nil, sanitize(err)
+	}
+	defer rows.Close()
+	var out []RuleRow
+	for rows.Next() {
+		r, err := scanRule(rows)
+		if err != nil {
+			return nil, sanitize(err)
+		}
+		out = append(out, r)
+	}
+	return out, sanitize(rows.Err())
+}
+
 // RuleSelector is the filter of a selection ("select all" of the rules list).
 type RuleSelector struct {
 	Folder    string // "" any, "root", or "folder"
@@ -700,22 +721,32 @@ type OptionsRow struct {
 	RestrictedYouTube          *bool
 }
 
-const qOptionsGet = `SELECT default_action, default_target_kind, default_target_location_id, host(default_target_ipv4), host(default_target_ipv6),
+const optionsColumns = `default_action, default_target_kind, default_target_location_id, host(default_target_ipv4), host(default_target_ipv6),
   default_target_host, default_location_unavailable, block_exfiltration, rebind_protection, disable_dnssec, block_ttl, redirect_ttl, bypass_ttl,
-  block_response, host(block_custom_v4), host(block_custom_v6), ecs_mode, ecs_v4::text, ecs_v6::text, dns64, cname_flattening, safe_search, restricted_youtube
+  block_response, host(block_custom_v4), host(block_custom_v6), ecs_mode, ecs_v4::text, ecs_v6::text, dns64, cname_flattening, safe_search, restricted_youtube`
+
+const qOptionsGet = `SELECT ` + optionsColumns + `
 FROM ctrlz.profile_options WHERE tenant_id = $1 AND profile_id = $2`
 
-// Options reads the options row of the profile; a profile with none has the zero value, found false.
-func (t Tx) Options(profile uuid.UUID) (OptionsRow, bool, error) {
+// qOptionsAll is the options row of every profile of the tenant, for the profile list, which shows each profile's Default Rule:
+// one statement over the tenant's primary key prefix instead of one read for each profile (p2-B3-r13-2).
+const qOptionsAll = `SELECT profile_id, ` + optionsColumns + `
+FROM ctrlz.profile_options WHERE tenant_id = $1`
+
+// scanOptions reads one row of the two statements above into the zero-value convention of OptionsRow; profile is the
+// extra first column of qOptionsAll, nil for qOptionsGet.
+func scanOptions(row interface{ Scan(dest ...any) error }, profile *uuid.UUID) (OptionsRow, error) {
 	var o OptionsRow
 	var action, kind, v4, v6, host, resp, b4, b6, ecs, e4, e6 *string
 	var loc *uuid.UUID
-	err := t.tx.QueryRow(t.ctx, qOptionsGet, t.tenant, profile).Scan(&action, &kind, &loc, &v4, &v6, &host, &o.DefaultLocationUnavailable,
+	dest := []any{&action, &kind, &loc, &v4, &v6, &host, &o.DefaultLocationUnavailable,
 		&o.BlockExfiltration, &o.RebindProtection, &o.DisableDNSSEC, &o.BlockTTL, &o.RedirectTTL, &o.BypassTTL, &resp, &b4, &b6, &ecs, &e4, &e6,
-		&o.DNS64, &o.CNAMEFlattening, &o.SafeSearch, &o.RestrictedYouTube)
-	ok, err := notFound(err)
-	if err != nil || !ok {
-		return OptionsRow{}, ok, err
+		&o.DNS64, &o.CNAMEFlattening, &o.SafeSearch, &o.RestrictedYouTube}
+	if profile != nil {
+		dest = append([]any{profile}, dest...)
+	}
+	if err := row.Scan(dest...); err != nil {
+		return OptionsRow{}, err
 	}
 	str := func(p *string) string {
 		if p == nil {
@@ -726,7 +757,36 @@ func (t Tx) Options(profile uuid.UUID) (OptionsRow, bool, error) {
 	o.DefaultAction = str(action)
 	o.DefaultTarget = scanTarget(kind, loc, v4, v6, host)
 	o.BlockResponse, o.BlockV4, o.BlockV6, o.ECSMode, o.ECSV4, o.ECSV6 = str(resp), str(b4), str(b6), str(ecs), str(e4), str(e6)
+	return o, nil
+}
+
+// Options reads the options row of the profile; a profile with none has the zero value, found false.
+func (t Tx) Options(profile uuid.UUID) (OptionsRow, bool, error) {
+	o, err := scanOptions(t.tx.QueryRow(t.ctx, qOptionsGet, t.tenant, profile), nil)
+	ok, err := notFound(err)
+	if err != nil || !ok {
+		return OptionsRow{}, ok, err
+	}
 	return o, true, nil
+}
+
+// OptionsAll reads the options row of every profile of the tenant that has one, by profile id.
+func (t Tx) OptionsAll() (map[uuid.UUID]OptionsRow, error) {
+	rows, err := t.tx.Query(t.ctx, qOptionsAll, t.tenant)
+	if err != nil {
+		return nil, sanitize(err)
+	}
+	defer rows.Close()
+	out := map[uuid.UUID]OptionsRow{}
+	for rows.Next() {
+		var id uuid.UUID
+		o, err := scanOptions(rows, &id)
+		if err != nil {
+			return nil, sanitize(err)
+		}
+		out[id] = o
+	}
+	return out, sanitize(rows.Err())
 }
 
 const qOptionsSet = `INSERT INTO ctrlz.profile_options (tenant_id, profile_id, default_action, default_target_kind, default_target_location_id,

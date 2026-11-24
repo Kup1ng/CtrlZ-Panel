@@ -42,6 +42,7 @@ func (r jsonResponse) write(w http.ResponseWriter) error {
 	return err
 }
 
+func (r jsonResponse) VisitGetJobResponse(w http.ResponseWriter) error            { return r.write(w) }
 func (r jsonResponse) VisitExportProfileResponse(w http.ResponseWriter) error     { return r.write(w) }
 func (r jsonResponse) VisitExportFolderRulesResponse(w http.ResponseWriter) error { return r.write(w) }
 func (r jsonResponse) VisitImportProfileResponse(w http.ResponseWriter) error     { return r.write(w) }
@@ -50,6 +51,7 @@ func (r jsonResponse) VisitUploadFolderRulesResponse(w http.ResponseWriter) erro
 func (r jsonResponse) VisitBatchRulesResponse(w http.ResponseWriter) error        { return r.write(w) }
 
 var (
+	_ gen.GetJobResponseObject            = jsonResponse{}
 	_ gen.ExportProfileResponseObject     = jsonResponse{}
 	_ gen.ExportFolderRulesResponseObject = jsonResponse{}
 	_ gen.ImportProfileResponseObject     = jsonResponse{}
@@ -438,23 +440,76 @@ func (s *Server) GetActiveJob(ctx context.Context, _ gen.GetActiveJobRequestObje
 	return gen.GetActiveJob200JSONResponse(out), err
 }
 
-// GetJob is GET /jobs/{id}.
+// heldJobFloor is the answer size under which GetJob reserves nothing: an answer of at most the spill size goes straight to the
+// connection and is never held.
+const heldJobFloor = 64 << 10
+
+// GetJob is GET /jobs/{id}. The stored result of a job (at most 10,000 items, about 830 KiB) is already the wire form, so it
+// is copied into the answer as it is: it is not decoded into 10,000 structs and encoded again, which held about 5 MiB and
+// 60 ms of one core for each poll, and the transaction is closed before the answer is put together. The room of a big answer
+// is reserved before the result is read, as a rule create does, so a refusal costs one number and not the work
+// (p2-B3-r13-3).
 func (s *Server) GetJob(ctx context.Context, req gen.GetJobRequestObject) (gen.GetJobResponseObject, error) {
 	pr, err := principal(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var out gen.Job
-	err = s.readTenant(ctx, pr.TenantID, func(tx store.Tx) error {
-		row, ok, err := tx.Job(uuid.UUID(req.Id))
+	var row store.JobRow
+	err = s.snapshotTx(ctx, pr.TenantID, func(tx store.Tx) error {
+		size, ok, err := tx.JobResultSize(uuid.UUID(req.Id))
 		if err != nil {
 			return err
 		}
 		if !ok {
 			return httpx.NotFound()
 		}
-		out, err = jobOut(row)
-		return err
+		if size > heldJobFloor {
+			if e := httpx.HoldAnswer(ctx, size+heldJobHead); e != nil {
+				return e
+			}
+		}
+		row, ok, err = tx.Job(uuid.UUID(req.Id))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return httpx.NotFound()
+		}
+		return nil
 	})
-	return gen.GetJob200JSONResponse(out), err
+	if err != nil {
+		return nil, err
+	}
+	result := row.Result
+	row.Result = nil
+	head, err := jobOut(row)
+	if err != nil {
+		return nil, err
+	}
+	body, err := jobBody(head, result)
+	if err != nil {
+		return nil, err
+	}
+	return jsonResponse{status: http.StatusOK, body: body}, nil
 }
+
+// jobBody is the answer of a job: its head as the generated type encodes it, and the stored result put in as it is. One
+// buffer and one write: the pipeline spills an answer by the size of its first write, so a small head written first would send
+// the rest to the connection.
+func jobBody(head gen.Job, result []byte) ([]byte, error) {
+	b, err := json.Marshal(head)
+	if err != nil {
+		return nil, err
+	}
+	const key = `,"result":`
+	body := make([]byte, 0, len(b)+len(result)+len(key)+2)
+	body = append(body, b[:len(b)-1]...)
+	if len(result) > 0 {
+		body = append(body, key...)
+		body = append(body, result...)
+	}
+	return append(body, '}', '\n'), nil
+}
+
+// heldJobHead is what the head of a job answer (its id, kind, state and counters) adds to the stored result.
+const heldJobHead = 1 << 10

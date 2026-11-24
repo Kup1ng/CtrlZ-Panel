@@ -1,6 +1,8 @@
 package profiles_test
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -378,5 +380,39 @@ func TestDeleteAgainstAClientWriter(t *testing.T) {
 		if err := <-done; err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// TestDeleteDoesNotRepeatOnALockTimeout (p2-B3-r13-5): spec 3.3 retries a delete on a deadlock only. A delete that meets a
+// held guard is refused at the end of the one lock wait of 3.1, as a 503 the client retries, and does not run again two
+// more times on a pooled connection: three waits of 300 ms here would be 900 ms.
+func TestDeleteDoesNotRepeatOnALockTimeout(t *testing.T) {
+	f := newFx(t)
+	p := f.newProfile(t, f.A.Tenant, "held")
+	super, err := f.db.Super(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = super.Close(context.Background()) }()
+	holder, err := super.Begin(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = holder.Rollback(context.Background()) }()
+	// A writer of the profile (a job) holds its row.
+	if _, err := holder.Exec(f.ctx, `SELECT 1 FROM ctrlz.profiles WHERE tenant_id = $1 AND id = $2 FOR UPDATE`, f.A.Tenant, p); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	err = f.env.Delete(f.ctx, f.st, f.A.Tenant, p, store.TxOpts{LockWait: 300 * time.Millisecond})
+	took := time.Since(start)
+	if !errors.Is(err, store.ErrRetry) {
+		t.Fatalf("a delete behind a held guard: %v, want the retryable refusal", err)
+	}
+	if took < 250*time.Millisecond {
+		t.Fatalf("the delete gave up after %v, before its lock wait", took)
+	}
+	if took > 700*time.Millisecond {
+		t.Fatalf("the delete ran again after a lock timeout: %v for a wait of 300 ms", took)
 	}
 }

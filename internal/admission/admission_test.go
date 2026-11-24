@@ -212,3 +212,108 @@ func TestHeldAnswersAreBoundedPerTenantAndInTheProcess(t *testing.T) {
 		t.Fatalf("%d bytes held after every release", got)
 	}
 }
+
+// One tenant runs at most OrdinaryTenant ordinary requests at once whatever the number of its sessions, the line behind
+// them is first in first out and bounded, and another tenant is not behind it (p2-B3-r13-1).
+func TestOrdinaryTurnsAreBoundedForEachTenantAndOtherTenantsAreNotBehindThem(t *testing.T) {
+	a := newAdm(t, admission.Config{OrdinaryTenant: 2, OrdinaryTotal: 8, OrdinaryWaiting: 2, OrdinaryWait: 50 * time.Millisecond})
+	ctx := context.Background()
+	r1, err := a.Ordinary(ctx, "t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2, err := a.Ordinary(ctx, "t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The third request of t1 waits and gives up after the wait, with no turn.
+	start := time.Now()
+	if _, err := a.Ordinary(ctx, "t1"); !errors.Is(err, admission.ErrOrdinaryBusy) {
+		t.Fatalf("a third request of one tenant with two turns: %v", err)
+	}
+	if time.Since(start) < 40*time.Millisecond {
+		t.Fatalf("the refusal came after %v, before the wait of 50 ms", time.Since(start))
+	}
+	// Another tenant has its own turns at once.
+	o1, err := a.Ordinary(ctx, "t2")
+	if err != nil {
+		t.Fatalf("another tenant was refused while t1 holds its turns: %v", err)
+	}
+	// The line is first in first out: the first waiter gets the turn that is freed.
+	got := make(chan int, 2)
+	var wg sync.WaitGroup
+	b := newAdm(t, admission.Config{OrdinaryTenant: 1, OrdinaryTotal: 8, OrdinaryWaiting: 2, OrdinaryWait: 5 * time.Second})
+	hold, err := b.Ordinary(ctx, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rels [2]func()
+	for i := range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rel, err := b.Ordinary(ctx, "t")
+			if err != nil {
+				t.Errorf("waiter %d: %v", i, err)
+				return
+			}
+			rels[i] = rel
+			got <- i
+			// The turn is held until the test has read the order.
+		}()
+		// Waiter i is in line before waiter i+1 starts.
+		testwait.Until(t, 5*time.Second, "the waiter is in line", func() bool { return b.OrdinaryWaiting("t") == i+1 })
+	}
+	// The line is full (2): a third waiter is refused at once, not after the wait.
+	start = time.Now()
+	if _, err := b.Ordinary(ctx, "t"); !errors.Is(err, admission.ErrOrdinaryBusy) || time.Since(start) > time.Second {
+		t.Fatalf("a request behind a full line: %v after %v", err, time.Since(start))
+	}
+	hold()
+	if first := <-got; first != 0 {
+		t.Fatalf("waiter %d got the freed turn before waiter 0", first)
+	}
+	rels[0]()
+	if second := <-got; second != 1 {
+		t.Fatalf("the second turn went to waiter %d", second)
+	}
+	wg.Wait()
+	rels[1]()
+	r1()
+	r1() // twice is safe
+	r2()
+	o1()
+	if n := a.OrdinaryTenants(); n != 0 {
+		t.Fatalf("%d tenants are still remembered with nothing in flight", n)
+	}
+	if n := b.OrdinaryTenants(); n != 0 {
+		t.Fatalf("%d tenants are still remembered after the line ended", n)
+	}
+}
+
+// A client that leaves while it waits leaves the line, and the process-wide bound holds across tenants.
+func TestOrdinaryWaitEndsWithTheClientAndTheProcessIsBounded(t *testing.T) {
+	a := newAdm(t, admission.Config{OrdinaryTenant: 4, OrdinaryTotal: 2, OrdinaryWaiting: 8, OrdinaryWait: 5 * time.Second})
+	rel1, err := a.Ordinary(context.Background(), "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel2, err := a.Ordinary(context.Background(), "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := a.Ordinary(ctx, "c"); done <- err }()
+	testwait.Until(t, 5*time.Second, "the third tenant waits", func() bool { return a.OrdinaryTenants() == 3 })
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("a client that left: %v", err)
+	}
+	testwait.Until(t, 5*time.Second, "the tenant that left is forgotten", func() bool { return a.OrdinaryTenants() == 2 })
+	rel1()
+	rel2()
+	if _, err := a.Ordinary(context.Background(), "c"); err != nil {
+		t.Fatalf("a turn after the others ended: %v", err)
+	}
+}

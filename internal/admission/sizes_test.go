@@ -59,6 +59,14 @@ func TestTheHeavyBudgetFitsTheContainer(t *testing.T) {
 		if sum > limit {
 			t.Errorf("%s: the api may hold %d MiB with its heavy operations at their bounds, GOMEMLIMIT is %d MiB", profile, sum>>20, limit>>20)
 		}
+		// The ordinary operations hold memory too, and the 16 connections no longer bound it alone: OrdinaryTotal of them run
+		// at once, each at most OrdinaryBytes live (a rule create of 1,000 patterns is the largest). The collector keeps the
+		// heavy sum under GOMEMLIMIT; with the ordinary ones added the process must still be under the container, so the
+		// cgroup kill never comes before the collector has had its turn (p2-B3-r13-1).
+		ordinary := int64(admission.OrdinaryTotal) * admission.OrdinaryBytes
+		if all, mem := sum+ordinary, mib(t, strings.TrimSuffix(env["MEM_API"], "m")+"MiB"); all > mem {
+			t.Errorf("%s: with %d ordinary requests at %d MiB the api may hold %d MiB, the container has %d MiB", profile, admission.OrdinaryTotal, admission.OrdinaryBytes>>20, all>>20, mem>>20)
+		}
 	}
 	// The three weights fit the pool, and the biggest one fills it, so an Import of 6 MiB can always be admitted alone.
 	for _, w := range []int64{admission.WeightLarge, admission.WeightExport, admission.WeightSmall} {

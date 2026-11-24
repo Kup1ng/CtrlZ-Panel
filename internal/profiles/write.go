@@ -222,11 +222,25 @@ func (e *Env) Delete(ctx context.Context, st *store.Store, tenant, id uuid.UUID,
 	var err error
 	for attempt := 0; attempt < deleteAttempts; attempt++ {
 		err = st.WithTenant(ctx, tenant, opts, func(tx store.Tx) error { return e.deleteIn(tx, id) })
-		if !errors.Is(err, store.ErrRetry) {
+		if !lostARace(err) {
 			return err
 		}
 	}
 	return err
+}
+
+// lostARace is a transaction the database rolled back for a conflict that a second run may not meet: a deadlock (40P01) or
+// a serialization failure (40001). The two other kinds of ErrRetry are not: a lock timeout (55P03, the 200 ms of 3.1) says
+// the profile's guard is held, so a second run would wait the same 200 ms again, and a statement timeout (57014) would run
+// the delete for up to 30 s again. Each is the first answer, a 503 the client retries after the Retry-After it is given,
+// and not three transactions on a pooled connection that change nothing (p2-B3-r13-5).
+func lostARace(err error) bool {
+	var se *store.Error
+	if !errors.As(err, &se) || !errors.Is(err, store.ErrRetry) {
+		return false
+	}
+	c := se.SQLState()
+	return c == "40P01" || c == "40001"
 }
 
 // restricted is the refusal of the RESTRICT foreign keys of endpoints and schedule_windows (SQLSTATE 23001): an

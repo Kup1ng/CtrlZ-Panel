@@ -159,7 +159,11 @@ func (t Tx) ProfileCreate(name, kind string) (ProfileWrite, Won, error) {
 	return ProfileWrite{tenant: t.tenant, batch: t.batch, id: id}, w, nil
 }
 
-const qProfileClientsLock = `SELECT id FROM ctrlz.clients WHERE tenant_id = $1 AND (profile_id = $2 OR profile2_id = $2)` + orderedDelete
+// The two lookups ride on clients_profile_idx and clients_profile2_idx (migration 0091), so the lock reads the clients that name
+// the profile and not every client of the tenant (p2-B3-r13-4). The locking read is the outer one, by primary key, in id order.
+const qProfileClientsLock = `SELECT id FROM ctrlz.clients WHERE tenant_id = $1 AND id IN (
+  SELECT c.id FROM ctrlz.clients c WHERE c.tenant_id = $1 AND c.profile_id = $2
+  UNION SELECT c.id FROM ctrlz.clients c WHERE c.tenant_id = $1 AND c.profile2_id = $2)` + orderedDelete
 
 // ProfileClientsLock locks the clients that name the profile, in id order, before the profile is
 // deleted: the foreign keys write them (ON DELETE SET NULL, and promote_profile2), and a writer of

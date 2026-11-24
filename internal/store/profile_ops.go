@@ -117,6 +117,19 @@ func (t Tx) Job(id uuid.UUID) (JobRow, bool, error) {
 	return j, ok, err
 }
 
+// qJobResultSize is the size of a job's stored result as text, which is about the size of its answer: the database detoasts and
+// renders it and sends back a number, so the api can reserve the room of the answer before it reads one byte of it (p2-B3-r13-3).
+const qJobResultSize = `SELECT COALESCE(octet_length(result::text), 0)::bigint FROM ctrlz.batch_jobs WHERE tenant_id = $1 AND id = $2`
+
+// JobResultSize reads how many bytes the result of the tenant's job takes as JSON, 0 for a job with none; another tenant's id
+// is not found.
+func (t Tx) JobResultSize(id uuid.UUID) (int64, bool, error) {
+	var n int64
+	err := t.tx.QueryRow(t.ctx, qJobResultSize, t.tenant, id).Scan(&n)
+	ok, err := notFound(err)
+	return n, ok, err
+}
+
 const qJobActive = `SELECT ` + jobColumns + ` FROM ctrlz.batch_jobs WHERE tenant_id = $1 AND state IN ('queued', 'running')`
 
 // JobActive is the tenant's queued or running job, so a client that lost the 202 can resume polling.
@@ -253,10 +266,17 @@ func (t Tx) GlobalPair() (Pair, bool, error) {
 // qProfilePairs lists the node pair of every Endpoint that uses the profile in any role: enforced,
 // Profile 2, a schedule window, or a client. The override columns are NULL in v1 (D30), and a NULL pair
 // means the global pair; the query is written so that a pair override needs no change (T-022).
+//
+// It starts from the profile and not from the endpoints: the four index lookups (clients_profile_idx and
+// clients_profile2_idx, schedule_windows_profile_idx and schedule_windows_profile2_idx, migration 0091) are the rows that
+// name it, joined once to the endpoint ids. The form it replaced asked, for each of 50 endpoints, whether any of 1,000
+// clients named the profile, and so read all 50,000 of them for a profile no client uses (p2-B3-r13-4).
 const qProfilePairs = `SELECT DISTINCT e.pair_override_node_a, e.pair_override_node_b FROM ctrlz.endpoints e
-WHERE e.tenant_id = $1 AND (e.profile_id = $2 OR e.profile2_id = $2
-  OR EXISTS (SELECT 1 FROM ctrlz.schedule_windows w WHERE w.tenant_id = e.tenant_id AND w.endpoint_id = e.id AND (w.profile_id = $2 OR w.profile2_id = $2))
-  OR EXISTS (SELECT 1 FROM ctrlz.clients c WHERE c.tenant_id = e.tenant_id AND c.endpoint_id = e.id AND (c.profile_id = $2 OR c.profile2_id = $2)))`
+WHERE e.tenant_id = $1 AND (e.profile_id = $2 OR e.profile2_id = $2 OR e.id IN (
+  SELECT w.endpoint_id FROM ctrlz.schedule_windows w WHERE w.tenant_id = $1 AND w.profile_id = $2
+  UNION SELECT w.endpoint_id FROM ctrlz.schedule_windows w WHERE w.tenant_id = $1 AND w.profile2_id = $2
+  UNION SELECT c.endpoint_id FROM ctrlz.clients c WHERE c.tenant_id = $1 AND c.profile_id = $2
+  UNION SELECT c.endpoint_id FROM ctrlz.clients c WHERE c.tenant_id = $1 AND c.profile2_id = $2))`
 
 // ProfilePairs returns the pairs of the Endpoints that use the profile. A zero Pair stands for the
 // global pair.

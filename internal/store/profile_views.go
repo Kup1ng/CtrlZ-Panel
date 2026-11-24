@@ -24,8 +24,22 @@ type ProfileCounts struct {
 const qProfileCounts = `SELECT profile_id, endpoint_count, filter_count, service_count, rule_count, option_count
 FROM ctrlz.tenant_profile_counts WHERE tenant_id = $1`
 
-// ProfileCounts reads the counters of every profile of the tenant, by profile id.
-func (t Tx) ProfileCounts() (map[uuid.UUID]ProfileCounts, error) {
+// qProfileCountsOne names the profile, which the view's correlated counts need to push down: without it a read of one profile
+// counted the rules of all of them (20 profiles of 10,000 rules is 200,000 index tuples to show one, p2-B3-r13-2, r13-7).
+const qProfileCountsOne = `SELECT profile_id, endpoint_count, filter_count, service_count, rule_count, option_count
+FROM ctrlz.tenant_profile_counts WHERE tenant_id = $1 AND profile_id = $2`
+
+func scanProfileCounts(rows pgx.Rows) (uuid.UUID, ProfileCounts, error) {
+	var id uuid.UUID
+	var e, f, s, r, o int64
+	if err := rows.Scan(&id, &e, &f, &s, &r, &o); err != nil {
+		return uuid.Nil, ProfileCounts{}, sanitize(err)
+	}
+	return id, ProfileCounts{Endpoints: int(e), Filters: int(f), Services: int(s), Rules: int(r), Options: int(o)}, nil
+}
+
+// ProfileCountsAll reads the counters of every profile of the tenant, by profile id: the list needs all of them.
+func (t Tx) ProfileCountsAll() (map[uuid.UUID]ProfileCounts, error) {
 	rows, err := t.tx.Query(t.ctx, qProfileCounts, t.tenant)
 	if err != nil {
 		return nil, sanitize(err)
@@ -33,12 +47,27 @@ func (t Tx) ProfileCounts() (map[uuid.UUID]ProfileCounts, error) {
 	defer rows.Close()
 	out := map[uuid.UUID]ProfileCounts{}
 	for rows.Next() {
-		var id uuid.UUID
-		var e, f, s, r, o int64
-		if err := rows.Scan(&id, &e, &f, &s, &r, &o); err != nil {
-			return nil, sanitize(err)
+		id, c, err := scanProfileCounts(rows)
+		if err != nil {
+			return nil, err
 		}
-		out[id] = ProfileCounts{Endpoints: int(e), Filters: int(f), Services: int(s), Rules: int(r), Options: int(o)}
+		out[id] = c
+	}
+	return out, sanitize(rows.Err())
+}
+
+// ProfileCountsOf reads the counters of one profile; a profile that is not the tenant's has the zero value.
+func (t Tx) ProfileCountsOf(profile uuid.UUID) (ProfileCounts, error) {
+	rows, err := t.tx.Query(t.ctx, qProfileCountsOne, t.tenant, profile)
+	if err != nil {
+		return ProfileCounts{}, sanitize(err)
+	}
+	defer rows.Close()
+	var out ProfileCounts
+	for rows.Next() {
+		if _, out, err = scanProfileCounts(rows); err != nil {
+			return ProfileCounts{}, err
+		}
 	}
 	return out, sanitize(rows.Err())
 }

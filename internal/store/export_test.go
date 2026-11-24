@@ -79,3 +79,10 @@ const (
 	QFoldersList   = qFoldersList
 	QFolderCounted = qFolderCounted
 )
+
+// The profile statements of round 13, for the same plan test.
+const (
+	QProfilePairs       = qProfilePairs
+	QProfileClientsLock = qProfileClientsLock
+	QProfileCountsOne   = qProfileCountsOne
+)
