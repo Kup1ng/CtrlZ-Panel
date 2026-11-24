@@ -1,0 +1,130 @@
+# What a ctrlz role may reach in pg_catalog without a grant on anything of ours (P1 auth review round
+# 14, db-r14-3 and db-r14-4; rules.md topic 2 "role-reach", round 14).
+#
+# Postgres leaves a set of functions and views open to PUBLIC that either hold SHARED SERVER STATE (the
+# advisory locks: one session's lock stops every other) or SHOW what other sessions do with no
+# privilege on the tables they do it to (the statistics, the lock views, the sizes, the WAL
+# position). Check 12 reads grants on OUR objects and cannot see them. Check 30 asks the live ACLs of
+# every object matched below and fails for any role that holds a privilege the entry does not name, and
+# for PUBLIC holding any: DEFAULT DENY, so a family has no allow list unless it needs one.
+#
+# bootstrap/20-database.sql does the REVOKE (a superuser step: pg_catalog belongs to the cluster, so
+# a migration cannot) and the three GRANTs below. The two ends are one decision; a role granted here
+# without the bootstrap line, or a revoke the bootstrap forgot, is a finding of check 30.
+#
+# like: SQL LIKE patterns (underscore escaped) on the object name in pg_catalog; names: exact names.
+# A new family is a new entry. A function added by a later Postgres under a matched name is covered
+# by the pattern, and the bootstrap loop covers it the next time it runs.
+#
+# execute / select: the name with its identity arguments, or the relation name, mapped to the roles
+# (short names of grants.yaml) that may hold the privilege, each with the reason in the family's why.
+
+functions:
+  - family: advisory-locks
+    like: ['pg\_advisory\_%', 'pg\_try\_advisory\_%']
+    names: []
+    why: >-
+      A lock function gives a session the means to make every other wait: a session-level lock is not
+      ended by statement_timeout or idle_in_transaction_session_timeout, and the keys the system takes
+      (hashtextextended('ctrlz.audit_log', 0), 'ctrlz.ip_claim_request:<tenant>') can be computed by
+      anyone. ctrlz_auth owns the definer functions that take the transaction-level lock
+      (ip_claim_request, audit_lock). ctrlz_migrator is goose's session locker (one migration run at a
+      time); it logs in only from the migrate container. No role that serves requests holds one: the
+      admin service takes the audit lock through ctrlz_fn.audit_lock(), which locks that one key.
+    execute:
+      "pg_advisory_xact_lock(bigint)": [auth]
+      "pg_try_advisory_lock(bigint)": [migrator]
+      "pg_advisory_unlock(bigint)": [migrator]
+
+  - family: statistics-and-lock-views
+    like: ['pg\_stat\_%', 'pg\_statio\_%']
+    names: [pg_lock_status, pg_prepared_xact]
+    why: >-
+      The cumulative statistics count the rows each table received and the calls each function got,
+      with no privilege on the table or the function, so a role with no grant on sms_counters or
+      otp_challenges could count what an OTP request wrote there and tell a real challenge from a
+      decoy by it. The lock functions show which relations other sessions hold. Nobody of ours needs
+      them: monitoring is a role added on purpose (pg_monitor), outside this file.
+    execute: {}
+
+  - family: sizes-and-wal-position
+    like: []
+    names: [pg_relation_size, pg_total_relation_size, pg_table_size, pg_indexes_size, pg_database_size,
+            pg_tablespace_size, pg_current_wal_lsn, pg_current_wal_insert_lsn, pg_current_wal_flush_lsn]
+    why: >-
+      pg_relation_size and its relatives check no privilege on the relation, and the WAL position is the
+      byte count of everything written, so the growth of a table or of the log measures what other
+      sessions did. Nobody of ours needs them.
+    execute: {}
+
+  - family: blocking-and-server-control
+    like: ['pg\_control\_%', 'pg\_last\_wal\_%']
+    names: [pg_blocking_pids, pg_safe_snapshot_blocking_pids, pg_isolation_test_session_is_blocked,
+            pg_get_wal_summarizer_state, pg_available_wal_summaries]
+    why: >-
+      The lock family's own reason applies to these (db-r15-9): pg_blocking_pids and its two relatives
+      say which session waits for which, so two overlapping requests of which only one writes the global
+      counter row (a real OTP request, not a decoy) can be told apart; the control-file and WAL-summary
+      functions give the position of the log and the next transaction id as of the last checkpoint, the
+      sizes family's measure of what other sessions wrote. They were in no pattern, so check 30 never
+      judged them. Nobody of ours needs them. Catalog check 31 keeps the same gap from opening again:
+      it lists everything PUBLIC may use in pg_catalog.
+    execute: {}
+
+  - family: binary-upgrade
+    like: ['binary\_upgrade\_%']
+    names: []
+    why: >-
+      pg_upgrade's own helpers (they refuse to run outside a binary-upgrade server, but PUBLIC holds
+      EXECUTE by default). A minor release adds one without notice: 18.7 added
+      binary_upgrade_set_next_attribute_versions and catalog check 31 failed on a runner that pulled it
+      (db-r16-1). A PATTERN, not a name, so the next one is closed by the same bootstrap loop and judged
+      by check 30 and by the migrate step with no line written. Nobody of ours needs them.
+    execute: {}
+
+  - family: large-objects
+    like: ['lo\_%']
+    names: [loread, lowrite]
+    why: >-
+      A large object is created with lo_create, lo_from_bytea or lo_open and needs no grant on anything:
+      a role with only CONNECT stores any amount of data in pg_largeobject, outside ctrlz, outside every
+      retention sweep and every column grant, and it outlives the session (db-r16-15). The volume then
+      fills for every tenant, and nothing in the schema shows where the space went. Nobody of ours uses
+      large objects. lo_import and lo_export are superuser-only already and are listed here by the pattern.
+    execute: {}
+
+  - family: transaction-status-and-snapshots
+    like: []
+    names: [pg_current_snapshot, txid_current_snapshot, pg_xact_status, txid_status, pg_get_multixact_members,
+            pg_xact_commit_timestamp, pg_xact_commit_timestamp_origin, pg_last_committed_xact]
+    why: >-
+      These read what OTHER transactions did with no privilege on the tables they did it to: the
+      transaction ids in progress (a snapshot lists the write transactions running now), whether a given
+      transaction committed or rolled back, who holds a multixact, and commit times. A role that polls
+      them while a request is made from outside can tell a request that caused write transactions (a real
+      one-time code, and the worker's claim, send and cost transactions after it) from one that did not
+      (db-r16-16; rule known-unknown-oracle). Reading the role's OWN transaction id (pg_current_xact_id,
+      txid_current, a RETURNING of xmin) cannot be closed and stays the declared open item.
+    execute: {}
+
+  - family: wal-writes-and-notifications
+    like: []
+    names: [pg_logical_emit_message, pg_notify]
+    why: >-
+      pg_logical_emit_message writes a record of any size to the WAL with no grant on any table, so any
+      role can grow the log for every tenant. pg_notify is the function spelling of NOTIFY: nothing in
+      the module notifies (rule no-notify), and the function revoked here means that a definer function
+      which calls it in ANY spelling (a Unicode-escaped identifier, a dynamic EXECUTE) fails with 42501
+      the first time it runs, where the text checks (catalog check 32, the Go lint) judge only the
+      spellings they know (db-r16-17). The statements NOTIFY and LISTEN are keywords and have no
+      privilege to revoke; check 32 and the behaviour test of rule no-notify judge those.
+    execute: {}
+
+relations:
+  - family: statistics-and-lock-views
+    like: ['pg\_stat\_%', 'pg\_statio\_%']
+    names: [pg_locks, pg_prepared_xacts]
+    why: >-
+      The views over the statistics and the lock table (see the function family of the same name).
+      pg_stats, which shows only the columns the reader may read, is not matched.
+    select: {}
