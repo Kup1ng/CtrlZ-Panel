@@ -91,6 +91,7 @@ var insertOrderExempt = map[string]stmtExempt{
 	"qOutboxFirstGate": {"sms_counters", "one row: the source is a CTE over the singleton system_settings table, filtered by a WHERE", "b7fb77ebfc7657d71ffed74affaf3274be892ff5743d68d8bd7a4601bb7f880e"},
 	"qFolderInsert":    {"rule_folders", "one row: the source is a SELECT of the parameters with a WHERE on the folder cap, no FROM", "cb801ae1930a9371f0ebc690e66c6b3bb86c2aae25cc1e2d92ac17dcae924d18"},
 	"qClientInsert":    {"clients", "one row: the source is a SELECT of the parameters with a WHERE on max_clients_per_endpoint, no FROM; the WITH only supplies the tenant's one row of limits (none: the cap reads 0)", "b7454b801e5da267470643a8ecc06887cec45facf541a7e6a22574a52b03cb2f"},
+	"qDDNSHostInsert":  {"endpoint_ddns_hosts", "one row: the source is a SELECT of the parameters with a WHERE on the host cap of the Endpoint, no FROM", "a79bf6e1c3a3e9f0fceb56ae130fb90cbc79debaebcf7fd312b10cfe76c7d4f7"},
 	"qGroupInsert":     {"endpoint_groups", "one row: the source is a SELECT of the parameters with a WHERE on the group cap, no FROM", "50082951cc9a7ad465cd81a78b41337592588f925a69cf2b310364e93a9e9080"},
 	"qProfileCreate":   {"profiles", "one row: the source is a SELECT of the parameters with a WHERE on max_profiles, no FROM; the WITH only supplies the tenant's one row of limits (none: the cap reads 0)", "017e323d70e5916c5d6c553b8c575b9c0b408cdd616c598a05ad01de772184ee"},
 }

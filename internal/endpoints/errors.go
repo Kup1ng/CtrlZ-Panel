@@ -32,6 +32,15 @@ const (
 	KindTokenNotAllowed
 	// KindKeyReused is 409 idempotency_key_reused.
 	KindKeyReused
+	// KindIPSuspended is 409 ip_suspended: the claim, or a claim of the tenant that overlaps it, is suspended and only an admin ends that.
+	KindIPSuspended
+	// KindIPUnavailable is 409 ip_unavailable: another tenant holds the address and the proof does not displace it (D35). It names nobody.
+	KindIPUnavailable
+	// KindNeedsAdmin is 409 needs_admin_approval: a claim wider than /32 is proven only after an admin approves it.
+	KindNeedsAdmin
+	// KindTooManyChallenges is 429 too_many_attempts: the claim, or the tenant, holds as many live challenges as the function allows.
+	// RetryAfter is the seconds until one ends.
+	KindTooManyChallenges
 )
 
 func (k Kind) String() string {
@@ -54,6 +63,14 @@ func (k Kind) String() string {
 		return "token_not_allowed"
 	case KindKeyReused:
 		return "idempotency_key_reused"
+	case KindIPSuspended:
+		return "ip_suspended"
+	case KindIPUnavailable:
+		return "ip_unavailable"
+	case KindNeedsAdmin:
+		return "needs_admin_approval"
+	case KindTooManyChallenges:
+		return "too_many_attempts"
 	}
 	return "unknown"
 }
@@ -69,6 +86,8 @@ type Field struct {
 type Error struct {
 	Kind   Kind
 	Fields []Field
+	// RetryAfter is the seconds a KindTooManyChallenges asks the caller to wait.
+	RetryAfter int
 }
 
 func (e *Error) Error() string {
@@ -112,4 +131,8 @@ const (
 	CodeGrid              = "grid"
 	CodeOverlap           = "overlap"
 	CodeReserved          = "reserved"
+	CodeCurrentAddress    = "current_address"
+	CodeLastAuthorized    = "last_authorized"
+	CodeReservedRange     = "reserved_range"
+	CodeUnsupportedFamily = "unsupported_family"
 )

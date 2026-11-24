@@ -82,6 +82,7 @@ type Runner struct {
 	backoff  []time.Duration
 	now      func() time.Time
 	failures map[uuid.UUID]failure
+	holder   string // this worker's name in the lease of the periodic sweep
 
 	beforeStart func(store.AdminJob)
 	afterPage   func(int)
@@ -100,7 +101,7 @@ func New(c Config) (*Runner, error) {
 	if c.Store == nil || c.Log == nil {
 		return nil, errors.New("adminjobs: store and log are required")
 	}
-	r := &Runner{db: c.Store, log: c.Log, poll: c.Poll, maxFail: c.MaxFailures, page: c.Page, failures: map[uuid.UUID]failure{}, backoff: c.Backoff, now: c.Now,
+	r := &Runner{db: c.Store, log: c.Log, poll: c.Poll, maxFail: c.MaxFailures, page: c.Page, failures: map[uuid.UUID]failure{}, holder: sweepHolder(), backoff: c.Backoff, now: c.Now,
 		beforeStart: c.BeforeStart, afterPage: c.AfterPage}
 	if r.poll <= 0 {
 		r.poll = 5 * time.Second
@@ -131,6 +132,23 @@ func New(c Config) (*Runner, error) {
 func (r *Runner) Run(ctx context.Context) error {
 	tick := time.NewTicker(r.poll)
 	defer tick.Stop()
+	// The registration sweep has its own cadence and its own goroutine: it walks every tenant and must not hold back the poll
+	// for jobs (P3 spec 4.4).
+	done := make(chan struct{})
+	safego.Go(r.log, unitSweep, func() {
+		defer close(done)
+		sweep := time.NewTicker(SweepEvery)
+		defer sweep.Stop()
+		for {
+			r.runSweepOnce(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-sweep.C:
+			}
+		}
+	})
+	defer func() { <-done }()
 	for {
 		r.pass(ctx)
 		select {
@@ -159,10 +177,11 @@ type logUnit string
 const (
 	unitPass    logUnit = "pass"
 	unitHandler logUnit = "handler"
+	unitSweep   logUnit = "sweep"
 )
 
 // Valid reports membership.
-func (u logUnit) Valid() bool { return u == unitPass || u == unitHandler }
+func (u logUnit) Valid() bool { return u == unitPass || u == unitHandler || u == unitSweep }
 
 func errClass(err error) logattr.ErrClass {
 	switch {
@@ -322,6 +341,12 @@ var errBadParams = errors.New("adminjobs: bad parameters")
 // reporting after every page. A tenant that fails stops the walk with the error:
 // the job is left running and the whole walk runs again, which is safe.
 func (r *Runner) forEachTenant(ctx context.Context, fn func(store.Tx) error, after func(done int)) error {
+	return r.forEachTenantWith(ctx, store.TxOpts{}, 0, fn, after)
+}
+
+// forEachTenantWith is forEachTenant with the options of each tenant's transaction (the sweep gives them one batch id) and a bound on
+// the tenants of one run (0 for none): a run that stops at its bound leaves the rest to the next one.
+func (r *Runner) forEachTenantWith(ctx context.Context, opts store.TxOpts, bound int, fn func(store.Tx) error, after func(done int)) error {
 	cursor := uuid.Nil
 	done := 0
 	for {
@@ -336,10 +361,14 @@ func (r *Runner) forEachTenant(ctx context.Context, fn func(store.Tx) error, aft
 			return nil
 		}
 		for _, id := range ids {
-			if err := r.db.WithTenant(ctx, id, store.TxOpts{}, fn); err != nil {
+			if err := r.db.WithTenant(ctx, id, opts, fn); err != nil {
 				return err
 			}
 			done++
+			if bound > 0 && done >= bound {
+				after(done)
+				return nil
+			}
 		}
 		after(done)
 		if r.afterPage != nil {
@@ -414,35 +443,6 @@ func (r *Runner) webauthnRPChange(ctx context.Context, j store.AdminJob, report 
 		prog.Users += len(users)
 		prog.Enforced += int(cleared)
 		return nil
-	}, func(done int) {
-		prog.Tenants = done
-		report(prog)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return prog, nil
-}
-
-// ---------------------------------------------------------------------------
-// registration_transition (11.2)
-
-// RegistrationProgress is the progress of a registration transition.
-type RegistrationProgress struct {
-	Tenants int `json:"tenants"`
-	Claims  int `json:"claims"`
-}
-
-// registrationTransition counts the unproven claims and finishes. P1 builds no
-// grace and no suspension: no route can create an ip_claim before P3, so the
-// count is 0 and the job is safe with nothing else to do. P3 replaces this
-// handler with the sweep of 11.5 through Config.Handlers.
-func (r *Runner) registrationTransition(ctx context.Context, _ store.AdminJob, report Report) (any, error) {
-	var prog RegistrationProgress
-	err := r.forEachTenant(ctx, func(tx store.Tx) error {
-		n, err := tx.UnprovenClaims()
-		prog.Claims += n
-		return err
 	}, func(done int) {
 		prog.Tenants = done
 		report(prog)

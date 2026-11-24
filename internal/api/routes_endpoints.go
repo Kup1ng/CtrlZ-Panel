@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -61,6 +62,15 @@ func endpointsError(err error) (*httpx.Error, bool) {
 		e = httpx.New(http.StatusForbidden, httpx.CodeTokenNotAllowed)
 	case endpoints.KindKeyReused:
 		e = httpx.New(http.StatusConflict, httpx.CodeKeyReused)
+	case endpoints.KindIPSuspended:
+		e = httpx.New(http.StatusConflict, httpx.CodeIPSuspended)
+	case endpoints.KindIPUnavailable:
+		// Generic on purpose: the same answer whoever holds the address (spec 4.3, D35).
+		e = httpx.New(http.StatusConflict, httpx.CodeIPUnavailable)
+	case endpoints.KindNeedsAdmin:
+		e = httpx.New(http.StatusConflict, httpx.CodeNeedsAdminApproval)
+	case endpoints.KindTooManyChallenges:
+		e = httpx.New(http.StatusTooManyRequests, httpx.CodeTooManyAttempts).WithRetry(time.Duration(ee.RetryAfter) * time.Second)
 	default:
 		return httpx.Internal(), true
 	}
@@ -107,6 +117,23 @@ func (v lockVerifier) LockPasswordFailed(ctx context.Context, profile, endpoint 
 	return v.s.writeTx(ctx, v.tenant, func(tx store.Tx) error {
 		return audit.Tenant(tx, v.user, v.ip, audit.ProfileLockPasswordFailed{ProfileID: profile, EndpointID: endpoint})
 	})
+}
+
+// LockPasswordUsed writes the audit row of a verified password for a request that ends without a commit, in a transaction of its
+// own (the write that commits writes it in its own transaction).
+func (v lockVerifier) LockPasswordUsed(ctx context.Context, profile, endpoint uuid.UUID) error {
+	return v.s.writeTx(ctx, v.tenant, func(tx store.Tx) error {
+		return audit.Tenant(tx, v.user, v.ip, audit.ProfileLockPasswordUsed{ProfileID: profile, EndpointID: endpoint})
+	})
+}
+
+// LockPasswordsAccepted clears profile_unlock for each profile whose password a committed write used, as the unlock route does
+// after a right password: that scope counts failures, so right passwords must not use it up. profile_lock_tenant is not cleared
+// (P3 spec 3.3). A convenience after the commit, not a gate.
+func (v lockVerifier) LockPasswordsAccepted(ctx context.Context, profiles []uuid.UUID) {
+	for _, p := range profiles {
+		_ = v.s.throttle.Clear(ctx, throttle.ProfileUnlock, throttle.Who{Tenant: v.tenant, Profile: p})
+	}
 }
 
 // endpointAuth builds what a write that may need lock passwords carries: the passwords, bounded as P2 7.1 bounds them
@@ -251,6 +278,11 @@ func decodeListCursor(c *string, tenant uuid.UUID, byName bool) (at time.Time, n
 		return at, name, uuid.Nil, false, httpx.NotFound()
 	}
 	if byName {
+		// The name goes to Postgres as text: bytes that are not UTF-8, or a NUL, are an error there (SQLSTATE 22021) and would
+		// be answered 500, so a forged position is refused here. A name the panel wrote is at most NameLimit characters.
+		if n := parts[3]; !utf8.ValidString(n) || strings.ContainsRune(n, 0) || utf8.RuneCountInString(n) > endpoints.NameLimit {
+			return at, name, uuid.Nil, false, httpx.BadRequest()
+		}
 		return at, parts[3], id, true, nil
 	}
 	n, e3 := strconv.ParseInt(parts[3], 10, 64)

@@ -162,9 +162,15 @@ func (s *Store) WithTenant(ctx context.Context, tenant uuid.UUID, opts TxOpts, f
 	if ctx.Value(txMarker{}) != nil {
 		return ErrNested
 	}
-	batch, err := uuid.NewV7()
-	if err != nil {
-		return fmt.Errorf("store: batch id: %w", err)
+	// A caller that walks several tenants in one run (the registration sweep, P3 spec 4.4) passes the run's batch id, so
+	// the endpoint_set rows of every tenant it changes carry one batch_id and the compiler emits one config entry for the
+	// run. Everyone else gets a batch of its own.
+	batch := opts.Batch
+	if batch == uuid.Nil {
+		var err error
+		if batch, err = uuid.NewV7(); err != nil {
+			return fmt.Errorf("store: batch id: %w", err)
+		}
 	}
 	return s.run(ctx, opts, func(ctx context.Context, tx *guardTx) error {
 		if _, err := tx.Exec(ctx, setTenantSQL, tenant.String()); err != nil {

@@ -332,6 +332,9 @@ func All() []Bucket {
 		// charged by the pipeline once the session resolved, before the bulk gate and the body.
 		{Layer: RateClass, Service: Tenant, Name: "bulk-write", Source: Subject, Parts: []Part{PartSession}, Limits: perMin(10)},
 		{Layer: RateClass, Service: Tenant, Name: "bulk-write-tenant", Source: Subject, Parts: []Part{PartTenant}, Limits: []Limit{{Max: 200, Per: d24}}},
+		// Every claim request, release and challenge open of a tenant, from any of its sessions (P3 spec 4.5, T-529): the only bound on how
+		// many released rows a tenant accumulates. The pipeline charges it after the operation's own class (x-ctrlz-rate-also), on the tenant of the live session.
+		{Layer: RateClass, Service: Tenant, Name: "ip-claim", Source: Subject, Parts: []Part{PartTenant}, Limits: []Limit{{Max: 30, Per: time.Hour}}},
 		{Layer: RateClass, Service: Tenant, Name: "session-lookup", Source: Proof, Parts: []Part{PartCookie}, Limits: perMin(120)},
 		// What dead cookies can cost in lookups once the dead set has forgotten some: one budget per session, taken
 		// before the lookup and given back unless the session is gone for good (round 7, primitives-r7-6; keyed on the

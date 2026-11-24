@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -113,19 +114,37 @@ func (f *fx) lock(t *testing.T, profile uuid.UUID) {
 
 // fakeVerifier accepts one password, and records what it was asked.
 type fakeVerifier struct {
-	right  string
-	calls  []uuid.UUID
-	failed []uuid.UUID
+	right string
+	// wrongFor is a profile whose password is refused whatever is sent.
+	wrongFor uuid.UUID
+	calls    []uuid.UUID
+	failed   []uuid.UUID
+	used     []uuid.UUID
+	accepted []uuid.UUID
+	// onCheck runs inside a password check, which is where the rows of a real request can change under it.
+	onCheck func()
 }
 
 func (v *fakeVerifier) CheckLockPassword(_ context.Context, profile uuid.UUID, pw, _ secret.String) (bool, error) {
+	if v.onCheck != nil {
+		v.onCheck()
+	}
 	v.calls = append(v.calls, profile)
-	return pw.Reveal() == v.right, nil
+	return profile != v.wrongFor && pw.Reveal() == v.right, nil
 }
 
 func (v *fakeVerifier) LockPasswordFailed(_ context.Context, profile, _ uuid.UUID) error {
 	v.failed = append(v.failed, profile)
 	return nil
+}
+
+func (v *fakeVerifier) LockPasswordUsed(_ context.Context, profile, _ uuid.UUID) error {
+	v.used = append(v.used, profile)
+	return nil
+}
+
+func (v *fakeVerifier) LockPasswordsAccepted(_ context.Context, profiles []uuid.UUID) {
+	v.accepted = append(v.accepted, profiles...)
 }
 
 func (f *fx) auth(tenant uuid.UUID, v *fakeVerifier, pws ...endpoints.Password) endpoints.Auth {
@@ -607,5 +626,200 @@ func TestRotateDrawsNewValuesAndEndsTheLinks(t *testing.T) {
 	// B's links are its own.
 	if n := f.count(t, `SELECT count(*) FROM ctrlz.setup_share_tokens WHERE endpoint_id = $1 AND revoked_at IS NULL`, f.B.Endpoint); n == 0 {
 		t.Error("B's share link ended with A's rotation")
+	}
+}
+
+// The passwords of a committed write are reported accepted (the api clears profile_unlock for them, as the unlock route does),
+// and those of a refused one are not.
+func TestLockPasswordsAreAcceptedOnlyAfterTheCommit(t *testing.T) {
+	f := newFx(t)
+	p1 := f.newProfile(t, f.A.Tenant, "locked")
+	ep := f.create(t, f.A.Tenant, p1, "guarded")[0]
+	f.lock(t, p1)
+	v := &fakeVerifier{right: "right-password"}
+	soft := "soft_disabled"
+	if _, err := f.env.Patch(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, v, pw(p1, "wrong")), ep.ID, endpoints.Patch{AdminState: &soft}); err == nil {
+		t.Fatal("a wrong password applied")
+	}
+	if len(v.accepted) != 0 {
+		t.Errorf("a refused request reported %v accepted", v.accepted)
+	}
+	if _, err := f.env.Patch(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, v, pw(p1, "right-password")), ep.ID, endpoints.Patch{AdminState: &soft}); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.accepted) != 1 || v.accepted[0] != p1 {
+		t.Errorf("accepted %v, want [%v]", v.accepted, p1)
+	}
+	// Committed: its use is the row of its own transaction, and the verifier is not asked to write another.
+	if len(v.used) != 0 {
+		t.Errorf("a committed write asked for %d out-of-transaction used rows", len(v.used))
+	}
+}
+
+// A request that needs more passwords than a request can carry is 422 exceeded, not 423 required: no list of at most eight
+// satisfies it, and asking for a password the owner cannot supply would never end.
+func TestARequestThatNeedsMoreThanEightPasswordsIsExceeded(t *testing.T) {
+	f := newFx(t)
+	base := f.newProfile(t, f.A.Tenant, "base")
+	ep := f.create(t, f.A.Tenant, base, "wide")[0]
+	locked := []uuid.UUID{base}
+	var ws []endpoints.WindowIn
+	for i := 0; i < 8; i++ {
+		p := f.newProfile(t, f.A.Tenant, "w"+string(rune('a'+i)))
+		locked = append(locked, p)
+		ws = append(ws, endpoints.WindowIn{Start: i * 60, End: i*60 + 30, ProfileID: p})
+	}
+	v := &fakeVerifier{right: "right-password"}
+	if _, err := f.env.SetSchedule(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, v), ep.ID, endpoints.ScheduleIn{Timezone: "UTC", Windows: ws}); err != nil {
+		t.Fatal(err)
+	}
+	var pws []endpoints.Password
+	for _, p := range locked {
+		f.lock(t, p)
+		pws = append(pws, pw(p, "right-password"))
+	}
+	for n := 0; n <= 8; n += 4 {
+		err := f.env.Delete(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, v, pws[:n]...), []uuid.UUID{ep.ID})
+		if e := refusal(t, err); e.Kind != endpoints.KindValidation || !hasField(e, "/lock_passwords", endpoints.CodeExceeded) {
+			t.Errorf("%d passwords sent: %v", n, e)
+		}
+	}
+	if len(v.calls) != 0 {
+		t.Error("a request that cannot be satisfied was charged")
+	}
+	if f.count(t, `SELECT count(*) FROM ctrlz.endpoints WHERE id = $1`, ep.ID) != 1 {
+		t.Error("the Endpoint was deleted")
+	}
+}
+
+// A password that was verified is in the audit trail even when the request does not commit, because a later one was wrong.
+func TestAVerifiedPasswordIsRecordedWhenALaterOneIsWrong(t *testing.T) {
+	f := newFx(t)
+	p1 := f.newProfile(t, f.A.Tenant, "first")
+	p2 := f.newProfile(t, f.A.Tenant, "second")
+	ep := f.create(t, f.A.Tenant, p1, "two")[0]
+	if _, err := f.env.SetSchedule(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, &fakeVerifier{}), ep.ID,
+		endpoints.ScheduleIn{Timezone: "UTC", Windows: []endpoints.WindowIn{{Start: 0, End: 60, ProfileID: p2}}}); err != nil {
+		t.Fatal(err)
+	}
+	f.lock(t, p1)
+	f.lock(t, p2)
+	// The profiles are checked in id order: the larger id is the wrong one, so the smaller is verified first.
+	lo, hi := p1, p2
+	if slices.Compare(lo[:], hi[:]) > 0 {
+		lo, hi = hi, lo
+	}
+	v := &fakeVerifier{right: "right-password", wrongFor: hi}
+	err := f.env.Delete(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, v, pw(p1, "right-password"), pw(p2, "right-password")), []uuid.UUID{ep.ID})
+	if e := refusal(t, err); e.Kind != endpoints.KindInvalidCredentials {
+		t.Fatalf("%v", e)
+	}
+	if len(v.used) != 1 || v.used[0] != lo || len(v.failed) != 1 || v.failed[0] != hi {
+		t.Errorf("used %v failed %v, want used [%v] failed [%v]", v.used, v.failed, lo, hi)
+	}
+	if len(v.accepted) != 0 || f.count(t, `SELECT count(*) FROM ctrlz.endpoints WHERE id = $1`, ep.ID) != 1 {
+		t.Error("a refused request was accepted or applied")
+	}
+}
+
+// An edit by selector reaches every match across the repeats that "more" asks for: a client that already holds the values is
+// skipped, so each call makes progress. It used to select the first 500 by id every time.
+func TestBatchEditBySelectorReachesEveryClient(t *testing.T) {
+	f := newFx(t)
+	ep := f.create(t, f.A.Tenant, f.A.Profile, "many")[0]
+	f.exec(t, `INSERT INTO ctrlz.clients (tenant_id, endpoint_id, label, source)
+	  SELECT $1, $2, 'c' || g, 'auto' FROM generate_series(1, 1250) g`, f.A.Tenant, ep.ID)
+	a := f.auth(f.A.Tenant, &fakeVerifier{})
+	group := "kids"
+	in := endpoints.ClientBatchIn{Op: "edit", All: true, Change: endpoints.ClientChange{GroupName: &group}}
+	for i, want := range []struct {
+		n    int
+		more bool
+	}{{500, true}, {500, true}, {250, false}, {0, false}} {
+		n, more, err := f.env.BatchClients(f.ctx, f.st, f.A.Tenant, opts, a, ep.ID, in)
+		if err != nil || n != want.n || more != want.more {
+			t.Fatalf("call %d: affected %d more %v err %v, want %d %v", i+1, n, more, err, want.n, want.more)
+		}
+	}
+	if left := f.count(t, `SELECT count(*) FROM ctrlz.clients WHERE endpoint_id = $1 AND group_name IS DISTINCT FROM 'kids'`, ep.ID); left != 0 {
+		t.Errorf("%d clients were not reached", left)
+	}
+}
+
+// A change of the alias or the group name of a client that has a profile moves nothing the compiler reads: no outbox row. A
+// change of the profile does.
+func TestClientEditMarksOnlyACompiledChange(t *testing.T) {
+	f := newFx(t)
+	ep := f.create(t, f.A.Tenant, f.A.Profile, "mark")[0]
+	a := f.auth(f.A.Tenant, &fakeVerifier{})
+	c, err := f.env.CreateClient(f.ctx, f.st, f.A.Tenant, opts, a, ep.ID, endpoints.ClientCreate{Alias: "kid", ProfileID: f.A.Profile2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(t, `DELETE FROM ctrlz.policy_outbox`)
+	alias, group := "renamed", "home"
+	if _, err := f.env.PatchClient(f.ctx, f.st, f.A.Tenant, opts, a, ep.ID, c.ID, endpoints.ClientChange{Alias: &alias, GroupName: &group}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.env.BatchClients(f.ctx, f.st, f.A.Tenant, opts, a, ep.ID, endpoints.ClientBatchIn{Op: "edit", IDs: []uuid.UUID{c.ID}, Change: endpoints.ClientChange{GroupName: &alias}}); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.outbox(t, f.A.Tenant); n != 0 {
+		t.Errorf("a rename wrote %d outbox rows", n)
+	}
+	if _, err := f.env.PatchClient(f.ctx, f.st, f.A.Tenant, opts, a, ep.ID, c.ID, endpoints.ClientChange{ClearProfile: true}); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.outbox(t, f.A.Tenant); n != 1 {
+		t.Errorf("clearing the profile wrote %d outbox rows", n)
+	}
+}
+
+// A patch answers with the row its own transaction wrote, read before the commit, so a delete that follows cannot turn the answer
+// into an empty 200. The race itself needs two requests between two statements; this checks the row that is answered and the
+// not-found of a client that is gone.
+func TestPatchClientAnswersTheRowItWrote(t *testing.T) {
+	f := newFx(t)
+	ep := f.create(t, f.A.Tenant, f.A.Profile, "answer")[0]
+	a := f.auth(f.A.Tenant, &fakeVerifier{})
+	c, err := f.env.CreateClient(f.ctx, f.st, f.A.Tenant, opts, a, ep.ID, endpoints.ClientCreate{Alias: "kid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias := "x"
+	got, err := f.env.PatchClient(f.ctx, f.st, f.A.Tenant, opts, a, ep.ID, c.ID, endpoints.ClientChange{Alias: &alias})
+	if err != nil || got.ID != c.ID || got.Alias == nil || *got.Alias != "x" {
+		t.Fatalf("%v %+v", err, got)
+	}
+	if _, err := f.env.PatchClient(f.ctx, f.st, f.A.Tenant, opts, a, ep.ID, uuid.New(), endpoints.ClientChange{Alias: &alias}); refusal(t, err).Kind != endpoints.KindNotFound {
+		t.Error("a client that is gone")
+	}
+}
+
+// A password that was verified for the probe but is not needed by the write that commits (the rows moved while Argon2 ran)
+// still leaves its used row: the owner's trail shows which password was confirmed (p3-D2-r2-1, r2-3).
+func TestVerifiedPasswordTheWriteNoLongerNeedsIsAudited(t *testing.T) {
+	f := newFx(t)
+	p1 := f.newProfile(t, f.A.Tenant, "locked")
+	ep := f.create(t, f.A.Tenant, p1, "guarded")[0]
+	f.lock(t, p1)
+	v := &fakeVerifier{right: "right-password"}
+	// While the password is checked, another request switches the Endpoint off: the write then removes nothing.
+	v.onCheck = func() {
+		f.exec(t, `UPDATE ctrlz.endpoints SET admin_state = 'soft_disabled' WHERE id = $1`, ep.ID)
+	}
+	soft := "soft_disabled"
+	if _, err := f.env.Patch(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, v, pw(p1, "right-password")), ep.ID, endpoints.Patch{AdminState: &soft}); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.calls) != 1 {
+		t.Fatalf("%d checks", len(v.calls))
+	}
+	if n := f.count(t, `SELECT count(*) FROM ctrlz.tenant_audit_log WHERE tenant_id = $1 AND action = 'profile.lock_password_used'`, f.A.Tenant); n != 1 {
+		t.Errorf("%d used rows for a password that was verified and charged", n)
+	}
+	// The other tenant's trail is untouched.
+	if n := f.count(t, `SELECT count(*) FROM ctrlz.tenant_audit_log WHERE tenant_id = $1 AND action = 'profile.lock_password_used'`, f.B.Tenant); n != 0 {
+		t.Errorf("%d used rows in the other tenant", n)
 	}
 }

@@ -191,7 +191,7 @@ func reference(now time.Time, before, after *Input) []uuid.UUID {
 		return local(in, unix)
 	}
 	for _, id := range identities(before, after) {
-		step := int64(1800)
+		step := int64(900) // a quarter hour: the zones the panel allows have offsets of that grain (spec 3.3)
 		start := now.Unix() - now.Unix()%step
 		for t := start; t <= now.Add(horizon).Unix(); t += step {
 			sb := stack(before, id, t)
@@ -264,8 +264,8 @@ func randomInput(r *rand.Rand, zone string, profiles []uuid.UUID) *Input {
 func TestNeededMatchesTheReference(t *testing.T) {
 	r := rand.New(rand.NewSource(7))
 	profiles := []uuid.UUID{pA, pB, pC}
-	zones := []string{"Asia/Tehran", "UTC", "America/New_York", "Europe/London"}
-	for i := 0; i < 120; i++ {
+	zones := []string{"Asia/Tehran", "UTC", "America/New_York", "Europe/London", "Asia/Kathmandu", "Australia/Eucla", "Pacific/Chatham"}
+	for i := 0; i < 160; i++ {
 		before := randomInput(r, zones[r.Intn(len(zones))], profiles)
 		after := randomInput(r, before.Zone, profiles)
 		if r.Intn(3) == 0 {
@@ -284,5 +284,44 @@ func TestNeededMatchesTheReference(t *testing.T) {
 		if !same(got, want) {
 			t.Fatalf("case %d: Needed %v, reference %v\nbefore %+v\nafter %+v", i, got, want, before, a)
 		}
+	}
+}
+
+// TestNeededQuarterHourZone: Kathmandu is +5:45, so its 30-minute cells start at :15 and :45 of UTC. A UTC window of the
+// locked profile at Monday 00:00 to 00:30 moved to the same local minutes, 05:30 to 06:00 (UTC 23:45 to 00:15), leaves the
+// profile in force from 00:15 to 00:30 of UTC no more, which a walk that only looks at :00 and :30 of UTC never sees.
+func TestNeededQuarterHourZone(t *testing.T) {
+	mon := 1440
+	utc := &Input{Zone: "UTC", Base: Stack{pA, uuid.Nil},
+		Windows: []Window{{ID: uuid.New(), Start: mon, End: mon + 30, Stack: Stack{pB, uuid.Nil}}}}
+	kat := &Input{Zone: "Asia/Kathmandu", Base: Stack{pA, uuid.Nil},
+		Windows: []Window{{ID: uuid.New(), Start: mon + 330, End: mon + 360, Stack: Stack{pB, uuid.Nil}}}}
+	if got := Needed(now0, utc, kat); !same(got, []uuid.UUID{pA, pB}) {
+		t.Errorf("a zone change to a quarter-hour offset: %v", got)
+	}
+	if got, want := Needed(now0, utc, kat), reference(now0, utc, kat); !same(got, want) {
+		t.Errorf("Needed %v, reference %v", got, want)
+	}
+}
+
+// TestNeededCostIsBoundedByDistinctStacks: 3,000 clients that lose their own stack, over a stepped path with 64 windows, are
+// one evaluation per distinct stack and not one per client and pair (the probe is uncharged, so this is the bound).
+func TestNeededCostIsBoundedByDistinctStacks(t *testing.T) {
+	var ws []Window
+	for i := 0; i < 64; i++ {
+		ws = append(ws, Window{ID: uuid.New(), Start: i * 120, End: i*120 + 60, Stack: Stack{pB, uuid.Nil}})
+	}
+	before := &Input{Zone: "UTC", Base: Stack{pA, uuid.Nil}, Windows: ws, Clients: map[string]Stack{}}
+	for i := 0; i < 3000; i++ {
+		before.Clients[uuid.NewString()] = Stack{pC, uuid.Nil}
+	}
+	after := &Input{Zone: "Asia/Tehran", Base: Stack{pA, uuid.Nil}, Windows: ws}
+	start := time.Now()
+	got := Needed(now0, before, after)
+	if !same(got, []uuid.UUID{pA, pB, pC}) {
+		t.Fatalf("needed %v", got)
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("3,000 clients took %v: the work is per client again", d)
 	}
 }

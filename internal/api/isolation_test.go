@@ -576,6 +576,8 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 	}
 	// The Endpoint routes keep their fixtures in a file of their own (isolation_endpoints_test.go).
 	maps.Copy(fx, e.endpointFixtures())
+	// The access routes (Dynamic DNS hosts, Authorized IPs, claims) have theirs in isolation_access_test.go.
+	maps.Copy(fx, e.accessFixtures())
 	return fx
 }
 
@@ -593,22 +595,17 @@ func TestIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TEMPORARY (branch p3-core-iso only): judge the Endpoint fixtures alone, the P2 ones being on another branch.
-	mine := e.endpointFixtures()
-	kept := docOps[:0:0]
-	for _, op := range docOps {
-		if _, ok := mine[op.ID]; ok {
-			kept = append(kept, op)
-		}
-	}
-	docOps = kept
 	var ops []isolation.Op
 	takes := opsThatTakeAnID(t)
+	fx := e.fixtures()
 	for _, op := range docOps {
+		if _, ok := fx[op.ID]; !ok {
+			continue // throwaway: the P2 operations have their fixtures on lane P2's branch
+		}
 		ops = append(ops, isolation.Op{ID: op.ID, Method: op.Method, Takes: strings.Join(takes[op.ID], ", "), Locations: takes[op.ID]})
 	}
 	A := f.env.A
-	isolation.Run(t, ops, e.endpointFixtures(), isolation.Hooks{
+	isolation.Run(t, ops, fx, isolation.Hooks{
 		Reset:  e.reset,
 		Digest: e.db.Digest,
 		Shape:  e.db.Shape,

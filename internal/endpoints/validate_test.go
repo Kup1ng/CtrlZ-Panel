@@ -85,6 +85,7 @@ func TestCheckWindows(t *testing.T) {
 		{"negative", []WindowIn{w(-30, 30)}, CodeGrid},
 		{"overlap", []WindowIn{w(0, 120), w(60, 180)}, CodeOverlap},
 		{"same window twice", []WindowIn{w(0, 60), w(0, 60)}, CodeOverlap},
+		{"same id twice, disjoint minutes", []WindowIn{{ID: uuid.MustParse("00000000-0000-7000-8000-0000000000aa"), Start: 0, End: 60, ProfileID: p}, {ID: uuid.MustParse("00000000-0000-7000-8000-0000000000aa"), Start: 120, End: 180, ProfileID: p}}, CodeDuplicate},
 		{"no profile", []WindowIn{{Start: 0, End: 30}}, CodeRequired},
 		{"profile 2 equals profile", []WindowIn{{Start: 0, End: 30, ProfileID: p, Profile2ID: p}}, CodeSameProfile},
 		{"too many", make([]WindowIn, MaxWindowsPerEndpoint+1), CodeExceeded},

@@ -350,3 +350,10 @@ func scanAddr(dst **netip.Addr) any { return dst }
 
 // scanPrefixes is the scan target of an inet[] column.
 func scanPrefixes(dst *[]netip.Prefix) any { return dst }
+
+// prefixesArg binds a list of prefixes as cidr[]. Like addrArg it is one of the few places an address-carrying value becomes the
+// driver's `any`, so the network-cut lint lists it and the other store files pass its result.
+func prefixesArg(ps []netip.Prefix) any { return ps }
+
+// scanPrefix is the scan target of a cidr column held in a netip.Prefix.
+func scanPrefix(dst *netip.Prefix) any { return dst }

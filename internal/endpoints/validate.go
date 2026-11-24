@@ -87,11 +87,19 @@ type WindowIn struct {
 // checkWindows applies the rules of spec 3.8 to a schedule PUT, with field names under /windows.
 func checkWindows(ws []WindowIn) []Field {
 	var fs []Field
+	seen := map[uuid.UUID]bool{}
 	if len(ws) > MaxWindowsPerEndpoint {
 		return []Field{{"/windows", CodeExceeded}}
 	}
 	for i, w := range ws {
 		at := func(m string) string { return fmt.Sprintf("/windows/%d/%s", i, m) }
+		// A repeated id would hit the primary key at the second insert and read as an overlap, which it is not.
+		if w.ID != uuid.Nil {
+			if seen[w.ID] {
+				fs = append(fs, Field{at("id"), CodeDuplicate})
+			}
+			seen[w.ID] = true
+		}
 		switch {
 		case w.Start%schedule.MinutesPerCell != 0 || w.End%schedule.MinutesPerCell != 0:
 			fs = append(fs, Field{at("start"), CodeGrid})

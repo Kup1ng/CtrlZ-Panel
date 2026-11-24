@@ -100,6 +100,7 @@ var sweepNotASweep = map[string]string{
 	"qWindowsDelete":                    sweepEndpointRows,
 	"qEndpointsSetGroup":                sweepEndpointRows,
 	"qEndpointsDelete":                  sweepEndpointRows,
+	"qAuthorizedDelete":                 sweepEndpointRows,
 	"qShareLinksRevoke":                 sweepEndpointRows,
 	"qDownloadLinksDelete":              sweepEndpointRows,
 	"qIdempotencyFinish":                "keyed by its whole primary key (tenant, key): the one row the request inserted, named by the statement's own parameters",

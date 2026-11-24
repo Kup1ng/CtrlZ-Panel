@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"fmt"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,9 @@ func p3Drivers() map[string]func(*testing.T, *raceEnv) {
 		"max_clients_per_endpoint": driveMaxClients,
 		"endpoint_group.create":    driveGroupCap,
 		"endpoint.delete":          driveEndpointDelete,
+		"max_authorized_ips":       driveMaxAuthorizedIPs,
+		"ddns_host.create":         driveDDNSHostCap,
+		"authorized_ip.last":       driveAuthorizedLast,
 	}
 }
 
@@ -214,5 +218,109 @@ func driveEndpointDelete(t *testing.T, e *raceEnv) {
 	// B's Endpoint is its own.
 	if n := e.count(t, `SELECT count(*) FROM ctrlz.endpoints WHERE id = $1`, e.B.Endpoint); n != 1 {
 		t.Errorf("B's Endpoint was deleted with A's")
+	}
+}
+
+// max_authorized_ips counts the tenant's manual rows under the quota lock: more spenders than the room, and exactly the room gets in.
+func driveMaxAuthorizedIPs(t *testing.T, e *raceEnv) {
+	have := e.count(t, `SELECT count(*) FROM ctrlz.authorized_ips WHERE tenant_id = $1 AND source = 'manual'`, e.A.Tenant)
+	e.exec(t, `UPDATE ctrlz.tenant_entitlements SET max_authorized_ips = $2 WHERE tenant_id = $1`, e.A.Tenant, have+3)
+	settle := newBarrier(spenders, 400*time.Millisecond)
+	got := wins(t, spenders, func(i int, hold func()) (bool, error) {
+		var w store.Won
+		err := e.tenant.WithTenant(e.ctx, e.A.Tenant, store.TxOpts{}, func(tx store.Tx) error {
+			hold()
+			if err := tx.QuotaLock(); err != nil {
+				return err
+			}
+			if _, err := tx.EndpointsLock([]uuid.UUID{e.A.Endpoint}); err != nil {
+				return err
+			}
+			var err error
+			_, w, err = tx.AuthorizedInsert(e.A.Endpoint, []netip.Prefix{netip.MustParsePrefix(fmt.Sprintf("203.0.113.%d/32", i+1))})
+			settle()
+			return err
+		})
+		return w.Yes(), err
+	})
+	if got != 3 {
+		t.Errorf("%d prefixes were added into 3 free slots", got)
+	}
+	if n := e.count(t, `SELECT count(*) FROM ctrlz.authorized_ips WHERE tenant_id = $1 AND source = 'manual'`, e.A.Tenant); n != have+3 {
+		t.Errorf("the tenant holds %d manual rows, want %d", n, have+3)
+	}
+	// A learned row is not counted: it leaves the manual room as it was.
+	e.exec(t, `INSERT INTO ctrlz.authorized_ips (tenant_id, endpoint_id, cidr, source) VALUES ($1, $2, '203.0.113.250/32', 'secure_dns')`, e.A.Tenant, e.A.Endpoint)
+	if n := e.count(t, `SELECT count(*) FROM ctrlz.authorized_ips WHERE tenant_id = $1 AND source = 'manual'`, e.A.Tenant); n != have+3 {
+		t.Errorf("a learned row changed the manual count: %d", n)
+	}
+}
+
+// ddns_host.create counts the Endpoint's hosts under its row: of eight spenders only the room under five gets in.
+func driveDDNSHostCap(t *testing.T, e *raceEnv) {
+	have := e.count(t, `SELECT count(*) FROM ctrlz.endpoint_ddns_hosts WHERE tenant_id = $1 AND endpoint_id = $2`, e.A.Tenant, e.A.Endpoint)
+	room := store.MaxDDNSHostsPerEndpoint - have
+	settle := newBarrier(spenders, 400*time.Millisecond)
+	got := wins(t, spenders, func(i int, hold func()) (bool, error) {
+		var w store.Won
+		err := e.tenant.WithTenant(e.ctx, e.A.Tenant, store.TxOpts{}, func(tx store.Tx) error {
+			hold()
+			if _, err := tx.EndpointsLock([]uuid.UUID{e.A.Endpoint}); err != nil {
+				return err
+			}
+			var err error
+			_, w, err = tx.DDNSHostInsert(e.A.Endpoint, fmt.Sprintf("race%d.example.org", i))
+			settle()
+			return err
+		})
+		return w.Yes(), err
+	})
+	if got != room {
+		t.Errorf("%d hosts were added into %d free slots", got, room)
+	}
+	if n := e.count(t, `SELECT count(*) FROM ctrlz.endpoint_ddns_hosts WHERE tenant_id = $1 AND endpoint_id = $2`, e.A.Tenant, e.A.Endpoint); n != store.MaxDDNSHostsPerEndpoint {
+		t.Errorf("the Endpoint holds %d hosts", n)
+	}
+}
+
+// authorized_ip.last: an Endpoint that requires authorized IPs holds two rows and eight deleters go after one or the other.
+// One delete wins and one row is left, whoever races whom (spec 5, E6).
+func driveAuthorizedLast(t *testing.T, e *raceEnv) {
+	e.exec(t, `INSERT INTO ctrlz.authorized_ips (tenant_id, endpoint_id, cidr, source) VALUES ($1, $2, '203.0.113.77/32', 'manual')`, e.A.Tenant, e.A.Endpoint)
+	e.exec(t, `UPDATE ctrlz.endpoints SET require_authorized_ips = true WHERE id = $1`, e.A.Endpoint)
+	var rows []uuid.UUID
+	if err := e.tenant.WithTenant(e.ctx, e.A.Tenant, store.TxOpts{ReadOnly: true}, func(tx store.Tx) error {
+		list, err := tx.AuthorizedList(store.AuthorizedFilter{Endpoint: e.A.Endpoint, Limit: 10})
+		for _, r := range list {
+			rows = append(rows, r.ID)
+		}
+		return err
+	}); err != nil || len(rows) != 2 {
+		t.Fatalf("%d rows (%v), want 2", len(rows), err)
+	}
+	settle := newBarrier(spenders, 400*time.Millisecond)
+	got := wins(t, spenders, func(i int, hold func()) (bool, error) {
+		var w store.Won
+		err := e.tenant.WithTenant(e.ctx, e.A.Tenant, store.TxOpts{}, func(tx store.Tx) error {
+			hold()
+			if _, err := tx.EndpointsLock([]uuid.UUID{e.A.Endpoint}); err != nil {
+				return err
+			}
+			var err error
+			w, err = tx.AuthorizedDelete(e.A.Endpoint, []uuid.UUID{rows[i%2]})
+			settle()
+			return err
+		})
+		return w.Yes(), err
+	})
+	if got != 1 {
+		t.Errorf("%d deletes of the rows of an Endpoint that requires them won, want 1", got)
+	}
+	if n := e.count(t, `SELECT count(*) FROM ctrlz.authorized_ips WHERE tenant_id = $1 AND endpoint_id = $2`, e.A.Tenant, e.A.Endpoint); n != 1 {
+		t.Errorf("the Endpoint holds %d rows, want 1", n)
+	}
+	// B's rows are its own.
+	if n := e.count(t, `SELECT count(*) FROM ctrlz.authorized_ips WHERE tenant_id = $1`, e.B.Tenant); n == 0 {
+		t.Error("B's rows went with A's")
 	}
 }

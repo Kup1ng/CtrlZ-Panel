@@ -419,6 +419,13 @@ func (a *API) perOp(next http.Handler) http.Handler {
 					return
 				}
 			}
+			// A second class of the operation, charged on the tenant of the live session (x-ctrlz-rate-also).
+			if op.Also != "" {
+				if e := a.chargeTenantClass(ctx, res, op.Also); e != nil {
+					a.refuse(w, r, e)
+					return
+				}
+			}
 			// The bulk gate (spec 6.2): after the session resolved and its class was charged, before the body is read.
 			if a.bulk(op) {
 				rsv, gb, e := a.openBulk(res, r)
@@ -571,6 +578,18 @@ func (a *API) chargeBulkTenant(ctx context.Context, res Resolved) *Error {
 		return Internal()
 	}
 	c, ok := ratelimit.Lookup(a.p.Service, ratelimit.BulkWriteTenant)
+	if !ok {
+		return Internal()
+	}
+	return a.charge(ctx, c, ratelimit.Subject{Tenant: res.Tenant})
+}
+
+// chargeTenantClass charges a second class of an operation to the tenant of the live session: 429 rate_limited when it is spent.
+func (a *API) chargeTenantClass(ctx context.Context, res Resolved, name string) *Error {
+	if res.Tenant == "" {
+		return Internal()
+	}
+	c, ok := ratelimit.Lookup(a.p.Service, name)
 	if !ok {
 		return Internal()
 	}

@@ -363,6 +363,22 @@ var netCutAllowed = map[string]string{
 	"internal/store/fn.go#(Tx).EndpointPairIPs": "a registered claim function: it hands the addresses of an endpoint pair to the driver",
 	"internal/store/fn.go#(Tx).IPClaimCheck":    "a registered claim function: it hands an address to the driver as a statement parameter",
 	"internal/store/fn.go#(Tx).IPClaimRequest":  "a registered claim function: it hands an address to the driver as a statement parameter",
+	"internal/store/fn.go#prefixesArg":          "binds the prefixes of an authorized-IP add as a statement parameter, like addrArg: the one place of the access list that hands them to the driver",
+	"internal/store/fn.go#scanPrefix":           "the scan target of a cidr column read back as a prefix, like scanPrefixes",
+
+	// The access list and the claims of an Endpoint (P3 spec 4, 5): a prefix the owner typed is read, checked against the widths
+	// the list allows and handed to a statement, and a prefix read back is shown to the owner. Each one is the owner's own data
+	// on its way to or from the database, an answer and never a key.
+	"internal/endpoints/access.go#ParseAuthorized":     "reads an authorized prefix the owner typed and checks its host bits and width; it keys no bucket and keeps nothing",
+	"internal/endpoints/access.go#(Env).AddAuthorized": "reads each typed prefix through ParseAuthorized and hands the list to the statement that adds them; it keys no bucket and keeps nothing",
+	"internal/endpoints/claims.go#ParseClaimPrefix":    "reads a claim prefix the owner typed and checks its host bits; it keys no bucket and keeps nothing",
+	"internal/endpoints/claims.go#PrefixOfAddress":     "makes the host prefix of the address of the request, which the owner asked to claim as a Plain DNS address; it keys no bucket and keeps nothing",
+	"internal/endpoints/claims.go#(ClaimAsk).Check":    "reads the prefix of a claim request through resolve before anything is charged; it keys no bucket and keeps nothing",
+	"internal/endpoints/claims.go#(Env).RequestClaim":  "reads the prefix of a claim request through resolve and hands it to the claim function; it keys no bucket and keeps nothing",
+	"internal/endpoints/claims.go#(ClaimAsk).resolve":  "reads the prefix of a claim request through ParseClaimPrefix and PrefixOfAddress; it keys no bucket and keeps nothing",
+	"internal/api/routes_access.go#authorizedOut":      "shows an authorized prefix to the owner who made it (an answer, not a key)",
+	"internal/api/routes_access.go#claimOut":           "shows a claim's prefix to the owner who made it (an answer, not a key)",
+	"internal/api/routes_access.go#challengeCommands":  "shows the two server addresses of the Endpoint's pair (nodes of ours, not a client) in the proof dialog; it keys no bucket and keeps nothing",
 }
 
 type netCutResult struct {

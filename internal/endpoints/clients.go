@@ -47,6 +47,24 @@ func clientCompiled(r store.ClientRow) bool {
 	return r.ProfileID != uuid.Nil || r.AnalyticsLevel != nil
 }
 
+// clientCompiledDiffers says an edit moved a value the compiler reads: the client's profiles and its Analytics level. The
+// alias and the group name are not compiled (spec 3.2), so renaming a client that has a profile marks nothing.
+func clientCompiledDiffers(a, b store.ClientRow) bool {
+	return a.ProfileID != b.ProfileID || a.Profile2ID != b.Profile2ID || !sameText(a.AnalyticsLevel, b.AnalyticsLevel)
+}
+
+// sameClientValues says the change leaves every member the owner can change as it was.
+func sameClientValues(a, b store.ClientRow) bool {
+	return !clientCompiledDiffers(a, b) && sameText(a.Alias, b.Alias) && sameText(a.GroupName, b.GroupName)
+}
+
+func sameText(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
 // CreateClient adds a manual client to an Endpoint, under the Endpoint's row: max_clients_per_endpoint is decided by the
 // statement that adds it and counts the manual clients of that Endpoint. Giving a client its own stack removes the Endpoint's
 // stack from that label, which needs the lock passwords of spec 3.3.
@@ -214,7 +232,7 @@ func (c ClientChange) apply(r *store.ClientRow, prefix string) []Field {
 // editClients is the body shared by the patch of one client and the batch edit: the clients are locked first (step 3), the
 // profiles the change names next, the Endpoint's row after them.
 func (e *Env) editClients(ctx context.Context, st *store.Store, tenant uuid.UUID, opts store.TxOpts, a Auth, endpoint uuid.UUID,
-	lock func(tx store.Tx) ([]store.ClientRow, bool, error), change ClientChange, del bool, prefix func(i int) string) (affected int, more bool, err error) {
+	lock func(tx store.Tx) ([]store.ClientRow, bool, error), change ClientChange, del bool, prefix func(i int) string, fin func(tx store.Tx) error) (affected int, more bool, err error) {
 	named := uniqueIDs(change.named())
 	members := map[uuid.UUID]string{}
 	if change.ProfileID != nil {
@@ -252,18 +270,19 @@ func (e *Env) editClients(ctx context.Context, st *store.Store, tenant uuid.UUID
 		ids := make([]uuid.UUID, len(rows))
 		for i, r := range rows {
 			ids[i] = r.ID
-			if clientCompiled(r) {
-				mark = true
-			}
 			if del {
+				// A client that held a record goes with it.
+				if clientCompiled(r) {
+					mark = true
+				}
 				continue
 			}
 			nr := r
 			fs = append(fs, change.apply(&nr, prefix(i))...)
-			if clientCompiled(nr) {
+			if clientCompiledDiffers(r, nr) {
 				mark = true
 			}
-			if fs == nil {
+			if fs == nil && !sameClientValues(r, nr) {
 				if err := tx.ClientUpdate(nr); err != nil {
 					return err
 				}
@@ -292,6 +311,12 @@ func (e *Env) editClients(ctx context.Context, st *store.Store, tenant uuid.UUID
 				return err
 			}
 		}
+		if fin != nil {
+			// Read inside the transaction that wrote, so the answer is the row this request left and not what a later request made of it.
+			if err := fin(tx); err != nil {
+				return err
+			}
+		}
 		affected, more = len(rows), hasMore
 		return nil
 	})
@@ -303,6 +328,7 @@ func (e *Env) PatchClient(ctx context.Context, st *store.Store, tenant uuid.UUID
 	if fs := c.pre(""); fs != nil {
 		return store.ClientRow{}, invalid(fs...)
 	}
+	var out store.ClientRow
 	_, _, err := e.editClients(ctx, st, tenant, opts, a, endpoint, func(tx store.Tx) ([]store.ClientRow, bool, error) {
 		rows, err := tx.ClientsLockIDs(endpoint, []uuid.UUID{client})
 		if err != nil {
@@ -312,16 +338,21 @@ func (e *Env) PatchClient(ctx context.Context, st *store.Store, tenant uuid.UUID
 			return nil, false, notFound()
 		}
 		return rows, false, nil
-	}, c, false, func(int) string { return "" })
+	}, c, false, func(int) string { return "" }, func(tx store.Tx) error {
+		row, found, err := tx.ClientGet(endpoint, client)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return notFound()
+		}
+		out = row
+		return nil
+	})
 	if err != nil {
 		return store.ClientRow{}, err
 	}
-	var out store.ClientRow
-	err = e.Plain(ctx, st, tenant, store.TxOpts{ReadOnly: true, LockWait: opts.LockWait}, func(tx store.Tx) (err error) {
-		out, _, err = tx.ClientGet(endpoint, client)
-		return
-	})
-	return out, err
+	return out, nil
 }
 
 // ClientBatchIn is a batch over the clients of one Endpoint: named by ids, or by a selector (T-259).
@@ -380,16 +411,37 @@ func (e *Env) BatchClients(ctx context.Context, st *store.Store, tenant uuid.UUI
 			}
 			return rows, false, nil
 		}
-		rows, err := tx.ClientsLockSelector(endpoint, in.InactiveDays, now, store.MaxClientsPerSelector+1)
-		if err != nil {
-			return nil, false, err
+		// An edit by selector acts on the clients the change would alter and skips those that already hold the values. Without
+		// that, the repeat that "more" asks for would select the same first 500 again (the selector orders by id and an edit
+		// moves neither id nor the inactivity), the rest would never be reached and "more" would stay true. A delete takes every
+		// match, since a deleted client is not selected again.
+		var picked []store.ClientRow
+		after := uuid.Nil
+		for {
+			page, err := tx.ClientsLockSelector(endpoint, in.InactiveDays, now, after, store.MaxClientsPerSelector+1)
+			if err != nil {
+				return nil, false, err
+			}
+			for _, r := range page {
+				if in.Op == "edit" {
+					nr := r
+					in.Change.apply(&nr, "/set")
+					if sameClientValues(r, nr) {
+						continue
+					}
+				}
+				picked = append(picked, r)
+				if len(picked) > store.MaxClientsPerSelector {
+					return picked[:store.MaxClientsPerSelector], true, nil
+				}
+			}
+			if len(page) <= store.MaxClientsPerSelector {
+				return picked, false, nil
+			}
+			after = page[len(page)-1].ID
 		}
-		if len(rows) > store.MaxClientsPerSelector {
-			return rows[:store.MaxClientsPerSelector], true, nil
-		}
-		return rows, false, nil
 	}
-	return e.editClients(ctx, st, tenant, opts, a, endpoint, lock, in.Change, in.Op == "delete", func(int) string { return "/set" })
+	return e.editClients(ctx, st, tenant, opts, a, endpoint, lock, in.Change, in.Op == "delete", func(int) string { return "/set" }, nil)
 }
 
 // clientProfiles lists the profiles the clients hold now, which the write key-shares before the Endpoint's lock (Guard.Begin).

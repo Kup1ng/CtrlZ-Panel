@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -200,4 +201,47 @@ func TestEndpointLockPasswordFlow(t *testing.T) {
 	a.post("/endpoints/"+ep+":delete", map[string]any{}).want(423, "profile_locked")
 	a.post("/endpoints/"+ep+":delete", map[string]any{"lock_passwords": []map[string]any{{"profile_id": locked.String(), "password": "correct horse"}}}).want(204, "")
 	a.get("/endpoints/"+ep).want(404, "not_found")
+}
+
+// A right lock password must not count as a failure: profile_unlock allows five failures in 15 minutes, and the unlock route
+// clears it after a success. Six deletes in a row, each with the right password, all pass; the sixth used to be 429.
+func TestEndpointLockPasswordRightOnesDoNotUseUpTheScope(t *testing.T) {
+	f := newFrig(t, frigOpts{})
+	A := f.env.A
+	a := f.makeSession(A.Tenant, A.User)
+	typ := f.endpointType()
+	locked := uuid.Must(uuid.NewV7())
+	f.env.Exec(t, `INSERT INTO ctrlz.profiles (tenant_id, id, name) VALUES ($1, $2, 'locked')`, A.Tenant, locked)
+	var created struct {
+		Endpoints []pEndpoint `json:"endpoints"`
+	}
+	a.do("POST", "/endpoints", map[string]any{"type": typ, "names": []string{"e1", "e2", "e3", "e4", "e5", "e6"}, "profile_id": locked.String()}, idem("ep-flow-lock-many")).want(201, "").json(&created)
+	hash, err := f.hasher.Hash(f.env.Ctx, secret.New("correct horse"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.env.Exec(t, `UPDATE ctrlz.profiles SET lock_state = 'locked', lock_password_hash = $2 WHERE id = $1`, locked, hash.Reveal())
+	for i, e := range created.Endpoints {
+		a.post("/endpoints/"+e.ID.String()+":delete", map[string]any{
+			"lock_passwords": []map[string]any{{"profile_id": locked.String(), "password": "correct horse"}}}).want(204, "")
+		if t.Failed() {
+			t.Fatalf("delete %d of %d was refused", i+1, len(created.Endpoints))
+		}
+	}
+}
+
+// A forged alphabetical cursor whose name is not text Postgres takes is a 400, not a 500 (SQLSTATE 22021).
+func TestEndpointListCursorWithABadNameIsRefused(t *testing.T) {
+	f := newFrig(t, frigOpts{})
+	A := f.env.A
+	a := f.makeSession(A.Tenant, A.User)
+	forge := func(name string) string {
+		return base64.RawURLEncoding.EncodeToString([]byte("n|" + uuid.New().String() + "|" + A.Tenant.String() + "|" + name))
+	}
+	for label, name := range map[string]string{"invalid utf-8": "ab\xff", "nul": "a\x00b", "too long": strings.Repeat("x", 65)} {
+		a.get("/endpoints?sort=name&cursor="+forge(name)).want(400, "bad_request")
+		if t.Failed() {
+			t.Fatalf("%s was not refused", label)
+		}
+	}
 }
