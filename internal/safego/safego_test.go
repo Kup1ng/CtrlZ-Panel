@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/safego"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 type unit string
@@ -126,20 +127,43 @@ func TestRunWithANilLogStillKeepsThePanic(t *testing.T) {
 }
 
 // signalWriter is a log sink that is safe to read while a goroutine writes, and tells the test the
-// moment the first line arrives, so the test waits on that line and not on a clock (rule 33).
+// moment the first line arrives, so the test waits on that line and not on a clock (rule 33). It also
+// tells when a second line arrives: a guard that logs a panic twice writes the two lines one after the
+// other on the goroutine, and a test that read the buffer the moment the first came could pass before
+// the second was written (a mutant survived this way on a fast runner, 2026-11-24).
 type signalWriter struct {
-	mu   sync.Mutex
-	buf  bytes.Buffer
-	once sync.Once
-	got  chan struct{}
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	lines  int
+	once   sync.Once
+	got    chan struct{}
+	second chan struct{}
+}
+
+func newSignalWriter() *signalWriter {
+	return &signalWriter{got: make(chan struct{}), second: make(chan struct{})}
 }
 
 func (w *signalWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	n, err := w.buf.Write(p)
+	w.lines++
+	if w.lines == 2 {
+		close(w.second)
+	}
 	w.mu.Unlock()
 	w.once.Do(func() { close(w.got) })
 	return n, err
+}
+
+// noSecondLine waits for the first line, then gives a second line a bounded time to arrive and reports
+// whether none did. The wait for the first is an event; the bound is only for the negative, which has no
+// event to wait on, and the second line of a guard that doubles its note follows the first within
+// microseconds on the same goroutine.
+func (w *signalWriter) noSecondLine() bool {
+	<-w.got
+	_, again := testwait.TryReceive(w.second, 250*time.Millisecond)
+	return !again
 }
 
 func (w *signalWriter) text() string {
@@ -153,7 +177,7 @@ func (w *signalWriter) text() string {
 // that clause (a mutant of it names TestEveryGoroutineKeepsItsPanic), and this test holds the rest:
 // the count-down put first in fn runs while the panic unwinds, and the log has the unit once.
 func TestGoCountsDownAUnitThatPanickedAndTheProcessLives(t *testing.T) {
-	w := &signalWriter{got: make(chan struct{})}
+	w := newSignalWriter()
 	log := slog.New(slog.NewJSONHandler(w, nil))
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -162,7 +186,9 @@ func TestGoCountsDownAUnitThatPanickedAndTheProcessLives(t *testing.T) {
 		panic("canary-go-value")
 	})
 	wg.Wait() // a count-down that did not run would hang here until the test timeout
-	<-w.got
+	if !w.noSecondLine() {
+		t.Error("the panic was logged more than once")
+	}
 	got := w.text()
 	if strings.Count(got, safego.Msg) != 1 || !strings.Contains(got, `"unit":"a"`) {
 		t.Errorf("the panic was not logged once with its unit: %s", got)
@@ -186,7 +212,7 @@ func TestAfterAndOnDoneKeepThePanicOfTheirCallback(t *testing.T) {
 			cancel()
 		},
 	} {
-		w := &signalWriter{got: make(chan struct{})}
+		w := newSignalWriter()
 		log := slog.New(slog.NewJSONHandler(w, nil))
 		ran := make(chan struct{}, 2)
 		start(log, func() {
@@ -194,7 +220,9 @@ func TestAfterAndOnDoneKeepThePanicOfTheirCallback(t *testing.T) {
 			panic("canary-callback-value")
 		})
 		<-ran
-		<-w.got
+		if !w.noSecondLine() {
+			t.Errorf("%s: the panic was logged more than once", name)
+		}
 		got := w.text()
 		if strings.Count(got, safego.Msg) != 1 || !strings.Contains(got, `"unit":"a"`) {
 			t.Errorf("%s: the panic was not logged once with its unit: %s", name, got)
