@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -397,7 +399,7 @@ func TestASecurityNoticeWithNoGatewayQueuesNothing(t *testing.T) {
 // unread security notices shown apart are the newest SecurityNoticeListLimit, and that number is the document's own
 // maxItems. A thief can make that many in minutes (a regeneration is ten a minute and the reauth window keeps going),
 // so a notice older than the newest fifty must not fall out of every response: it stays in the list, where paging
-// reaches it, and in its count, marked as a security notice that this session may mark. Tenant B is untouched.
+// reaches it, and in unread_count (not in security_unread_count, which counts the set shown apart), marked as a security notice that this session may mark. Tenant B is untouched.
 func TestTheSecurityNoticesShownApartAreBoundedAndNoneIsLeftOutOfEveryResponse(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	A, B := f.env.A, f.env.B
@@ -426,8 +428,13 @@ func TestTheSecurityNoticesShownApartAreBoundedAndNoneIsLeftOutOfEveryResponse(t
 	if len(p1.SecurityItems) != store.SecurityNoticeListLimit {
 		t.Fatalf("%d security items, want the bound %d", len(p1.SecurityItems), store.SecurityNoticeListLimit)
 	}
-	if p1.SecurityUnread != total {
-		t.Fatalf("security unread %d, want every one of the %d", p1.SecurityUnread, total)
+	// The count beside security_items counts the set it holds and no more: a notice past the fifty is in unread_count
+	// (it is in the list), so a badge that adds the two counts each notice once (review dec-c-r2-1).
+	if p1.SecurityUnread != store.SecurityNoticeListLimit {
+		t.Fatalf("security unread %d, want the %d shown apart", p1.SecurityUnread, store.SecurityNoticeListLimit)
+	}
+	if p1.Unread+p1.SecurityUnread != total+1 { // the welcome notice and every security notice, once
+		t.Fatalf("the two counts add up to %d, want %d: a notice is counted twice or not at all", p1.Unread+p1.SecurityUnread, total+1)
 	}
 	for i, it := range p1.SecurityItems {
 		if it.ID == oldest {
@@ -477,12 +484,111 @@ func TestTheSecurityNoticesShownApartAreBoundedAndNoneIsLeftOutOfEveryResponse(t
 	// It can be read from where it is listed, and then it is history.
 	a.post("/notifications/"+oldest+"/read", nil).want(204, "")
 	after := a.notices("")
-	if after.SecurityUnread != total-1 || after.Unread != 2 {
-		t.Fatalf("after the mark: security unread %d and unread %d, want %d and 2", after.SecurityUnread, after.Unread, total-1)
+	// 51 unread security notices: the boundary. Fifty are apart and one is in the list, counted once.
+	if after.SecurityUnread != store.SecurityNoticeListLimit || after.Unread != 2 {
+		t.Fatalf("after the mark: security unread %d and unread %d, want %d and 2", after.SecurityUnread, after.Unread, store.SecurityNoticeListLimit)
+	}
+	// One more read: exactly fifty, all apart, and the list holds the welcome notice alone.
+	a.post("/notifications/"+after.SecurityItems[0].ID+"/read", nil).want(204, "")
+	exact := a.notices("")
+	if exact.SecurityUnread != store.SecurityNoticeListLimit || len(exact.SecurityItems) != store.SecurityNoticeListLimit || exact.Unread != 1 {
+		t.Fatalf("at exactly fifty: security unread %d, items %d, unread %d, want %d, %d and 1", exact.SecurityUnread, len(exact.SecurityItems), exact.Unread, store.SecurityNoticeListLimit, store.SecurityNoticeListLimit)
 	}
 
 	pb := b.notices("")
 	if len(pb.SecurityItems) != 1 || pb.SecurityUnread != 1 || pb.Unread != 1 {
 		t.Fatalf("B sees %+v, want its own one security notice and its welcome", pb)
+	}
+}
+
+// TestThePasskeyNoticeAdviceEvictsThePasskey is the promise of the SMS of a passkey notice (review dec-c-r2-3). The
+// message is the one sign a thief cannot hide, so what it tells the owner to do must put the thief's passkey out. A
+// password change does not: spec 3.7 keeps passkeys, and a passkey signs in alone. Forgot password ends every session
+// and puts the live passkeys in review, so the same passkey is then refused. The test runs both, so a text that names
+// the first again is not backed by the code, and checks that the seeded copy names the second.
+func TestThePasskeyNoticeAdviceEvictsThePasskey(t *testing.T) {
+	f := newFrig(t, frigOpts{passkey: true})
+	A := f.env.A
+	const newPw = "Cobalt-meadow-Falcon-4417"
+
+	thief := f.client()
+	thief.mustLogin(A.Phone, pwA)
+	key := passkeytest.New(pkOrigin, pkRP)
+	thief.reauthPassword(pwA).want(204, "")
+	thief.addPasskey(key).want(201, "")
+
+	// What the old text said: change your password. The thief's passkey still signs in.
+	f.ck.add(time.Minute)
+	f.clearThrottle()
+	owner := f.client()
+	owner.mustLogin(A.Phone, pwA)
+	owner.reauthPassword(pwA).want(204, "")
+	owner.post("/account/password", map[string]any{"new_password": newPw}).want(204, "")
+	f.client().passkeyLogin(key).want(200, "")
+
+	// What the text says now: Forgot password. Every session ends and the passkey is refused.
+	f.ck.add(time.Minute)
+	f.clearThrottle()
+	rc := f.client()
+	v := rc.verifyReset(A.Phone)
+	rc.post("/auth/password/reset/complete", map[string]any{"ticket": v.Ticket, "new_password": "Basalt-orchid-Heron-5528"}).want(204, "")
+	f.client().passkeyLogin(key).want(401, "passkey_invalid")
+
+	var fa, en string
+	f.env.Scan(t, `SELECT body FROM ctrlz.sms_templates WHERE key = 'notice_passkey' AND locale = 'fa'`, nil, &fa)
+	f.env.Scan(t, `SELECT body FROM ctrlz.sms_templates WHERE key = 'notice_passkey' AND locale = 'en'`, nil, &en)
+	if !strings.Contains(fa, "بازیابی") || strings.Contains(fa, "عوض") {
+		t.Errorf("the Persian passkey notice does not name the recovery: %q", fa)
+	}
+	if !strings.Contains(en, "forgot password") || strings.Contains(en, "change your password") {
+		t.Errorf("the English passkey notice does not name forgot password: %q", en)
+	}
+}
+
+// TestTheNoticeListReadsOneSnapshot is review dec-c-r2-2. The list is four statements, and the page and the count leave
+// out the notices that SecurityNotices shows apart, so a security notice read between two of them would be in neither
+// part of the response. readTenantSnapshot, which the route uses, gives the four one snapshot: a notice read by another
+// session in the middle is still listed as it was. The control runs the same steps in the plain read transaction and
+// sees the change, so the interleaving is real and the test can fail.
+func TestTheNoticeListReadsOneSnapshot(t *testing.T) {
+	f := newFrig(t, frigOpts{})
+	A := f.env.A
+	f.env.Exec(t, `INSERT INTO ctrlz.notifications (tenant_id, kind, severity) VALUES ($1, 'passkey_added', 'info')`, A.Tenant)
+	session := uuid.Must(uuid.NewV7())
+
+	steps := func(run func(context.Context, uuid.UUID, func(store.Tx) error) error, reset bool) (before, after, unreadAfter int) {
+		t.Helper()
+		if reset {
+			f.env.Exec(t, `UPDATE ctrlz.notifications SET read_at = NULL WHERE tenant_id = $1 AND kind = 'passkey_added'`, A.Tenant)
+		}
+		err := run(f.env.Ctx, A.Tenant, func(tx store.Tx) error {
+			first, err := tx.SecurityNotices(session)
+			if err != nil {
+				return err
+			}
+			before = len(first)
+			// Another session reads the notice while this request is between two statements.
+			f.env.Exec(t, `UPDATE ctrlz.notifications SET read_at = now() WHERE tenant_id = $1 AND kind = 'passkey_added'`, A.Tenant)
+			second, err := tx.SecurityNotices(session)
+			if err != nil {
+				return err
+			}
+			after = len(second)
+			unreadAfter, err = tx.SecurityNoticesUnread()
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return before, after, unreadAfter
+	}
+
+	// Control: at READ COMMITTED the second statement sees the read.
+	if before, after, _ := steps(f.srv.readTenant, false); before != 1 || after != 0 {
+		t.Fatalf("control: %d notices before and %d after the read, want 1 and 0: the interleaving is not real", before, after)
+	}
+	// The route's read: one snapshot, so both statements and the count agree.
+	if before, after, unread := steps(f.srv.readTenantSnapshot, true); before != 1 || after != 1 || unread != 1 {
+		t.Fatalf("snapshot: %d notices before, %d after, count %d, want 1 each: the statements saw different states", before, after, unread)
 	}
 }

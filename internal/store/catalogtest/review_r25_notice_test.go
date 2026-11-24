@@ -6,7 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Kup1ng/CtrlZ-Panel/internal/migrate"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/store/catalogtest"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/testpg"
 )
 
@@ -112,4 +115,125 @@ func TestMigration0062LeavesNoInviteMessage(t *testing.T) {
 	refused("a notice with the template of a code", "sms_outbox_notice_bare",
 		`INSERT INTO ctrlz.sms_outbox (kind, phone_e164, template_key, locale) VALUES ('notice', '+989121110005', 'otp', 'fa')`)
 	exec(`INSERT INTO ctrlz.sms_outbox (kind, phone_e164, template_key, locale) VALUES ('notice', '+989121110005', 'notice_recovery', 'en')`)
+}
+
+// TestMigration0064AdvisesAnActionThatEvictsAndKeepsAnOperatorsEdit is review dec-c-r2-3 on an installed database: the
+// four notice bodies of 0062 are replaced by the ones that name an action that puts a thief out (Forgot password for a
+// passkey, new codes for the recovery codes), and only WHILE a row still holds the 0062 text, so a body the operator
+// edited on the SMS page is never overwritten. Running the migration's updates again changes nothing.
+func TestMigration0064AdvisesAnActionThatEvictsAndKeepsAnOperatorsEdit(t *testing.T) {
+	c := testpg.Need(t, cluster)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+	d := c.NewEmptyDB(ctx, t)
+	db, err := d.MigratorDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	super, err := d.Super(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer super.Close(context.Background())
+
+	if _, err := migrate.UpTo(ctx, db, 63); err != nil {
+		t.Fatal(err)
+	}
+	body := func(key, locale string) string {
+		t.Helper()
+		var b string
+		if err := super.QueryRow(ctx, `SELECT body FROM ctrlz.sms_templates WHERE key = $1 AND locale = $2`, key, locale).Scan(&b); err != nil {
+			t.Fatalf("%s/%s: %v", key, locale, err)
+		}
+		return b
+	}
+	if !strings.Contains(body("notice_passkey", "en"), "change your password") {
+		t.Fatal("the premise is gone: 0062 no longer says change your password")
+	}
+	const custom = "متن ویرایش‌شده توسط اپراتور"
+	if _, err := super.Exec(ctx, `UPDATE ctrlz.sms_templates SET body = $1 WHERE key = 'notice_recovery' AND locale = 'fa'`, custom); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := migrate.UpTo(ctx, db, 64); err != nil {
+		t.Fatalf("0064: %v", err)
+	}
+	if got := body("notice_passkey", "fa"); !strings.Contains(got, "بازیابی") || strings.Contains(got, "عوض") {
+		t.Errorf("the Persian passkey notice: %q", got)
+	}
+	if got := body("notice_passkey", "en"); !strings.Contains(got, "forgot password") || strings.Contains(got, "change your password") {
+		t.Errorf("the English passkey notice: %q", got)
+	}
+	if got := body("notice_recovery", "en"); !strings.Contains(got, "make new codes") {
+		t.Errorf("the English recovery notice: %q", got)
+	}
+	if got := body("notice_recovery", "fa"); got != custom {
+		t.Errorf("an operator's edit was overwritten: %q", got)
+	}
+	var n int
+	if err := super.QueryRow(ctx, `SELECT count(*) FROM ctrlz.sms_templates WHERE key IN ('notice_passkey', 'notice_recovery')`).Scan(&n); err != nil || n != 4 {
+		t.Errorf("%d notice templates, want 4: %v", n, err)
+	}
+}
+
+// TestTheNoticeCapIsCountedForTheAccountItTells is review dec-c-r2-5. The message goes to one user's phone and the
+// lock that makes the count exact is that user's row lock, so the audit rows counted are that user's: a member who
+// added three passkeys of their own has spent nothing of another member's, and the cap still holds for the member who
+// reached it. Tenant B has the same activity and none of it counts for A (two tenants). v1 has one user per tenant
+// (users_one_owner_uq, D32), so the test lifts that index inside a transaction that is rolled back: the function is
+// written for the day members exist, and the day must not find it counting the wrong rows.
+func TestTheNoticeCapIsCountedForTheAccountItTells(t *testing.T) {
+	h := newHarness(t, testpg.Need(t, cluster))
+	tx, err := h.super.Begin(h.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := tx.Exec(h.ctx, sql, args...); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+	exec(`DROP INDEX ctrlz.users_one_owner_uq`)
+	for _, s := range []catalogtest.SeedIDs{h.A, h.B} {
+		exec(`UPDATE ctrlz.users SET phone_verified_at = now() WHERE id = $1`, s.User)
+	}
+	other := uuid.Must(uuid.NewV7()) // a second member of tenant A
+	exec(`INSERT INTO ctrlz.users (tenant_id, id, phone_e164, password_hash, phone_verified_at) VALUES ($1, $2, '+989139990001', 'argon2id$seed', now())`, h.A.Tenant, other)
+	// The first member added three passkeys today, and so did B's user.
+	for _, s := range []catalogtest.SeedIDs{h.A, h.B} {
+		for i := 0; i < 3; i++ {
+			exec(`INSERT INTO ctrlz.tenant_audit_log (tenant_id, user_id, action) VALUES ($1, $2, 'passkey.add')`, s.Tenant, s.User)
+		}
+	}
+	ask := func(tenant, user uuid.UUID) bool {
+		t.Helper()
+		exec("SET LOCAL ROLE ctrlz_tenant")
+		defer exec("RESET ROLE")
+		exec("SELECT pg_catalog.set_config('ctrlz.tenant_id', $1, true)", tenant.String())
+		var notice uuid.UUID
+		if err := tx.QueryRow(h.ctx, `INSERT INTO ctrlz.notifications (tenant_id, kind, severity) VALUES ($1, 'passkey_added', 'info') RETURNING id`, tenant).Scan(&notice); err != nil {
+			t.Fatal(err)
+		}
+		exec(`INSERT INTO ctrlz.tenant_audit_log (tenant_id, user_id, action) VALUES ($1, $2, 'passkey.add')`, tenant, user)
+		var queued bool
+		if err := tx.QueryRow(h.ctx, `SELECT ctrlz_fn.tenant_notice_sms($1, $2, 3)`, user, notice).Scan(&queued); err != nil {
+			t.Fatal(err)
+		}
+		return queued
+	}
+	// The other member's first passkey is told, although the tenant already has three of the first member's today.
+	if !ask(h.A.Tenant, other) {
+		t.Error("a member's first passkey of the day was not told because another member spent the messages")
+	}
+	// The first member's fourth is past the cap of three for that account.
+	if ask(h.A.Tenant, h.A.User) {
+		t.Error("a fourth message to one phone in a day was queued")
+	}
+	// B's user is in the same state, and A's activity does not touch it.
+	if ask(h.B.Tenant, h.B.User) {
+		t.Error("B's fourth message was queued")
+	}
 }

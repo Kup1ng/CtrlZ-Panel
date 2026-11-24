@@ -65,7 +65,7 @@ tables:
     tenant: "S I"
     admin: "S U(status,admin_reply,replied_at)"
   tenant_audit_log:
-    scoped: "S(tenant_id,action,at) I(tenant_id,user_id,action,target,params)"
+    scoped: "S(tenant_id,user_id,action,at) I(tenant_id,user_id,action,target,params)"
     tenant: "S I"
     worker: "S(tenant_id,id,at) D"
     auth: "I(tenant_id,user_id,action,target,params)"

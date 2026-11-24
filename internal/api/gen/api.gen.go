@@ -502,9 +502,11 @@ type NotificationPage struct {
 	NextCursor *string        `json:"next_cursor,omitempty"`
 
 	// SecurityItems The unread security notices, newest first, the same on every page. They are not in `items` or `unread_count`, except the ones older than the newest 50, which stay in the list so that no unread notice is left out of every response.
-	SecurityItems       []Notification `json:"security_items"`
-	SecurityUnreadCount int            `json:"security_unread_count"`
-	UnreadCount         int            `json:"unread_count"`
+	SecurityItems []Notification `json:"security_items"`
+
+	// SecurityUnreadCount How many unread security notices are in `security_items`, at most 50. A notice older than the newest 50 is in `items` and `unread_count`, not here, so `unread_count` plus this is every unread notice once.
+	SecurityUnreadCount int `json:"security_unread_count"`
+	UnreadCount         int `json:"unread_count"`
 }
 
 // NotificationParams The values a notification's text is built from. Scalars only, so the client never renders a structure the server did not bound.

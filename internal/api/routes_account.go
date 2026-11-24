@@ -288,7 +288,9 @@ func (s *Server) ListNotifications(ctx context.Context, req gen.ListNotification
 	}
 	limit := pageLimit(req.Params.Limit)
 	out := gen.NotificationPage{Items: []gen.Notification{}, SecurityItems: []gen.Notification{}}
-	err = s.readTenant(ctx, p.TenantID, func(tx store.Tx) error {
+	// One snapshot for the four statements: the page and the count leave out the notices shown apart, and the
+	// notices shown apart are asked for later, so they must agree about which these are.
+	err = s.readTenantSnapshot(ctx, p.TenantID, func(tx store.Tx) error {
 		rows, err := tx.NotificationsPage(cur, limit+1, p.SessionID) // one more, to know whether there is a next page
 		if err != nil {
 			return err

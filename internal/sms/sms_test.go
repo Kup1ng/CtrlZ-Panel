@@ -107,8 +107,8 @@ var seededBodies = map[string][2]string{
 	"otp_reset":       {"کد بازیابی رمز Ctrl Z: {code}. اگر شما نخواستید، نادیده بگیرید.", "Ctrl Z password reset code: {code}. Ignore this if you did not ask for it."},
 	"otp_phone":       {"کد تغییر شماره Ctrl Z: {code}. اگر شما نبودید، رمز را عوض کنید.", "Ctrl Z phone change code: {code}. If this was not you, change your password."},
 	"account_exists":  {"برای این شماره قبلا حساب Ctrl Z ساخته شده است. از صفحه ورود یا فراموشی رمز استفاده کنید.", "This number already has a Ctrl Z account. Use the login or forgot password page."},
-	"notice_passkey":  {"Passkey تازه برای Ctrl Z ثبت شد. شما نبودید؟ رمز را عوض کنید.", "Ctrl Z: a passkey was added to your account. If this was not you, change your password."},
-	"notice_recovery": {"کدهای بازیابی حساب Ctrl Z عوض شد. شما نبودید؟ رمز را عوض کنید.", "Ctrl Z: your recovery codes were replaced. If this was not you, change your password."},
+	"notice_passkey":  {"Passkey تازه ثبت شد. شما نبودید؟ رمز Ctrl Z را بازیابی کنید.", "Ctrl Z: a passkey was added to your account. If this was not you, use the forgot password page."},
+	"notice_recovery": {"کدهای بازیابی Ctrl Z عوض شد. شما نبودید؟ کدها و رمز را عوض کنید.", "Ctrl Z: your recovery codes were replaced. If this was not you, make new codes and change your password."},
 }
 
 func TestCheckBody(t *testing.T) {
@@ -1120,7 +1120,8 @@ func bodyUpdates(t *testing.T, file string) map[string][2]string {
 }
 
 // effectiveBodies is what a migrated database holds: the seed of 0011 with the guarded updates of
-// 0041 on top, without the two invite rows 0062 deletes and with the four notice rows it adds, key/locale to body.
+// 0041 on top, without the two invite rows 0062 deletes and with the four notice rows it adds (and the advice of
+// 0064 on top of them), key/locale to body.
 func effectiveBodies(t *testing.T) map[string]string {
 	t.Helper()
 	seed := seedRows(t, "0011_auth.sql")
@@ -1150,6 +1151,19 @@ func effectiveBodies(t *testing.T) map[string]string {
 	}
 	for k, v := range notices {
 		eff[k] = v
+	}
+	// 0064 (review dec-c-r2-3): the advice of the two notices names an action that evicts the thief. Each update
+	// guards with the text 0062 seeded, so an operator's edit is never overwritten, and its guard must match
+	// what 0062 really seeds or it is dead.
+	advice := bodyUpdates(t, "0064_notice_sms_advice.sql")
+	if len(advice) != 4 {
+		t.Fatalf("0064 updates %d bodies, the two notices have four", len(advice))
+	}
+	for k, u := range advice {
+		if notices[k] != u[1] {
+			t.Errorf("0064 guards %s with a text that 0062 does not seed, so the update matches nothing", k)
+		}
+		eff[k] = u[0]
 	}
 	if len(eff) != 12 {
 		t.Fatalf("a migrated database holds %d templates, spec 9.4 lists 12", len(eff))

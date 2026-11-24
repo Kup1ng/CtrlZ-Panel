@@ -1142,12 +1142,15 @@ func (t Tx) SecurityNotices(session uuid.UUID) ([]Notification, error) {
 	return out, sanitize(rows.Err())
 }
 
-const qSecurityNoticesUnread = `SELECT count(*) FROM ctrlz.notifications WHERE tenant_id = $1 AND read_at IS NULL AND kind = ANY ($2::text[])`
+// qSecurityNoticesUnread counts the set SecurityNotices returns and no more. A notice past the newest fifty is in
+// the list and in NotificationsUnread, so counting it here too would make a badge that adds the two count it twice
+// (review dec-c-r2-1). The count is therefore at most SecurityNoticeListLimit, and equals len(security_items).
+const qSecurityNoticesUnread = `SELECT count(*) FROM (` + qApartSet + `) apart`
 
-// SecurityNoticesUnread counts every unread security notice, not the page of them.
+// SecurityNoticesUnread counts the unread security notices shown apart: the newest SecurityNoticeListLimit of them.
 func (t Tx) SecurityNoticesUnread() (int, error) {
 	var n int
-	if err := t.tx.QueryRow(t.ctx, qSecurityNoticesUnread, t.tenant, SecurityNoticeKinds()).Scan(&n); err != nil {
+	if err := t.tx.QueryRow(t.ctx, qSecurityNoticesUnread, t.tenant, SecurityNoticeKinds(), int32(SecurityNoticeListLimit)).Scan(&n); err != nil {
 		return 0, sanitize(err)
 	}
 	return n, nil

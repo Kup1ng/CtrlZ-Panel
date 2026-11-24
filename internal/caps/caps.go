@@ -61,10 +61,10 @@ const MaxPasskeys = 20
 // live row for ever, and the session list and the pool paid for a loop of logins.
 const MaxSessions = 50
 
-// MaxNoticeSMS is how many SMS of ONE kind of security notice one tenant may queue in 24 hours (question 19, D31 numbers are
+// MaxNoticeSMS is how many SMS of ONE kind of security notice one account may queue in 24 hours (question 19, D31 numbers are
 // provisional). It is a cap and not an input bound: ctrlz_fn.tenant_notice_sms compares it with ctrlz.cap_reached over
-// the audit rows of the action of that notice, so a thief cannot spend the messages of one kind to silence the other
-// (review dec-c-r1-6), under the user row lock the two routes already hold, so two changes at once cannot
+// the audit rows of the action of that notice and of that user, so a thief cannot spend the messages of one kind to silence the other
+// (review dec-c-r1-6) and one member of a tenant cannot spend another member's messages (dec-c-r2-5), under the user row lock the two routes already hold, so two changes at once cannot
 // both take the last message. The notice is still written past it; only the SMS is not queued.
 const MaxNoticeSMS = 3
 
@@ -142,9 +142,9 @@ func Entries() []Entry {
 		{Name: "sessions.per_user", Kind: Cap, Consts: []string{"MaxSessions"}, Rows: []string{"Tx.SessionsTrim"}},
 		{
 			Name: "notice.sms", Kind: Cap, Consts: []string{"MaxNoticeSMS"}, SQL: "ctrlz_fn.tenant_notice_sms",
-			// The count is of the tenant's audit rows, and the lock that makes it exact is the user row lock that both
-			// routes hold, so the cap is exact for the changes of one account.
-			Slack: "the audit rows of two uncommitted transactions are not visible to each other, so changes of two different users of one tenant at the same instant can each take the last message: at most the number of users of the tenant in flight over",
+			// The count is of the audit rows of the user the message is for (migration 0064), and the lock that makes it
+			// exact is that user's row lock, which both routes hold, so the cap is exact: no other account's change can
+			// spend it or race it.
 		},
 		{Name: "totp.step.user", Kind: SingleUse, Wins: []string{"Tx.TOTPStepAccept"}},
 		{Name: "totp.step.admin", Kind: SingleUse, Wins: []string{"GlobalTx.AdminTOTPStepAccept"}},
