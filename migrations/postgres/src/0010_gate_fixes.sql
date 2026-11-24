@@ -1,0 +1,818 @@
+-- Fixes from the P0 gate review of the database layer. A new file and not an
+-- edit of 0006 to 0009, because a migration that has been applied anywhere is
+-- never edited (README, Rules).
+--
+--  1. ip_claim_take no longer takes a method: the proof method is read from
+--     the evidence (D33), so browser_ip leaves proof_method and invalid_method
+--     leaves the outcomes. It takes the caller's batch id instead and writes
+--     the endpoint_set outbox rows for every tenant it displaces and for the
+--     taker, in the same subtransaction as the displacement, so the delete for
+--     the victim and the put for the taker are one config entry. ctrlz_auth
+--     gets INSERT on policy_outbox through one named policy.
+--  2. A tenant's own suspended claim is honoured by every function that could
+--     bring an overlapping claim back: take and open_challenge refuse, request
+--     locks the tenant's overlapping rows before it looks, so a suspension in
+--     flight is seen. Take locks all of them in one statement ordered by id.
+--  3. An Endpoint with admin_hold, or with a suspended claim on it, cannot be
+--     deleted by the tenant role: one restrictive DELETE policy. The worker's
+--     tenant purge is not touched, because the policy names ctrlz_tenant. A
+--     suspension that is still uncommitted is invisible to the policy, so a
+--     BEFORE DELETE trigger on ip_claims refuses to delete a suspended claim
+--     while its tenant exists (SQLSTATE CZ001); a tenant purge deletes the
+--     tenant row first and passes.
+--  4. A claim wider than /32 is never proven without admin approval, in every
+--     mode, so the sweep of a later open registration still sees it. A new
+--     claim inherits first_grace_at from the maximum first_grace_at of the
+--     tenant's overlapping claims, so release and request do not buy a second
+--     grace.
+--  5. At most ten live proof challenges per claim, and a quota on the claims a
+--     tenant holds (max_ip_claims, answered as quota_exceeded).
+--  6. auth_otp_issue checks the cooldown after the counters, inside the same
+--     subtransaction: the row lock of the GLOBAL counter (every call that will send a
+--     message takes it, last of its keys, and holds it to the end of the
+--     transaction) serialises concurrent sends, and the check then runs on a
+--     fresh snapshot. A call that sends nothing (a decoy) has no global key, so
+--     only the phone's own row orders it against another call for that phone. auth_totp_seed checks its
+--     tenant argument against the setting when there is one.
+--  7. Grants: the worker can select the key and expiry columns of the three
+--     proof and link tables, so a sweep can filter; the hub can read
+--     last_seen_at on the three tables it writes it on, so it can keep the
+--     maximum.
+--  8. Constraints: block pages (mode and link agree, link is ASCII with a
+--     plain host, title and message carry no control character), catalog wire
+--     ids (third-party filters from 1000, service ids up to u32).
+--  9. tenant_profile_counts does not count default_location_unavailable.
+-- 10. Deleting a Profile 1 promotes the Profile 2 of the clients that used it.
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+-- Tables, as the owner. ------------------------------------------------------------------
+
+-- How the address was supplied is ip_claims.source. proof_method records how it
+-- was proven, and only the evidence says that.
+ALTER TABLE ctrlz.ip_claims DROP CONSTRAINT ip_claims_proof_method_check;
+ALTER TABLE ctrlz.ip_claims ADD CONSTRAINT ip_claims_proof_method_check
+  CHECK (proof_method IN ('verify_tcp', 'verify_udp_txt', 'secure_dns'));
+
+-- The unblock link and the mode agree, as wire.ValidateBlockPage wants: mode
+-- 'custom' (the URL mode) has a link, 'none' and 'default' (the request mode)
+-- have none. wire.ValidateBlockPage is the authority and the API runs it before
+-- every write; this table is the backstop for a write that skips it. The link is
+-- ASCII, as wire.validHTTPSURL requires (an internationalised host is sent in
+-- its punycode form), and has this shape:
+--   * a host of letters, digits, dots and hyphens that starts with a letter or
+--     a digit, or an IPv6 literal in brackets, so https://:80, https://a^b and
+--     https://[x do not pass;
+--   * an optional colon and digits (the validator also takes an empty port);
+--   * an optional path in which a percent sign starts a two digit escape, as
+--     the URL parser demands of a path, then an optional query of any printable
+--     ASCII.
+--
+-- Everything the validator accepts, the table accepts, so a valid save never
+-- fails here. The reverse is not true. The table refuses the host spellings the
+-- URL parser takes and no real site uses (an underscore, a sub-delimiter such
+-- as !, a percent escape, an IPv6 zone), and it is looser than the validator in
+-- one place: the bracket form takes any run of hex digits, colons and dots, so
+-- https://[1:2]/ and https://[:80] pass the table and not the validator. A write
+-- that skips the API can therefore store a bracket host the validator refuses.
+-- The compiler runs the validator on each row before it builds the record, so
+-- such a row is caught there and not served.
+ALTER TABLE ctrlz.block_pages DROP CONSTRAINT block_pages_limits;
+ALTER TABLE ctrlz.block_pages ADD CONSTRAINT block_pages_limits CHECK (
+  char_length(title) <= 120 AND char_length(message) <= 2000
+  AND (unblock_url IS NULL
+       OR (char_length(unblock_url) <= 2048
+           AND unblock_url ~ '^https://([A-Za-z0-9][A-Za-z0-9.-]*|\[[0-9A-Fa-f:.]+\])(:[0-9]*)?(/([\x21-\x24\x26-\x3e\x40-\x7e]|%[0-9A-Fa-f]{2})*)?(\?[\x21-\x7e]*)?$')));
+ALTER TABLE ctrlz.block_pages ADD CONSTRAINT block_pages_unblock_mode_url
+  CHECK ((unblock_mode = 'custom') = (unblock_url IS NOT NULL));
+-- The validator's rule for text: no C0 control and no DEL; a message may also
+-- hold a line break and a tab, a title may not.
+ALTER TABLE ctrlz.block_pages ADD CONSTRAINT block_pages_text_controls CHECK (
+  title !~ '[\x01-\x1f\x7f]' AND message !~ '[\x01-\x08\x0b-\x1f\x7f]');
+
+-- Claims are bounded by a quota like every other tenant-made row. A request
+-- counts the tenant's claims that are not released against this number or the
+-- tenant's override. The default is provisional (D31).
+ALTER TABLE ctrlz.entitlement_defaults ADD COLUMN max_ip_claims integer NOT NULL DEFAULT 50 CHECK (max_ip_claims >= 0);
+ALTER TABLE ctrlz.tenant_entitlements ADD COLUMN max_ip_claims integer CHECK (max_ip_claims >= 0);
+
+-- Contract 9.5: native filter ids are below 1000 and third-party ones start at
+-- 1000, and policy/match.go relies on that order for "lowest filter_id wins".
+ALTER TABLE ctrlz.catalog_filter ADD CONSTRAINT catalog_filter_wire_by_kind
+  CHECK ((kind = 'native' AND wire_id < 1000) OR (kind = 'third_party' AND wire_id >= 1000));
+
+-- The SVCS and CZGT records carry a service id as u32 (contract 9.5).
+ALTER TABLE ctrlz.catalog_service DROP CONSTRAINT catalog_service_wire_id_check;
+ALTER TABLE ctrlz.catalog_service ALTER COLUMN wire_id TYPE bigint;
+ALTER TABLE ctrlz.catalog_service ADD CONSTRAINT catalog_service_wire_id_range CHECK (wire_id BETWEEN 1 AND 4294967295);
+
+-- option_count is the number of options a profile sets. default_location_unavailable
+-- is a flag the worker writes and is never NULL, so it counted as an option for
+-- every profile that has a row.
+CREATE OR REPLACE VIEW ctrlz.tenant_profile_counts WITH (security_invoker = true) AS
+SELECT p.tenant_id, p.id AS profile_id,
+       (SELECT count(*) FROM ctrlz.endpoints e
+         WHERE e.tenant_id = p.tenant_id AND (e.profile_id = p.id OR e.profile2_id = p.id)) AS endpoint_count,
+       (SELECT count(*) FROM ctrlz.profile_filters f
+         WHERE f.tenant_id = p.tenant_id AND f.profile_id = p.id AND f.enabled) AS filter_count,
+       (SELECT count(*) FROM ctrlz.profile_services s
+         WHERE s.tenant_id = p.tenant_id AND s.profile_id = p.id AND s.enabled) AS service_count,
+       (SELECT count(*) FROM ctrlz.rules r
+         WHERE r.tenant_id = p.tenant_id AND r.profile_id = p.id) AS rule_count,
+       (SELECT count(*) FROM ctrlz.profile_options o, jsonb_each(to_jsonb(o)) AS kv
+         WHERE o.tenant_id = p.tenant_id AND o.profile_id = p.id
+           AND kv.value <> 'null'::jsonb
+           AND kv.key NOT IN ('tenant_id', 'profile_id', 'created_at', 'updated_at', 'default_location_unavailable')) AS option_count
+FROM ctrlz.profiles p;
+
+-- Profile 1 of a client may be deleted while the client keeps a Profile 2. The
+-- foreign key clears profile_id and the CHECK of 0009 refuses Profile 2 without
+-- Profile 1, so the delete used to fail. The user's choice of Profile 2 is
+-- worth keeping, so it moves up to Profile 1. The function runs with the rights
+-- of the caller: ctrlz_tenant can update both columns, and the cascade of a
+-- tenant purge runs as the table owner, so no SECURITY DEFINER is needed.
+--
+-- The clients are locked before the UPDATE looks at them. A concurrent change of
+-- a client's Profile 2 would otherwise leave the UPDATE with a snapshot in which
+-- the profile the client pointed at is the old one: after it waited for that
+-- change to commit, the EXISTS below (flattened into a join) is checked against
+-- the old profile row and the new Profile 2, fails, and the client is skipped.
+-- The foreign key's SET NULL then leaves a client with Profile 2 and no Profile
+-- 1, which the CHECK refuses, and the whole delete fails. After the lock the
+-- UPDATE is a new statement on a new snapshot.
+--
+-- The order is by id because the statements a developer writes need one rule:
+-- a statement that locks several clients of a tenant locks them in id order.
+-- The table order of rows is not stable and no hand-written statement can keep
+-- it, while an explicit order can be kept by every one of them. Two statements
+-- that lock the same clients in different orders deadlock, whichever order this
+-- trigger picks, so the hub's batch of last_seen_at (P4) and any bulk write of
+-- clients (P3) are bound by the rule. (The functions that lock several
+-- ip_claims rows of a tenant also go by id, but that is a rule about a
+-- different table.)
+--
+-- The rule does not make a writer safe against a delete. The cascades of an
+-- Endpoint delete and the SET NULL (profile2_id) of a profile delete lock rows in
+-- plan order, which no SQL here can change, and a delete and a writer also meet on
+-- other rows: the deleted row itself, through a foreign key check, and ip_claims
+-- and authorized_ips. Which pairs deadlock depends on the order each side reaches
+-- those rows, and the writers of P3 and P4 do not exist yet, so this comment does
+-- not list the cases. catalogtest pins the one that is promised.
+--
+-- 40P01 is ErrRetry: one side rolls back, it can be either side, nothing is
+-- corrupted, and the store retries for nobody. So:
+--   - A route that deletes an Endpoint (P3) or a profile (P2) locks the affected
+--     clients first with SELECT ... ORDER BY id FOR UPDATE, and retries on 40P01.
+--     The affected clients are endpoint_id = $1 for an Endpoint and
+--     profile_id = $1 OR profile2_id = $1 for a profile: one profile row can be
+--     Profile 1 of one client and Profile 2 of another. The lock closes the case
+--     of a writer that only touches clients, and it opens others, so it does not
+--     replace the retry.
+--   - Every writer bound by the rule retries on 40P01 too, because it can be the
+--     side that rolled back.
+--
+-- Profile 2 is promoted only if its row still exists. When one statement deletes
+-- both profiles of a stack (the cascade of a tenant purge, or a tenant's
+-- DELETE of two ids), the foreign key's SET NULL for the first row is queued and
+-- has not run when this trigger fires for the second. If the first row to go was
+-- the client's Profile 2, the trigger would write that dead id into profile_id
+-- and the foreign key check would fail the whole statement, in the heap order of
+-- the rows and so on every retry.
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.promote_profile2() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  PERFORM 1 FROM ctrlz.clients c
+  WHERE c.tenant_id = OLD.tenant_id AND c.profile_id = OLD.id
+  ORDER BY c.id
+  FOR NO KEY UPDATE;
+  UPDATE ctrlz.clients c SET profile_id = c.profile2_id, profile2_id = NULL
+  WHERE c.tenant_id = OLD.tenant_id AND c.profile_id = OLD.id AND c.profile2_id IS NOT NULL
+    AND EXISTS (SELECT 1 FROM ctrlz.profiles p WHERE p.tenant_id = c.tenant_id AND p.id = c.profile2_id);
+  RETURN OLD;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.promote_profile2() FROM PUBLIC;
+CREATE TRIGGER promote_profile2 BEFORE DELETE ON ctrlz.profiles
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.promote_profile2();
+
+-- Policies, as the owner. ----------------------------------------------------------------
+
+-- A restrictive policy is ANDed with tenant_isolation. A row it refuses is
+-- skipped by the DELETE, which then reports zero rows and no error. Two things
+-- pin an Endpoint: the admin's hold (the tenant cannot write it, and could
+-- otherwise drop it by deleting and recreating the row), and a suspended claim
+-- on it (the cascade would erase the suspension, which only an admin ends). It
+-- names ctrlz_tenant, so only the tenant role's own DELETE is filtered. The
+-- worker's purge of a tenant cascades through foreign keys, which row security
+-- does not apply to; the trigger below has its own exception for it. A tenant
+-- can still create a new Endpoint beside a held one; the tenant-level hold is
+-- the full stop, this only pins the row.
+CREATE POLICY hold_blocks_delete ON ctrlz.endpoints AS RESTRICTIVE FOR DELETE TO ctrlz_tenant
+  USING (NOT admin_hold
+         AND NOT EXISTS (SELECT 1 FROM ctrlz.ip_claims c
+                         WHERE c.tenant_id = endpoints.tenant_id AND c.endpoint_id = endpoints.id AND c.state = 'suspended'));
+
+-- ip_claim_take writes the endpoint_set row of a tenant it displaced, which is
+-- not the tenant of the transaction. Only that aggregate, and only for the
+-- tenant it names.
+CREATE POLICY auth_endpoint_set ON ctrlz.policy_outbox FOR INSERT TO ctrlz_auth
+  WITH CHECK (aggregate_type = 'endpoint_set' AND aggregate_id = tenant_id);
+
+-- ip_claim_request reads the tenant's own limit, and only that tenant's.
+CREATE POLICY auth_limits ON ctrlz.tenant_entitlements FOR SELECT TO ctrlz_auth
+  USING (tenant_id = ctrlz.current_tenant_id());
+
+-- The policy above cannot see a suspension that has not committed: its EXISTS
+-- reads the snapshot of the DELETE, so an Endpoint delete that overlaps the
+-- worker's or an admin's UPDATE to 'suspended' passes the policy. The cascade
+-- then waits for the claim row, and when the suspension commits it deletes the
+-- suspended row. A row trigger runs after that wait, on the latest version of
+-- the row, and refuses. It lets a suspended claim go only when its tenant is
+-- gone, which is the purge: the tenant row is deleted first and the cascade
+-- runs after it, so the tenant is no longer visible here. The error has its own
+-- SQLSTATE, so the store can tell it from an unrelated failure and the route
+-- can answer as it does for the zero rows the policy gives (conflict).
+-- The function takes the rights of whoever runs the cascade, which is the owner
+-- of ip_claims; foreign key actions are exempt from row security, and the
+-- test shows that this read of tenants is too.
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.suspended_claim_stays() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  IF OLD.state = 'suspended' AND EXISTS (SELECT 1 FROM ctrlz.tenants t WHERE t.id = OLD.tenant_id) THEN
+    RAISE EXCEPTION 'a suspended claim is not deleted while its tenant exists' USING ERRCODE = 'CZ001';
+  END IF;
+  RETURN OLD;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.suspended_claim_stays() FROM PUBLIC;
+CREATE TRIGGER suspended_claim_stays BEFORE DELETE ON ctrlz.ip_claims
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.suspended_claim_stays();
+
+-- Grants, as the table owner. ------------------------------------------------------------
+
+GRANT INSERT ON ctrlz.policy_outbox TO ctrlz_auth;
+
+-- The hub keeps the maximum of last_seen_at, and GREATEST(last_seen_at, $1)
+-- reads the column. A blind write moved the value back.
+GRANT SELECT (last_seen_at) ON ctrlz.ip_claims TO ctrlz_hub;
+GRANT SELECT (last_seen_at) ON ctrlz.clients TO ctrlz_hub;
+GRANT SELECT (last_seen_at) ON ctrlz.authorized_ips TO ctrlz_hub;
+
+-- A DELETE that filters on a column needs SELECT on it. Only the key and expiry
+-- columns, never token_hash.
+GRANT SELECT (tenant_id, id, expires_at, consumed_at) ON ctrlz.ip_proof_challenges TO ctrlz_worker;
+GRANT SELECT (tenant_id, id, expires_at, revoked_at) ON ctrlz.setup_share_tokens TO ctrlz_worker;
+GRANT SELECT (tenant_id, id, expires_at) ON ctrlz.profile_download_tokens TO ctrlz_worker;
+
+-- ip_claim_request compares the claim count with the tenant's limit or the
+-- default. Only the limit column, and the tenant key for the policy.
+GRANT SELECT (tenant_id, max_ip_claims) ON ctrlz.tenant_entitlements TO ctrlz_auth;
+GRANT SELECT (max_ip_claims) ON ctrlz.entitlement_defaults TO ctrlz_auth;
+
+-- Functions, as ctrlz_auth. --------------------------------------------------------------
+
+SET ROLE ctrlz_auth;
+
+-- The TOTP seed for the check during login, before a session exists. With a
+-- tenant setting, the tenant argument must be that tenant (PS section 8), or a
+-- tenant connection could ask for another tenant's seed given its two ids. The
+-- login path has no setting, and the check is skipped only then.
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.auth_totp_seed(p_user_id uuid, p_tenant_id uuid)
+RETURNS TABLE (totp_secret_ct bytea)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT u.totp_secret_ct
+  FROM ctrlz.users u
+  WHERE u.id = p_user_id AND u.tenant_id = p_tenant_id
+    AND (ctrlz.current_tenant_id() IS NULL OR ctrlz.current_tenant_id() = p_tenant_id)
+$$;
+-- +goose StatementEnd
+
+-- Issue an OTP challenge. As in 0009, with the cooldown check after the
+-- counters. It used to come first, as a plain read, and a call that overlapped
+-- another one for the same phone and purpose could not see the other's
+-- uncommitted challenge, so both passed. Now every call that will send a message takes the row lock of
+-- the global counter before it looks (a decoy, which has no global key, waits on
+-- the phone's row), a second call waits there for the first to commit, and the check that follows is a new statement on a new snapshot.
+-- A refusal still undoes the counters, because they are in the same
+-- subtransaction. (A caller on REPEATABLE READ or SERIALIZABLE would keep its
+-- old snapshot; the auth path uses the default.)
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.auth_otp_issue(p_phone text, p_purpose text, p_code_hash bytea, p_delivery_ct bytea, p_ip inet)
+RETURNS TABLE (id uuid, allowed boolean)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_day    date := (pg_catalog.now() AT TIME ZONE 'Asia/Tehran')::date;
+  v_ip     inet := p_ip;
+  v_net    text;
+  v_scopes text[];
+  v_keys   text[];
+  v_caps   integer[];
+  v_id     uuid;
+  v_n      integer;
+  i        integer;
+BEGIN
+  IF p_phone IS NULL OR p_phone !~ '^\+[1-9][0-9]{7,14}$'
+     OR p_purpose IS NULL OR p_purpose NOT IN ('login', 'signup', 'invite', 'reset', 'phone_old', 'phone_new')
+     OR p_code_hash IS NULL OR p_ip IS NULL THEN
+    RETURN QUERY SELECT NULL::uuid, false;
+    RETURN;
+  END IF;
+
+  -- ::ffff:a.b.c.d and a.b.c.d are one client.
+  IF pg_catalog.family(v_ip) = 6 AND v_ip << '::ffff:0:0/96'::inet THEN
+    v_ip := '0.0.0.0'::inet + (v_ip - '::ffff:0.0.0.0'::inet);
+  END IF;
+
+  IF pg_catalog.family(v_ip) = 4 THEN
+    v_net    := pg_catalog.network(pg_catalog.set_masklen(v_ip, 24))::text;
+    v_scopes := ARRAY['ip', 'ip'];
+    v_keys   := ARRAY[pg_catalog.host(v_ip), v_net];
+    v_caps   := ARRAY[20, 100];
+  ELSE
+    v_net    := pg_catalog.network(pg_catalog.set_masklen(v_ip, 64))::text;
+    v_scopes := ARRAY['ip'];
+    v_keys   := ARRAY[v_net];
+    v_caps   := ARRAY[20];
+  END IF;
+  v_scopes := v_scopes || ARRAY['phone_net', 'phone', 'global'];
+  v_keys   := v_keys   || ARRAY[p_phone || '|' || v_net, p_phone, 'all'];
+  v_caps   := v_caps   || ARRAY[3, 5, 5000];
+
+  BEGIN
+    FOR i IN 1 .. pg_catalog.array_length(v_keys, 1) LOOP
+      INSERT INTO ctrlz.sms_counters AS c (day, scope, key, count)
+      VALUES (v_day, v_scopes[i], v_keys[i], 1)
+      ON CONFLICT (day, scope, key) DO UPDATE SET count = c.count + 1 WHERE c.count < v_caps[i]
+      RETURNING c.count INTO v_n;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'cap' USING ERRCODE = 'P0001';
+      END IF;
+    END LOOP;
+
+    -- The cooldown reads challenges, which exist only for messages sent. The
+    -- global counter above is locked until the caller's transaction ends, so a
+    -- concurrent send is already waiting behind it (a decoy has none: the phone's
+    -- own row orders it).
+    IF EXISTS (SELECT 1 FROM ctrlz.otp_challenges o
+               WHERE o.phone_e164 = p_phone AND o.purpose = p_purpose
+                 AND o.created_at > pg_catalog.now() - interval '60 seconds') THEN
+      RAISE EXCEPTION 'cooldown' USING ERRCODE = 'P0001';
+    END IF;
+
+    INSERT INTO ctrlz.otp_challenges (phone_e164, purpose, code_hash, delivery_ct, expires_at, ip)
+    VALUES (p_phone, p_purpose, p_code_hash, p_delivery_ct, pg_catalog.now() + interval '5 minutes', v_ip)
+    RETURNING ctrlz.otp_challenges.id INTO v_id;
+  EXCEPTION WHEN raise_exception THEN
+    -- The subtransaction undoes the counters bumped before the refusal.
+    RETURN QUERY SELECT NULL::uuid, false;
+    RETURN;
+  END;
+
+  RETURN QUERY SELECT v_id, true;
+END
+$$;
+-- +goose StatementEnd
+
+-- Create a claim. As in 0009, plus:
+--
+--  * The tenant's overlapping rows are locked, in id order, before the check
+--    for a suspended one. A suspension that an admin has made but not yet
+--    committed is waited for, and the request then sees it. Before, the insert
+--    waited on the exclusion constraint instead and succeeded after the commit,
+--    which left a suspended row and an active row on one prefix.
+--  * The new row inherits the maximum first_grace_at of the tenant's
+--    overlapping rows, released ones included: a claim gets one grace, and
+--    releasing it to request the same prefix again does not make a second one.
+--    It is the maximum and not the value of the newest row, because a wider
+--    request can overlap a graced row and a newer ungraced one. The history is
+--    lost when the Endpoint is deleted, because the rows go with it.
+--  * The tenant's claims that are not released are counted against max_ip_claims
+--    (its override, else the default); at the limit the outcome is
+--    quota_exceeded and nothing is written. The tenant's requests take one
+--    advisory lock first, before any row lock, so the count is exact for
+--    parallel requests of one tenant: the second waits, and its count is a new
+--    statement that sees the first's row. The lock is held to the end of the
+--    transaction, so a caller that makes a claim and then something slow in the
+--    same transaction holds up its own tenant's next request. Only
+--    ip_claim_open_challenge takes the same lock, in the same order (the lock,
+--    then claim rows), so the two cannot be the two sides of a deadlock unless
+--    a transaction already holds claim row locks when it calls either.
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.ip_claim_request(p_endpoint_id uuid, p_cidr cidr, p_source text)
+RETURNS TABLE (claim_id uuid, outcome text)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant uuid := ctrlz.current_tenant_id();
+  v_mode   text;
+  v_min    integer;
+  v_id     uuid;
+  v_grace  timestamptz;
+  v_limit  integer;
+  v_count  integer;
+BEGIN
+  IF v_tenant IS NULL THEN
+    RETURN;
+  END IF;
+  IF p_source IS NULL OR p_source NOT IN ('manual', 'browser', 'secure_dns', 'ddns') THEN
+    RETURN QUERY SELECT NULL::uuid, 'invalid_source'::text;
+    RETURN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM ctrlz.endpoints e WHERE e.tenant_id = v_tenant AND e.id = p_endpoint_id) THEN
+    RETURN QUERY SELECT NULL::uuid, 'not_found'::text;
+    RETURN;
+  END IF;
+  IF pg_catalog.family(p_cidr) <> 4 THEN
+    RETURN QUERY SELECT NULL::uuid, 'unsupported'::text;
+    RETURN;
+  END IF;
+  IF p_cidr && ANY (ARRAY[
+       '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16',
+       '172.16.0.0/12', '192.168.0.0/16', '224.0.0.0/4', '240.0.0.0/4']::cidr[]) THEN
+    RETURN QUERY SELECT NULL::uuid, 'invalid_address'::text;
+    RETURN;
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('ctrlz.ip_claim_request:' || v_tenant::text, 0));
+
+  PERFORM 1 FROM ctrlz.ip_claims c
+  WHERE c.tenant_id = v_tenant AND c.cidr && p_cidr AND c.state <> 'released'
+  ORDER BY c.id
+  FOR UPDATE;
+
+  IF EXISTS (SELECT 1 FROM ctrlz.ip_claims c
+             WHERE c.tenant_id = v_tenant AND c.state = 'suspended' AND c.cidr && p_cidr) THEN
+    RETURN QUERY SELECT NULL::uuid, 'suspended'::text;
+    RETURN;
+  END IF;
+
+  SELECT COALESCE(te.max_ip_claims, d.max_ip_claims) INTO v_limit
+  FROM ctrlz.entitlement_defaults d
+  LEFT JOIN ctrlz.tenant_entitlements te ON te.tenant_id = v_tenant;
+  SELECT pg_catalog.count(*) INTO v_count
+  FROM ctrlz.ip_claims c
+  WHERE c.tenant_id = v_tenant AND c.state <> 'released';
+  IF v_limit IS NULL OR v_count >= v_limit THEN
+    RETURN QUERY SELECT NULL::uuid, 'quota_exceeded'::text;
+    RETURN;
+  END IF;
+
+  SELECT pg_catalog.max(c.first_grace_at) INTO v_grace
+  FROM ctrlz.ip_claims c
+  WHERE c.tenant_id = v_tenant AND c.cidr && p_cidr;
+
+  SELECT s.registration_mode INTO v_mode FROM ctrlz.system_settings s;
+  v_min := CASE WHEN v_mode = 'open' THEN 32 ELSE 28 END;
+
+  IF pg_catalog.masklen(p_cidr) < v_min THEN
+    INSERT INTO ctrlz.ip_claims (tenant_id, endpoint_id, cidr, state, source, first_grace_at)
+    VALUES (v_tenant, p_endpoint_id, p_cidr, 'pending_proof', p_source, v_grace)
+    RETURNING ctrlz.ip_claims.id INTO v_id;
+    RETURN QUERY SELECT v_id, 'wide_requires_approval'::text;
+  ELSIF v_mode = 'open' THEN
+    INSERT INTO ctrlz.ip_claims (tenant_id, endpoint_id, cidr, state, source, first_grace_at)
+    VALUES (v_tenant, p_endpoint_id, p_cidr, 'pending_proof', p_source, v_grace)
+    RETURNING ctrlz.ip_claims.id INTO v_id;
+    RETURN QUERY SELECT v_id, 'pending_proof'::text;
+  ELSE
+    BEGIN
+      INSERT INTO ctrlz.ip_claims (tenant_id, endpoint_id, cidr, state, source, first_grace_at)
+      VALUES (v_tenant, p_endpoint_id, p_cidr, 'active', p_source, v_grace)
+      RETURNING ctrlz.ip_claims.id INTO v_id;
+    EXCEPTION WHEN exclusion_violation THEN
+      RETURN QUERY SELECT NULL::uuid, 'unavailable'::text;
+      RETURN;
+    END;
+    RETURN QUERY SELECT v_id, 'active'::text;
+  END IF;
+END
+$$;
+-- +goose StatementEnd
+
+-- Open a proof challenge for the caller's claim. As in 0009, plus:
+--
+--  * The tenant's advisory lock of ip_claim_request is taken first, then the
+--    claim row, so the count below is exact for one tenant and the lock order
+--    is the one request uses. The claim row is locked before the per-claim
+--    count: this function is the only way a challenge is made.
+--  * At most ten challenges per claim whose expiry is still ahead, consumed or
+--    not. Beyond that, no row. The number is provisional (D31).
+--  * At most ten times the larger of the tenant's max_ip_claims and the claims
+--    it holds that are not released, challenges in all whose expiry is still
+--    ahead, whatever claim they are on, released claims included (a limit
+--    lowered below what is held stops new claims and not proof of the held
+--    ones). The quota counts claims that are not released, and a tenant that requests,
+--    opens ten challenges and releases, in a loop, never holds more than the
+--    quota and used to collect ten challenges a round. A challenge lives ten
+--    minutes, so this caps the live rows. It does not cap the rows of released
+--    claims: nothing prunes them, because first_grace_at is inherited from them,
+--    and the route rate limit of P3 is the only bound on how fast they grow.
+--  * No row either when the tenant has another suspended claim that overlaps
+--    this one: the pending twin of a suspended claim must not collect proof.
+--
+-- The tenant's lock is taken before the claim row, and the row is locked FOR
+-- UPDATE with that lock held, so an open can wait through its tenant's lock
+-- behind another tenant: tenant B's ip_claim_take locks the active and grace
+-- claims of other tenants that overlap its own, and while that take holds a
+-- row of tenant A, A's open of that claim waits on the row, and every other
+-- open and request of A waits on A's lock behind it. Each wait ends at
+-- lock_timeout with 55P03, and it lasts as long as B's transaction. B can only
+-- get there with fresh evidence from the address, because take answers no_proof
+-- before it locks anything of another tenant, and take takes no advisory lock,
+-- so this is a wait and not a deadlock. It is accepted: FOR UPDATE NOWAIT would
+-- also turn the ordinary waits of one tenant, such as its own take on the same
+-- claim, into an immediate 55P03.
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.ip_claim_open_challenge(p_claim_id uuid)
+RETURNS TABLE (challenge_id uuid, label text, expires_at timestamptz)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant uuid := ctrlz.current_tenant_id();
+  v_state  text;
+  v_cidr   cidr;
+  v_live   integer;
+  v_limit  integer;
+  v_held   integer;
+  v_bits   pg_catalog.varbit;
+  v_label  text;
+  v_id     uuid;
+  v_exp    timestamptz;
+BEGIN
+  IF v_tenant IS NULL THEN
+    RETURN;
+  END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('ctrlz.ip_claim_request:' || v_tenant::text, 0));
+  SELECT c.state, c.cidr INTO v_state, v_cidr
+  FROM ctrlz.ip_claims c
+  WHERE c.tenant_id = v_tenant AND c.id = p_claim_id
+  FOR UPDATE;
+  IF NOT FOUND OR v_state IN ('released', 'suspended') THEN
+    RETURN;
+  END IF;
+  IF EXISTS (SELECT 1 FROM ctrlz.ip_claims o
+             WHERE o.tenant_id = v_tenant AND o.state = 'suspended' AND o.cidr && v_cidr AND o.id <> p_claim_id) THEN
+    RETURN;
+  END IF;
+  SELECT pg_catalog.count(*) INTO v_live
+  FROM ctrlz.ip_proof_challenges ch
+  WHERE ch.tenant_id = v_tenant AND ch.claim_id = p_claim_id AND ch.expires_at > pg_catalog.now();
+  IF v_live >= 10 THEN
+    RETURN;
+  END IF;
+  SELECT COALESCE(te.max_ip_claims, d.max_ip_claims) INTO v_limit
+  FROM ctrlz.entitlement_defaults d
+  LEFT JOIN ctrlz.tenant_entitlements te ON te.tenant_id = v_tenant;
+  SELECT pg_catalog.count(*) INTO v_live
+  FROM ctrlz.ip_proof_challenges ch
+  WHERE ch.tenant_id = v_tenant AND ch.expires_at > pg_catalog.now();
+  -- A limit lowered below what the tenant holds must stop new claims, not the
+  -- proof of the claims it already holds: at a limit of 0 a claim in grace
+  -- could never be proven and would be suspended at the end of its grace, which
+  -- only an admin ends. So the cap is ten times the larger of the limit and the
+  -- claims held, counted under the same lock as the request that makes them.
+  -- The cast keeps ten times a limit near the top of integer from overflowing.
+  SELECT pg_catalog.count(*) INTO v_held
+  FROM ctrlz.ip_claims c
+  WHERE c.tenant_id = v_tenant AND c.state <> 'released';
+  IF v_limit IS NULL OR v_live >= GREATEST(v_limit, v_held)::bigint * 10 THEN
+    RETURN;
+  END IF;
+
+  -- 128 bits padded with two zero bits make 26 groups of 5.
+  v_bits := ('x' || pg_catalog.encode(pg_catalog.uuid_send(pg_catalog.gen_random_uuid()), 'hex'))::pg_catalog.bit(128) || B'00';
+  SELECT pg_catalog.string_agg(pg_catalog.substr('abcdefghijklmnopqrstuvwxyz234567',
+           (pg_catalog.substr(v_bits::pg_catalog.text, n * 5 + 1, 5)::pg_catalog.bit(5))::integer + 1, 1), '' ORDER BY n)
+    INTO v_label
+  FROM pg_catalog.generate_series(0, 25) AS n;
+
+  INSERT INTO ctrlz.ip_proof_challenges (tenant_id, claim_id, label, expires_at)
+  VALUES (v_tenant, p_claim_id, v_label, pg_catalog.now() + interval '10 minutes')
+  RETURNING ctrlz.ip_proof_challenges.id, ctrlz.ip_proof_challenges.expires_at INTO v_id, v_exp;
+
+  RETURN QUERY SELECT v_id, v_label, v_exp;
+END
+$$;
+-- +goose StatementEnd
+
+-- Move the caller's claim to active after proof. As in 0009, with these
+-- changes:
+--
+--  * No method argument. The proof method is decided by the evidence (D33):
+--    verify_udp_txt, verify_tcp or secure_dns. How the address was supplied is
+--    ip_claims.source. The outcome invalid_method is gone with the argument.
+--  * p_batch_id is the batch of the caller's transaction. NULL gets
+--    invalid_batch. In the subtransaction that displaces and activates, the
+--    function writes one endpoint_set row for each tenant it displaced and one
+--    for the caller, with that batch id (ON CONFLICT DO NOTHING), so the
+--    compiler emits the delete of the victim's claim and the put of the
+--    taker's in one config entry. A refusal or a rollback writes none.
+--  * The claim's own row and every other non-released row of the tenant that
+--    overlaps it are locked in one statement ordered by id, before the state is
+--    read: twin takes lock in the same order and do not deadlock, and a state
+--    read after the lock cannot be stale. A suspended overlapping row of the
+--    tenant refuses the take with suspended.
+--  * Width: a claim wider than /32 needs approved_by_admin in every mode. Proof
+--    of one address says nothing about the range around it, and an unapproved
+--    wide claim that turned proven escaped the sweep of a later open registration
+--    and could not be displaced.
+DROP FUNCTION ctrlz_fn.ip_claim_take(uuid, text, text);
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.ip_claim_take(p_claim_id uuid, p_code text, p_batch_id uuid)
+RETURNS TABLE (outcome text)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant   uuid := ctrlz.current_tenant_id();
+  v_cidr     cidr;
+  v_state    text;
+  v_approved boolean;
+  v_proven   timestamptz;
+  v_idle     integer;
+  v_code     text;
+  v_hash     bytea;
+  v_chal     uuid;
+  v_obs      inet;
+  v_proto    text;
+  v_method   text;
+  v_udp_ids  uuid[] := ARRAY[]::uuid[];
+  v_diff     integer;
+  v_blocked  boolean;
+  v_victims  uuid[];
+  r          record;
+  i          integer;
+BEGIN
+  IF v_tenant IS NULL THEN
+    RETURN;
+  END IF;
+  IF p_batch_id IS NULL THEN
+    RETURN QUERY SELECT 'invalid_batch'::text;
+    RETURN;
+  END IF;
+
+  -- The cidr of a claim never changes, so it can be read before the lock.
+  SELECT c.cidr INTO v_cidr FROM ctrlz.ip_claims c WHERE c.tenant_id = v_tenant AND c.id = p_claim_id;
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 'not_found'::text;
+    RETURN;
+  END IF;
+
+  PERFORM 1 FROM ctrlz.ip_claims c
+  WHERE c.tenant_id = v_tenant AND c.cidr && v_cidr AND (c.id = p_claim_id OR c.state <> 'released')
+  ORDER BY c.id
+  FOR UPDATE;
+
+  SELECT c.state, c.approved_by_admin, c.proven_at INTO v_state, v_approved, v_proven
+  FROM ctrlz.ip_claims c
+  WHERE c.tenant_id = v_tenant AND c.id = p_claim_id;
+
+  IF NOT FOUND OR v_state = 'released' THEN
+    RETURN QUERY SELECT 'not_found'::text;
+    RETURN;
+  ELSIF v_state = 'active' AND v_proven IS NOT NULL THEN
+    RETURN QUERY SELECT 'already_active'::text;
+    RETURN;
+  ELSIF v_state = 'suspended' THEN
+    RETURN QUERY SELECT 'suspended'::text;
+    RETURN;
+  ELSIF EXISTS (SELECT 1 FROM ctrlz.ip_claims o
+                WHERE o.tenant_id = v_tenant AND o.state = 'suspended' AND o.cidr && v_cidr AND o.id <> p_claim_id) THEN
+    RETURN QUERY SELECT 'suspended'::text;
+    RETURN;
+  END IF;
+
+  SELECT s.takeover_idle_days INTO v_idle FROM ctrlz.system_settings s;
+
+  IF pg_catalog.masklen(v_cidr) < 32 AND NOT v_approved THEN
+    RETURN QUERY SELECT 'wide_requires_approval'::text;
+    RETURN;
+  END IF;
+
+  v_code := pg_catalog.lower(pg_catalog.btrim(COALESCE(p_code, '')));
+  IF v_code <> '' THEN
+    v_hash := pg_catalog.sha256(pg_catalog.convert_to(v_code, 'UTF8'));
+  END IF;
+
+  -- Look for evidence: TCP-class first, then udp ones that match the code.
+  FOR r IN
+    SELECT ch.id, ch.observed_ip, ch.observed_protocol, ch.txt_code_hash
+    FROM ctrlz.ip_proof_challenges ch
+    WHERE ch.tenant_id = v_tenant AND ch.claim_id = p_claim_id
+      AND ch.observed_at IS NOT NULL AND ch.observed_ip <<= v_cidr
+      AND ch.observed_at <= ch.expires_at AND ch.expires_at > pg_catalog.now()
+      AND ch.observed_at > pg_catalog.now() - interval '15 minutes'
+      AND ch.consumed_at IS NULL AND ch.attempts < 5
+    ORDER BY (ch.observed_protocol = 'udp'), ch.observed_at DESC, ch.id
+    FOR UPDATE
+  LOOP
+    IF r.observed_protocol <> 'udp' THEN
+      v_chal := r.id; v_obs := r.observed_ip; v_proto := r.observed_protocol;
+      EXIT;
+    END IF;
+    v_udp_ids := v_udp_ids || r.id;
+    IF v_hash IS NOT NULL THEN
+      -- No early exit: the whole hash is always compared.
+      v_diff := 0;
+      FOR i IN 0 .. 31 LOOP
+        v_diff := v_diff | (pg_catalog.get_byte(r.txt_code_hash, i) # pg_catalog.get_byte(v_hash, i));
+      END LOOP;
+      IF v_diff = 0 THEN
+        v_chal := r.id; v_obs := r.observed_ip; v_proto := r.observed_protocol;
+        EXIT;
+      END IF;
+    END IF;
+  END LOOP;
+
+  IF v_chal IS NULL THEN
+    IF v_hash IS NOT NULL AND pg_catalog.cardinality(v_udp_ids) > 0 THEN
+      UPDATE ctrlz.ip_proof_challenges ch
+      SET attempts = ch.attempts + 1,
+          consumed_at = CASE WHEN ch.attempts + 1 >= 5 THEN pg_catalog.now() ELSE ch.consumed_at END
+      WHERE ch.tenant_id = v_tenant AND ch.id = ANY (v_udp_ids);
+    END IF;
+    RETURN QUERY SELECT 'no_proof'::text;
+    RETURN;
+  END IF;
+
+  v_method := CASE v_proto WHEN 'udp' THEN 'verify_udp_txt' WHEN 'tcp' THEN 'verify_tcp' ELSE 'secure_dns' END;
+
+  -- Lock first, then look: the check below runs as a new statement and sees
+  -- whatever a concurrent transaction committed while we waited. Ordered by id,
+  -- so two takers that both reach a third tenant's rows lock them in one order.
+  PERFORM 1
+  FROM ctrlz.ip_claims o
+  WHERE o.cidr && v_cidr AND o.state IN ('active', 'grace') AND o.tenant_id <> v_tenant
+  ORDER BY o.id
+  FOR UPDATE;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM ctrlz.ip_claims o
+    LEFT JOIN ctrlz.endpoints oe ON oe.tenant_id = o.tenant_id AND oe.id = o.endpoint_id
+    WHERE o.cidr && v_cidr AND o.state IN ('active', 'grace') AND o.tenant_id <> v_tenant
+      AND NOT (
+        o.cidr <<= v_cidr AND o.cidr >>= v_obs
+        AND (o.proven_at IS NULL
+             OR COALESCE(o.last_seen_at, o.proven_at) < pg_catalog.now() - pg_catalog.make_interval(days => v_idle)
+             OR COALESCE(oe.admin_state, '') = 'hard_disabled')
+      )
+  ) INTO v_blocked;
+
+  IF v_blocked THEN
+    RETURN QUERY SELECT 'unavailable'::text;
+    RETURN;
+  END IF;
+
+  BEGIN
+    WITH d AS (
+      UPDATE ctrlz.ip_claims o SET state = 'released', displaced_at = pg_catalog.now()
+      WHERE o.cidr && v_cidr AND o.state IN ('active', 'grace') AND o.tenant_id <> v_tenant
+        AND o.cidr <<= v_cidr AND o.cidr >>= v_obs
+        AND (o.proven_at IS NULL
+             OR COALESCE(o.last_seen_at, o.proven_at) < pg_catalog.now() - pg_catalog.make_interval(days => v_idle)
+             OR EXISTS (SELECT 1 FROM ctrlz.endpoints oe
+                        WHERE oe.tenant_id = o.tenant_id AND oe.id = o.endpoint_id AND oe.admin_state = 'hard_disabled'))
+      RETURNING o.tenant_id
+    )
+    SELECT pg_catalog.array_agg(DISTINCT d.tenant_id) INTO v_victims FROM d;
+
+    UPDATE ctrlz.ip_claims c
+    SET state = 'active', proof_method = v_method, proven_at = pg_catalog.now(), grace_until = NULL
+    WHERE c.tenant_id = v_tenant AND c.id = p_claim_id;
+
+    UPDATE ctrlz.ip_proof_challenges ch SET consumed_at = pg_catalog.now()
+    WHERE ch.tenant_id = v_tenant AND ch.id = v_chal;
+
+    -- The victim's endpoint_set must be rebuilt too, or its nodes keep serving
+    -- the claim that was just released.
+    INSERT INTO ctrlz.policy_outbox (tenant_id, aggregate_type, aggregate_id, batch_id)
+    SELECT t.id, 'endpoint_set', t.id, p_batch_id
+    FROM (SELECT DISTINCT x AS id FROM pg_catalog.unnest(COALESCE(v_victims, ARRAY[]::uuid[]) || v_tenant) AS x) t
+    ON CONFLICT DO NOTHING;
+  EXCEPTION WHEN exclusion_violation THEN
+    -- Something overlapping that the predicate did not release (the caller's
+    -- own tenant, or a row that changed). The subtransaction undoes the
+    -- displacement and the outbox rows above.
+    RETURN QUERY SELECT 'unavailable'::text;
+    RETURN;
+  END;
+
+  RETURN QUERY SELECT 'active'::text;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.ip_claim_take(uuid, text, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.ip_claim_take(uuid, text, uuid) TO ctrlz_tenant, ctrlz_worker;
+
+RESET ROLE;
