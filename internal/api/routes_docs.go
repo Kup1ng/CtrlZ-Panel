@@ -325,7 +325,10 @@ func (s *Server) BatchRules(ctx context.Context, req gen.BatchRulesRequestObject
 		return nil, err
 	}
 	profile := uuid.UUID(req.Id)
-	in := batchIn(req.Body)
+	in, err := batchIn(req.Body)
+	if err != nil {
+		return nil, err
+	}
 	body, _ := json.Marshal(req.Body)
 	r := profiles.Request{Key: req.Params.IdempotencyKey, Method: http.MethodPost, Path: "/profiles/" + profile.String() + "/rules:batch", Body: body}
 	return s.idempotent(ctx, pr.TenantID, r, func(tx store.Tx) (int, []byte, error) {

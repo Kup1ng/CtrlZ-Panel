@@ -301,7 +301,11 @@ func (s *Server) CreateRules(ctx context.Context, req gen.CreateRulesRequestObje
 		return nil, err
 	}
 	b := req.Body
-	in := profiles.RuleIn{Patterns: b.Patterns, Act: actIn(string(b.Action), b.Target), FolderID: uid(b.FolderId), Comment: str(b.Comment),
+	folder, err := bodyID(b.FolderId)
+	if err != nil {
+		return nil, err
+	}
+	in := profiles.RuleIn{Patterns: b.Patterns, Act: actIn(string(b.Action), b.Target), FolderID: folder, Comment: str(b.Comment),
 		Disabled: b.Enabled != nil && !*b.Enabled}
 	if b.ExpiresIn != nil {
 		in.Expiry.In = string(*b.ExpiresIn)
@@ -355,7 +359,10 @@ func (s *Server) UpdateRule(ctx context.Context, req gen.UpdateRuleRequestObject
 		return nil, errValidation("/action", profiles.CodeRequired)
 	}
 	if b.FolderId != nil {
-		f := uuid.UUID(*b.FolderId)
+		f, err := bodyID(b.FolderId)
+		if err != nil {
+			return nil, err
+		}
 		patch.FolderID = &f
 	}
 	if b.ExpiresIn != nil || b.ExpiresAt != nil {
@@ -424,7 +431,15 @@ func (s *Server) TransferRule(ctx context.Context, req gen.TransferRuleRequestOb
 		return nil, err
 	}
 	b := req.Body
-	in := profiles.BatchIn{Op: string(b.Op), IDs: []uuid.UUID{uuid.UUID(req.RuleId)}, DestProfile: uid(b.DestProfileId), DestFolder: uid(b.DestFolderId),
+	destProfile, err := bodyID(b.DestProfileId)
+	if err != nil {
+		return nil, err
+	}
+	destFolder, err := bodyID(b.DestFolderId)
+	if err != nil {
+		return nil, err
+	}
+	in := profiles.BatchIn{Op: string(b.Op), IDs: []uuid.UUID{uuid.UUID(req.RuleId)}, DestProfile: destProfile, DestFolder: destFolder,
 		DestRoot: b.DestRoot != nil && *b.DestRoot, NewFolder: newFolderIn(b.NewFolder)}
 	var res profiles.BatchResult
 	err = s.writeTx(ctx, pr.TenantID, func(tx store.Tx) (e error) {
@@ -435,8 +450,16 @@ func (s *Server) TransferRule(ctx context.Context, req gen.TransferRuleRequestOb
 }
 
 // batchIn converts the body of rules:batch.
-func batchIn(b *gen.RulesBatch) profiles.BatchIn {
-	in := profiles.BatchIn{Op: string(b.Op), DestProfile: uid(b.DestProfileId), DestFolder: uid(b.DestFolderId),
+func batchIn(b *gen.RulesBatch) (profiles.BatchIn, error) {
+	destProfile, err := bodyID(b.DestProfileId)
+	if err != nil {
+		return profiles.BatchIn{}, err
+	}
+	destFolder, err := bodyID(b.DestFolderId)
+	if err != nil {
+		return profiles.BatchIn{}, err
+	}
+	in := profiles.BatchIn{Op: string(b.Op), DestProfile: destProfile, DestFolder: destFolder,
 		DestRoot: b.DestRoot != nil && *b.DestRoot, NewFolder: newFolderIn(b.NewFolder)}
 	if b.Ids != nil {
 		for _, id := range *b.Ids {
@@ -463,8 +486,13 @@ func batchIn(b *gen.RulesBatch) profiles.BatchIn {
 	}
 	if b.Set != nil {
 		set := &profiles.EditSet{Comment: b.Set.Comment}
-		if b.Set.Action != nil {
+		switch {
+		case b.Set.Action != nil:
 			a := actIn(string(*b.Set.Action), b.Set.Target)
+			set.Act = &a
+		case b.Set.Target != nil:
+			// Carried with an empty action so CheckBatch refuses it, inline and as a job alike (p2-B3-r15-1).
+			a := actIn("", b.Set.Target)
 			set.Act = &a
 		}
 		if b.Set.ExpiresIn != nil || b.Set.ExpiresAt != nil {
@@ -478,7 +506,10 @@ func batchIn(b *gen.RulesBatch) profiles.BatchIn {
 			set.Expiry = &x
 		}
 		if b.Set.FolderId != nil {
-			f := uuid.UUID(*b.Set.FolderId)
+			f, err := bodyID(b.Set.FolderId)
+			if err != nil {
+				return profiles.BatchIn{}, err
+			}
 			set.FolderID = &f
 		}
 		in.Set = set
@@ -488,7 +519,7 @@ func batchIn(b *gen.RulesBatch) profiles.BatchIn {
 			in.Clear = append(in.Clear, string(c))
 		}
 	}
-	return in
+	return in, nil
 }
 
 // ---------------------------------------------------------------------------

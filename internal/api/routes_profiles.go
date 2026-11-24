@@ -88,6 +88,16 @@ func uid(p *openapi_types.UUID) uuid.UUID {
 	return uuid.UUID(*p)
 }
 
+// bodyID reads an id that a body names: a folder or profile of this tenant. The all-zero id is what uid answers for an
+// absent member, so a sent one would be read as "not sent" (a rule out of its folder, a move to the root). It names
+// nothing, so it is the same 404 as an id that is not found (spec 3.7, p2-B3-r15-2).
+func bodyID(p *openapi_types.UUID) (uuid.UUID, error) {
+	if p != nil && uuid.UUID(*p) == uuid.Nil {
+		return uuid.Nil, httpx.NotFound()
+	}
+	return uid(p), nil
+}
+
 func uidp(id uuid.UUID) *openapi_types.UUID {
 	if id == uuid.Nil {
 		return nil

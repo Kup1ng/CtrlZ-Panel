@@ -97,6 +97,16 @@ func (e *Env) CheckBatch(tx store.Tx, profile uuid.UUID, in BatchIn) (store.Limi
 	if in.Op == "copy" && (in.DestProfile == uuid.Nil || in.DestProfile == profile) {
 		return store.Limits{}, invalid(Field{"/dest_profile_id", CodeInvalid})
 	}
+	// A target sent with no action is the same 422 as on UpdateRule and UpdateFolder; the handler carries it here as an
+	// Act with an empty action, so the inline and the job path refuse it alike (p2-B3-r15-1).
+	if in.Op == "edit" && in.Set != nil && in.Set.Act != nil && in.Set.Act.Action == "" {
+		return store.Limits{}, invalid(Field{"/set/action", CodeRequired})
+	}
+	// The destination of a transfer is shape, not row work: a request above the job threshold is refused here, before
+	// it is queued, as an inline one is (p2-B3-r15-3).
+	if (in.Op == "copy" || in.Op == "move") && destCount(in) != 1 {
+		return store.Limits{}, invalid(Field{"/dest_folder_id", CodeRequired})
+	}
 	return lim, nil
 }
 
@@ -442,11 +452,8 @@ func (w *wtx) editRules(rows []store.RuleRow, in BatchIn, index map[uuid.UUID]in
 	return nil
 }
 
-// transfer copies or moves rules to a folder of this profile or of another one. The destination's lock, quotas and
-// location set are checked again for what arrives (T-193); a rule that would be Iranian under a Redirect there is
-// refused with iranian_name, including a grandfathered one carried out of its profile (3.6).
-func transfer(w, d *wtx, rows []store.RuleRow, in BatchIn, cross bool, index map[uuid.UUID]int, res *BatchResult) error {
-	// The destination folder: exactly one of an existing folder, the top level, or a new one.
+// destCount is how many of dest_folder_id, dest_root and new_folder a transfer names; the rule is exactly one.
+func destCount(in BatchIn) int {
 	n := 0
 	if in.DestFolder != uuid.Nil {
 		n++
@@ -457,7 +464,16 @@ func transfer(w, d *wtx, rows []store.RuleRow, in BatchIn, cross bool, index map
 	if in.NewFolder != nil {
 		n++
 	}
-	if n != 1 {
+	return n
+}
+
+// transfer copies or moves rules to a folder of this profile or of another one. The destination's lock, quotas and
+// location set are checked again for what arrives (T-193); a rule that would be Iranian under a Redirect there is
+// refused with iranian_name, including a grandfathered one carried out of its profile (3.6).
+func transfer(w, d *wtx, rows []store.RuleRow, in BatchIn, cross bool, index map[uuid.UUID]int, res *BatchResult) error {
+	// The destination folder: exactly one of an existing folder, the top level, or a new one. CheckBatch refuses the
+	// other cases first; the count stays here for a caller that did not run it.
+	if destCount(in) != 1 {
 		return invalid(Field{"/dest_folder_id", CodeRequired})
 	}
 	var dest *store.FolderRow
