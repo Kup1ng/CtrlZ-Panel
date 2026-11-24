@@ -576,6 +576,8 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 	}
 	// The Endpoint routes keep their fixtures in a file of their own (isolation_endpoints_test.go).
 	maps.Copy(fx, e.endpointFixtures())
+	// The access routes (Dynamic DNS hosts, Authorized IPs, claims) have theirs in isolation_access_test.go.
+	maps.Copy(fx, e.accessFixtures())
 	return fx
 }
 

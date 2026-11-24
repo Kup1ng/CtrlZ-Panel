@@ -62,6 +62,15 @@ func endpointsError(err error) (*httpx.Error, bool) {
 		e = httpx.New(http.StatusForbidden, httpx.CodeTokenNotAllowed)
 	case endpoints.KindKeyReused:
 		e = httpx.New(http.StatusConflict, httpx.CodeKeyReused)
+	case endpoints.KindIPSuspended:
+		e = httpx.New(http.StatusConflict, httpx.CodeIPSuspended)
+	case endpoints.KindIPUnavailable:
+		// Generic on purpose: the same answer whoever holds the address (spec 4.3, D35).
+		e = httpx.New(http.StatusConflict, httpx.CodeIPUnavailable)
+	case endpoints.KindNeedsAdmin:
+		e = httpx.New(http.StatusConflict, httpx.CodeNeedsAdminApproval)
+	case endpoints.KindTooManyChallenges:
+		e = httpx.New(http.StatusTooManyRequests, httpx.CodeTooManyAttempts).WithRetry(time.Duration(ee.RetryAfter) * time.Second)
 	default:
 		return httpx.Internal(), true
 	}

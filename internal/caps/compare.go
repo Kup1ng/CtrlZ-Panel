@@ -125,7 +125,6 @@ type PendingLimit struct {
 func PendingLimits() []PendingLimit {
 	const r = "a per-tenant ceiling whose objects do not exist in P1; the default and the override are read for the account page only"
 	return []PendingLimit{
-		{"max_authorized_ips", "P2", r},
 		{"max_api_tokens", "P2", r},
 		// Enforced in P2 on the items of one request, in memory: no state is shared between requests, so there is
 		// nothing for racing actors to spend (spec 3.4). A boundary test at 10,000 and 10,001 items holds it.

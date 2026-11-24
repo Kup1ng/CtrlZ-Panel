@@ -18,6 +18,27 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AuthorizedIPSource.
+const (
+	AuthorizedIPSourceDdns      AuthorizedIPSource = "ddns"
+	AuthorizedIPSourceManual    AuthorizedIPSource = "manual"
+	AuthorizedIPSourceSecureDns AuthorizedIPSource = "secure_dns"
+)
+
+// Valid indicates whether the value is a known member of the AuthorizedIPSource enum.
+func (e AuthorizedIPSource) Valid() bool {
+	switch e {
+	case AuthorizedIPSourceDdns:
+		return true
+	case AuthorizedIPSourceManual:
+		return true
+	case AuthorizedIPSourceSecureDns:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BatchItemOutcome.
 const (
 	BatchItemOutcomeConflict BatchItemOutcome = "conflict"
@@ -120,6 +141,75 @@ func (e CatalogServiceState) Valid() bool {
 	case CatalogServiceStateAvailable:
 		return true
 	case CatalogServiceStateDeprecated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ChallengeCommandsReason.
+const (
+	PairMissing ChallengeCommandsReason = "pair_missing"
+	ZoneMissing ChallengeCommandsReason = "zone_missing"
+)
+
+// Valid indicates whether the value is a known member of the ChallengeCommandsReason enum.
+func (e ChallengeCommandsReason) Valid() bool {
+	switch e {
+	case PairMissing:
+		return true
+	case ZoneMissing:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClaimChallengeObservedProtocol.
+const (
+	Doh  ClaimChallengeObservedProtocol = "doh"
+	Doh3 ClaimChallengeObservedProtocol = "doh3"
+	Doq  ClaimChallengeObservedProtocol = "doq"
+	Dot  ClaimChallengeObservedProtocol = "dot"
+	Tcp  ClaimChallengeObservedProtocol = "tcp"
+	Udp  ClaimChallengeObservedProtocol = "udp"
+)
+
+// Valid indicates whether the value is a known member of the ClaimChallengeObservedProtocol enum.
+func (e ClaimChallengeObservedProtocol) Valid() bool {
+	switch e {
+	case Doh:
+		return true
+	case Doh3:
+		return true
+	case Doq:
+		return true
+	case Dot:
+		return true
+	case Tcp:
+		return true
+	case Udp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClaimTakeOutcome.
+const (
+	ClaimTakeOutcomeActive        ClaimTakeOutcome = "active"
+	ClaimTakeOutcomeAlreadyActive ClaimTakeOutcome = "already_active"
+	ClaimTakeOutcomeNoProof       ClaimTakeOutcome = "no_proof"
+)
+
+// Valid indicates whether the value is a known member of the ClaimTakeOutcome enum.
+func (e ClaimTakeOutcome) Valid() bool {
+	switch e {
+	case ClaimTakeOutcomeActive:
+		return true
+	case ClaimTakeOutcomeAlreadyActive:
+		return true
+	case ClaimTakeOutcomeNoProof:
 		return true
 	default:
 		return false
@@ -834,6 +924,78 @@ const (
 func (e FolderPatchClear) Valid() bool {
 	switch e {
 	case Action:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IPClaimProofMethod.
+const (
+	IPClaimProofMethodBrowserIp    IPClaimProofMethod = "browser_ip"
+	IPClaimProofMethodSecureDns    IPClaimProofMethod = "secure_dns"
+	IPClaimProofMethodVerifyTcp    IPClaimProofMethod = "verify_tcp"
+	IPClaimProofMethodVerifyUdpTxt IPClaimProofMethod = "verify_udp_txt"
+)
+
+// Valid indicates whether the value is a known member of the IPClaimProofMethod enum.
+func (e IPClaimProofMethod) Valid() bool {
+	switch e {
+	case IPClaimProofMethodBrowserIp:
+		return true
+	case IPClaimProofMethodSecureDns:
+		return true
+	case IPClaimProofMethodVerifyTcp:
+		return true
+	case IPClaimProofMethodVerifyUdpTxt:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IPClaimSource.
+const (
+	IPClaimSourceBrowser   IPClaimSource = "browser"
+	IPClaimSourceDdns      IPClaimSource = "ddns"
+	IPClaimSourceManual    IPClaimSource = "manual"
+	IPClaimSourceSecureDns IPClaimSource = "secure_dns"
+)
+
+// Valid indicates whether the value is a known member of the IPClaimSource enum.
+func (e IPClaimSource) Valid() bool {
+	switch e {
+	case IPClaimSourceBrowser:
+		return true
+	case IPClaimSourceDdns:
+		return true
+	case IPClaimSourceManual:
+		return true
+	case IPClaimSourceSecureDns:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IPClaimState.
+const (
+	IPClaimStateActive       IPClaimState = "active"
+	IPClaimStateGrace        IPClaimState = "grace"
+	IPClaimStatePendingProof IPClaimState = "pending_proof"
+	IPClaimStateSuspended    IPClaimState = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the IPClaimState enum.
+func (e IPClaimState) Valid() bool {
+	switch e {
+	case IPClaimStateActive:
+		return true
+	case IPClaimStateGrace:
+		return true
+	case IPClaimStatePendingProof:
+		return true
+	case IPClaimStateSuspended:
 		return true
 	default:
 		return false
@@ -2009,6 +2171,54 @@ type AnnouncementPage struct {
 	UnreadCount int            `json:"unread_count"`
 }
 
+// AuthorizedAdd defines model for AuthorizedAdd.
+type AuthorizedAdd struct {
+	Cidrs []string `json:"cidrs"`
+}
+
+// AuthorizedAdded defines model for AuthorizedAdded.
+type AuthorizedAdded struct {
+	Items []AuthorizedIP `json:"items"`
+}
+
+// AuthorizedDelete defines model for AuthorizedDelete.
+type AuthorizedDelete struct {
+	Ids []openapi_types.UUID `json:"ids"`
+
+	// LockPasswords The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+	LockPasswords *LockPasswords `json:"lock_passwords,omitempty"`
+}
+
+// AuthorizedIP defines model for AuthorizedIP.
+type AuthorizedIP struct {
+	Cidr         string             `json:"cidr"`
+	City         *string            `json:"city,omitempty"`
+	CleanupOptIn bool               `json:"cleanup_opt_in"`
+	CreatedAt    time.Time          `json:"created_at"`
+	Id           openapi_types.UUID `json:"id"`
+	IsCurrent    bool               `json:"is_current"`
+	Isp          *string            `json:"isp,omitempty"`
+	LastSeenAt   *time.Time         `json:"last_seen_at,omitempty"`
+	Source       AuthorizedIPSource `json:"source"`
+}
+
+// AuthorizedIPSource defines model for AuthorizedIP.Source.
+type AuthorizedIPSource string
+
+// AuthorizedPage defines model for AuthorizedPage.
+type AuthorizedPage struct {
+	Items      []AuthorizedIP `json:"items"`
+	NextCursor *string        `json:"next_cursor,omitempty"`
+}
+
+// AuthorizedPatch defines model for AuthorizedPatch.
+type AuthorizedPatch struct {
+	CleanupOptIn bool `json:"cleanup_opt_in"`
+
+	// LockPasswords The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.
+	LockPasswords *LockPasswords `json:"lock_passwords,omitempty"`
+}
+
 // BatchItem defines model for BatchItem.
 type BatchItem struct {
 	Id      *openapi_types.UUID `json:"id,omitempty"`
@@ -2089,10 +2299,62 @@ type Category struct {
 	NameFa string `json:"name_fa"`
 }
 
+// Challenge defines model for Challenge.
+type Challenge struct {
+	// Commands The part of the Resolver view a proof needs (spec 9.3 `Challenge.commands`), the address pair and the name to query.
+	Commands  ChallengeCommands  `json:"commands"`
+	ExpiresAt time.Time          `json:"expires_at"`
+	Id        openapi_types.UUID `json:"id"`
+	Label     string             `json:"label"`
+}
+
+// ChallengeCommands The part of the Resolver view a proof needs (spec 9.3 `Challenge.commands`), the address pair and the name to query.
+type ChallengeCommands struct {
+	Legacy     *ChallengeLegacy         `json:"legacy,omitempty"`
+	Ready      bool                     `json:"ready"`
+	Reason     *ChallengeCommandsReason `json:"reason,omitempty"`
+	VerifyHost *string                  `json:"verify_host,omitempty"`
+}
+
+// ChallengeCommandsReason defines model for ChallengeCommands.Reason.
+type ChallengeCommandsReason string
+
+// ChallengeLegacy defines model for ChallengeLegacy.
+type ChallengeLegacy struct {
+	Dns1 string `json:"dns1"`
+	Dns2 string `json:"dns2"`
+}
+
 // ChangePasswordRequest defines model for ChangePasswordRequest.
 type ChangePasswordRequest struct {
 	NewPassword string  `json:"new_password"`
 	TotpCode    *string `json:"totp_code,omitempty"`
+}
+
+// ClaimChallenge defines model for ClaimChallenge.
+type ClaimChallenge struct {
+	ExpiresAt        time.Time                       `json:"expires_at"`
+	Id               openapi_types.UUID              `json:"id"`
+	Label            string                          `json:"label"`
+	Observed         bool                            `json:"observed"`
+	ObservedProtocol *ClaimChallengeObservedProtocol `json:"observed_protocol,omitempty"`
+}
+
+// ClaimChallengeObservedProtocol defines model for ClaimChallenge.ObservedProtocol.
+type ClaimChallengeObservedProtocol string
+
+// ClaimTake defines model for ClaimTake.
+type ClaimTake struct {
+	Claim   IPClaim          `json:"claim"`
+	Outcome ClaimTakeOutcome `json:"outcome"`
+}
+
+// ClaimTakeOutcome defines model for ClaimTake.Outcome.
+type ClaimTakeOutcome string
+
+// ClaimTakeRequest defines model for ClaimTakeRequest.
+type ClaimTakeRequest struct {
+	Code *string `json:"code,omitempty"`
 }
 
 // Client defines model for Client.
@@ -2211,6 +2473,25 @@ type CredentialDescriptors = []struct {
 	Id         *string   `json:"id,omitempty"`
 	Transports *[]string `json:"transports,omitempty"`
 	Type       *string   `json:"type,omitempty"`
+}
+
+// DdnsHost defines model for DdnsHost.
+type DdnsHost struct {
+	Hostname       string             `json:"hostname"`
+	Id             openapi_types.UUID `json:"id"`
+	LastError      *string            `json:"last_error,omitempty"`
+	LastIps        []string           `json:"last_ips"`
+	LastResolvedAt *time.Time         `json:"last_resolved_at,omitempty"`
+}
+
+// DdnsHostCreate defines model for DdnsHostCreate.
+type DdnsHostCreate struct {
+	Hostname string `json:"hostname"`
+}
+
+// DdnsHostList defines model for DdnsHostList.
+type DdnsHostList struct {
+	Hosts []DdnsHost `json:"hosts"`
 }
 
 // DefaultRedirect defines model for DefaultRedirect.
@@ -2608,6 +2889,40 @@ type GroupRename struct {
 // HomeCountries defines model for HomeCountries.
 type HomeCountries struct {
 	Countries []string `json:"countries"`
+}
+
+// IPClaim defines model for IPClaim.
+type IPClaim struct {
+	Challenge   *ClaimChallenge     `json:"challenge,omitempty"`
+	Cidr        string              `json:"cidr"`
+	GraceUntil  *time.Time          `json:"grace_until,omitempty"`
+	Id          openapi_types.UUID  `json:"id"`
+	LastSeenAt  *time.Time          `json:"last_seen_at,omitempty"`
+	NeedsAdmin  bool                `json:"needs_admin"`
+	ProofMethod *IPClaimProofMethod `json:"proof_method,omitempty"`
+	Proven      bool                `json:"proven"`
+	Source      IPClaimSource       `json:"source"`
+	State       IPClaimState        `json:"state"`
+}
+
+// IPClaimProofMethod defines model for IPClaim.ProofMethod.
+type IPClaimProofMethod string
+
+// IPClaimSource defines model for IPClaim.Source.
+type IPClaimSource string
+
+// IPClaimState defines model for IPClaim.State.
+type IPClaimState string
+
+// IPClaimList defines model for IPClaimList.
+type IPClaimList struct {
+	Claims []IPClaim `json:"claims"`
+}
+
+// IPClaimRequest defines model for IPClaimRequest.
+type IPClaimRequest struct {
+	Cidr         *string `json:"cidr,omitempty"`
+	UseMyAddress *bool   `json:"use_my_address,omitempty"`
 }
 
 // InviteInfo defines model for InviteInfo.
@@ -3490,11 +3805,20 @@ type TotpSetup struct {
 // isolation harness asks for a Cross call that carries another tenant's value in each.
 type WebAuthnResponse = json.RawMessage
 
+// AuthorizedId defines model for AuthorizedId.
+type AuthorizedId = openapi_types.UUID
+
+// ClaimId defines model for ClaimId.
+type ClaimId = openapi_types.UUID
+
 // ClientId defines model for ClientId.
 type ClientId = openapi_types.UUID
 
 // Cursor defines model for Cursor.
 type Cursor = string
+
+// DdnsHostId defines model for DdnsHostId.
+type DdnsHostId = openapi_types.UUID
 
 // FilterId defines model for FilterId.
 type FilterId = string
@@ -3605,6 +3929,16 @@ type ListEndpointsParamsSort string
 type CreateEndpointsParams struct {
 	// IdempotencyKey 1 to 64 characters of `A-Z a-z 0-9 _ -`. A replay with the same request gives the same answer and no second effect; the same key with another request is `idempotency_key_reused`.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ListAuthorizedIpsParams defines parameters for ListAuthorizedIps.
+type ListAuthorizedIpsParams struct {
+	// Q A part of the address, as text.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Cursor Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ListClientsParams defines parameters for ListClients.
@@ -3773,6 +4107,15 @@ type CreateEndpointsJSONRequestBody = EndpointCreate
 // PatchEndpointJSONRequestBody defines body for PatchEndpoint for application/json ContentType.
 type PatchEndpointJSONRequestBody = EndpointPatch
 
+// AddAuthorizedIpsJSONRequestBody defines body for AddAuthorizedIps for application/json ContentType.
+type AddAuthorizedIpsJSONRequestBody = AuthorizedAdd
+
+// PatchAuthorizedIpJSONRequestBody defines body for PatchAuthorizedIp for application/json ContentType.
+type PatchAuthorizedIpJSONRequestBody = AuthorizedPatch
+
+// DeleteAuthorizedIpsJSONRequestBody defines body for DeleteAuthorizedIps for application/json ContentType.
+type DeleteAuthorizedIpsJSONRequestBody = AuthorizedDelete
+
 // CreateClientJSONRequestBody defines body for CreateClient for application/json ContentType.
 type CreateClientJSONRequestBody = ClientCreate
 
@@ -3781,6 +4124,21 @@ type PatchClientJSONRequestBody = ClientPatch
 
 // BatchClientsJSONRequestBody defines body for BatchClients for application/json ContentType.
 type BatchClientsJSONRequestBody = ClientBatch
+
+// CreateDdnsHostJSONRequestBody defines body for CreateDdnsHost for application/json ContentType.
+type CreateDdnsHostJSONRequestBody = DdnsHostCreate
+
+// DeleteDdnsHostJSONRequestBody defines body for DeleteDdnsHost for application/json ContentType.
+type DeleteDdnsHostJSONRequestBody = LockPasswordsBody
+
+// RequestIpClaimJSONRequestBody defines body for RequestIpClaim for application/json ContentType.
+type RequestIpClaimJSONRequestBody = IPClaimRequest
+
+// ReleaseIpClaimJSONRequestBody defines body for ReleaseIpClaim for application/json ContentType.
+type ReleaseIpClaimJSONRequestBody = LockPasswordsBody
+
+// TakeIpClaimJSONRequestBody defines body for TakeIpClaim for application/json ContentType.
+type TakeIpClaimJSONRequestBody = ClaimTakeRequest
 
 // PutEndpointScheduleJSONRequestBody defines body for PutEndpointSchedule for application/json ContentType.
 type PutEndpointScheduleJSONRequestBody = SchedulePut
@@ -4012,6 +4370,18 @@ type ServerInterface interface {
 	// PatchEndpoint Change an Endpoint
 	// (PATCH /endpoints/{id})
 	PatchEndpoint(w http.ResponseWriter, r *http.Request, id Id)
+	// ListAuthorizedIps The authorized addresses of an Endpoint, newest first
+	// (GET /endpoints/{id}/authorized-ips)
+	ListAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id, params ListAuthorizedIpsParams)
+	// AddAuthorizedIps Add up to 100 addresses or subnets
+	// (POST /endpoints/{id}/authorized-ips)
+	AddAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id)
+	// PatchAuthorizedIp Opt a row in or out of the automatic cleanup
+	// (PATCH /endpoints/{id}/authorized-ips/{aid})
+	PatchAuthorizedIp(w http.ResponseWriter, r *http.Request, id Id, aid AuthorizedId)
+	// DeleteAuthorizedIps Delete authorized addresses
+	// (POST /endpoints/{id}/authorized-ips:delete)
+	DeleteAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id)
 	// ListClients The clients of an Endpoint, newest first
 	// (GET /endpoints/{id}/clients)
 	ListClients(w http.ResponseWriter, r *http.Request, id Id, params ListClientsParams)
@@ -4024,6 +4394,30 @@ type ServerInterface interface {
 	// BatchClients Edit or delete clients by id or by a selector
 	// (POST /endpoints/{id}/clients:batch)
 	BatchClients(w http.ResponseWriter, r *http.Request, id Id)
+	// ListDdnsHosts The Dynamic DNS hosts of an Endpoint
+	// (GET /endpoints/{id}/ddns-hosts)
+	ListDdnsHosts(w http.ResponseWriter, r *http.Request, id Id)
+	// CreateDdnsHost Add a Dynamic DNS host
+	// (POST /endpoints/{id}/ddns-hosts)
+	CreateDdnsHost(w http.ResponseWriter, r *http.Request, id Id)
+	// DeleteDdnsHost Delete a Dynamic DNS host and the addresses it learned
+	// (POST /endpoints/{id}/ddns-hosts/{hid}:delete)
+	DeleteDdnsHost(w http.ResponseWriter, r *http.Request, id Id, hid DdnsHostId)
+	// ListIpClaims The Plain DNS addresses of an Endpoint
+	// (GET /endpoints/{id}/ip-claims)
+	ListIpClaims(w http.ResponseWriter, r *http.Request, id Id)
+	// RequestIpClaim Ask for a Plain DNS address
+	// (POST /endpoints/{id}/ip-claims)
+	RequestIpClaim(w http.ResponseWriter, r *http.Request, id Id)
+	// OpenIpClaimChallenge Open a proof challenge
+	// (POST /endpoints/{id}/ip-claims/{claim_id}/challenges)
+	OpenIpClaimChallenge(w http.ResponseWriter, r *http.Request, id Id, claimId ClaimId)
+	// ReleaseIpClaim Give an address up
+	// (POST /endpoints/{id}/ip-claims/{claim_id}:release)
+	ReleaseIpClaim(w http.ResponseWriter, r *http.Request, id Id, claimId ClaimId)
+	// TakeIpClaim Prove a claim with the evidence the nodes saw
+	// (POST /endpoints/{id}/ip-claims/{claim_id}:take)
+	TakeIpClaim(w http.ResponseWriter, r *http.Request, id Id, claimId ClaimId)
 	// GetEndpointSchedule The schedule of an Endpoint
 	// (GET /endpoints/{id}/schedule)
 	GetEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id)
@@ -4483,6 +4877,30 @@ func (_ Unimplemented) PatchEndpoint(w http.ResponseWriter, r *http.Request, id 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ListAuthorizedIps The authorized addresses of an Endpoint, newest first
+// (GET /endpoints/{id}/authorized-ips)
+func (_ Unimplemented) ListAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id, params ListAuthorizedIpsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// AddAuthorizedIps Add up to 100 addresses or subnets
+// (POST /endpoints/{id}/authorized-ips)
+func (_ Unimplemented) AddAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PatchAuthorizedIp Opt a row in or out of the automatic cleanup
+// (PATCH /endpoints/{id}/authorized-ips/{aid})
+func (_ Unimplemented) PatchAuthorizedIp(w http.ResponseWriter, r *http.Request, id Id, aid AuthorizedId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteAuthorizedIps Delete authorized addresses
+// (POST /endpoints/{id}/authorized-ips:delete)
+func (_ Unimplemented) DeleteAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListClients The clients of an Endpoint, newest first
 // (GET /endpoints/{id}/clients)
 func (_ Unimplemented) ListClients(w http.ResponseWriter, r *http.Request, id Id, params ListClientsParams) {
@@ -4504,6 +4922,54 @@ func (_ Unimplemented) PatchClient(w http.ResponseWriter, r *http.Request, id Id
 // BatchClients Edit or delete clients by id or by a selector
 // (POST /endpoints/{id}/clients:batch)
 func (_ Unimplemented) BatchClients(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListDdnsHosts The Dynamic DNS hosts of an Endpoint
+// (GET /endpoints/{id}/ddns-hosts)
+func (_ Unimplemented) ListDdnsHosts(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateDdnsHost Add a Dynamic DNS host
+// (POST /endpoints/{id}/ddns-hosts)
+func (_ Unimplemented) CreateDdnsHost(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteDdnsHost Delete a Dynamic DNS host and the addresses it learned
+// (POST /endpoints/{id}/ddns-hosts/{hid}:delete)
+func (_ Unimplemented) DeleteDdnsHost(w http.ResponseWriter, r *http.Request, id Id, hid DdnsHostId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListIpClaims The Plain DNS addresses of an Endpoint
+// (GET /endpoints/{id}/ip-claims)
+func (_ Unimplemented) ListIpClaims(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RequestIpClaim Ask for a Plain DNS address
+// (POST /endpoints/{id}/ip-claims)
+func (_ Unimplemented) RequestIpClaim(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// OpenIpClaimChallenge Open a proof challenge
+// (POST /endpoints/{id}/ip-claims/{claim_id}/challenges)
+func (_ Unimplemented) OpenIpClaimChallenge(w http.ResponseWriter, r *http.Request, id Id, claimId ClaimId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ReleaseIpClaim Give an address up
+// (POST /endpoints/{id}/ip-claims/{claim_id}:release)
+func (_ Unimplemented) ReleaseIpClaim(w http.ResponseWriter, r *http.Request, id Id, claimId ClaimId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// TakeIpClaim Prove a claim with the evidence the nodes saw
+// (POST /endpoints/{id}/ip-claims/{claim_id}:take)
+func (_ Unimplemented) TakeIpClaim(w http.ResponseWriter, r *http.Request, id Id, claimId ClaimId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5922,6 +6388,161 @@ func (siw *ServerInterfaceWrapper) PatchEndpoint(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ListAuthorizedIps operation middleware
+func (siw *ServerInterfaceWrapper) ListAuthorizedIps(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAuthorizedIpsParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAuthorizedIps(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddAuthorizedIps operation middleware
+func (siw *ServerInterfaceWrapper) AddAuthorizedIps(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddAuthorizedIps(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchAuthorizedIp operation middleware
+func (siw *ServerInterfaceWrapper) PatchAuthorizedIp(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "aid" -------------
+	var aid AuthorizedId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "aid", chi.URLParam(r, "aid"), &aid, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "aid", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchAuthorizedIp(w, r, id, aid)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteAuthorizedIps operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAuthorizedIps(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAuthorizedIps(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListClients operation middleware
 func (siw *ServerInterfaceWrapper) ListClients(w http.ResponseWriter, r *http.Request) {
 
@@ -6094,6 +6715,250 @@ func (siw *ServerInterfaceWrapper) BatchClients(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.BatchClients(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDdnsHosts operation middleware
+func (siw *ServerInterfaceWrapper) ListDdnsHosts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDdnsHosts(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateDdnsHost operation middleware
+func (siw *ServerInterfaceWrapper) CreateDdnsHost(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateDdnsHost(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteDdnsHost operation middleware
+func (siw *ServerInterfaceWrapper) DeleteDdnsHost(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "hid" -------------
+	var hid DdnsHostId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "hid", chi.URLParam(r, "hid"), &hid, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "hid", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteDdnsHost(w, r, id, hid)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListIpClaims operation middleware
+func (siw *ServerInterfaceWrapper) ListIpClaims(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListIpClaims(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RequestIpClaim operation middleware
+func (siw *ServerInterfaceWrapper) RequestIpClaim(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestIpClaim(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// OpenIpClaimChallenge operation middleware
+func (siw *ServerInterfaceWrapper) OpenIpClaimChallenge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "claim_id" -------------
+	var claimId ClaimId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "claim_id", chi.URLParam(r, "claim_id"), &claimId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "claim_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.OpenIpClaimChallenge(w, r, id, claimId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReleaseIpClaim operation middleware
+func (siw *ServerInterfaceWrapper) ReleaseIpClaim(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "claim_id" -------------
+	var claimId ClaimId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "claim_id", chi.URLParam(r, "claim_id"), &claimId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "claim_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReleaseIpClaim(w, r, id, claimId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TakeIpClaim operation middleware
+func (siw *ServerInterfaceWrapper) TakeIpClaim(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "claim_id" -------------
+	var claimId ClaimId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "claim_id", chi.URLParam(r, "claim_id"), &claimId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "claim_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TakeIpClaim(w, r, id, claimId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7899,6 +8764,42 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/endpoints/{id}/clients:batch", wrapper.BatchClients)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints/{id}/ddns-hosts", wrapper.ListDdnsHosts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/ddns-hosts", wrapper.CreateDdnsHost)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/ddns-hosts/{hid}:delete", wrapper.DeleteDdnsHost)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints/{id}/authorized-ips", wrapper.ListAuthorizedIps)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/authorized-ips", wrapper.AddAuthorizedIps)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/endpoints/{id}/authorized-ips/{aid}", wrapper.PatchAuthorizedIp)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/authorized-ips:delete", wrapper.DeleteAuthorizedIps)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints/{id}/ip-claims", wrapper.ListIpClaims)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/ip-claims", wrapper.RequestIpClaim)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/ip-claims/{claim_id}/challenges", wrapper.OpenIpClaimChallenge)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/ip-claims/{claim_id}:take", wrapper.TakeIpClaim)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/ip-claims/{claim_id}:release", wrapper.ReleaseIpClaim)
 	})
 
 	return r
@@ -10268,6 +11169,177 @@ func (response PatchEndpointdefaultJSONResponse) VisitPatchEndpointResponse(w ht
 	return err
 }
 
+type ListAuthorizedIpsRequestObject struct {
+	Id     Id `json:"id"`
+	Params ListAuthorizedIpsParams
+}
+
+type ListAuthorizedIpsResponseObject interface {
+	VisitListAuthorizedIpsResponse(w http.ResponseWriter) error
+}
+
+type ListAuthorizedIps200JSONResponse AuthorizedPage
+
+func (response ListAuthorizedIps200JSONResponse) VisitListAuthorizedIpsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAuthorizedIpsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListAuthorizedIpsdefaultJSONResponse) VisitListAuthorizedIpsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddAuthorizedIpsRequestObject struct {
+	Id   Id `json:"id"`
+	Body *AddAuthorizedIpsJSONRequestBody
+}
+
+type AddAuthorizedIpsResponseObject interface {
+	VisitAddAuthorizedIpsResponse(w http.ResponseWriter) error
+}
+
+type AddAuthorizedIps201JSONResponse AuthorizedAdded
+
+func (response AddAuthorizedIps201JSONResponse) VisitAddAuthorizedIpsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddAuthorizedIpsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response AddAuthorizedIpsdefaultJSONResponse) VisitAddAuthorizedIpsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchAuthorizedIpRequestObject struct {
+	Id   Id           `json:"id"`
+	Aid  AuthorizedId `json:"aid"`
+	Body *PatchAuthorizedIpJSONRequestBody
+}
+
+type PatchAuthorizedIpResponseObject interface {
+	VisitPatchAuthorizedIpResponse(w http.ResponseWriter) error
+}
+
+type PatchAuthorizedIp200JSONResponse AuthorizedIP
+
+func (response PatchAuthorizedIp200JSONResponse) VisitPatchAuthorizedIpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchAuthorizedIpdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PatchAuthorizedIpdefaultJSONResponse) VisitPatchAuthorizedIpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAuthorizedIpsRequestObject struct {
+	Id   Id `json:"id"`
+	Body *DeleteAuthorizedIpsJSONRequestBody
+}
+
+type DeleteAuthorizedIpsResponseObject interface {
+	VisitDeleteAuthorizedIpsResponse(w http.ResponseWriter) error
+}
+
+type DeleteAuthorizedIps204Response struct {
+}
+
+func (response DeleteAuthorizedIps204Response) VisitDeleteAuthorizedIpsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteAuthorizedIpsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response DeleteAuthorizedIpsdefaultJSONResponse) VisitDeleteAuthorizedIpsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListClientsRequestObject struct {
 	Id     Id `json:"id"`
 	Params ListClientsParams
@@ -10431,6 +11503,347 @@ type BatchClientsdefaultJSONResponse struct {
 }
 
 func (response BatchClientsdefaultJSONResponse) VisitBatchClientsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDdnsHostsRequestObject struct {
+	Id Id `json:"id"`
+}
+
+type ListDdnsHostsResponseObject interface {
+	VisitListDdnsHostsResponse(w http.ResponseWriter) error
+}
+
+type ListDdnsHosts200JSONResponse DdnsHostList
+
+func (response ListDdnsHosts200JSONResponse) VisitListDdnsHostsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDdnsHostsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListDdnsHostsdefaultJSONResponse) VisitListDdnsHostsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateDdnsHostRequestObject struct {
+	Id   Id `json:"id"`
+	Body *CreateDdnsHostJSONRequestBody
+}
+
+type CreateDdnsHostResponseObject interface {
+	VisitCreateDdnsHostResponse(w http.ResponseWriter) error
+}
+
+type CreateDdnsHost201JSONResponse DdnsHost
+
+func (response CreateDdnsHost201JSONResponse) VisitCreateDdnsHostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateDdnsHostdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateDdnsHostdefaultJSONResponse) VisitCreateDdnsHostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteDdnsHostRequestObject struct {
+	Id   Id         `json:"id"`
+	Hid  DdnsHostId `json:"hid"`
+	Body *DeleteDdnsHostJSONRequestBody
+}
+
+type DeleteDdnsHostResponseObject interface {
+	VisitDeleteDdnsHostResponse(w http.ResponseWriter) error
+}
+
+type DeleteDdnsHost204Response struct {
+}
+
+func (response DeleteDdnsHost204Response) VisitDeleteDdnsHostResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteDdnsHostdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response DeleteDdnsHostdefaultJSONResponse) VisitDeleteDdnsHostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListIpClaimsRequestObject struct {
+	Id Id `json:"id"`
+}
+
+type ListIpClaimsResponseObject interface {
+	VisitListIpClaimsResponse(w http.ResponseWriter) error
+}
+
+type ListIpClaims200JSONResponse IPClaimList
+
+func (response ListIpClaims200JSONResponse) VisitListIpClaimsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListIpClaimsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListIpClaimsdefaultJSONResponse) VisitListIpClaimsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestIpClaimRequestObject struct {
+	Id   Id `json:"id"`
+	Body *RequestIpClaimJSONRequestBody
+}
+
+type RequestIpClaimResponseObject interface {
+	VisitRequestIpClaimResponse(w http.ResponseWriter) error
+}
+
+type RequestIpClaim201JSONResponse IPClaim
+
+func (response RequestIpClaim201JSONResponse) VisitRequestIpClaimResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestIpClaimdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response RequestIpClaimdefaultJSONResponse) VisitRequestIpClaimResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type OpenIpClaimChallengeRequestObject struct {
+	Id      Id      `json:"id"`
+	ClaimId ClaimId `json:"claim_id"`
+}
+
+type OpenIpClaimChallengeResponseObject interface {
+	VisitOpenIpClaimChallengeResponse(w http.ResponseWriter) error
+}
+
+type OpenIpClaimChallenge201JSONResponse Challenge
+
+func (response OpenIpClaimChallenge201JSONResponse) VisitOpenIpClaimChallengeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type OpenIpClaimChallengedefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response OpenIpClaimChallengedefaultJSONResponse) VisitOpenIpClaimChallengeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReleaseIpClaimRequestObject struct {
+	Id      Id      `json:"id"`
+	ClaimId ClaimId `json:"claim_id"`
+	Body    *ReleaseIpClaimJSONRequestBody
+}
+
+type ReleaseIpClaimResponseObject interface {
+	VisitReleaseIpClaimResponse(w http.ResponseWriter) error
+}
+
+type ReleaseIpClaim204Response struct {
+}
+
+func (response ReleaseIpClaim204Response) VisitReleaseIpClaimResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReleaseIpClaimdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ReleaseIpClaimdefaultJSONResponse) VisitReleaseIpClaimResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TakeIpClaimRequestObject struct {
+	Id      Id      `json:"id"`
+	ClaimId ClaimId `json:"claim_id"`
+	Body    *TakeIpClaimJSONRequestBody
+}
+
+type TakeIpClaimResponseObject interface {
+	VisitTakeIpClaimResponse(w http.ResponseWriter) error
+}
+
+type TakeIpClaim200JSONResponse ClaimTake
+
+func (response TakeIpClaim200JSONResponse) VisitTakeIpClaimResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TakeIpClaimdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response TakeIpClaimdefaultJSONResponse) VisitTakeIpClaimResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -12498,6 +13911,18 @@ type StrictServerInterface interface {
 	// PatchEndpoint Change an Endpoint
 	// (PATCH /endpoints/{id})
 	PatchEndpoint(ctx context.Context, request PatchEndpointRequestObject) (PatchEndpointResponseObject, error)
+	// ListAuthorizedIps The authorized addresses of an Endpoint, newest first
+	// (GET /endpoints/{id}/authorized-ips)
+	ListAuthorizedIps(ctx context.Context, request ListAuthorizedIpsRequestObject) (ListAuthorizedIpsResponseObject, error)
+	// AddAuthorizedIps Add up to 100 addresses or subnets
+	// (POST /endpoints/{id}/authorized-ips)
+	AddAuthorizedIps(ctx context.Context, request AddAuthorizedIpsRequestObject) (AddAuthorizedIpsResponseObject, error)
+	// PatchAuthorizedIp Opt a row in or out of the automatic cleanup
+	// (PATCH /endpoints/{id}/authorized-ips/{aid})
+	PatchAuthorizedIp(ctx context.Context, request PatchAuthorizedIpRequestObject) (PatchAuthorizedIpResponseObject, error)
+	// DeleteAuthorizedIps Delete authorized addresses
+	// (POST /endpoints/{id}/authorized-ips:delete)
+	DeleteAuthorizedIps(ctx context.Context, request DeleteAuthorizedIpsRequestObject) (DeleteAuthorizedIpsResponseObject, error)
 	// ListClients The clients of an Endpoint, newest first
 	// (GET /endpoints/{id}/clients)
 	ListClients(ctx context.Context, request ListClientsRequestObject) (ListClientsResponseObject, error)
@@ -12510,6 +13935,30 @@ type StrictServerInterface interface {
 	// BatchClients Edit or delete clients by id or by a selector
 	// (POST /endpoints/{id}/clients:batch)
 	BatchClients(ctx context.Context, request BatchClientsRequestObject) (BatchClientsResponseObject, error)
+	// ListDdnsHosts The Dynamic DNS hosts of an Endpoint
+	// (GET /endpoints/{id}/ddns-hosts)
+	ListDdnsHosts(ctx context.Context, request ListDdnsHostsRequestObject) (ListDdnsHostsResponseObject, error)
+	// CreateDdnsHost Add a Dynamic DNS host
+	// (POST /endpoints/{id}/ddns-hosts)
+	CreateDdnsHost(ctx context.Context, request CreateDdnsHostRequestObject) (CreateDdnsHostResponseObject, error)
+	// DeleteDdnsHost Delete a Dynamic DNS host and the addresses it learned
+	// (POST /endpoints/{id}/ddns-hosts/{hid}:delete)
+	DeleteDdnsHost(ctx context.Context, request DeleteDdnsHostRequestObject) (DeleteDdnsHostResponseObject, error)
+	// ListIpClaims The Plain DNS addresses of an Endpoint
+	// (GET /endpoints/{id}/ip-claims)
+	ListIpClaims(ctx context.Context, request ListIpClaimsRequestObject) (ListIpClaimsResponseObject, error)
+	// RequestIpClaim Ask for a Plain DNS address
+	// (POST /endpoints/{id}/ip-claims)
+	RequestIpClaim(ctx context.Context, request RequestIpClaimRequestObject) (RequestIpClaimResponseObject, error)
+	// OpenIpClaimChallenge Open a proof challenge
+	// (POST /endpoints/{id}/ip-claims/{claim_id}/challenges)
+	OpenIpClaimChallenge(ctx context.Context, request OpenIpClaimChallengeRequestObject) (OpenIpClaimChallengeResponseObject, error)
+	// ReleaseIpClaim Give an address up
+	// (POST /endpoints/{id}/ip-claims/{claim_id}:release)
+	ReleaseIpClaim(ctx context.Context, request ReleaseIpClaimRequestObject) (ReleaseIpClaimResponseObject, error)
+	// TakeIpClaim Prove a claim with the evidence the nodes saw
+	// (POST /endpoints/{id}/ip-claims/{claim_id}:take)
+	TakeIpClaim(ctx context.Context, request TakeIpClaimRequestObject) (TakeIpClaimResponseObject, error)
 	// GetEndpointSchedule The schedule of an Endpoint
 	// (GET /endpoints/{id}/schedule)
 	GetEndpointSchedule(ctx context.Context, request GetEndpointScheduleRequestObject) (GetEndpointScheduleResponseObject, error)
@@ -14250,6 +15699,133 @@ func (sh *strictHandler) PatchEndpoint(w http.ResponseWriter, r *http.Request, i
 	}
 }
 
+// ListAuthorizedIps operation middleware
+func (sh *strictHandler) ListAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id, params ListAuthorizedIpsParams) {
+	var request ListAuthorizedIpsRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAuthorizedIps(ctx, request.(ListAuthorizedIpsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAuthorizedIps")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAuthorizedIpsResponseObject); ok {
+		if err := validResponse.VisitListAuthorizedIpsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddAuthorizedIps operation middleware
+func (sh *strictHandler) AddAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id) {
+	var request AddAuthorizedIpsRequestObject
+
+	request.Id = id
+
+	var body AddAuthorizedIpsJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddAuthorizedIps(ctx, request.(AddAuthorizedIpsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddAuthorizedIps")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddAuthorizedIpsResponseObject); ok {
+		if err := validResponse.VisitAddAuthorizedIpsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchAuthorizedIp operation middleware
+func (sh *strictHandler) PatchAuthorizedIp(w http.ResponseWriter, r *http.Request, id Id, aid AuthorizedId) {
+	var request PatchAuthorizedIpRequestObject
+
+	request.Id = id
+	request.Aid = aid
+
+	var body PatchAuthorizedIpJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchAuthorizedIp(ctx, request.(PatchAuthorizedIpRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchAuthorizedIp")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchAuthorizedIpResponseObject); ok {
+		if err := validResponse.VisitPatchAuthorizedIpResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteAuthorizedIps operation middleware
+func (sh *strictHandler) DeleteAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id) {
+	var request DeleteAuthorizedIpsRequestObject
+
+	request.Id = id
+
+	var body DeleteAuthorizedIpsJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteAuthorizedIps(ctx, request.(DeleteAuthorizedIpsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteAuthorizedIps")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteAuthorizedIpsResponseObject); ok {
+		if err := validResponse.VisitDeleteAuthorizedIpsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListClients operation middleware
 func (sh *strictHandler) ListClients(w http.ResponseWriter, r *http.Request, id Id, params ListClientsParams) {
 	var request ListClientsRequestObject
@@ -14370,6 +15946,253 @@ func (sh *strictHandler) BatchClients(w http.ResponseWriter, r *http.Request, id
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(BatchClientsResponseObject); ok {
 		if err := validResponse.VisitBatchClientsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListDdnsHosts operation middleware
+func (sh *strictHandler) ListDdnsHosts(w http.ResponseWriter, r *http.Request, id Id) {
+	var request ListDdnsHostsRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListDdnsHosts(ctx, request.(ListDdnsHostsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListDdnsHosts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListDdnsHostsResponseObject); ok {
+		if err := validResponse.VisitListDdnsHostsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateDdnsHost operation middleware
+func (sh *strictHandler) CreateDdnsHost(w http.ResponseWriter, r *http.Request, id Id) {
+	var request CreateDdnsHostRequestObject
+
+	request.Id = id
+
+	var body CreateDdnsHostJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateDdnsHost(ctx, request.(CreateDdnsHostRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateDdnsHost")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateDdnsHostResponseObject); ok {
+		if err := validResponse.VisitCreateDdnsHostResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteDdnsHost operation middleware
+func (sh *strictHandler) DeleteDdnsHost(w http.ResponseWriter, r *http.Request, id Id, hid DdnsHostId) {
+	var request DeleteDdnsHostRequestObject
+
+	request.Id = id
+	request.Hid = hid
+
+	var body DeleteDdnsHostJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteDdnsHost(ctx, request.(DeleteDdnsHostRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteDdnsHost")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteDdnsHostResponseObject); ok {
+		if err := validResponse.VisitDeleteDdnsHostResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListIpClaims operation middleware
+func (sh *strictHandler) ListIpClaims(w http.ResponseWriter, r *http.Request, id Id) {
+	var request ListIpClaimsRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListIpClaims(ctx, request.(ListIpClaimsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListIpClaims")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListIpClaimsResponseObject); ok {
+		if err := validResponse.VisitListIpClaimsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RequestIpClaim operation middleware
+func (sh *strictHandler) RequestIpClaim(w http.ResponseWriter, r *http.Request, id Id) {
+	var request RequestIpClaimRequestObject
+
+	request.Id = id
+
+	var body RequestIpClaimJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RequestIpClaim(ctx, request.(RequestIpClaimRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RequestIpClaim")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RequestIpClaimResponseObject); ok {
+		if err := validResponse.VisitRequestIpClaimResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// OpenIpClaimChallenge operation middleware
+func (sh *strictHandler) OpenIpClaimChallenge(w http.ResponseWriter, r *http.Request, id Id, claimId ClaimId) {
+	var request OpenIpClaimChallengeRequestObject
+
+	request.Id = id
+	request.ClaimId = claimId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.OpenIpClaimChallenge(ctx, request.(OpenIpClaimChallengeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "OpenIpClaimChallenge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(OpenIpClaimChallengeResponseObject); ok {
+		if err := validResponse.VisitOpenIpClaimChallengeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReleaseIpClaim operation middleware
+func (sh *strictHandler) ReleaseIpClaim(w http.ResponseWriter, r *http.Request, id Id, claimId ClaimId) {
+	var request ReleaseIpClaimRequestObject
+
+	request.Id = id
+	request.ClaimId = claimId
+
+	var body ReleaseIpClaimJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReleaseIpClaim(ctx, request.(ReleaseIpClaimRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReleaseIpClaim")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReleaseIpClaimResponseObject); ok {
+		if err := validResponse.VisitReleaseIpClaimResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TakeIpClaim operation middleware
+func (sh *strictHandler) TakeIpClaim(w http.ResponseWriter, r *http.Request, id Id, claimId ClaimId) {
+	var request TakeIpClaimRequestObject
+
+	request.Id = id
+	request.ClaimId = claimId
+
+	var body TakeIpClaimJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TakeIpClaim(ctx, request.(TakeIpClaimRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TakeIpClaim")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TakeIpClaimResponseObject); ok {
+		if err := validResponse.VisitTakeIpClaimResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

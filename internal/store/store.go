@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -275,6 +276,9 @@ type TxOpts struct {
 	// A lock that is not granted in time is 55P03, which the store reports as ErrRetry (a 503). WithGlobal
 	// ignores it: the global roles keep their own default.
 	LockWait time.Duration
+	// Batch, when set, is the batch id of the transaction instead of a fresh one (WithTenant only): one run of a job that
+	// walks the tenants shares one batch across them (P3 spec 4.4).
+	Batch uuid.UUID
 }
 
 func (o TxOpts) pgx() pgx.TxOptions {

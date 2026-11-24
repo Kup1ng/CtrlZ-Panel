@@ -67,6 +67,9 @@ const (
 	CodeEndpointHeld         = "endpoint_held"
 	CodeDestinationsLost     = "destinations_lost"
 	CodeTokenNotAllowed      = "token_not_allowed"
+	CodeIPUnavailable        = "ip_unavailable"
+	CodeIPSuspended          = "ip_suspended"
+	CodeNeedsAdminApproval   = "needs_admin_approval"
 )
 
 // FieldError names one invalid field. The code is a stable machine value, never

@@ -2378,6 +2378,299 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/ClientBatchResult"}
         default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/ddns-hosts:
+    get:
+      tags: [endpoints]
+      operationId: listDdnsHosts
+      summary: The Dynamic DNS hosts of an Endpoint
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "200":
+          description: The hosts, oldest first.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DdnsHostList"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [endpoints]
+      operationId: createDdnsHost
+      summary: Add a Dynamic DNS host
+      description: |
+        At most five an Endpoint. A host never proves an address (spec 4.5). Errors: `validation_failed` (`invalid`, `exceeded`,
+        `exists` on `/hostname`, `max_ddns_hosts` exceeded).
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DdnsHostCreate"}
+      responses:
+        "201":
+          description: The host.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DdnsHost"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/ddns-hosts/{hid}:delete:
+    post:
+      tags: [endpoints]
+      operationId: deleteDdnsHost
+      summary: Delete a Dynamic DNS host and the addresses it learned
+      description: |
+        The rows the host learned go through the same rules as an authorized delete (spec 5). Errors: `validation_failed`
+        (`current_address`, `last_authorized`), `profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - {$ref: "#/components/parameters/DdnsHostId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LockPasswordsBody"}
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/authorized-ips:
+    get:
+      tags: [endpoints]
+      operationId: listAuthorizedIps
+      summary: The authorized addresses of an Endpoint, newest first
+      description: '`is_current` marks the row that holds the address of this request: its delete is refused (spec 5 rule 1).'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - name: q
+          in: query
+          required: false
+          description: A part of the address, as text.
+          schema: {type: string, maxLength: 64, pattern: *pasted, x-ctrlz-rowref: false}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AuthorizedPage"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [endpoints]
+      operationId: addAuthorizedIps
+      summary: Add up to 100 addresses or subnets
+      description: |
+        IPv4 /16 or narrower, IPv6 /32 or narrower. Any refused prefix refuses the request, each named by its index in `cidrs`.
+        Errors: `validation_failed` (`invalid`, `out_of_range`, `exists`, `duplicate`, `max_authorized_ips` exceeded).
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AuthorizedAdd"}
+      responses:
+        "201":
+          description: The rows made.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AuthorizedAdded"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/authorized-ips/{aid}:
+    patch:
+      tags: [endpoints]
+      operationId: patchAuthorizedIp
+      summary: Opt a row in or out of the automatic cleanup
+      description: 'Turning it on while the Endpoint requires authorized IPs needs the lock passwords. Errors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - {$ref: "#/components/parameters/AuthorizedId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AuthorizedPatch"}
+      responses:
+        "200":
+          description: The row.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AuthorizedIP"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/authorized-ips:delete:
+    post:
+      tags: [endpoints]
+      operationId: deleteAuthorizedIps
+      summary: Delete authorized addresses
+      description: |
+        All or none. The row that holds the address of the request, and the last row of an Endpoint that requires authorized IPs,
+        are not deleted: `validation_failed` with `current_address` or `last_authorized` on the indexes of `ids`. While Require is
+        on the lock passwords are needed: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: write
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      x-ctrlz-max-body: 65536
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AuthorizedDelete"}
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/ip-claims:
+    get:
+      tags: [endpoints]
+      operationId: listIpClaims
+      summary: The Plain DNS addresses of an Endpoint
+      description: A claim carries its live challenge, with whether the hub saw it and over which protocol, never from which address.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "200":
+          description: The claims that are not released.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/IPClaimList"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [endpoints]
+      operationId: requestIpClaim
+      summary: Ask for a Plain DNS address
+      description: |
+        Exactly one of `cidr` and `use_my_address`. A claim that needs an admin says `needs_admin`. Charged to `ip-claim` too.
+        Errors: `validation_failed` (`reserved_range`, `unsupported_family`, `exists` on `/cidr`, `max_ip_claims` exceeded),
+        `ip_suspended`, `rate_limited`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/IPClaimRequest"}
+      responses:
+        "201":
+          description: The claim.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/IPClaim"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/ip-claims/{claim_id}/challenges:
+    post:
+      tags: [endpoints]
+      operationId: openIpClaimChallenge
+      summary: Open a proof challenge
+      description: 'Charged to `ip-claim` too. Errors: `too_many_attempts` (with `Retry-After`), `ip_suspended`, `rate_limited`.'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - {$ref: "#/components/parameters/ClaimId"}
+      responses:
+        "201":
+          description: The challenge and the values to prove with.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Challenge"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/ip-claims/{claim_id}:take:
+    post:
+      tags: [endpoints]
+      operationId: takeIpClaim
+      summary: Prove a claim with the evidence the nodes saw
+      description: |
+        `no_proof` is a 200: a wrong code is counted by the database. Errors: `ip_unavailable`, `ip_suspended`,
+        `needs_admin_approval`, `validation_failed` (`exists` on `/cidr`).
+      x-ctrlz-auth: session
+      x-ctrlz-rate: sensitive
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - {$ref: "#/components/parameters/ClaimId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ClaimTakeRequest"}
+      responses:
+        "200":
+          description: The claim and what the proof came to.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ClaimTake"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/ip-claims/{claim_id}:release:
+    post:
+      tags: [endpoints]
+      operationId: releaseIpClaim
+      summary: Give an address up
+      description: |
+        A claim that was a Plain DNS identity takes its devices' filtering away, so the lock passwords may be needed. Charged to
+        `ip-claim` too. Errors: `ip_suspended`, `profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: endpoint_set
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - {$ref: "#/components/parameters/ClaimId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LockPasswordsBody"}
+      responses:
+        "204": {description: Released.}
+        default: {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     session:
@@ -2456,6 +2749,21 @@ components:
       schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
     ClientId:
       name: cid
+      in: path
+      required: true
+      schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    DdnsHostId:
+      name: hid
+      in: path
+      required: true
+      schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    AuthorizedId:
+      name: aid
+      in: path
+      required: true
+      schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    ClaimId:
+      name: claim_id
       in: path
       required: true
       schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
@@ -4113,6 +4421,161 @@ components:
       properties:
         affected: {type: integer, minimum: 0, maximum: 2147483647}
         more: {type: boolean}
+    DdnsHost:
+      type: object
+      required: [id, hostname, last_ips]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        hostname: {type: string, maxLength: 253, pattern: *text}
+        last_resolved_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_ips:
+          type: array
+          maxItems: 16
+          items: {type: string, maxLength: 45, pattern: '^[0-9A-Fa-f:.]+$'}
+        last_error: {type: string, maxLength: 255, pattern: *text}
+    DdnsHostList:
+      type: object
+      required: [hosts]
+      properties:
+        hosts:
+          type: array
+          maxItems: 5
+          items: {$ref: "#/components/schemas/DdnsHost"}
+    DdnsHostCreate:
+      type: object
+      additionalProperties: false
+      required: [hostname]
+      properties:
+        hostname: {type: string, minLength: 1, maxLength: 253, pattern: *content, x-ctrlz-rowref: false}
+    AuthorizedIP:
+      type: object
+      required: [id, cidr, source, cleanup_opt_in, created_at, is_current]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        cidr: {type: string, maxLength: 43, pattern: '^[0-9A-Fa-f:.]+/[0-9]{1,3}$'}
+        source: {type: string, maxLength: 16, enum: [manual, secure_dns, ddns]}
+        cleanup_opt_in: {type: boolean}
+        city: {type: string, maxLength: 128, pattern: *text}
+        isp: {type: string, maxLength: 128, pattern: *text}
+        last_seen_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        is_current: {type: boolean}
+    AuthorizedPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/AuthorizedIP"}
+        next_cursor: {type: string, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$'}
+    AuthorizedAdd:
+      type: object
+      additionalProperties: false
+      required: [cidrs]
+      properties:
+        cidrs:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: {type: string, minLength: 1, maxLength: 43, pattern: '^[0-9A-Fa-f][0-9A-Fa-f:.]*(/[0-9]{1,3})?$', x-ctrlz-rowref: false}
+    AuthorizedAdded:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/AuthorizedIP"}
+    AuthorizedPatch:
+      type: object
+      additionalProperties: false
+      required: [cleanup_opt_in]
+      properties:
+        cleanup_opt_in: {type: boolean}
+        lock_passwords: {$ref: "#/components/schemas/LockPasswords"}
+    AuthorizedDelete:
+      type: object
+      additionalProperties: false
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        lock_passwords: {$ref: "#/components/schemas/LockPasswords"}
+    ClaimChallenge:
+      type: object
+      required: [id, label, expires_at, observed]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        label: {type: string, maxLength: 26, pattern: '^[a-z2-7]{26}$'}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        observed: {type: boolean}
+        observed_protocol: {type: string, maxLength: 8, enum: [udp, tcp, dot, doh, doh3, doq]}
+    IPClaim:
+      type: object
+      required: [id, cidr, state, proven, source, needs_admin]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        cidr: {type: string, maxLength: 18, pattern: '^[0-9.]+/[0-9]{1,2}$'}
+        state: {type: string, maxLength: 16, enum: [active, pending_proof, grace, suspended]}
+        proven: {type: boolean}
+        proof_method: {type: string, maxLength: 16, enum: [verify_tcp, verify_udp_txt, browser_ip, secure_dns]}
+        source: {type: string, maxLength: 16, enum: [manual, browser, secure_dns, ddns]}
+        grace_until: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_seen_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        needs_admin: {type: boolean}
+        challenge: {$ref: "#/components/schemas/ClaimChallenge"}
+    IPClaimList:
+      type: object
+      required: [claims]
+      properties:
+        claims:
+          type: array
+          maxItems: 1000
+          items: {$ref: "#/components/schemas/IPClaim"}
+    IPClaimRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        cidr: {type: string, minLength: 1, maxLength: 43, pattern: '^[0-9A-Fa-f][0-9A-Fa-f:.]*(/[0-9]{1,3})?$', x-ctrlz-rowref: false}
+        use_my_address: {type: boolean}
+    ChallengeLegacy:
+      type: object
+      required: [dns1, dns2]
+      properties:
+        dns1: {type: string, maxLength: 45, pattern: '^[0-9A-Fa-f:.]+$'}
+        dns2: {type: string, maxLength: 45, pattern: '^[0-9A-Fa-f:.]*$'}
+    ChallengeCommands:
+      type: object
+      description: The part of the Resolver view a proof needs (spec 9.3 `Challenge.commands`), the address pair and the name to query.
+      required: [ready]
+      properties:
+        ready: {type: boolean}
+        reason: {type: string, maxLength: 16, enum: [zone_missing, pair_missing]}
+        verify_host: {type: string, maxLength: 253, pattern: '^[a-z0-9.-]+$'}
+        legacy: {$ref: "#/components/schemas/ChallengeLegacy"}
+    Challenge:
+      type: object
+      required: [id, label, expires_at, commands]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        label: {type: string, maxLength: 26, pattern: '^[a-z2-7]{26}$'}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        commands: {$ref: "#/components/schemas/ChallengeCommands"}
+    ClaimTakeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent, x-ctrlz-rowref: false}
+    ClaimTake:
+      type: object
+      required: [claim, outcome]
+      properties:
+        claim: {$ref: "#/components/schemas/IPClaim"}
+        outcome: {type: string, maxLength: 16, enum: [active, already_active, no_proof]}
 security:
   - session: []
   - apiToken: []

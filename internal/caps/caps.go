@@ -187,6 +187,12 @@ func Entries() []Entry {
 		{Name: "max_clients_per_endpoint", Kind: Cap, Entitlements: []string{"max_clients_per_endpoint"}, Wins: []string{"Tx.ClientInsert"}},
 		{Name: "endpoint_group.create", Kind: Cap, Consts: []string{"MaxGroupsPerTenant"}, Wins: []string{"Tx.GroupInsert"}},
 		{Name: "endpoint.delete", Kind: Ending, Wins: []string{"Tx.EndpointsDelete"}},
+		// The access list (spec 3.5, 5). max_authorized_ips counts the tenant's manual rows under the quota lock; a DDNS host is
+		// counted under its Endpoint's row; the last row of an Endpoint that requires authorized IPs is one statement that ends
+		// with the rows it was given or none, whoever deletes.
+		{Name: "max_authorized_ips", Kind: Cap, Entitlements: []string{"max_authorized_ips"}, Wins: []string{"Tx.AuthorizedInsert"}},
+		{Name: "ddns_host.create", Kind: Cap, Consts: []string{"MaxDDNSHostsPerEndpoint"}, Wins: []string{"Tx.DDNSHostInsert"}},
+		{Name: "authorized_ip.last", Kind: Ending, Wins: []string{"Tx.AuthorizedDelete"}},
 	}
 }
 
@@ -238,6 +244,8 @@ func Bounds() []Bound {
 		{"MaxIDsPerBatch", "ids in one batch operation (D31): the items of one request, checked on the value in hand"},
 		{"MaxWindowsPerEndpoint", "windows in one schedule PUT (the grid holds one byte per cell): the items of one request; the PUT replaces the whole set under the Endpoint's row, so nothing accumulates"},
 		{"MaxLockPasswords", "lock passwords in one request (D31): the items of one request, checked before any charge"},
+		{"MaxPrefixesPerAdd", "prefixes in one authorized-IP add (D31): the items of one request, checked on the value in hand; max_authorized_ips is the cap"},
+		{"MaxHostnameBytes", "longest DDNS hostname DNS allows, checked on the one value in hand; a format limit, nothing shared that racing actors could spend"},
 		{"MaxClientsPerSelector", "clients one selector write resolves (spec 9.3): the write applies to the rows it locked and says whether more remain, so the caller repeats; a size of one request, not an amount racing actors spend"},
 	}
 }

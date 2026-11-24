@@ -56,10 +56,14 @@ const (
 // that prove nothing can refuse one that does (primitives-r6-5).
 const SessionLookup = "session-lookup"
 
-// ChargedByThePipeline says the pipeline charges the class itself, around the session
+// IPClaim is the hourly budget of a tenant for the Plain DNS claim routes (P3 spec 4.5). A handler charges it, by the tenant of
+// the live session, after the operation's own class has passed; no operation names it as its rate class.
+const IPClaim = "ip-claim"
+
+// ChargedByThePipeline says the pipeline (or, for ip-claim, the handler) charges the class itself, around the session
 // lookup, and no operation names it as its rate class.
 func ChargedByThePipeline(name string) bool {
-	return name == SessionLookup || name == SessionMiss || name == BulkWriteTenant
+	return name == SessionLookup || name == SessionMiss || name == BulkWriteTenant || name == IPClaim
 }
 
 // BulkWriteTenant is the day budget of a tenant for the bulk routes (spec 8.1). The pipeline charges it for an operation
