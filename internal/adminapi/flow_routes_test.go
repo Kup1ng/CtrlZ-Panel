@@ -537,7 +537,7 @@ func TestSMSPage(t *testing.T) {
 		} `json:"items"`
 	}
 	b.get("/sms/templates").want(200, "").json(&tl)
-	if len(tl.Items) != 10 {
+	if len(tl.Items) != 12 { // the ten of 0011 less the two invite rows, plus the four of the notices (0062)
 		t.Fatalf("templates: %d", len(tl.Items))
 	}
 	b.put("/sms/templates/otp/en", map[string]any{"body": "Your Ctrl Z code is {code}."}).want(200, "")
