@@ -1,0 +1,52 @@
+{
+  "appName": "Ctrl Z",
+  "close": "بستن",
+  "cancel": "انصراف",
+  "save": "ذخیره",
+  "saving": "در حال ذخیره",
+  "delete": "حذف",
+  "remove": "برداشتن",
+  "edit": "ویرایش",
+  "add": "افزودن",
+  "create": "ساخت",
+  "confirm": "تایید",
+  "apply": "اعمال",
+  "reset": "بازنشانی",
+  "clear": "پاک کردن",
+  "back": "بازگشت",
+  "next": "ادامه",
+  "done": "انجام شد",
+  "retry": "تلاش دوباره",
+  "copy": "کپی",
+  "copied": "کپی شد",
+  "search": "جستجو",
+  "more": "بیشتر",
+  "yes": "بله",
+  "no": "خیر",
+  "optional": "اختیاری",
+  "required": "الزامی",
+  "loading": "در حال بارگیری",
+  "noResults": "نتیجه‌ای پیدا نشد",
+  "skipToContent": "رفتن به محتوای صفحه",
+  "status": {
+    "on": "روشن",
+    "off": "خاموش",
+    "enabled": "فعال",
+    "disabled": "غیرفعال"
+  },
+  "language": {
+    "label": "زبان",
+    "fa": "فارسی",
+    "en": "English"
+  },
+  "theme": {
+    "label": "پوسته",
+    "light": "روشن",
+    "dark": "تیره",
+    "system": "مطابق سیستم"
+  },
+  "count": {
+    "items": "{count, plural, one {# مورد} other {# مورد}}",
+    "selected": "{count, plural, one {# مورد انتخاب شد} other {# مورد انتخاب شد}}"
+  }
+}

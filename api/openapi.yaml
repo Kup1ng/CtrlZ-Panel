@@ -1,0 +1,1557 @@
+openapi: 3.1.0
+info:
+  title: Ctrl Z Panel API
+  version: 0.2.0-p1
+  summary: The tenant API. Every route of spec 14.2 is here; later phases add the rest of the product's routes.
+  description: |
+    The tenant API (`ctrlz api`, database role `ctrlz_tenant`). The admin API
+    (`ctrlz admin`) has its own hostname and its own document, `admin-openapi.yaml`.
+
+    Two ways to authenticate, both resolved before the tenant is known and then
+    scoped to one tenant for the whole request (`store.WithTenant`):
+
+    - a session cookie named `__Host-ctrlz_session` (opaque value, only a hash is stored);
+    - a bearer API token, `read` or `write`, optionally limited to Allowed IPs (P3, refused on every P1 route).
+
+    No route takes a tenant id. Every route acts on the `(tenant, user)` of the
+    session, so another tenant's row and a missing row are both `404 not_found`.
+
+    Every refusal that could reveal another tenant's data (a taken prefix, a
+    taken phone number, an unknown token) returns the same generic error.
+
+    Every operation outside the `health` tag carries two extensions that the
+    router and a test read (`internal/apispec`):
+
+    - `x-ctrlz-auth`: `none`, `session`, `session-setup` (also while the
+      session is restricted by a one-time password) or `reauth` (a reauth in the
+      last 10 minutes);
+    - `x-ctrlz-rate`: the rate class of spec 14.1.
+
+    A third, optional, `x-ctrlz-max-body`, raises the request body limit above the
+    16 KiB default; only the passkey finish routes use it.
+
+    Errors are `Error` bodies. The codes of spec 14.3 are listed on each
+    operation's `default` response; the HTTP status is the one of that table.
+servers:
+  - url: /api/v1
+    description: Behind the Panel hostname, through the front door.
+tags:
+  - name: health
+    description: Liveness and readiness. Not versioned, not authenticated, outside the request pipeline.
+  - name: auth
+    description: Sessions, login, refresh, registration and Forgot Password.
+  - name: account
+    description: The signed-in user's own account.
+  - name: notifications
+    description: The bell and the announcement banners.
+# The alphabets of the string schemas below, written once so the two documents and
+# every field agree (rule boundary-input, spec 14.2). Each pattern is anchored and
+# excludes the control, format and private-use characters; internal/lint judges them
+# by what they accept, not by how they are written. They are RE2 (Go) patterns, which
+# is what the request validator runs.
+x-ctrlz-patterns:
+  text: &text '^[^\p{C}]*$'
+  # A typed code or a phone number: `text` plus the paste marks (format characters, tab, line feed,
+  # carriage return) that the fold of internal/auth/digits drops, so a code pasted from a
+  # right-to-left editor reaches the handler instead of being refused here. The text is
+  # digits.PastePattern; TestPastePatternIsThePasteMarkClass holds the two together (round 14,
+  # primitives-r14-3). The fields that use it are the lint's list (codeFields).
+  pasted: &pasted '^(?:[^\p{C}]|\p{Cf}|[\t\n\r])*$'
+  # An identifier or a value the server keys on: its first character is not a control, format or
+  # separator character, so an empty value and a blank one are refused by the schema and never reach a keyed
+  # step (tenant-r18-3; the same patterns as api/admin-openapi.yaml). `pastedcontent` is `pasted` for a typed
+  # code, phone or token that must be there (digits.PasteContentPattern).
+  content: &content '^[^\p{C}\p{Z}][^\p{C}]*$'
+  pastedcontent: &pastedcontent '^(?:\p{Cf}|\p{Z}|[\t\n\r])*[^\p{C}\p{Z}](?:[^\p{C}]|\p{Cf}|[\t\n\r])*$'
+  # Persian prose keeps the zero width non-joiner (U+200C), which the language needs
+  # inside words. Only fields that carry prose use it, and the lint holds that list.
+  prose: &prose '^(?:[^\p{C}]|\x{200C})*$'
+  # `prose` for a value that must be there (the name of a passkey): the first character is not a control,
+  # format or separator character, so an empty or blank name is refused, except that a half-space (U+200C)
+  # may lead: the server drops it and refuses what is left when nothing is, with a 422 of the handler
+  # (primitives-r18-3 together with tenant-r18-3).
+  prosecontent: &prosecontent '^(?:[^\p{C}\p{Z}]|\x{200C})(?:[^\p{C}]|\x{200C})*$'
+  uuid: &uuid '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+  datetime: &datetime '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]{8,16}(Z|[+-][0-9]{2}:[0-9]{2})$'
+  date: &date '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+  b64url: &b64url '^[A-Za-z0-9_-]*$'
+  word: &word '^[a-z][a-z0-9_.-]*$'
+  key: &key '^[A-Za-z][A-Za-z0-9_.-]*$'
+  host: &host '^[A-Za-z0-9.-]*$'
+  alpha2: &alpha2 '^[A-Za-z]{2}$'
+  base32: &base32 '^[A-Z2-7]*$'
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      operationId: healthz
+      summary: Liveness
+      security: []
+      servers:
+        - url: /
+      responses:
+        "200":
+          description: The process is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, role, version]
+                properties:
+                  status: {type: string, const: ok, maxLength: 2}
+                  role: {type: string, maxLength: 32, pattern: '^[a-z]+$'}
+                  version: {type: string, maxLength: 64, pattern: '^[A-Za-z0-9._+~-]*$'}
+  /readyz:
+    get:
+      tags: [health]
+      operationId: readyz
+      summary: Readiness
+      description: |
+        Succeeds when the database answers for this role. Answered to a loopback peer only (the
+        container healthcheck); any other peer gets the 404 of an unknown path, so a neighbour cannot
+        spend the role's database pool through it (admin-r11-4).
+      security: []
+      servers:
+        - url: /
+      responses:
+        "200": {description: Ready.}
+        "503": {description: The database is unavailable.}
+  /auth/config:
+    get:
+      tags: [auth]
+      operationId: getAuthConfig
+      summary: What the login page needs before anyone is signed in
+      description: |
+        The registration mode, whether an SMS can be sent and whether Passkey is
+        on. It holds no user data and is cached for 30 seconds.
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: public-read
+      responses:
+        "200":
+          description: The public configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicConfig"
+        "429": {$ref: "#/components/responses/RateLimited"}
+        "503": {$ref: "#/components/responses/Unavailable"}
+  /auth/login/password:
+    post:
+      tags: [auth]
+      operationId: loginPassword
+      summary: Sign in with a phone number and a password
+      description: |
+        Inside a 500 ms floor. A known and an unknown phone take the same path
+        and run Argon2 once. Errors: `invalid_credentials`, `too_many_attempts`,
+        `account_suspended`, `server_busy`.
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      requestBody: {$ref: "#/components/requestBodies/LoginPassword"}
+      responses:
+        "200": {$ref: "#/components/responses/LoginResult"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/otp/request:
+    post:
+      tags: [auth]
+      operationId: requestOtp
+      summary: Send a code by SMS for login, signup, Forgot Password or an invite
+      description: |
+        Inside a 300 ms floor. A phone with no account gets the same 202 as one
+        with an account (a decoy challenge). Errors: `otp_limited`,
+        `registration_closed`, `invite_invalid`, `invalid_phone`, `sms_unavailable`.
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: otp-send
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/OtpRequest"}
+      responses:
+        "202": {$ref: "#/components/responses/OtpIssued"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/login/otp:
+    post:
+      tags: [auth]
+      operationId: loginOtp
+      summary: Sign in with a code sent by SMS
+      description: 'Errors: `otp_invalid`, `otp_expired`, `otp_locked`, `too_many_attempts`, `account_suspended`.'
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LoginOtpRequest"}
+      responses:
+        "200": {$ref: "#/components/responses/LoginResult"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/login/totp:
+    post:
+      tags: [auth]
+      operationId: loginTotp
+      summary: Finish a login with a TOTP code or a recovery code
+      description: 'The ticket comes from `mfa_required`. Errors: `ticket_invalid`, `totp_invalid`, `totp_step_reused`, `too_many_attempts`, `conflict`.'
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LoginTotpRequest"}
+      responses:
+        "200": {$ref: "#/components/responses/LoginResult"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/passkey/login/begin:
+    post:
+      tags: [auth]
+      operationId: passkeyLoginBegin
+      summary: Start a discoverable Passkey login
+      description: 'Errors: `passkey_unavailable`.'
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PasskeyLoginBeginRequest"}
+      responses:
+        "200": {$ref: "#/components/responses/PasskeyCeremony"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/passkey/login/finish:
+    post:
+      tags: [auth]
+      operationId: passkeyLoginFinish
+      summary: Finish a Passkey login with the browser's assertion
+      description: |
+        The ticket is in the `X-Ctrlz-Ticket` header and the body is the
+        browser's assertion JSON, untouched. Inside a 200 ms floor. Errors:
+        `passkey_invalid`, `ticket_invalid`, `passkey_unavailable`, `account_suspended`.
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      x-ctrlz-max-body: 65536
+      parameters:
+        - {$ref: "#/components/parameters/Ticket"}
+      requestBody: {$ref: "#/components/requestBodies/WebAuthnResponse"}
+      responses:
+        "200": {$ref: "#/components/responses/LoginResult"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshSession
+      summary: Renew the session from the refresh cookie
+      description: |
+        Reads `__Host-ctrlz_refresh` (Remember me). On success it rotates the
+        refresh token and the session token and answers 204 with both cookies.
+        A concurrent tab that loses the race inside the 10 second grace gets 204
+        with no cookies and retries. A refresh token used again after the grace
+        ends its whole family and the session. Errors: `session_expired`.
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      responses:
+        "204": {description: Renewed, or already renewed by a concurrent request.}
+        "401": {$ref: "#/components/responses/SessionExpired"}
+        "429": {$ref: "#/components/responses/RateLimited"}
+        "503": {$ref: "#/components/responses/Unavailable"}
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: End this session
+      description: Also works while the account is suspended and while the session is restricted.
+      x-ctrlz-auth: session-setup
+      x-ctrlz-rate: user-write
+      responses:
+        "204": {description: Signed out. Both cookies are cleared.}
+        "401": {$ref: "#/components/responses/SessionExpired"}
+        "429": {$ref: "#/components/responses/RateLimited"}
+        "503": {$ref: "#/components/responses/Unavailable"}
+  /auth/logout-all:
+    post:
+      tags: [auth]
+      operationId: logoutAll
+      summary: End every session of this user, this one included
+      x-ctrlz-auth: session
+      x-ctrlz-rate: sensitive
+      responses:
+        "204": {description: All sessions ended. Both cookies are cleared.}
+        "401": {$ref: "#/components/responses/SessionExpired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/RateLimited"}
+        "503": {$ref: "#/components/responses/Unavailable"}
+  /auth/reauth:
+    post:
+      tags: [auth]
+      operationId: reauth
+      summary: Prove the current factors again and open a ten minute reauth window
+      description: |
+        What must be sent depends on what the user has (spec 3.5): the password,
+        the password and a TOTP or recovery code, a TOTP or recovery code alone,
+        or, for a user with neither, a code from `/auth/reauth/otp/request`. SMS
+        never satisfies a user who has a password or TOTP. The session token is
+        rotated and both cookies are set. Errors: `invalid_credentials`,
+        `totp_invalid`, `totp_step_reused`, `otp_invalid`, `otp_expired`,
+        `otp_locked`, `too_many_attempts`, `conflict` (a credential moved while the
+        request ran: start again), `server_busy` (the Argon2 gate was full; nothing was
+        counted against the user).
+      x-ctrlz-auth: session-setup
+      x-ctrlz-rate: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ReauthRequest"}
+      responses:
+        "204": {description: The reauth window is open. New cookies are set.}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/reauth/otp/request:
+    post:
+      tags: [auth]
+      operationId: reauthOtpRequest
+      summary: Send a reauth code to the signed-in user's own number
+      description: |
+        Takes no body and no phone. Answers `409 conflict` when the user has a
+        password or TOTP, so it never sends a code that could not be used.
+        Errors: `otp_limited`, `sms_unavailable`, `conflict`.
+      x-ctrlz-auth: session-setup
+      x-ctrlz-rate: otp-send-user
+      responses:
+        "202": {$ref: "#/components/responses/SessionOtpIssued"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/reauth/passkey/begin:
+    post:
+      tags: [auth]
+      operationId: reauthPasskeyBegin
+      summary: Start a Passkey assertion for the signed-in user
+      description: 'Errors: `passkey_unavailable`, `passkey_invalid`.'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: sensitive
+      responses:
+        "200": {$ref: "#/components/responses/PasskeyCeremony"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/reauth/passkey/finish:
+    post:
+      tags: [auth]
+      operationId: reauthPasskeyFinish
+      summary: Finish a Passkey reauth
+      description: 'Errors: `passkey_invalid`, `ticket_invalid`, `too_many_attempts`. Inside a 200 ms floor.'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: sensitive
+      x-ctrlz-max-body: 65536
+      parameters:
+        - {$ref: "#/components/parameters/Ticket"}
+      requestBody: {$ref: "#/components/requestBodies/WebAuthnResponse"}
+      responses:
+        "204": {description: The reauth window is open. New cookies are set.}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Create an account with an SMS code, in open mode or with an invite
+      description: |
+        The password is optional; without it the account is OTP-only. A weak
+        password is refused before the code is spent. Errors: `otp_invalid`,
+        `otp_expired`, `otp_locked`, `password_weak`, `registration_closed`,
+        `invite_invalid`, `too_many_attempts`, `conflict` (the number was taken while
+        the request ran), `server_busy` (the Argon2 or scoring gate was full; the code
+        was not spent and the network count of the check is given back).
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RegisterRequest"}
+      responses:
+        "201": {$ref: "#/components/responses/LoginResult"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/invites/lookup:
+    post:
+      tags: [auth]
+      operationId: lookupInvite
+      summary: Read an invite link, for the invite page
+      description: 'Forged, unknown, used, revoked and expired invites are all `404 invite_invalid`. Errors: `invite_invalid`, `too_many_attempts`.'
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/InviteLookupRequest"}
+      responses:
+        "200":
+          description: The invite is valid.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/InviteInfo"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/password/reset/verify:
+    post:
+      tags: [auth]
+      operationId: resetVerify
+      summary: Check the Forgot Password code and say what else is needed
+      description: 'Errors: `otp_invalid`, `otp_expired`, `otp_locked`, `too_many_attempts`.'
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ResetVerifyRequest"}
+      responses:
+        "200":
+          description: The code was right. The ticket is good for five minutes.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ResetVerified"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/password/reset/passkey/begin:
+    post:
+      tags: [auth]
+      operationId: resetPasskeyBegin
+      summary: Start the Passkey proof of Forgot Password
+      description: 'Errors: `ticket_invalid`, `passkey_unavailable`.'
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TicketOnly"}
+      responses:
+        "200": {$ref: "#/components/responses/PasskeyCeremony"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/password/reset/passkey/finish:
+    post:
+      tags: [auth]
+      operationId: resetPasskeyFinish
+      summary: Finish the Passkey proof of Forgot Password
+      description: 'Returns a new reset ticket that records the proof. Errors: `passkey_invalid`, `ticket_invalid`, `too_many_attempts`. Inside a 200 ms floor.'
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      x-ctrlz-max-body: 65536
+      parameters:
+        - {$ref: "#/components/parameters/Ticket"}
+      requestBody: {$ref: "#/components/requestBodies/WebAuthnResponse"}
+      responses:
+        "200":
+          description: The proof was accepted.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TicketOnly"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/password/reset/complete:
+    post:
+      tags: [auth]
+      operationId: resetComplete
+      summary: Set a new password
+      description: |
+        Needs the second factor `ResetVerified.second_factor` named. With a
+        Passkey that is out of reach, `defer_enforce` starts the 72 hour delay
+        after which Enforce Passkey counts as off. Every session of the user ends.
+        Errors: `ticket_invalid`, `password_weak`, `totp_invalid`,
+        `totp_step_reused`, `passkey_invalid`, `too_many_attempts`, `conflict`,
+        `server_busy`.
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ResetCompleteRequest"}
+      responses:
+        "204": {description: The password is set. The user signs in normally.}
+        default: {$ref: "#/components/responses/Problem"}
+  /me:
+    get:
+      tags: [account]
+      operationId: getMe
+      summary: The shell's bootstrap
+      description: Works while the session is restricted and while the tenant is suspended.
+      x-ctrlz-auth: session-setup
+      x-ctrlz-rate: user-read
+      responses:
+        "200": {$ref: "#/components/responses/Me"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/preferences:
+    patch:
+      tags: [account]
+      operationId: updatePreferences
+      summary: Language, theme and the onboarding checklist
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PreferencesRequest"}
+      responses:
+        "200": {$ref: "#/components/responses/Me"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/home-countries:
+    put:
+      tags: [account]
+      operationId: setHomeCountries
+      summary: Replace the Home Countries (at most three)
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/HomeCountries"}
+      responses:
+        "200":
+          description: Stored.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HomeCountries"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/limits:
+    get:
+      tags: [account]
+      operationId: getLimits
+      summary: The quotas in force, read only
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      responses:
+        "200":
+          description: One number per quota.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Limits"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/sessions:
+    get:
+      tags: [account]
+      operationId: listSessions
+      summary: The user's live sessions
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      responses:
+        "200":
+          description: Newest first.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SessionList"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/sessions/{id}:
+    delete:
+      tags: [account]
+      operationId: deleteSession
+      summary: End another session
+      description: |
+        A session created before this one can be ended with no more proof. A
+        newer one needs a live reauth window (`reauth_required`), so a thief
+        cannot throw the owner out. The current session is `validation_failed`:
+        use logout. Errors: `reauth_required`, `validation_failed`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "204": {description: Ended.}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/password:
+    post:
+      tags: [account]
+      operationId: changePassword
+      summary: Set a new password
+      description: |
+        Needs a reauth window, except for a session opened by the live one-time
+        password (it just proved knowledge of it). Inside a fresh reauth window no
+        code is asked, because that window already proved the second factor. Only
+        in the excepted case, outside a fresh window, and when the user has TOTP,
+        `totp_code` is required. Rotates this session and ends the others and the
+        API tokens. Errors: `password_weak`, `totp_invalid`, `totp_step_reused`,
+        `too_many_attempts`, `reauth_required`, `session_expired`, `conflict` (a
+        credential moved while the request ran: start again), `server_busy`.
+      x-ctrlz-auth: session-setup
+      x-ctrlz-rate: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ChangePasswordRequest"}
+      responses:
+        "204": {description: Changed. New cookies are set.}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/phone/change:
+    post:
+      tags: [account]
+      operationId: startPhoneChange
+      summary: Start a phone change; a code goes to both numbers
+      description: 'Errors: `otp_limited`, `invalid_phone`, `sms_unavailable`, `validation_failed` (same number).'
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: otp-send-user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PhoneChangeRequest"}
+      responses:
+        "202":
+          description: Both codes are on their way.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PhoneChange"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/phone/change/{id}/confirm:
+    post:
+      tags: [account]
+      operationId: confirmPhoneChange
+      summary: Finish a phone change with both codes
+      description: 'Errors: `otp_invalid` (with `fields` naming `old_code` or `new_code`), `phone_unavailable`, `too_many_attempts`, `not_found`.'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: sensitive
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PhoneConfirmRequest"}
+      responses:
+        "204": {description: The number changed. New cookies are set and the other sessions ended.}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/totp/setup:
+    post:
+      tags: [account]
+      operationId: totpSetup
+      summary: Make a TOTP secret, not yet enabled
+      description: 'Errors: `totp_already_enabled`.'
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Empty"}
+      responses:
+        "200":
+          description: The secret, shown once, and the otpauth URI for the QR code.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TotpSetup"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/totp/confirm:
+    post:
+      tags: [account]
+      operationId: totpConfirm
+      summary: Prove the app has the secret and turn TOTP on
+      description: 'Errors: `totp_invalid`, `totp_step_reused`, `totp_not_pending`, `too_many_attempts`, `conflict`, `validation_failed` (`saved` must be true).'
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TotpConfirmRequest"}
+      responses:
+        "200":
+          description: TOTP is on. The recovery codes are shown once.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TotpEnabled"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/totp/disable:
+    post:
+      tags: [account]
+      operationId: totpDisable
+      summary: Turn TOTP off
+      description: 'Errors: `totp_not_enabled`.'
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Empty"}
+      responses:
+        "200": {$ref: "#/components/responses/SessionsEnded"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/totp/recovery-codes:
+    post:
+      tags: [account]
+      operationId: regenerateRecoveryCodes
+      summary: Replace the recovery codes
+      description: 'Errors: `totp_not_enabled`.'
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Empty"}
+      responses:
+        "200":
+          description: The new codes, shown once.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RecoveryCodes"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/passkeys:
+    get:
+      tags: [account]
+      operationId: listPasskeys
+      summary: The user's passkeys, stale ones included
+      description: 'Errors: `passkey_unavailable`.'
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      responses:
+        "200":
+          description: Oldest first.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PasskeyList"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/passkeys/begin:
+    post:
+      tags: [account]
+      operationId: passkeyBegin
+      summary: Start adding a passkey
+      description: 'Errors: `passkey_unavailable`, `validation_failed` (too many passkeys).'
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Empty"}
+      responses:
+        "200": {$ref: "#/components/responses/PasskeyCeremony"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/passkeys/finish:
+    post:
+      tags: [account]
+      operationId: passkeyFinish
+      summary: Finish adding a passkey with the browser's attestation
+      description: |
+        The ticket is in the `X-Ctrlz-Ticket` header and the body is the
+        browser's attestation JSON, untouched. The chosen name is set afterwards
+        with PATCH. Errors: `passkey_invalid`, `ticket_invalid`.
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      x-ctrlz-max-body: 65536
+      parameters:
+        - {$ref: "#/components/parameters/Ticket"}
+      requestBody: {$ref: "#/components/requestBodies/WebAuthnResponse"}
+      responses:
+        "201":
+          description: Added. New cookies are set and the other sessions ended.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PasskeyAdded"}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/passkeys/review:
+    post:
+      tags: [account]
+      operationId: reviewPasskeys
+      summary: Confirm the passkey list after a recovery
+      description: 'Errors: `passkey_unavailable`.'
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Empty"}
+      responses:
+        "204": {description: The review flag is cleared.}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/passkeys/{id}:
+    patch:
+      tags: [account]
+      operationId: renamePasskey
+      summary: Rename a passkey
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RenamePasskeyRequest"}
+      responses:
+        "200":
+          description: Renamed.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PasskeyRow"}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [account]
+      operationId: deletePasskey
+      summary: Delete a passkey
+      description: Deleting the last live passkey turns Enforce Passkey off.
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Problem"}
+  /account/passkey-enforcement:
+    put:
+      tags: [account]
+      operationId: setPasskeyEnforcement
+      summary: Turn Enforce Passkey on or off
+      description: 'Errors: `enforce_precondition_failed`.'
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EnforcementRequest"}
+      responses:
+        "200": {$ref: "#/components/responses/SessionsEnded"}
+        default: {$ref: "#/components/responses/Problem"}
+  /notifications:
+    get:
+      tags: [notifications]
+      operationId: listNotifications
+      summary: The bell
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      parameters:
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: Newest first. `unread_count` counts every row, not one page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NotificationPage"}
+        default: {$ref: "#/components/responses/Problem"}
+  /notifications/{id}/read:
+    post:
+      tags: [notifications]
+      operationId: readNotification
+      summary: Mark a notification read
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "204": {description: Marked.}
+        default: {$ref: "#/components/responses/Problem"}
+  /announcements:
+    get:
+      tags: [notifications]
+      operationId: listAnnouncements
+      summary: The announcements addressed to this tenant
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      parameters:
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: Newest first. `unread_count` counts every row, not one page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AnnouncementPage"}
+        default: {$ref: "#/components/responses/Problem"}
+  /announcements/{id}/read:
+    post:
+      tags: [notifications]
+      operationId: readAnnouncement
+      summary: Mark an announcement read
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "204": {description: Marked.}
+        default: {$ref: "#/components/responses/Problem"}
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: __Host-ctrlz_session
+    apiToken:
+      type: http
+      scheme: bearer
+      description: A `read` or `write` token. `read` tokens cannot call a mutating route.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    Ticket:
+      name: X-Ctrlz-Ticket
+      in: header
+      required: true
+      description: The ticket a begin route returned.
+      schema: {type: string, minLength: 1, maxLength: 4096, pattern: *b64url, x-ctrlz-rowref: true}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: *b64url, x-ctrlz-rowref: true}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+  requestBodies:
+    LoginPassword:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/LoginPasswordRequest"}
+    WebAuthnResponse:
+      required: true
+      description: The credential JSON exactly as the browser produced it.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/WebAuthnResponse"}
+  responses:
+    SessionExpired:
+      description: No session, or it is revoked or past its idle or absolute limit (`session_expired`).
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Forbidden:
+      description: |
+        `csrf_rejected`, `password_change_required`, `reauth_required` or `account_suspended`.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    RateLimited:
+      description: '`rate_limited`, with `Retry-After`.'
+      headers:
+        Retry-After:
+          description: Seconds to wait.
+          schema: {type: integer, minimum: 0, maximum: 86400}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Unavailable:
+      description: '`service_unavailable`: the database could not be reached.'
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Problem:
+      description: |
+        An error of spec 14.3. The status and `code` are the pair of that table;
+        the codes an operation can raise are in its description. `Retry-After`
+        accompanies 429 and 503 answers that have a wait.
+      headers:
+        Retry-After:
+          description: Seconds to wait.
+          schema: {type: integer, minimum: 0, maximum: 86400}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    LoginResult:
+      description: |
+        `authenticated` (the session cookies are set), `mfa_required` (finish with
+        `/auth/login/totp`) or `passkey_required` (finish with a Passkey).
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/LoginResult"}
+    OtpIssued:
+      description: A challenge exists. Whether a message was sent is not said.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/OtpIssued"}
+    SessionOtpIssued:
+      description: A challenge exists for the signed-in user's own number.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/SessionOtpIssued"}
+    PasskeyCeremony:
+      description: The ticket to send back and the options for the browser.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/PasskeyCeremony"}
+    Me:
+      description: The signed-in user.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Me"}
+    SessionsEnded:
+      description: Done. New cookies are set.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/SessionsEnded"}
+  schemas:
+    Error:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          maxLength: 64
+          pattern: *word
+          description: A stable machine-readable code. The message is localised by the client.
+        request_id:
+          type: string
+          maxLength: 64
+          pattern: *b64url
+        retry_after_s:
+          type: integer
+          minimum: 0
+          maximum: 86400
+        fields:
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            required: [name, code]
+            properties:
+              name: {type: string, maxLength: 64, pattern: *word}
+              code: {type: string, maxLength: 64, pattern: *word}
+    Empty:
+      type: object
+      additionalProperties: false
+    WebAuthnResponse:
+      type: object
+      additionalProperties: false
+      description: |
+        The credential JSON as the browser produced it, for an attestation (add a
+        passkey) or an assertion (sign in). The server hands the bytes to the WebAuthn
+        library untouched, so the schema bounds every member the browser can send and the
+        pipeline refuses anything outside it before the library parses a byte. The
+        members of the two shapes are all here and only the ones that apply are present.
+        Three members name a row and are marked x-ctrlz-rowref true: id and rawId (the
+        library finds the credential by rawId, and requires id to equal it) and userHandle
+        (the route compares it with the user id of the stored credential), so the
+        isolation harness asks for a Cross call that carries another tenant's value in each.
+      required: [id, rawId, type, response]
+      x-go-type: json.RawMessage
+      properties:
+        id: {type: string, minLength: 1, maxLength: 1400, pattern: *b64url, x-ctrlz-rowref: true}
+        rawId: {type: string, minLength: 1, maxLength: 1400, pattern: *b64url, x-ctrlz-rowref: true}
+        type: {type: string, maxLength: 16, enum: [public-key]}
+        authenticatorAttachment: {type: [string, "null"], maxLength: 16, pattern: *word, x-ctrlz-rowref: false}
+        response:
+          type: object
+          additionalProperties: false
+          required: [clientDataJSON]
+          properties:
+            clientDataJSON: {type: string, minLength: 1, maxLength: 4096, pattern: *b64url, x-ctrlz-rowref: false}
+            attestationObject: {type: string, minLength: 1, maxLength: 24576, pattern: *b64url, x-ctrlz-rowref: false}
+            authenticatorData: {type: string, minLength: 1, maxLength: 8192, pattern: *b64url, x-ctrlz-rowref: false}
+            publicKey: {type: [string, "null"], maxLength: 2048, pattern: *b64url, x-ctrlz-rowref: false}
+            publicKeyAlgorithm: {type: integer, minimum: -65536, maximum: 65536}
+            signature: {type: string, minLength: 1, maxLength: 2048, pattern: *b64url, x-ctrlz-rowref: false}
+            userHandle: {type: [string, "null"], maxLength: 256, pattern: *b64url, x-ctrlz-rowref: true}
+            transports:
+              type: array
+              maxItems: 16
+              items: {type: string, maxLength: 24, pattern: *word, x-ctrlz-rowref: false}
+        clientExtensionResults:
+          type: object
+          maxProperties: 8
+          patternProperties:
+            '^[a-z][a-zA-Z0-9]{0,31}$':
+              type: object
+              maxProperties: 8
+              patternProperties:
+                '^[a-z][a-zA-Z0-9]{0,31}$': {type: [boolean, integer, string], minimum: -2147483648, maximum: 2147483647, minLength: 1, maxLength: 2048, pattern: *content, x-ctrlz-rowref: false}
+              additionalProperties: false
+          additionalProperties: false
+    PublicConfig:
+      type: object
+      required: [registration_mode, sms_available, passkey_enabled]
+      properties:
+        registration_mode:
+          type: string
+          maxLength: 8
+          enum: [closed, invite, open]
+        sms_available:
+          type: boolean
+        passkey_enabled:
+          type: boolean
+    LoginPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [phone, password]
+      properties:
+        phone: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        password: {type: string, maxLength: 2048, pattern: *prose}
+        remember_me: {type: boolean}
+    OtpRequest:
+      type: object
+      additionalProperties: false
+      required: [purpose]
+      properties:
+        phone: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        purpose:
+          type: string
+          maxLength: 8
+          enum: [login, signup, reset, invite]
+        locale:
+          type: string
+          maxLength: 2
+          enum: [fa, en]
+        invite_token: {type: string, minLength: 1, maxLength: 200, pattern: *pastedcontent}
+    OtpIssued:
+      type: object
+      required: [challenge_id, expires_in_s, resend_after_s]
+      properties:
+        challenge_id: {type: string, minLength: 64, maxLength: 64, pattern: *b64url}
+        expires_in_s: {type: integer, minimum: 0, maximum: 86400}
+        resend_after_s: {type: integer, minimum: 0, maximum: 86400}
+    SessionOtpIssued:
+      type: object
+      required: [challenge_id, expires_in_s, resend_after_s]
+      properties:
+        challenge_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        expires_in_s: {type: integer, minimum: 0, maximum: 86400}
+        resend_after_s: {type: integer, minimum: 0, maximum: 86400}
+    LoginOtpRequest:
+      type: object
+      additionalProperties: false
+      required: [phone, challenge_id, code]
+      properties:
+        phone: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        challenge_id: {type: string, minLength: 64, maxLength: 64, pattern: *b64url}
+        code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        remember_me: {type: boolean}
+    LoginTotpRequest:
+      type: object
+      additionalProperties: false
+      required: [ticket]
+      properties:
+        ticket: {type: string, minLength: 1, maxLength: 4096, pattern: *b64url}
+        totp_code: {type: string, maxLength: 64, pattern: *pasted}
+        recovery_code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+    LoginResult:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          maxLength: 16
+          enum: [authenticated, mfa_required, passkey_required]
+        ticket: {type: string, maxLength: 4096, pattern: *b64url}
+        ticket_expires_in_s: {type: integer, minimum: 0, maximum: 86400}
+        methods:
+          type: array
+          maxItems: 2
+          items:
+            type: string
+            maxLength: 16
+            enum: [totp, recovery_code]
+    PasskeyLoginBeginRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        remember_me: {type: boolean}
+    PasskeyCeremony:
+      type: object
+      required: [ticket, options]
+      properties:
+        ticket: {type: string, maxLength: 4096, pattern: *b64url}
+        options:
+          type: object
+          description: The WebAuthn options object for `navigator.credentials`.
+          required: [publicKey]
+          x-go-type: json.RawMessage
+          properties:
+            publicKey:
+              type: object
+              properties:
+                challenge: {type: string, maxLength: 256, pattern: *b64url}
+                timeout: {type: integer, minimum: 0, maximum: 3600000}
+                rpId: {type: string, maxLength: 253, pattern: *host}
+                attestation: {type: string, maxLength: 16, pattern: *word}
+                userVerification: {type: string, maxLength: 16, pattern: *word}
+                rp:
+                  type: object
+                  properties:
+                    id: {type: string, maxLength: 253, pattern: *host}
+                    name: {type: string, maxLength: 64, pattern: *text}
+                user:
+                  type: object
+                  properties:
+                    id: {type: string, maxLength: 64, pattern: *b64url}
+                    name: {type: string, maxLength: 64, pattern: *text}
+                    displayName: {type: string, maxLength: 64, pattern: *text}
+                pubKeyCredParams:
+                  type: array
+                  maxItems: 16
+                  items:
+                    type: object
+                    properties:
+                      type: {type: string, maxLength: 16, pattern: *word}
+                      alg: {type: integer, minimum: -65536, maximum: 65535}
+                excludeCredentials: {$ref: "#/components/schemas/CredentialDescriptors"}
+                allowCredentials: {$ref: "#/components/schemas/CredentialDescriptors"}
+                authenticatorSelection:
+                  type: object
+                  properties:
+                    authenticatorAttachment: {type: string, maxLength: 16, pattern: *word}
+                    residentKey: {type: string, maxLength: 16, pattern: *word}
+                    requireResidentKey: {type: boolean}
+                    userVerification: {type: string, maxLength: 16, pattern: *word}
+    CredentialDescriptors:
+      type: array
+      maxItems: 64
+      items:
+        type: object
+        properties:
+          type: {type: string, maxLength: 16, pattern: *word}
+          id: {type: string, maxLength: 1400, pattern: *b64url}
+          transports:
+            type: array
+            maxItems: 16
+            items: {type: string, maxLength: 24, pattern: *word}
+    ReauthRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        password: {type: string, maxLength: 2048, pattern: *prose, x-ctrlz-rowref: false}
+        totp_code: {type: string, maxLength: 64, pattern: *pasted, x-ctrlz-rowref: false}
+        recovery_code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent, x-ctrlz-rowref: false}
+        otp_challenge_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        otp_code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent, x-ctrlz-rowref: false}
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, code]
+      properties:
+        phone: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        invite_token: {type: string, minLength: 1, maxLength: 200, pattern: *pastedcontent}
+        challenge_id: {type: string, minLength: 64, maxLength: 64, pattern: *b64url}
+        code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        password: {type: string, maxLength: 2048, pattern: *prose}
+        locale:
+          type: string
+          maxLength: 2
+          enum: [fa, en]
+    InviteLookupRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: {type: string, minLength: 1, maxLength: 200, pattern: *pastedcontent}
+    InviteInfo:
+      type: object
+      required: [phone_masked, expires_at]
+      properties:
+        phone_masked: {type: string, maxLength: 32, pattern: *text}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    ResetVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [phone, challenge_id, code]
+      properties:
+        phone: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        challenge_id: {type: string, minLength: 64, maxLength: 64, pattern: *b64url}
+        code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+    ResetVerified:
+      type: object
+      required: [ticket, second_factor]
+      properties:
+        ticket: {type: string, maxLength: 4096, pattern: *b64url}
+        second_factor:
+          type: string
+          maxLength: 8
+          enum: [none, totp, passkey]
+    TicketOnly:
+      type: object
+      additionalProperties: false
+      required: [ticket]
+      properties:
+        ticket: {type: string, minLength: 1, maxLength: 4096, pattern: *b64url}
+    ResetCompleteRequest:
+      type: object
+      additionalProperties: false
+      required: [ticket, new_password]
+      properties:
+        ticket: {type: string, minLength: 1, maxLength: 4096, pattern: *b64url}
+        new_password: {type: string, maxLength: 2048, pattern: *prose}
+        totp_code: {type: string, maxLength: 64, pattern: *pasted}
+        recovery_code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        defer_enforce: {type: boolean}
+    Me:
+      type: object
+      required: [user, security, tenant]
+      properties:
+        user:
+          type: object
+          required: [id, phone_masked, phone_verified, locale, theme, onboarding_hints, onboarding_state, has_password, must_reset]
+          properties:
+            id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+            phone_masked: {type: string, maxLength: 32, pattern: *text}
+            phone_verified: {type: boolean}
+            locale: {type: string, maxLength: 2, enum: [fa, en]}
+            theme: {type: string, maxLength: 8, enum: [system, light, dark]}
+            onboarding_hints:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: {type: boolean}
+            onboarding_state: {$ref: "#/components/schemas/OnboardingState"}
+            has_password: {type: boolean}
+            must_reset: {type: boolean}
+            last_login_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        security:
+          type: object
+          required: [totp_enabled, recovery_codes_left, passkeys, enforce_passkey, passkey_review_required]
+          properties:
+            totp_enabled: {type: boolean}
+            recovery_codes_left: {type: integer, minimum: 0, maximum: 64}
+            passkeys: {type: integer, minimum: 0, maximum: 1000}
+            enforce_passkey: {type: boolean}
+            enforce_lift_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+            passkey_review_required: {type: boolean}
+        tenant:
+          type: object
+          required: [id, status, home_countries]
+          properties:
+            id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+            status: {type: string, maxLength: 16, enum: [active, suspended, deleting]}
+            home_countries:
+              type: array
+              maxItems: 3
+              items: {type: string, minLength: 2, maxLength: 2, pattern: *alpha2}
+    OnboardingState:
+      type: object
+      description: |
+        What the dashboard remembers about the first-run hints: up to 32 keys, each
+        a scalar. It replaces the stored value as a whole (spec 12.1). A nested value
+        is refused, so the document bounds everything that is stored.
+      maxProperties: 32
+      patternProperties:
+        '^[A-Za-z][A-Za-z0-9_.-]{0,63}$': {type: [string, integer, boolean], minimum: -2147483648, maximum: 2147483647, minLength: 1, maxLength: 256, pattern: *content, x-ctrlz-rowref: false}
+      additionalProperties: false
+      x-go-type: map[string]interface{}
+    PreferencesRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        locale: {type: string, maxLength: 2, enum: [fa, en]}
+        theme: {type: string, maxLength: 8, enum: [system, light, dark]}
+        onboarding_hints:
+          type: object
+          additionalProperties: false
+          required: [enabled]
+          properties:
+            enabled: {type: boolean}
+        onboarding_state: {$ref: "#/components/schemas/OnboardingState"}
+    HomeCountries:
+      type: object
+      additionalProperties: false
+      required: [countries]
+      properties:
+        countries:
+          type: array
+          maxItems: 3
+          items: {type: string, minLength: 2, maxLength: 2, pattern: *alpha2, x-ctrlz-rowref: false}
+    Limits:
+      type: object
+      required: [max_profiles, max_endpoints, max_clients_per_endpoint, max_authorized_ips, max_api_tokens, max_rules_per_request, max_rules_per_profile, max_wildcards_per_profile, max_realtime_sessions, max_publishes_per_hour, max_ip_claims]
+      properties:
+        max_profiles: {type: integer, minimum: 0, maximum: 2147483647}
+        max_endpoints: {type: integer, minimum: 0, maximum: 2147483647}
+        max_clients_per_endpoint: {type: integer, minimum: 0, maximum: 2147483647}
+        max_authorized_ips: {type: integer, minimum: 0, maximum: 2147483647}
+        max_api_tokens: {type: integer, minimum: 0, maximum: 2147483647}
+        max_rules_per_request: {type: integer, minimum: 0, maximum: 2147483647}
+        max_rules_per_profile: {type: integer, minimum: 0, maximum: 2147483647}
+        max_wildcards_per_profile: {type: integer, minimum: 0, maximum: 2147483647}
+        max_realtime_sessions: {type: integer, minimum: 0, maximum: 2147483647}
+        max_publishes_per_hour: {type: integer, minimum: 0, maximum: 2147483647}
+        max_ip_claims: {type: integer, minimum: 0, maximum: 2147483647}
+    SessionRow:
+      type: object
+      required: [id, current, created_at, last_seen_at, auth_method, ip, user_agent]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        current: {type: boolean}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_seen_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        auth_method:
+          type: string
+          maxLength: 8
+          enum: [password, otp, passkey]
+        ip: {type: string, maxLength: 64, pattern: *text}
+        user_agent: {type: string, maxLength: 1024, pattern: *text}
+    SessionList:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          maxItems: 1000
+          items: {$ref: "#/components/schemas/SessionRow"}
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [new_password]
+      properties:
+        new_password: {type: string, maxLength: 2048, pattern: *prose, x-ctrlz-rowref: false}
+        totp_code: {type: string, maxLength: 64, pattern: *pasted, x-ctrlz-rowref: false}
+    PhoneChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [new_phone]
+      properties:
+        new_phone: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent, x-ctrlz-rowref: false}
+        locale: {type: string, maxLength: 2, enum: [fa, en]}
+    PhoneChange:
+      type: object
+      required: [request_id, old_challenge_id, new_challenge_id, expires_in_s, resend_after_s]
+      properties:
+        request_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        old_challenge_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        new_challenge_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        expires_in_s: {type: integer, minimum: 0, maximum: 86400}
+        resend_after_s: {type: integer, minimum: 0, maximum: 86400}
+    PhoneConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [old_code, new_code]
+      properties:
+        old_code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent, x-ctrlz-rowref: false}
+        new_code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent, x-ctrlz-rowref: false}
+    TotpSetup:
+      type: object
+      required: [secret, otpauth_uri]
+      properties:
+        secret: {type: string, maxLength: 128, pattern: *base32}
+        otpauth_uri: {type: string, maxLength: 512, pattern: *text}
+    TotpConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [code, saved]
+      properties:
+        code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent, x-ctrlz-rowref: false}
+        saved: {type: boolean}
+    TotpEnabled:
+      type: object
+      required: [recovery_codes, ended_sessions]
+      properties:
+        recovery_codes:
+          type: array
+          maxItems: 16
+          items: {type: string, maxLength: 32, pattern: *text}
+        ended_sessions: {type: integer, minimum: 0, maximum: 2147483647}
+    RecoveryCodes:
+      type: object
+      required: [recovery_codes]
+      properties:
+        recovery_codes:
+          type: array
+          maxItems: 16
+          items: {type: string, maxLength: 32, pattern: *text}
+    SessionsEnded:
+      type: object
+      required: [ended_sessions]
+      properties:
+        ended_sessions: {type: integer, minimum: 0, maximum: 2147483647}
+    PasskeyRow:
+      type: object
+      required: [id, name, created_at, stale, backup_eligible]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        name: {type: string, minLength: 1, maxLength: 64, pattern: *text}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_used_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        stale: {type: boolean}
+        backup_eligible: {type: boolean}
+    PasskeyList:
+      type: object
+      required: [passkeys]
+      properties:
+        passkeys:
+          type: array
+          maxItems: 64
+          items: {$ref: "#/components/schemas/PasskeyRow"}
+    PasskeyAdded:
+      type: object
+      required: [passkey, ended_sessions]
+      properties:
+        passkey: {$ref: "#/components/schemas/PasskeyRow"}
+        ended_sessions: {type: integer, minimum: 0, maximum: 2147483647}
+    RenamePasskeyRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64, pattern: *prosecontent, x-ctrlz-rowref: false}
+    EnforcementRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled]
+      properties:
+        enabled: {type: boolean}
+    Notification:
+      type: object
+      required: [id, kind, severity, params, created_at]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        kind: {type: string, maxLength: 64, pattern: *word}
+        severity:
+          type: string
+          maxLength: 8
+          enum: [info, warning, critical]
+        params: {$ref: "#/components/schemas/NotificationParams"}
+        link: {type: string, maxLength: 512, pattern: *text}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        read_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    NotificationParams:
+      type: object
+      description: The values a notification's text is built from. Scalars only, so the client never renders a structure the server did not bound.
+      maxProperties: 16
+      patternProperties:
+        '^[A-Za-z][A-Za-z0-9_.-]{0,63}$': {type: [string, integer, boolean], minimum: -2147483648, maximum: 2147483647, maxLength: 256, pattern: *text}
+      additionalProperties: false
+      x-go-type: map[string]interface{}
+    NotificationPage:
+      type: object
+      required: [items, unread_count]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/Notification"}
+        next_cursor: {type: string, maxLength: 128, pattern: *b64url}
+        unread_count: {type: integer, minimum: 0, maximum: 2147483647}
+    Announcement:
+      type: object
+      required: [id, body, starts_at, read]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        body: {type: string, maxLength: 4096, pattern: *prose}
+        starts_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        ends_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        read: {type: boolean}
+    AnnouncementPage:
+      type: object
+      required: [items, unread_count]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/Announcement"}
+        next_cursor: {type: string, maxLength: 128, pattern: *b64url}
+        unread_count: {type: integer, minimum: 0, maximum: 2147483647}
+security:
+  - session: []
+  - apiToken: []

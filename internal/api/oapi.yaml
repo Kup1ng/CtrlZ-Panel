@@ -1,0 +1,10 @@
+# oapi-codegen config for the tenant API (spec 2.2). Regenerate with
+# `go generate ./internal/api`; scripts/ci.sh fails when the output is stale.
+package: gen
+generate:
+  chi-server: true
+  strict-server: true
+  models: true
+output-options:
+  # /healthz and /readyz live at the server root, outside the /api pipeline.
+  exclude-tags: [health]
