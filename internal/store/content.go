@@ -501,6 +501,32 @@ func (t Tx) FolderInheriting(profile, folder uuid.UUID) (int, error) {
 	return n, sanitize(err)
 }
 
+// qFolderInheritingKeys is one page of the keys of a folder's inheriting rules in key order. The unique index
+// (tenant_id, profile_id, rule_key) gives the order, and the filter on the folder is applied to its rows, so no
+// page costs memory beyond its own keys however large the profile is.
+const qFolderInheritingKeys = `SELECT rule_key FROM ctrlz.rules WHERE tenant_id = $1 AND profile_id = $2 AND folder_id = $3
+  AND action = 'inherit' AND rule_key > $4 ORDER BY rule_key LIMIT $5`
+
+// FolderInheritingKeys returns at most limit keys of the rules that inherit the folder's action, in key order,
+// starting after the key `after` ("" for the first page). The D42 check of a Folder Rule walks them page by page
+// instead of reading the profile: an ordinary route must never hold more than a page of rules (6.5 (d)).
+func (t Tx) FolderInheritingKeys(profile, folder uuid.UUID, after string, limit int) ([]string, error) {
+	rows, err := t.tx.Query(t.ctx, qFolderInheritingKeys, t.tenant, profile, folder, after, int32(limit))
+	if err != nil {
+		return nil, sanitize(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, sanitize(err)
+		}
+		out = append(out, k)
+	}
+	return out, sanitize(rows.Err())
+}
+
 // ---------------------------------------------------------------------------
 // Services.
 
