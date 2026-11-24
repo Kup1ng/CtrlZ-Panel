@@ -98,6 +98,10 @@ type loadResult struct {
 	timeoutAt                            []time.Duration // offsets from the start of the window
 }
 
+// loadKey is the one key client w of runLoad writes. It is a name the test needs outside runLoad: the watcher of
+// the deletions must tell the load's own keys from the keys the test planted (see the watcher below).
+func loadKey(w int) string { return fmt.Sprintf("ctrlz:rl:api:otp-send:load-%d", w) }
+
 // runLoad drives EVALSHA of take.lua at `rate` calls per second in all, spread over the clients, for `window`,
 // OPEN LOOP: each client has a slot every 1/(rate/clients) seconds whether or not its last call came back, a
 // call that is not back within the limiter's own 250 ms (ratelimit.Config.Timeout) is a timeout, and a slot
@@ -116,7 +120,7 @@ func runLoad(clients []valkey.Client, sha string, rate int, window time.Duration
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			key := fmt.Sprintf("ctrlz:rl:api:otp-send:load-%d", w)
+			key := loadKey(w)
 			var timeouts, missed, busy, other int
 			var firstOther string
 			var lats, tAt []time.Duration
@@ -335,6 +339,17 @@ func TestValkeySweepKeepsLimiterCallsOnTime(t *testing.T) {
 	// The keys over the budget and the foreign key are watched from here on, beside the load and not only after it: on a
 	// host where a pass takes seconds they are gone long before the window ends, and the passes are counted against the
 	// moment they went. DBSIZE and EXISTS are constant time, so the watcher costs the load nothing worth measuring.
+	//
+	// The load's own keys are not counted. The sweep trims a zone that is over its budget by the keys its scan
+	// reaches last, and the load is a service that keeps writing: a load key the scan reaches last is deleted and
+	// the next call writes it again, so the whole keyspace sits one key over the budget between two passes for as
+	// long as the load runs, whichever way the scan fell. Counting it made this test pass or fail by where the hash
+	// table put eight names (run 45341257193: the keys were "gone" only when the window ended, 24 passes later).
+	// What the sweep must remove is the planted excess, so the planted keys are what is counted.
+	loadKeys := make([]string, clients)
+	for w := range loadKeys {
+		loadKeys[w] = loadKey(w)
+	}
 	type goneResult struct {
 		at time.Time
 		ok bool
@@ -347,8 +362,11 @@ func TestValkeySweepKeepsLimiterCallsOnTime(t *testing.T) {
 			if err != nil {
 				return false
 			}
+			load, _ := admin.Do(ctx, admin.B().Exists().Key(loadKeys...).Build()).AsInt64()
 			ex, _ := admin.Do(ctx, admin.B().Exists().Key(foreign).Build()).AsInt64()
-			if n <= budget && ex == 0 {
+			// The three reads are not one snapshot, and need not be: before the sweep has run the planted keys are
+			// 2,000 over, far more than a load key that came or went between the reads.
+			if n-load <= budget && ex == 0 {
 				at = time.Now()
 				return true
 			}
