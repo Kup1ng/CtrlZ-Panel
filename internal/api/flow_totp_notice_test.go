@@ -60,6 +60,8 @@ func TestTheConfirmAfterADisableIsARegenerationOfTheCodes(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	A, B := f.env.A, f.env.B
 	f.env.Exec(t, `DELETE FROM ctrlz.sms_outbox`) // the seed's test row
+	f.dropSeedCodes(A.Tenant, A.User)
+	f.dropSeedCodes(B.Tenant, B.User)
 	f.env.Exec(t, `UPDATE ctrlz.users SET phone_verified_at = now() WHERE id = $1`, A.User)
 	f.env.Exec(t, `UPDATE ctrlz.users SET phone_verified_at = now() WHERE id = $1`, B.User)
 
@@ -175,6 +177,7 @@ func TestTheConfirmAfterADisableIsARegenerationOfTheCodes(t *testing.T) {
 func TestTheSourceOfWhatTheConfirmReplaces(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	A := f.env.A
+	f.dropSeedCodes(A.Tenant, A.User) // the fixture's code is not a set this account was issued
 	f.env.Exec(t, `UPDATE ctrlz.users SET phone_verified_at = now() WHERE id = $1`, A.User)
 	a := f.client()
 	a.mustLogin(A.Phone, pwA)
@@ -243,4 +246,12 @@ func TestTheSourceOfWhatTheConfirmReplaces(t *testing.T) {
 	declareLost()
 	a.enrolTOTP(A.Tenant, pwA)
 	want("nothing left of an earlier set", 0)
+}
+
+// dropSeedCodes removes the recovery code the fixture gives every account. Production never has a code for an account
+// that has not enrolled an authenticator, and the confirm now reads those rows as "had codes before" (review
+// totp-r1-1), so a test of a first enrolment starts from the state a first enrolment really has.
+func (f *frig) dropSeedCodes(tenant, user uuid.UUID) {
+	f.t.Helper()
+	f.env.Exec(f.t, `DELETE FROM ctrlz.recovery_codes WHERE tenant_id = $1 AND user_id = $2`, tenant, user)
 }
