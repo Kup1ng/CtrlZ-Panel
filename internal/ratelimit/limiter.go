@@ -91,6 +91,10 @@ type Subject struct {
 	// Tenant is the tenant id of a live session, for the class that counts a whole tenant (bulk-write-tenant). It is read
 	// from the resolved principal, never from the request.
 	Tenant string
+	// Link is the id of the row a share link or a download link names, read from a value whose tag checked (internal/auth/bearer).
+	// The public-link class counts on it and on nothing else: not on the network, which a stranger with dead values could
+	// fill for every honest holder behind the same carrier address (P3 7.1).
+	Link string
 	// TokenSession is the id of the session a cookie opens, read from the body its tag covers
 	// (session.Manager.Screen). The session-miss class counts on it and on nothing else: not on the account,
 	// or the dead cookies of one session would refuse every other session of it (round 8, tenant-r8-3).
@@ -172,6 +176,10 @@ func (l *Limiter) slots(c Class, s Subject) []slot {
 		add("n", s.Network, 1)
 		if s.Wide != "" {
 			add("w", s.Wide, WideFactor)
+		}
+	case ByLink:
+		if s.Link != "" {
+			add("l", s.Link, 1)
 		}
 	case BySession:
 		if s.Session != "" {

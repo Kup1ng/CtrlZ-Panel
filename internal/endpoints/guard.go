@@ -12,8 +12,10 @@ import (
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/appclock"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/audit"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/bearer"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/keyring"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/locations"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/mobileconfig"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
 )
@@ -27,6 +29,10 @@ type Env struct {
 	Clock   func() time.Time
 	Keys    *keyring.Ring
 	Catalog locations.LocationCatalog
+	// Bearer makes the share and download link values (spec 6.2, 7). Nil refuses the routes that make one.
+	Bearer *bearer.Signer
+	// Trust says how devices trust the nodes' certificates, for the Apple profile (7.3); nil is the public setup.
+	Trust mobileconfig.Trust
 }
 
 func (e *Env) now() time.Time {

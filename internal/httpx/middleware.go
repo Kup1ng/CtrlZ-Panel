@@ -28,6 +28,7 @@ const (
 	keyReqHeader
 	keyDeferred
 	keyHeld
+	keyLinkDead
 )
 
 // DefaultBodyLimit is the request body limit of spec 2.3 step 4. Only the
@@ -541,4 +542,22 @@ func (h Health) Handler() http.Handler {
 		return http.NotFoundHandler()
 	}
 	return loopbackOnly(h.h)
+}
+
+// MarkLinkDead tells the pipeline that the share or download link value of the request names no live row (no row, or a tenant
+// that is not active): from now on the value is refused at the door, with no lookup, until the set forgets it (P3 7.1). It
+// does nothing for a request that carries no such value. A value that is merely used up, revoked or past its expiry is dead
+// as well, but only a lookup that found no row at all is reported here: the others cost one lookup each and are bounded by the
+// row's own public-link budget.
+func MarkLinkDead(ctx context.Context) {
+	if m, ok := ctx.Value(keyLinkDead).(*linkDeadMark); ok {
+		m.set.add(m.key)
+	}
+}
+
+// linkDeadMark is what the pipeline keeps in the context for a route that carries a link value: the set to mark and the key to mark
+// it under. A value and not a function, so no code of the pipeline runs in a goroutine of the handler's choosing.
+type linkDeadMark struct {
+	set *deadSet
+	key string
 }

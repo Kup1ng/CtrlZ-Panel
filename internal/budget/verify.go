@@ -61,6 +61,11 @@ func Verifies() []Verify {
 		// ticket (auth_tickets.attempts), and the passkey finish of a reset by reset_passkey_user. The behavioural test of the rows
 		// (internal/api TestEveryBoundScopeIsChargedByItsRoute) drives the TOTP case and fails if the scope is another.
 		{Service: Tenant, Op: "resetComplete", Bound: BoundScope, Scope: "totp_sms"},
+		// The three bearer values of P3 7.1: 160 random bits under a tag the pipeline checks in process, charged to the row they
+		// name before any lookup.
+		{Service: Tenant, Op: "openShare", Bound: BoundEntropy, Why: "a 160-bit random share link value under a tag the api checks in process"},
+		{Service: Tenant, Op: "createShareAppleProfile", Bound: BoundEntropy, Why: "a 160-bit random share link value under a tag the api checks in process"},
+		{Service: Tenant, Op: "downloadAppleProfile", Bound: BoundEntropy, Why: "a 160-bit random download link value under a tag the api checks in process"},
 		// ---- tenant, signed in, that check a secret ----
 		{Service: Tenant, Op: "reauth", Bound: BoundScope, Scope: "reauth_session"},
 		{Service: Tenant, Op: "reauthPasskeyFinish", Bound: BoundScope, Scope: "reauth_passkey_session"},

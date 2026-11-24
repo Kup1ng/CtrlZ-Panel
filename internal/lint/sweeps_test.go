@@ -97,6 +97,7 @@ var sweepNotASweep = map[string]string{
 	"qSMSLimitsSet":                     sweepSingle,
 	"qServiceDelete":                    "keyed by its whole primary key (tenant, profile, service_slug): one row, named by the statement's own parameters",
 	"qClientsDelete":                    sweepEndpointRows,
+	"qShareLinkDownloadsDelete":         sweepEndpointRows,
 	"qWindowsDelete":                    sweepEndpointRows,
 	"qEndpointsSetGroup":                sweepEndpointRows,
 	"qEndpointsDelete":                  sweepEndpointRows,

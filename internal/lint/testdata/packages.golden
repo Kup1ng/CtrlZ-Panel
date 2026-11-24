@@ -15,6 +15,7 @@ internal/app
 internal/appclock
 internal/auth/adminnotice
 internal/auth/audit
+internal/auth/bearer
 internal/auth/credstate
 internal/auth/digits
 internal/auth/invite

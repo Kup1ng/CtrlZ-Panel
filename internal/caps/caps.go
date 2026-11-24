@@ -193,6 +193,14 @@ func Entries() []Entry {
 		{Name: "max_authorized_ips", Kind: Cap, Entitlements: []string{"max_authorized_ips"}, Wins: []string{"Tx.AuthorizedInsert"}},
 		{Name: "ddns_host.create", Kind: Cap, Consts: []string{"MaxDDNSHostsPerEndpoint"}, Wins: []string{"Tx.DDNSHostInsert"}},
 		{Name: "authorized_ip.last", Kind: Ending, Wins: []string{"Tx.AuthorizedDelete"}},
+
+		// P3, the links without a session (docs/specs/p3-endpoints.md 3.5, 7.1). The caps count live rows only and are decided by the statement
+		// that adds the row, under the Endpoint's row (share links) or the tenant quota lock (download links); a use is spent by one
+		// statement that also holds the limit, the expiry and the revocation, so two requests cannot both have the last one.
+		{Name: "share_link.create", Kind: Cap, Consts: []string{"MaxShareLinksPerEndpoint"}, Wins: []string{"Tx.ShareLinkInsert"}},
+		{Name: "download_link.create", Kind: Cap, Consts: []string{"MaxDownloadLinksPerTenant"}, Wins: []string{"Tx.DownloadLinkInsert"}},
+		{Name: "share_link.use", Kind: SingleUse, Wins: []string{"Tx.ShareLinkConsume"}},
+		{Name: "download_link.use", Kind: SingleUse, Wins: []string{"Tx.DownloadLinkConsume"}},
 	}
 }
 
@@ -200,6 +208,7 @@ func Entries() []Entry {
 func Bounds() []Bound {
 	return []Bound{
 		{"maxLimit", "page size of a list route; reads only"},
+		{"maxProofMembers", "how many top-level members of one request body the proof reader looks at: in process, one request, nothing shared that racing actors could spend"},
 		{"MaxOTPUnitsFA", "length of one OTP template body in billed units, checked on the value in hand (sms.CheckBodyLength)"},
 		{"MaxOTPUnitsEN", "length of one OTP template body in billed units, checked on the value in hand (sms.CheckBodyLength)"},
 		{"maxInviteHours", "range of one request field"},
@@ -246,6 +255,7 @@ func Bounds() []Bound {
 		{"MaxLockPasswords", "lock passwords in one request (D31): the items of one request, checked before any charge"},
 		{"MaxPrefixesPerAdd", "prefixes in one authorized-IP add (D31): the items of one request, checked on the value in hand; max_authorized_ips is the cap"},
 		{"MaxHostnameBytes", "longest DDNS hostname DNS allows, checked on the one value in hand; a format limit, nothing shared that racing actors could spend"},
+		{"MaxShareHours", "range of one request field (ttl_hours of a share link, 1 to 168): checked on the value in hand; nothing is shared between requests that racing actors could spend (the live links of an Endpoint are capped by MaxShareLinksPerEndpoint)"},
 		{"MaxClientsPerSelector", "clients one selector write resolves (spec 9.3): the write applies to the rows it locked and says whether more remain, so the caller repeats; a size of one request, not an amount racing actors spend"},
 	}
 }

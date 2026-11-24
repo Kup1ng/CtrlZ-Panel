@@ -41,6 +41,12 @@ const (
 	LifeCeremony = 5 * time.Minute
 	// LifeRefresh is the life of one refresh token (3.3). The proof tag inside it lives as long.
 	LifeRefresh = 30 * 24 * time.Hour
+	// LifeAPIToken is the life of an API token (P3 6.2, D31): 365 days, renewal is a new token.
+	LifeAPIToken = 365 * 24 * time.Hour
+	// LifeShareLink is the longest life of a share link (P3 7.2): ttl_hours is at most 168.
+	LifeShareLink = 7 * 24 * time.Hour
+	// LifeDownloadLink is the life of an Apple profile download link (P3 7.3, D31).
+	LifeDownloadLink = 15 * time.Minute
 )
 
 // throttleRemoved is what removing the old line of a key costs a throttle row, and it is nothing: Ring.MAC always
@@ -74,11 +80,17 @@ func Uses() []Use {
 			"the text cannot be opened, so the code is not sent and the user asks again"},
 		{DomainAuthMAC, LabelDevice, "known-device markers", LifeDevice,
 			"the browser counts as a new device until the user signs in once more"},
+		{DomainAuthMAC, LabelAPIToken, "API token tags", LifeAPIToken,
+			"every API token answers token_invalid and its owner makes a new one"},
 		{DomainAuthMAC, LabelSession, "session tags", LifeUserSession,
 			"the session ends and its user signs in again"},
 		{DomainAuthMAC, LabelProof, "ticket, OTP challenge and refresh token tags", LifeRefresh,
 			"a login or reset step in progress starts again, and a Remember me browser signs in again"},
+		{DomainAuthMAC, LabelSetupShare, "share link tags", LifeShareLink,
+			"every share link answers not found and its owner makes a new one"},
 		{DomainAuthMAC, LabelThrottle, "throttle rows", LifeThrottle, throttleRemoved},
+		{DomainAuthMAC, LabelProfileDownload, "Apple profile download link tags", LifeDownloadLink,
+			"a download link in use answers not found and the person asks for the profile again"},
 		{DomainAuthMAC, LabelOTP, "OTP code hashes", LifeOTP,
 			"a live code no longer matches"},
 		{DomainAuthMAC, LabelCeremony, "passkey login tickets", LifeCeremony,
@@ -135,7 +147,8 @@ func LifeText(d time.Duration) string {
 // LabelNames lists the labels the Label constants define, for the test that keeps
 // Uses complete. The labels are code, not data.
 func LabelNames() []string {
-	return []string{LabelOTP, LabelThrottle, LabelDevice, LabelAdminDevice, LabelSession, LabelCeremony, LabelProof}
+	return []string{LabelOTP, LabelThrottle, LabelDevice, LabelAdminDevice, LabelSession, LabelCeremony, LabelProof,
+		LabelAPIToken, LabelSetupShare, LabelProfileDownload}
 }
 
 // Primitive is the one primitive a label's subkey may key.
@@ -158,7 +171,7 @@ const (
 // TestEveryLabelHasOnePrimitive keeps the two lists in step.
 func PrimitiveOf(label string) (Primitive, bool) {
 	switch label {
-	case LabelOTP, LabelThrottle, LabelSession, LabelCeremony, LabelProof:
+	case LabelOTP, LabelThrottle, LabelSession, LabelCeremony, LabelProof, LabelAPIToken, LabelSetupShare, LabelProfileDownload:
 		return MACOnly, true
 	case LabelDevice, LabelAdminDevice:
 		return SealOnly, true

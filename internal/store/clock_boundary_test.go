@@ -513,41 +513,69 @@ func windowCases() []windowCase {
 			e.nearDB("tenant_audit_log.at", e.at("tenant_audit_log", "at", "action = 'clock.test' AND tenant_id = $1", f.A.Tenant), 0)
 		}},
 
-		// The expiry of an API token and of the two kinds of link is written by Go from the application clock
-		// and SQL compares it only with a parameter that is the application time (P3 2.2 item 12, 7.1). The Go
-		// writers arrive with the token and link routes, whose own cases replace this one; until then the row is
-		// written here with an application time and read back, and the comparison the consume statement of 7.1
-		// makes is run with a parameter one second either side of it. A database now() would be three hours off.
-		{[]string{"api_tokens.expires_at", "profile_download_tokens.expires_at", "setup_share_tokens.expires_at"}, func(e *windowEnv) {
+		// The expiry of the two kinds of link is written by Go from the application clock and decided by the consume statements of
+		// P3 7.1 against an application time passed as a parameter. Here it goes through the writers of the store and back through
+		// the consume, one second either side of the expiry; a database now() would be three hours off.
+		{[]string{"profile_download_tokens.expires_at", "setup_share_tokens.expires_at"}, func(e *windowEnv) {
+			f, s := e.f, e.f.db.Store(e.f.ctx, e.t, store.RoleTenant)
+			until := e.app(time.Hour)
+			shareID, downID := uuid.New(), uuid.New()
+			f.inTenant(e.t, s, f.A.Tenant, func(tx store.Tx) {
+				if _, err := tx.EndpointsLock([]uuid.UUID{f.A.Endpoint}); err != nil {
+					e.t.Fatal(err)
+				}
+				if w, err := tx.ShareLinkInsert(store.ShareLinkNew{ID: shareID, Endpoint: f.A.Endpoint, Hash: []byte("clock-share"), Expires: until, Now: e.app(0)}); err != nil || !w.Yes() {
+					e.t.Fatalf("share link insert: %v", err)
+				}
+				if err := tx.DownloadLinkInsertVia(store.DownloadLinkNew{ID: downID, Endpoint: f.A.Endpoint, Params: []byte(`{}`), ParamsHash: []byte{1},
+					Hash: []byte("clock-down"), Expires: until, Via: shareID}); err != nil {
+					e.t.Fatal(err)
+				}
+			})
+			e.sameInstant("setup_share_tokens.expires_at", e.at("setup_share_tokens", "expires_at", "id = $1", shareID), until)
+			e.sameInstant("profile_download_tokens.expires_at", e.at("profile_download_tokens", "expires_at", "id = $1", downID), until)
+			for d, live := range map[time.Duration]bool{time.Hour - time.Second: true, time.Hour + time.Second: false} {
+				var shareWon, downWon bool
+				f.inTenant(e.t, s, f.A.Tenant, func(tx store.Tx) {
+					if _, err := tx.EndpointsLock([]uuid.UUID{f.A.Endpoint}); err != nil {
+						e.t.Fatal(err)
+					}
+					_, w, err := tx.ShareLinkConsume(shareID, f.A.Endpoint, e.app(d))
+					if err != nil {
+						e.t.Fatal(err)
+					}
+					shareWon = w.Yes()
+					_, w2, err := tx.DownloadLinkConsume(downID, f.A.Endpoint, e.app(d))
+					if err != nil {
+						e.t.Fatal(err)
+					}
+					downWon = w2.Yes()
+				})
+				if shareWon != live || downWon != live {
+					e.t.Errorf("a use at %v: share %v, download %v, want %v", d, shareWon, downWon, live)
+				}
+			}
+		}},
+
+		// The expiry of an API token is written by Go from the application clock too (P3 2.2 item 12, 6.2). The token writer arrives
+		// with the token routes, whose own case replaces this one; until then the row is written here with an application time and
+		// read back, and the comparison of 6.3 is run with a parameter one second either side of it.
+		{[]string{"api_tokens.expires_at"}, func(e *windowEnv) {
 			f := e.f
 			until := e.app(time.Hour)
-			var share, token uuid.UUID
-			if err := e.super.QueryRow(f.ctx, `INSERT INTO ctrlz.setup_share_tokens (tenant_id, endpoint_id, token_hash, expires_at)
-				VALUES ($1, $2, '\x7a01'::bytea, $3) RETURNING id`, f.A.Tenant, f.A.Endpoint, until).Scan(&share); err != nil {
-				e.t.Fatal(err)
-			}
-			if _, err := e.super.Exec(f.ctx, `INSERT INTO ctrlz.profile_download_tokens (tenant_id, endpoint_id, params, params_hash, token_hash, expires_at, via_share_id)
-				VALUES ($1, $2, '{}'::jsonb, '\x01'::bytea, '\x7a02'::bytea, $3, $4)`, f.A.Tenant, f.A.Endpoint, until, share); err != nil {
-				e.t.Fatal(err)
-			}
+			var token uuid.UUID
 			if err := e.super.QueryRow(f.ctx, `INSERT INTO ctrlz.api_tokens (tenant_id, user_id, name, kind, token_hash, token_prefix, expires_at)
 				VALUES ($1, $2, 'clock', 'read', '\x7a03'::bytea, 'czt_c', $3) RETURNING id`, f.A.Tenant, f.A.User, until).Scan(&token); err != nil {
 				e.t.Fatal(err)
 			}
-			for _, c := range []struct{ table, where string }{
-				{"setup_share_tokens", "token_hash = '\\x7a01'::bytea"},
-				{"profile_download_tokens", "token_hash = '\\x7a02'::bytea"},
-				{"api_tokens", "token_hash = '\\x7a03'::bytea"},
-			} {
-				e.sameInstant(c.table+".expires_at", e.at(c.table, "expires_at", c.where), until)
-				for d, live := range map[time.Duration]bool{time.Hour - time.Second: true, time.Hour + time.Second: false} {
-					var n int
-					if err := e.super.QueryRow(f.ctx, "SELECT count(*) FROM ctrlz."+c.table+" WHERE "+c.where+" AND expires_at > $1", e.app(d)).Scan(&n); err != nil {
-						e.t.Fatal(err)
-					}
-					if (n == 1) != live {
-						e.t.Errorf("%s live at %v = %v, want %v", c.table, d, n == 1, live)
-					}
+			e.sameInstant("api_tokens.expires_at", e.at("api_tokens", "expires_at", "token_hash = '\\x7a03'::bytea"), until)
+			for d, live := range map[time.Duration]bool{time.Hour - time.Second: true, time.Hour + time.Second: false} {
+				var n int
+				if err := e.super.QueryRow(f.ctx, "SELECT count(*) FROM ctrlz.api_tokens WHERE id = $1 AND expires_at > $2", token, e.app(d)).Scan(&n); err != nil {
+					e.t.Fatal(err)
+				}
+				if (n == 1) != live {
+					e.t.Errorf("api_tokens live at %v = %v, want %v", d, n == 1, live)
 				}
 			}
 		}},

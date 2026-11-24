@@ -276,6 +276,8 @@ func (s *Sweeper) Slow(ctx context.Context) (SlowResult, error) {
 			r.Tenant.PhoneChanges += c.PhoneChanges
 			r.Tenant.Audit += c.Audit
 			r.Tenant.PendingTOTP += c.PendingTOTP
+			r.Tenant.ShareLinks += c.ShareLinks
+			r.Tenant.DownloadLinks += c.DownloadLinks
 		}
 		after = ids[len(ids)-1]
 		if len(ids) < s.page {
@@ -327,6 +329,10 @@ func (s *Sweeper) sweepTenant(ctx context.Context, tenant uuid.UUID) (store.Tena
 			c.Audit = total
 		case store.TenantSweepPendingTOTP:
 			c.PendingTOTP = total
+		case store.TenantSweepShareLinks:
+			c.ShareLinks = total
+		case store.TenantSweepDownloadLinks:
+			c.DownloadLinks = total
 		}
 	}
 	return c, errors.Join(errs...)

@@ -44,6 +44,7 @@ func tenantEvents() []audit.TenantEvent {
 		audit.Register{Via: "invite"}, audit.TOTPLost{KeyNumber: 1, Users: 2},
 		audit.ProfileLock{ProfileID: id}, audit.ProfileUnlock{ProfileID: id}, audit.ProfileUnlockFailed{ProfileID: id},
 		audit.ProfileLockPasswordUsed{ProfileID: id, EndpointID: id}, audit.ProfileLockPasswordFailed{ProfileID: id, EndpointID: id},
+		audit.ShareLinkCreate{LinkID: id, EndpointID: id}, audit.ShareLinkRevoke{LinkID: id, EndpointID: id},
 	}
 }
 

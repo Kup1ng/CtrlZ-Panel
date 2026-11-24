@@ -963,6 +963,8 @@ func (g GlobalTx) AdminJobFinish(id uuid.UUID, state string, progress []byte) (W
 // TenantSweepCounts says what a tenant sweep did.
 type TenantSweepCounts struct {
 	Sessions, Refresh, PhoneChanges, Audit, PendingTOTP int
+	// ShareLinks and DownloadLinks are the link rows past their expiry or revoked (P3 7.1).
+	ShareLinks, DownloadLinks int
 }
 
 // TenantSweepStep names one statement of the per-tenant sweep. Like the global
@@ -979,12 +981,14 @@ const (
 	TenantSweepPhone
 	TenantSweepAudit
 	TenantSweepPendingTOTP
+	TenantSweepShareLinks
+	TenantSweepDownloadLinks
 )
 
 // TenantSweepSteps lists every tenant step. The pending TOTP secret goes first:
 // it is the one that holds key material, however small.
 func TenantSweepSteps() []TenantSweepStep {
-	return []TenantSweepStep{TenantSweepPendingTOTP, TenantSweepSessions, TenantSweepRefresh, TenantSweepPhone, TenantSweepAudit}
+	return []TenantSweepStep{TenantSweepPendingTOTP, TenantSweepSessions, TenantSweepRefresh, TenantSweepPhone, TenantSweepAudit, TenantSweepShareLinks, TenantSweepDownloadLinks}
 }
 
 // String is the step's short name, for a log line.
@@ -1000,6 +1004,10 @@ func (s TenantSweepStep) String() string {
 		return "audit"
 	case TenantSweepPendingTOTP:
 		return "pending_totp"
+	case TenantSweepShareLinks:
+		return "share_links"
+	case TenantSweepDownloadLinks:
+		return "download_links"
 	}
 	return "unknown"
 }
@@ -1065,6 +1073,10 @@ func (t Tx) SweepTenantBatch(step TenantSweepStep, limit int, now time.Time) (in
 		var cleared int32
 		err = sanitize(t.tx.QueryRow(t.ctx, qSweepPendingTOTP, int32(limit)).Scan(&cleared))
 		n = int64(cleared)
+	case TenantSweepShareLinks:
+		n, err = t.sweepLinks(true, limit, now)
+	case TenantSweepDownloadLinks:
+		n, err = t.sweepLinks(false, limit, now)
 	default:
 		return 0, errors.New("store: unknown tenant sweep step")
 	}

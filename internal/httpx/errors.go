@@ -70,6 +70,7 @@ const (
 	CodeIPUnavailable        = "ip_unavailable"
 	CodeIPSuspended          = "ip_suspended"
 	CodeNeedsAdminApproval   = "needs_admin_approval"
+	CodeSetupUnavailable     = "setup_unavailable"
 )
 
 // FieldError names one invalid field. The code is a stable machine value, never

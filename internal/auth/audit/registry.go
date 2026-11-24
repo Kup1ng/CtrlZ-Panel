@@ -20,6 +20,7 @@ func TenantEvents() []TenantEvent {
 		PasskeyAdd{}, PasskeyRename{}, PasskeyDelete{}, PasskeyEnforce{}, PasskeyReview{}, PasskeyCloneSuspect{},
 		Register{}, TOTPLost{},
 		ProfileLock{}, ProfileUnlock{}, ProfileUnlockFailed{}, ProfileLockPasswordUsed{}, ProfileLockPasswordFailed{},
+		ShareLinkCreate{}, ShareLinkRevoke{},
 	}
 }
 

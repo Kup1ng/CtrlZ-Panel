@@ -18,6 +18,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AppleProfileRequestProtocol.
+const (
+	AppleProfileRequestProtocolDoh AppleProfileRequestProtocol = "doh"
+	AppleProfileRequestProtocolDot AppleProfileRequestProtocol = "dot"
+)
+
+// Valid indicates whether the value is a known member of the AppleProfileRequestProtocol enum.
+func (e AppleProfileRequestProtocol) Valid() bool {
+	switch e {
+	case AppleProfileRequestProtocolDoh:
+		return true
+	case AppleProfileRequestProtocolDot:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuthorizedIPSource.
 const (
 	AuthorizedIPSourceDdns      AuthorizedIPSource = "ddns"
@@ -149,16 +167,16 @@ func (e CatalogServiceState) Valid() bool {
 
 // Defines values for ChallengeCommandsReason.
 const (
-	PairMissing ChallengeCommandsReason = "pair_missing"
-	ZoneMissing ChallengeCommandsReason = "zone_missing"
+	ChallengeCommandsReasonPairMissing ChallengeCommandsReason = "pair_missing"
+	ChallengeCommandsReasonZoneMissing ChallengeCommandsReason = "zone_missing"
 )
 
 // Valid indicates whether the value is a known member of the ChallengeCommandsReason enum.
 func (e ChallengeCommandsReason) Valid() bool {
 	switch e {
-	case PairMissing:
+	case ChallengeCommandsReasonPairMissing:
 		return true
-	case ZoneMissing:
+	case ChallengeCommandsReasonZoneMissing:
 		return true
 	default:
 		return false
@@ -167,28 +185,28 @@ func (e ChallengeCommandsReason) Valid() bool {
 
 // Defines values for ClaimChallengeObservedProtocol.
 const (
-	Doh  ClaimChallengeObservedProtocol = "doh"
-	Doh3 ClaimChallengeObservedProtocol = "doh3"
-	Doq  ClaimChallengeObservedProtocol = "doq"
-	Dot  ClaimChallengeObservedProtocol = "dot"
-	Tcp  ClaimChallengeObservedProtocol = "tcp"
-	Udp  ClaimChallengeObservedProtocol = "udp"
+	ClaimChallengeObservedProtocolDoh  ClaimChallengeObservedProtocol = "doh"
+	ClaimChallengeObservedProtocolDoh3 ClaimChallengeObservedProtocol = "doh3"
+	ClaimChallengeObservedProtocolDoq  ClaimChallengeObservedProtocol = "doq"
+	ClaimChallengeObservedProtocolDot  ClaimChallengeObservedProtocol = "dot"
+	ClaimChallengeObservedProtocolTcp  ClaimChallengeObservedProtocol = "tcp"
+	ClaimChallengeObservedProtocolUdp  ClaimChallengeObservedProtocol = "udp"
 )
 
 // Valid indicates whether the value is a known member of the ClaimChallengeObservedProtocol enum.
 func (e ClaimChallengeObservedProtocol) Valid() bool {
 	switch e {
-	case Doh:
+	case ClaimChallengeObservedProtocolDoh:
 		return true
-	case Doh3:
+	case ClaimChallengeObservedProtocolDoh3:
 		return true
-	case Doq:
+	case ClaimChallengeObservedProtocolDoq:
 		return true
-	case Dot:
+	case ClaimChallengeObservedProtocolDot:
 		return true
-	case Tcp:
+	case ClaimChallengeObservedProtocolTcp:
 		return true
-	case Udp:
+	case ClaimChallengeObservedProtocolUdp:
 		return true
 	default:
 		return false
@@ -1581,6 +1599,51 @@ func (e ResetVerifiedSecondFactor) Valid() bool {
 	}
 }
 
+// Defines values for ResolverViewProtocols.
+const (
+	ResolverViewProtocolsDoh   ResolverViewProtocols = "doh"
+	ResolverViewProtocolsDoh3  ResolverViewProtocols = "doh3"
+	ResolverViewProtocolsDoq   ResolverViewProtocols = "doq"
+	ResolverViewProtocolsDot   ResolverViewProtocols = "dot"
+	ResolverViewProtocolsPlain ResolverViewProtocols = "plain"
+)
+
+// Valid indicates whether the value is a known member of the ResolverViewProtocols enum.
+func (e ResolverViewProtocols) Valid() bool {
+	switch e {
+	case ResolverViewProtocolsDoh:
+		return true
+	case ResolverViewProtocolsDoh3:
+		return true
+	case ResolverViewProtocolsDoq:
+		return true
+	case ResolverViewProtocolsDot:
+		return true
+	case ResolverViewProtocolsPlain:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResolverViewReason.
+const (
+	ResolverViewReasonPairMissing ResolverViewReason = "pair_missing"
+	ResolverViewReasonZoneMissing ResolverViewReason = "zone_missing"
+)
+
+// Valid indicates whether the value is a known member of the ResolverViewReason enum.
+func (e ResolverViewReason) Valid() bool {
+	switch e {
+	case ResolverViewReasonPairMissing:
+		return true
+	case ResolverViewReasonZoneMissing:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RuleAction.
 const (
 	RuleActionBlock    RuleAction = "block"
@@ -2016,6 +2079,24 @@ func (e SessionRowAuthMethod) Valid() bool {
 	}
 }
 
+// Defines values for ShareAppleParamsProtocol.
+const (
+	ShareAppleParamsProtocolDoh ShareAppleParamsProtocol = "doh"
+	ShareAppleParamsProtocolDot ShareAppleParamsProtocol = "dot"
+)
+
+// Valid indicates whether the value is a known member of the ShareAppleParamsProtocol enum.
+func (e ShareAppleParamsProtocol) Valid() bool {
+	switch e {
+	case ShareAppleParamsProtocolDoh:
+		return true
+	case ShareAppleParamsProtocolDot:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TargetKind.
 const (
 	TargetKindAuto     TargetKind = "auto"
@@ -2170,6 +2251,26 @@ type AnnouncementPage struct {
 	NextCursor  *string        `json:"next_cursor,omitempty"`
 	UnreadCount int            `json:"unread_count"`
 }
+
+// AppleLink defines model for AppleLink.
+type AppleLink struct {
+	ExpiresAt time.Time `json:"expires_at"`
+	Url       string    `json:"url"`
+}
+
+// AppleProfileRequest defines model for AppleProfileRequest.
+type AppleProfileRequest struct {
+	Client              *string                     `json:"client,omitempty"`
+	ExcludeCommon       *bool                       `json:"exclude_common,omitempty"`
+	ExcludedDomains     *[]string                   `json:"excluded_domains,omitempty"`
+	ExcludedSsids       *[]string                   `json:"excluded_ssids,omitempty"`
+	FromFolderId        *openapi_types.UUID         `json:"from_folder_id,omitempty"`
+	ProhibitDisablement *bool                       `json:"prohibit_disablement,omitempty"`
+	Protocol            AppleProfileRequestProtocol `json:"protocol"`
+}
+
+// AppleProfileRequestProtocol defines model for AppleProfileRequest.Protocol.
+type AppleProfileRequestProtocol string
 
 // AuthorizedAdd defines model for AuthorizedAdd.
 type AuthorizedAdd struct {
@@ -2936,6 +3037,9 @@ type InviteLookupRequest struct {
 	Token string `json:"token"`
 }
 
+// IpAddress defines model for IpAddress.
+type IpAddress = string
+
 // Job defines model for Job.
 type Job struct {
 	Error     *Error              `json:"error,omitempty"`
@@ -2967,6 +3071,11 @@ type Limits struct {
 	MaxRulesPerProfile     int `json:"max_rules_per_profile"`
 	MaxRulesPerRequest     int `json:"max_rules_per_request"`
 	MaxWildcardsPerProfile int `json:"max_wildcards_per_profile"`
+}
+
+// LinkValue defines model for LinkValue.
+type LinkValue struct {
+	Link string `json:"link"`
 }
 
 // LocationKey defines model for LocationKey.
@@ -3424,6 +3533,12 @@ type ProfileUnlock struct {
 	Password string `json:"password"`
 }
 
+// ProtocolStamps defines model for ProtocolStamps.
+type ProtocolStamps struct {
+	AddressStamps []StampOfAddress `json:"address_stamps"`
+	HostnameStamp string           `json:"hostname_stamp"`
+}
+
 // PublicConfig defines model for PublicConfig.
 type PublicConfig struct {
 	PasskeyEnabled   bool                         `json:"passkey_enabled"`
@@ -3490,6 +3605,33 @@ type ResetVerifyRequest struct {
 	Code        string `json:"code"`
 	Phone       string `json:"phone"`
 }
+
+// ResolverView defines model for ResolverView.
+type ResolverView struct {
+	Bootstrap *[]IpAddress `json:"bootstrap,omitempty"`
+	Client    *string      `json:"client,omitempty"`
+	DohUrl    *string      `json:"doh_url,omitempty"`
+	Host      *string      `json:"host,omitempty"`
+	Legacy    *struct {
+		Dns1 IpAddress `json:"dns1"`
+		Dns2 IpAddress `json:"dns2"`
+	} `json:"legacy,omitempty"`
+	Protocols  []ResolverViewProtocols `json:"protocols"`
+	Ready      bool                    `json:"ready"`
+	Reason     *ResolverViewReason     `json:"reason,omitempty"`
+	ResolverId string                  `json:"resolver_id"`
+	Stamps     *struct {
+		Doh ProtocolStamps `json:"doh"`
+		Doq ProtocolStamps `json:"doq"`
+		Dot ProtocolStamps `json:"dot"`
+	} `json:"stamps,omitempty"`
+}
+
+// ResolverViewProtocols defines model for ResolverView.Protocols.
+type ResolverViewProtocols string
+
+// ResolverViewReason defines model for ResolverView.Reason.
+type ResolverViewReason string
 
 // Rule defines model for Rule.
 type Rule struct {
@@ -3752,6 +3894,69 @@ type SessionsEnded struct {
 	EndedSessions int `json:"ended_sessions"`
 }
 
+// ShareAppleParams defines model for ShareAppleParams.
+type ShareAppleParams struct {
+	Client              *string                  `json:"client,omitempty"`
+	ExcludeCommon       *bool                    `json:"exclude_common,omitempty"`
+	ExcludedDomains     *[]string                `json:"excluded_domains,omitempty"`
+	ExcludedSsids       *[]string                `json:"excluded_ssids,omitempty"`
+	ProhibitDisablement *bool                    `json:"prohibit_disablement,omitempty"`
+	Protocol            ShareAppleParamsProtocol `json:"protocol"`
+}
+
+// ShareAppleParamsProtocol defines model for ShareAppleParams.Protocol.
+type ShareAppleParamsProtocol string
+
+// ShareAppleRequest defines model for ShareAppleRequest.
+type ShareAppleRequest struct {
+	Link   string           `json:"link"`
+	Params ShareAppleParams `json:"params"`
+}
+
+// ShareLink defines model for ShareLink.
+type ShareLink struct {
+	Client    *string            `json:"client,omitempty"`
+	CreatedAt time.Time          `json:"created_at"`
+	ExpiresAt time.Time          `json:"expires_at"`
+	Id        openapi_types.UUID `json:"id"`
+	MaxUses   int                `json:"max_uses"`
+	Revoked   bool               `json:"revoked"`
+	Uses      int                `json:"uses"`
+}
+
+// ShareLinkCreate defines model for ShareLinkCreate.
+type ShareLinkCreate struct {
+	Client   *string `json:"client,omitempty"`
+	TtlHours *int    `json:"ttl_hours,omitempty"`
+}
+
+// ShareLinkCreated defines model for ShareLinkCreated.
+type ShareLinkCreated struct {
+	Link ShareLink `json:"link"`
+	Url  string    `json:"url"`
+}
+
+// ShareLinkList defines model for ShareLinkList.
+type ShareLinkList struct {
+	Links []ShareLink `json:"links"`
+}
+
+// ShareView defines model for ShareView.
+type ShareView struct {
+	Endpoint struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	} `json:"endpoint"`
+	ExpiresAt time.Time    `json:"expires_at"`
+	Resolvers ResolverView `json:"resolvers"`
+}
+
+// StampOfAddress defines model for StampOfAddress.
+type StampOfAddress struct {
+	Ip    IpAddress `json:"ip"`
+	Stamp string    `json:"stamp"`
+}
+
 // Target Where a Redirect goes. A request names a location by `location_id`; `location` is in responses only, read by
 // id, so a row whose location left the set can still be shown.
 type Target struct {
@@ -3814,6 +4019,9 @@ type ClaimId = openapi_types.UUID
 // ClientId defines model for ClientId.
 type ClientId = openapi_types.UUID
 
+// ClientLabel defines model for ClientLabel.
+type ClientLabel = string
+
 // Cursor defines model for Cursor.
 type Cursor = string
 
@@ -3846,6 +4054,9 @@ type RuleCursor = string
 
 // RuleId defines model for RuleId.
 type RuleId = openapi_types.UUID
+
+// ShareId defines model for ShareId.
+type ShareId = openapi_types.UUID
 
 // Slug defines model for Slug.
 type Slug = string
@@ -3950,6 +4161,21 @@ type ListClientsParams struct {
 	// Cursor Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetEndpointGeneratorParams defines parameters for GetEndpointGenerator.
+type GetEndpointGeneratorParams struct {
+	// Generator The id of a generator of the registry, such as `windows-doh`, `firefox-policy`, `chromium-policy`, `android-private-dns` or `address-list`.
+	Generator string `form:"generator" json:"generator"`
+
+	// Client A client label of the Endpoint (SC 3.1). Without it the view is the Endpoint's own.
+	Client *ClientLabel `form:"client,omitempty" json:"client,omitempty"`
+}
+
+// GetEndpointResolversParams defines parameters for GetEndpointResolvers.
+type GetEndpointResolversParams struct {
+	// Client A client label of the Endpoint (SC 3.1). Without it the view is the Endpoint's own.
+	Client *ClientLabel `form:"client,omitempty" json:"client,omitempty"`
 }
 
 // ListNotificationsParams defines parameters for ListNotifications.
@@ -4107,6 +4333,9 @@ type CreateEndpointsJSONRequestBody = EndpointCreate
 // PatchEndpointJSONRequestBody defines body for PatchEndpoint for application/json ContentType.
 type PatchEndpointJSONRequestBody = EndpointPatch
 
+// CreateAppleProfileJSONRequestBody defines body for CreateAppleProfile for application/json ContentType.
+type CreateAppleProfileJSONRequestBody = AppleProfileRequest
+
 // AddAuthorizedIpsJSONRequestBody defines body for AddAuthorizedIps for application/json ContentType.
 type AddAuthorizedIpsJSONRequestBody = AuthorizedAdd
 
@@ -4142,6 +4371,9 @@ type TakeIpClaimJSONRequestBody = ClaimTakeRequest
 
 // PutEndpointScheduleJSONRequestBody defines body for PutEndpointSchedule for application/json ContentType.
 type PutEndpointScheduleJSONRequestBody = SchedulePut
+
+// CreateShareLinkJSONRequestBody defines body for CreateShareLink for application/json ContentType.
+type CreateShareLinkJSONRequestBody = ShareLinkCreate
 
 // DeleteEndpointJSONRequestBody defines body for DeleteEndpoint for application/json ContentType.
 type DeleteEndpointJSONRequestBody = LockPasswordsBody
@@ -4205,6 +4437,12 @@ type DuplicateProfileJSONRequestBody = ProfileDuplicate
 
 // ImportProfileJSONRequestBody defines body for ImportProfile for application/json ContentType.
 type ImportProfileJSONRequestBody = DocumentUpload
+
+// OpenShareJSONRequestBody defines body for OpenShare for application/json ContentType.
+type OpenShareJSONRequestBody = LinkValue
+
+// CreateShareAppleProfileJSONRequestBody defines body for CreateShareAppleProfile for application/json ContentType.
+type CreateShareAppleProfileJSONRequestBody = ShareAppleRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -4370,6 +4608,9 @@ type ServerInterface interface {
 	// PatchEndpoint Change an Endpoint
 	// (PATCH /endpoints/{id})
 	PatchEndpoint(w http.ResponseWriter, r *http.Request, id Id)
+	// CreateAppleProfile Make a link to an Apple DNS profile
+	// (POST /endpoints/{id}/apple-profile)
+	CreateAppleProfile(w http.ResponseWriter, r *http.Request, id Id)
 	// ListAuthorizedIps The authorized addresses of an Endpoint, newest first
 	// (GET /endpoints/{id}/authorized-ips)
 	ListAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id, params ListAuthorizedIpsParams)
@@ -4403,6 +4644,9 @@ type ServerInterface interface {
 	// DeleteDdnsHost Delete a Dynamic DNS host and the addresses it learned
 	// (POST /endpoints/{id}/ddns-hosts/{hid}:delete)
 	DeleteDdnsHost(w http.ResponseWriter, r *http.Request, id Id, hid DdnsHostId)
+	// GetEndpointGenerator One generated setup text
+	// (GET /endpoints/{id}/generators)
+	GetEndpointGenerator(w http.ResponseWriter, r *http.Request, id Id, params GetEndpointGeneratorParams)
 	// ListIpClaims The Plain DNS addresses of an Endpoint
 	// (GET /endpoints/{id}/ip-claims)
 	ListIpClaims(w http.ResponseWriter, r *http.Request, id Id)
@@ -4418,12 +4662,24 @@ type ServerInterface interface {
 	// TakeIpClaim Prove a claim with the evidence the nodes saw
 	// (POST /endpoints/{id}/ip-claims/{claim_id}:take)
 	TakeIpClaim(w http.ResponseWriter, r *http.Request, id Id, claimId ClaimId)
+	// GetEndpointResolvers The values to set a device up with
+	// (GET /endpoints/{id}/resolvers)
+	GetEndpointResolvers(w http.ResponseWriter, r *http.Request, id Id, params GetEndpointResolversParams)
 	// GetEndpointSchedule The schedule of an Endpoint
 	// (GET /endpoints/{id}/schedule)
 	GetEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id)
 	// PutEndpointSchedule Replace the schedule of an Endpoint
 	// (PUT /endpoints/{id}/schedule)
 	PutEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id)
+	// ListShareLinks The share links of an Endpoint, newest first
+	// (GET /endpoints/{id}/share-links)
+	ListShareLinks(w http.ResponseWriter, r *http.Request, id Id)
+	// CreateShareLink Make a share link
+	// (POST /endpoints/{id}/share-links)
+	CreateShareLink(w http.ResponseWriter, r *http.Request, id Id)
+	// RevokeShareLink Revoke a share link
+	// (DELETE /endpoints/{id}/share-links/{sid})
+	RevokeShareLink(w http.ResponseWriter, r *http.Request, id Id, sid ShareId)
 	// DeleteEndpoint Delete an Endpoint
 	// (POST /endpoints/{id}:delete)
 	DeleteEndpoint(w http.ResponseWriter, r *http.Request, id Id)
@@ -4547,6 +4803,15 @@ type ServerInterface interface {
 	// ImportProfile Import a profile document
 	// (POST /profiles:import)
 	ImportProfile(w http.ResponseWriter, r *http.Request, params ImportProfileParams)
+	// DownloadAppleProfile Download an Apple DNS profile
+	// (GET /public/apple-profile/{link})
+	DownloadAppleProfile(w http.ResponseWriter, r *http.Request, link string)
+	// OpenShare Open a share link
+	// (POST /public/share)
+	OpenShare(w http.ResponseWriter, r *http.Request)
+	// CreateShareAppleProfile Make an Apple profile link through a share link
+	// (POST /public/share/apple-profile)
+	CreateShareAppleProfile(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -4877,6 +5142,12 @@ func (_ Unimplemented) PatchEndpoint(w http.ResponseWriter, r *http.Request, id 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// CreateAppleProfile Make a link to an Apple DNS profile
+// (POST /endpoints/{id}/apple-profile)
+func (_ Unimplemented) CreateAppleProfile(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListAuthorizedIps The authorized addresses of an Endpoint, newest first
 // (GET /endpoints/{id}/authorized-ips)
 func (_ Unimplemented) ListAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id, params ListAuthorizedIpsParams) {
@@ -4943,6 +5214,12 @@ func (_ Unimplemented) DeleteDdnsHost(w http.ResponseWriter, r *http.Request, id
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetEndpointGenerator One generated setup text
+// (GET /endpoints/{id}/generators)
+func (_ Unimplemented) GetEndpointGenerator(w http.ResponseWriter, r *http.Request, id Id, params GetEndpointGeneratorParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListIpClaims The Plain DNS addresses of an Endpoint
 // (GET /endpoints/{id}/ip-claims)
 func (_ Unimplemented) ListIpClaims(w http.ResponseWriter, r *http.Request, id Id) {
@@ -4973,6 +5250,12 @@ func (_ Unimplemented) TakeIpClaim(w http.ResponseWriter, r *http.Request, id Id
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetEndpointResolvers The values to set a device up with
+// (GET /endpoints/{id}/resolvers)
+func (_ Unimplemented) GetEndpointResolvers(w http.ResponseWriter, r *http.Request, id Id, params GetEndpointResolversParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetEndpointSchedule The schedule of an Endpoint
 // (GET /endpoints/{id}/schedule)
 func (_ Unimplemented) GetEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id) {
@@ -4982,6 +5265,24 @@ func (_ Unimplemented) GetEndpointSchedule(w http.ResponseWriter, r *http.Reques
 // PutEndpointSchedule Replace the schedule of an Endpoint
 // (PUT /endpoints/{id}/schedule)
 func (_ Unimplemented) PutEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListShareLinks The share links of an Endpoint, newest first
+// (GET /endpoints/{id}/share-links)
+func (_ Unimplemented) ListShareLinks(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateShareLink Make a share link
+// (POST /endpoints/{id}/share-links)
+func (_ Unimplemented) CreateShareLink(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RevokeShareLink Revoke a share link
+// (DELETE /endpoints/{id}/share-links/{sid})
+func (_ Unimplemented) RevokeShareLink(w http.ResponseWriter, r *http.Request, id Id, sid ShareId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5228,6 +5529,24 @@ func (_ Unimplemented) DuplicateProfile(w http.ResponseWriter, r *http.Request, 
 // ImportProfile Import a profile document
 // (POST /profiles:import)
 func (_ Unimplemented) ImportProfile(w http.ResponseWriter, r *http.Request, params ImportProfileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DownloadAppleProfile Download an Apple DNS profile
+// (GET /public/apple-profile/{link})
+func (_ Unimplemented) DownloadAppleProfile(w http.ResponseWriter, r *http.Request, link string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// OpenShare Open a share link
+// (POST /public/share)
+func (_ Unimplemented) OpenShare(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateShareAppleProfile Make an Apple profile link through a share link
+// (POST /public/share/apple-profile)
+func (_ Unimplemented) CreateShareAppleProfile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6388,6 +6707,32 @@ func (siw *ServerInterfaceWrapper) PatchEndpoint(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// CreateAppleProfile operation middleware
+func (siw *ServerInterfaceWrapper) CreateAppleProfile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAppleProfile(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListAuthorizedIps operation middleware
 func (siw *ServerInterfaceWrapper) ListAuthorizedIps(w http.ResponseWriter, r *http.Request) {
 
@@ -6811,6 +7156,61 @@ func (siw *ServerInterfaceWrapper) DeleteDdnsHost(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetEndpointGenerator operation middleware
+func (siw *ServerInterfaceWrapper) GetEndpointGenerator(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEndpointGeneratorParams
+
+	// ------------- Required query parameter "generator" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "generator", r.URL.Query(), &params.Generator, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "generator"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "generator", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "client" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "client", r.URL.Query(), &params.Client, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "client"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "client", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEndpointGenerator(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListIpClaims operation middleware
 func (siw *ServerInterfaceWrapper) ListIpClaims(w http.ResponseWriter, r *http.Request) {
 
@@ -6968,6 +7368,48 @@ func (siw *ServerInterfaceWrapper) TakeIpClaim(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetEndpointResolvers operation middleware
+func (siw *ServerInterfaceWrapper) GetEndpointResolvers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEndpointResolversParams
+
+	// ------------- Optional query parameter "client" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "client", r.URL.Query(), &params.Client, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "client"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "client", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEndpointResolvers(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetEndpointSchedule operation middleware
 func (siw *ServerInterfaceWrapper) GetEndpointSchedule(w http.ResponseWriter, r *http.Request) {
 
@@ -7011,6 +7453,93 @@ func (siw *ServerInterfaceWrapper) PutEndpointSchedule(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PutEndpointSchedule(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListShareLinks operation middleware
+func (siw *ServerInterfaceWrapper) ListShareLinks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListShareLinks(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateShareLink operation middleware
+func (siw *ServerInterfaceWrapper) CreateShareLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateShareLink(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeShareLink operation middleware
+func (siw *ServerInterfaceWrapper) RevokeShareLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sid" -------------
+	var sid ShareId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sid", chi.URLParam(r, "sid"), &sid, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sid", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeShareLink(w, r, id, sid)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8349,6 +8878,60 @@ func (siw *ServerInterfaceWrapper) ImportProfile(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// DownloadAppleProfile operation middleware
+func (siw *ServerInterfaceWrapper) DownloadAppleProfile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "link" -------------
+	var link string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "link", chi.URLParam(r, "link"), &link, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "link", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadAppleProfile(w, r, link)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// OpenShare operation middleware
+func (siw *ServerInterfaceWrapper) OpenShare(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.OpenShare(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateShareAppleProfile operation middleware
+func (siw *ServerInterfaceWrapper) CreateShareAppleProfile(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateShareAppleProfile(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -8800,6 +9383,33 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/endpoints/{id}/ip-claims/{claim_id}:release", wrapper.ReleaseIpClaim)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints/{id}/resolvers", wrapper.GetEndpointResolvers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints/{id}/generators", wrapper.GetEndpointGenerator)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/endpoints/{id}/share-links", wrapper.ListShareLinks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/share-links", wrapper.CreateShareLink)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/endpoints/{id}/share-links/{sid}", wrapper.RevokeShareLink)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/endpoints/{id}/apple-profile", wrapper.CreateAppleProfile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/public/share", wrapper.OpenShare)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/public/share/apple-profile", wrapper.CreateShareAppleProfile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/public/apple-profile/{link}", wrapper.DownloadAppleProfile)
 	})
 
 	return r
@@ -11169,6 +11779,50 @@ func (response PatchEndpointdefaultJSONResponse) VisitPatchEndpointResponse(w ht
 	return err
 }
 
+type CreateAppleProfileRequestObject struct {
+	Id   Id `json:"id"`
+	Body *CreateAppleProfileJSONRequestBody
+}
+
+type CreateAppleProfileResponseObject interface {
+	VisitCreateAppleProfileResponse(w http.ResponseWriter) error
+}
+
+type CreateAppleProfile201JSONResponse AppleLink
+
+func (response CreateAppleProfile201JSONResponse) VisitCreateAppleProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppleProfiledefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateAppleProfiledefaultJSONResponse) VisitCreateAppleProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListAuthorizedIpsRequestObject struct {
 	Id     Id `json:"id"`
 	Params ListAuthorizedIpsParams
@@ -11643,6 +12297,44 @@ func (response DeleteDdnsHostdefaultJSONResponse) VisitDeleteDdnsHostResponse(w 
 	return err
 }
 
+type GetEndpointGeneratorRequestObject struct {
+	Id     Id `json:"id"`
+	Params GetEndpointGeneratorParams
+}
+
+type GetEndpointGeneratorResponseObject interface {
+	VisitGetEndpointGeneratorResponse(w http.ResponseWriter) error
+}
+
+type GetEndpointGenerator200Response struct {
+}
+
+func (response GetEndpointGenerator200Response) VisitGetEndpointGeneratorResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type GetEndpointGeneratordefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response GetEndpointGeneratordefaultJSONResponse) VisitGetEndpointGeneratorResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListIpClaimsRequestObject struct {
 	Id Id `json:"id"`
 }
@@ -11858,6 +12550,50 @@ func (response TakeIpClaimdefaultJSONResponse) VisitTakeIpClaimResponse(w http.R
 	return err
 }
 
+type GetEndpointResolversRequestObject struct {
+	Id     Id `json:"id"`
+	Params GetEndpointResolversParams
+}
+
+type GetEndpointResolversResponseObject interface {
+	VisitGetEndpointResolversResponse(w http.ResponseWriter) error
+}
+
+type GetEndpointResolvers200JSONResponse ResolverView
+
+func (response GetEndpointResolvers200JSONResponse) VisitGetEndpointResolversResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEndpointResolversdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response GetEndpointResolversdefaultJSONResponse) VisitGetEndpointResolversResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetEndpointScheduleRequestObject struct {
 	Id Id `json:"id"`
 }
@@ -11931,6 +12667,131 @@ type PutEndpointScheduledefaultJSONResponse struct {
 }
 
 func (response PutEndpointScheduledefaultJSONResponse) VisitPutEndpointScheduleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListShareLinksRequestObject struct {
+	Id Id `json:"id"`
+}
+
+type ListShareLinksResponseObject interface {
+	VisitListShareLinksResponse(w http.ResponseWriter) error
+}
+
+type ListShareLinks200JSONResponse ShareLinkList
+
+func (response ListShareLinks200JSONResponse) VisitListShareLinksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListShareLinksdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListShareLinksdefaultJSONResponse) VisitListShareLinksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateShareLinkRequestObject struct {
+	Id   Id `json:"id"`
+	Body *CreateShareLinkJSONRequestBody
+}
+
+type CreateShareLinkResponseObject interface {
+	VisitCreateShareLinkResponse(w http.ResponseWriter) error
+}
+
+type CreateShareLink201JSONResponse ShareLinkCreated
+
+func (response CreateShareLink201JSONResponse) VisitCreateShareLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateShareLinkdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateShareLinkdefaultJSONResponse) VisitCreateShareLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeShareLinkRequestObject struct {
+	Id  Id      `json:"id"`
+	Sid ShareId `json:"sid"`
+}
+
+type RevokeShareLinkResponseObject interface {
+	VisitRevokeShareLinkResponse(w http.ResponseWriter) error
+}
+
+type RevokeShareLink204Response struct {
+}
+
+func (response RevokeShareLink204Response) VisitRevokeShareLinkResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeShareLinkdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response RevokeShareLinkdefaultJSONResponse) VisitRevokeShareLinkResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -13747,6 +14608,129 @@ func (response ImportProfiledefaultJSONResponse) VisitImportProfileResponse(w ht
 	return err
 }
 
+type DownloadAppleProfileRequestObject struct {
+	Link string `json:"link"`
+}
+
+type DownloadAppleProfileResponseObject interface {
+	VisitDownloadAppleProfileResponse(w http.ResponseWriter) error
+}
+
+type DownloadAppleProfile200Response struct {
+}
+
+func (response DownloadAppleProfile200Response) VisitDownloadAppleProfileResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type DownloadAppleProfiledefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response DownloadAppleProfiledefaultJSONResponse) VisitDownloadAppleProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type OpenShareRequestObject struct {
+	Body *OpenShareJSONRequestBody
+}
+
+type OpenShareResponseObject interface {
+	VisitOpenShareResponse(w http.ResponseWriter) error
+}
+
+type OpenShare200JSONResponse ShareView
+
+func (response OpenShare200JSONResponse) VisitOpenShareResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type OpenSharedefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response OpenSharedefaultJSONResponse) VisitOpenShareResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateShareAppleProfileRequestObject struct {
+	Body *CreateShareAppleProfileJSONRequestBody
+}
+
+type CreateShareAppleProfileResponseObject interface {
+	VisitCreateShareAppleProfileResponse(w http.ResponseWriter) error
+}
+
+type CreateShareAppleProfile201JSONResponse AppleLink
+
+func (response CreateShareAppleProfile201JSONResponse) VisitCreateShareAppleProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateShareAppleProfiledefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateShareAppleProfiledefaultJSONResponse) VisitCreateShareAppleProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// SetHomeCountries Replace the Home Countries (at most three)
@@ -13911,6 +14895,9 @@ type StrictServerInterface interface {
 	// PatchEndpoint Change an Endpoint
 	// (PATCH /endpoints/{id})
 	PatchEndpoint(ctx context.Context, request PatchEndpointRequestObject) (PatchEndpointResponseObject, error)
+	// CreateAppleProfile Make a link to an Apple DNS profile
+	// (POST /endpoints/{id}/apple-profile)
+	CreateAppleProfile(ctx context.Context, request CreateAppleProfileRequestObject) (CreateAppleProfileResponseObject, error)
 	// ListAuthorizedIps The authorized addresses of an Endpoint, newest first
 	// (GET /endpoints/{id}/authorized-ips)
 	ListAuthorizedIps(ctx context.Context, request ListAuthorizedIpsRequestObject) (ListAuthorizedIpsResponseObject, error)
@@ -13944,6 +14931,9 @@ type StrictServerInterface interface {
 	// DeleteDdnsHost Delete a Dynamic DNS host and the addresses it learned
 	// (POST /endpoints/{id}/ddns-hosts/{hid}:delete)
 	DeleteDdnsHost(ctx context.Context, request DeleteDdnsHostRequestObject) (DeleteDdnsHostResponseObject, error)
+	// GetEndpointGenerator One generated setup text
+	// (GET /endpoints/{id}/generators)
+	GetEndpointGenerator(ctx context.Context, request GetEndpointGeneratorRequestObject) (GetEndpointGeneratorResponseObject, error)
 	// ListIpClaims The Plain DNS addresses of an Endpoint
 	// (GET /endpoints/{id}/ip-claims)
 	ListIpClaims(ctx context.Context, request ListIpClaimsRequestObject) (ListIpClaimsResponseObject, error)
@@ -13959,12 +14949,24 @@ type StrictServerInterface interface {
 	// TakeIpClaim Prove a claim with the evidence the nodes saw
 	// (POST /endpoints/{id}/ip-claims/{claim_id}:take)
 	TakeIpClaim(ctx context.Context, request TakeIpClaimRequestObject) (TakeIpClaimResponseObject, error)
+	// GetEndpointResolvers The values to set a device up with
+	// (GET /endpoints/{id}/resolvers)
+	GetEndpointResolvers(ctx context.Context, request GetEndpointResolversRequestObject) (GetEndpointResolversResponseObject, error)
 	// GetEndpointSchedule The schedule of an Endpoint
 	// (GET /endpoints/{id}/schedule)
 	GetEndpointSchedule(ctx context.Context, request GetEndpointScheduleRequestObject) (GetEndpointScheduleResponseObject, error)
 	// PutEndpointSchedule Replace the schedule of an Endpoint
 	// (PUT /endpoints/{id}/schedule)
 	PutEndpointSchedule(ctx context.Context, request PutEndpointScheduleRequestObject) (PutEndpointScheduleResponseObject, error)
+	// ListShareLinks The share links of an Endpoint, newest first
+	// (GET /endpoints/{id}/share-links)
+	ListShareLinks(ctx context.Context, request ListShareLinksRequestObject) (ListShareLinksResponseObject, error)
+	// CreateShareLink Make a share link
+	// (POST /endpoints/{id}/share-links)
+	CreateShareLink(ctx context.Context, request CreateShareLinkRequestObject) (CreateShareLinkResponseObject, error)
+	// RevokeShareLink Revoke a share link
+	// (DELETE /endpoints/{id}/share-links/{sid})
+	RevokeShareLink(ctx context.Context, request RevokeShareLinkRequestObject) (RevokeShareLinkResponseObject, error)
 	// DeleteEndpoint Delete an Endpoint
 	// (POST /endpoints/{id}:delete)
 	DeleteEndpoint(ctx context.Context, request DeleteEndpointRequestObject) (DeleteEndpointResponseObject, error)
@@ -14088,6 +15090,15 @@ type StrictServerInterface interface {
 	// ImportProfile Import a profile document
 	// (POST /profiles:import)
 	ImportProfile(ctx context.Context, request ImportProfileRequestObject) (ImportProfileResponseObject, error)
+	// DownloadAppleProfile Download an Apple DNS profile
+	// (GET /public/apple-profile/{link})
+	DownloadAppleProfile(ctx context.Context, request DownloadAppleProfileRequestObject) (DownloadAppleProfileResponseObject, error)
+	// OpenShare Open a share link
+	// (POST /public/share)
+	OpenShare(ctx context.Context, request OpenShareRequestObject) (OpenShareResponseObject, error)
+	// CreateShareAppleProfile Make an Apple profile link through a share link
+	// (POST /public/share/apple-profile)
+	CreateShareAppleProfile(ctx context.Context, request CreateShareAppleProfileRequestObject) (CreateShareAppleProfileResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -15699,6 +16710,39 @@ func (sh *strictHandler) PatchEndpoint(w http.ResponseWriter, r *http.Request, i
 	}
 }
 
+// CreateAppleProfile operation middleware
+func (sh *strictHandler) CreateAppleProfile(w http.ResponseWriter, r *http.Request, id Id) {
+	var request CreateAppleProfileRequestObject
+
+	request.Id = id
+
+	var body CreateAppleProfileJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAppleProfile(ctx, request.(CreateAppleProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAppleProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAppleProfileResponseObject); ok {
+		if err := validResponse.VisitCreateAppleProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListAuthorizedIps operation middleware
 func (sh *strictHandler) ListAuthorizedIps(w http.ResponseWriter, r *http.Request, id Id, params ListAuthorizedIpsParams) {
 	var request ListAuthorizedIpsRequestObject
@@ -16046,6 +17090,33 @@ func (sh *strictHandler) DeleteDdnsHost(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// GetEndpointGenerator operation middleware
+func (sh *strictHandler) GetEndpointGenerator(w http.ResponseWriter, r *http.Request, id Id, params GetEndpointGeneratorParams) {
+	var request GetEndpointGeneratorRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEndpointGenerator(ctx, request.(GetEndpointGeneratorRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEndpointGenerator")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEndpointGeneratorResponseObject); ok {
+		if err := validResponse.VisitGetEndpointGeneratorResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListIpClaims operation middleware
 func (sh *strictHandler) ListIpClaims(w http.ResponseWriter, r *http.Request, id Id) {
 	var request ListIpClaimsRequestObject
@@ -16200,6 +17271,33 @@ func (sh *strictHandler) TakeIpClaim(w http.ResponseWriter, r *http.Request, id 
 	}
 }
 
+// GetEndpointResolvers operation middleware
+func (sh *strictHandler) GetEndpointResolvers(w http.ResponseWriter, r *http.Request, id Id, params GetEndpointResolversParams) {
+	var request GetEndpointResolversRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEndpointResolvers(ctx, request.(GetEndpointResolversRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEndpointResolvers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEndpointResolversResponseObject); ok {
+		if err := validResponse.VisitGetEndpointResolversResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetEndpointSchedule operation middleware
 func (sh *strictHandler) GetEndpointSchedule(w http.ResponseWriter, r *http.Request, id Id) {
 	var request GetEndpointScheduleRequestObject
@@ -16252,6 +17350,92 @@ func (sh *strictHandler) PutEndpointSchedule(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PutEndpointScheduleResponseObject); ok {
 		if err := validResponse.VisitPutEndpointScheduleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListShareLinks operation middleware
+func (sh *strictHandler) ListShareLinks(w http.ResponseWriter, r *http.Request, id Id) {
+	var request ListShareLinksRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListShareLinks(ctx, request.(ListShareLinksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListShareLinks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListShareLinksResponseObject); ok {
+		if err := validResponse.VisitListShareLinksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateShareLink operation middleware
+func (sh *strictHandler) CreateShareLink(w http.ResponseWriter, r *http.Request, id Id) {
+	var request CreateShareLinkRequestObject
+
+	request.Id = id
+
+	var body CreateShareLinkJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateShareLink(ctx, request.(CreateShareLinkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateShareLink")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateShareLinkResponseObject); ok {
+		if err := validResponse.VisitCreateShareLinkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeShareLink operation middleware
+func (sh *strictHandler) RevokeShareLink(w http.ResponseWriter, r *http.Request, id Id, sid ShareId) {
+	var request RevokeShareLinkRequestObject
+
+	request.Id = id
+	request.Sid = sid
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeShareLink(ctx, request.(RevokeShareLinkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeShareLink")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeShareLinkResponseObject); ok {
+		if err := validResponse.VisitRevokeShareLinkResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -17470,6 +18654,94 @@ func (sh *strictHandler) ImportProfile(w http.ResponseWriter, r *http.Request, p
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ImportProfileResponseObject); ok {
 		if err := validResponse.VisitImportProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DownloadAppleProfile operation middleware
+func (sh *strictHandler) DownloadAppleProfile(w http.ResponseWriter, r *http.Request, link string) {
+	var request DownloadAppleProfileRequestObject
+
+	request.Link = link
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DownloadAppleProfile(ctx, request.(DownloadAppleProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DownloadAppleProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DownloadAppleProfileResponseObject); ok {
+		if err := validResponse.VisitDownloadAppleProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// OpenShare operation middleware
+func (sh *strictHandler) OpenShare(w http.ResponseWriter, r *http.Request) {
+	var request OpenShareRequestObject
+
+	var body OpenShareJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.OpenShare(ctx, request.(OpenShareRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "OpenShare")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(OpenShareResponseObject); ok {
+		if err := validResponse.VisitOpenShareResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateShareAppleProfile operation middleware
+func (sh *strictHandler) CreateShareAppleProfile(w http.ResponseWriter, r *http.Request) {
+	var request CreateShareAppleProfileRequestObject
+
+	var body CreateShareAppleProfileJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateShareAppleProfile(ctx, request.(CreateShareAppleProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateShareAppleProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateShareAppleProfileResponseObject); ok {
+		if err := validResponse.VisitCreateShareAppleProfileResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

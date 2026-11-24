@@ -34,8 +34,8 @@ code_primitives:
     why: the per-label subkeys of the key ring; hkdf.Extract(sha1.New, msg, key) is HMAC-SHA1(key, msg)
     only: [internal/keyring]
   crypto/sha1:
-    why: the hash of an RFC 6238 code, the script digest EVALSHA takes in the rate limiter, and the UUIDv5 of a profile identifier in shared/appleprofile (RFC 9562 defines v5 as SHA-1 of a namespace and a name, with no key, so it is neither a MAC nor a code), which internal/mobileconfig reaches by importing it
-    only: [internal/auth/totp, internal/ratelimit, shared/appleprofile, internal/mobileconfig]
+    why: the hash of an RFC 6238 code, the script digest EVALSHA takes in the rate limiter, and the UUIDv5 of a profile identifier in shared/appleprofile (RFC 9562 defines v5 as SHA-1 of a namespace and a name, with no key, so it is neither a MAC nor a code), which internal/mobileconfig reaches by importing it, and internal/endpoints by importing both (it makes the stored params of a download link and builds the profile)
+    only: [internal/auth/totp, internal/ratelimit, shared/appleprofile, internal/mobileconfig, internal/endpoints]
   crypto/pbkdf2:
     why: PBKDF2 with one round over SHA-1 is an HMAC-SHA1 of the salt, so it is a way to compute a code
     only: []

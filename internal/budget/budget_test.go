@@ -108,7 +108,7 @@ func TestRegistryRowsFollowTheKeySourceRule(t *testing.T) {
 		for _, p := range b.Parts {
 			switch p {
 			case budget.PartNetwork, budget.PartWide, budget.PartPhone, budget.PartUsername, budget.PartUser,
-				budget.PartAdmin, budget.PartSession, budget.PartCookie, budget.PartTokenSession, budget.PartMarker, budget.PartInvite, budget.PartAdminSession, budget.PartUserSession, budget.PartTenant, budget.PartProfile, budget.PartChallenge:
+				budget.PartAdmin, budget.PartSession, budget.PartCookie, budget.PartTokenSession, budget.PartMarker, budget.PartInvite, budget.PartAdminSession, budget.PartUserSession, budget.PartTenant, budget.PartProfile, budget.PartChallenge, budget.PartLink:
 			default:
 				t.Errorf("%s has a key part %q that is not in the closed set", id, p)
 			}
@@ -190,6 +190,11 @@ func TestEveryOperationIsChargedToASuitableClass(t *testing.T) {
 			switch {
 			case b.Source == budget.Network && op.Auth.NeedsSession():
 				t.Errorf("%s %s carries a session and is charged to the network class %s", tc.svc, op.ID, op.Rate)
+			case b.Source == budget.Proof && len(b.Parts) == 1 && b.Parts[0] == budget.PartLink && op.Auth.NeedsSession():
+				t.Errorf("%s %s carries a session and is charged to the link class %s", tc.svc, op.ID, op.Rate)
+			case b.Source == budget.Proof && len(b.Parts) == 1 && b.Parts[0] == budget.PartLink && !op.Auth.NeedsSession():
+				// The one proof class a route with no session may use: the bearer value of a share or download link, whose tag
+				// the pipeline checks with no I/O and whose row id is the key (P3 7.1). Narrow on purpose: only that part.
 			case b.Source != budget.Network && !op.Auth.NeedsSession():
 				t.Errorf("%s %s carries no session and is charged to the %s class %s", tc.svc, op.ID, b.Source, op.Rate)
 			}

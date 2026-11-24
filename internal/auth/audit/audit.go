@@ -137,6 +137,15 @@ type (
 		ProfileID  uuid.UUID `json:"profile_id"`
 		EndpointID uuid.UUID `json:"endpoint_id"`
 	}
+	// ShareLinkCreate and ShareLinkRevoke are a share link made or ended (P3 7.2): the link and its Endpoint, never the value.
+	ShareLinkCreate struct {
+		LinkID     uuid.UUID `json:"link_id"`
+		EndpointID uuid.UUID `json:"endpoint_id"`
+	}
+	ShareLinkRevoke struct {
+		LinkID     uuid.UUID `json:"link_id"`
+		EndpointID uuid.UUID `json:"endpoint_id"`
+	}
 	ProfileUnlockFailed struct {
 		ProfileID uuid.UUID `json:"profile_id"`
 	}
@@ -178,6 +187,8 @@ func (ProfileUnlock) Action() string             { return "profile.unlock" }
 func (ProfileUnlockFailed) Action() string       { return "profile.unlock_failed" }
 func (ProfileLockPasswordUsed) Action() string   { return "profile.lock_password_used" }
 func (ProfileLockPasswordFailed) Action() string { return "profile.lock_password_failed" }
+func (ShareLinkCreate) Action() string           { return "share_link.create" }
+func (ShareLinkRevoke) Action() string           { return "share_link.revoke" }
 
 func (LoginOK) tenantEvent()                   {}
 func (LoginFailed) tenantEvent()               {}
@@ -207,6 +218,8 @@ func (ProfileUnlock) tenantEvent()             {}
 func (ProfileUnlockFailed) tenantEvent()       {}
 func (ProfileLockPasswordUsed) tenantEvent()   {}
 func (ProfileLockPasswordFailed) tenantEvent() {}
+func (ShareLinkCreate) tenantEvent()           {}
+func (ShareLinkRevoke) tenantEvent()           {}
 
 // Tenant writes the event into the transaction of the change it records, so a
 // change without its audit row cannot commit (13.1). user is the actor, the nil

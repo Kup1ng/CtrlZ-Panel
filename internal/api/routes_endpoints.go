@@ -60,6 +60,8 @@ func endpointsError(err error) (*httpx.Error, bool) {
 		e = httpx.New(http.StatusConflict, httpx.CodeConflict)
 	case endpoints.KindTokenNotAllowed:
 		e = httpx.New(http.StatusForbidden, httpx.CodeTokenNotAllowed)
+	case endpoints.KindSetupUnavailable:
+		e = httpx.New(http.StatusConflict, httpx.CodeSetupUnavailable)
 	case endpoints.KindKeyReused:
 		e = httpx.New(http.StatusConflict, httpx.CodeKeyReused)
 	case endpoints.KindIPSuspended:

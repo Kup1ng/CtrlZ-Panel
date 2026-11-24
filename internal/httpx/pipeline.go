@@ -94,6 +94,11 @@ type Pipeline struct {
 	// the schema check. A value that does not check is no proof and the request is charged to the network like any other.
 	// It is asked before Proof; the Held classes never ask it, since a bearer value is no device marker.
 	TokenProof func(r *http.Request, op apispec.Operation) (id, subject string, ok bool)
+	// Bearer reads the share or download link value of an operation of a ByLink class, screens it with no I/O (internal/auth/bearer)
+	// and returns the id of the row it names. A value that does not screen (junk, a wrong tag, past its expiry) is answered 404
+	// at once and charges nothing; one that does is charged to the class on that id, and no network bucket is charged
+	// (P3 7.1). Build refuses a document with such an operation when it is nil.
+	Bearer func(r *http.Request, op apispec.Operation) (key string, ok bool)
 	// Doc is the OpenAPI document the Ops were read from. Every request is checked
 	// against its operation's schemas before any handler runs (Validator, rule
 	// boundary-input), so the document and the check are the same bytes.
@@ -148,6 +153,10 @@ func (p *Pipeline) Build() (*API, error) {
 		}
 		if c.Key == ratelimit.BySession && !op.Auth.NeedsSession() {
 			return nil, errors.New("httpx: session-keyed rate class on a route without a session: " + op.ID)
+		}
+		// A link-keyed class is for a route that carries a bearer value and no session, and the pipeline must be able to read it.
+		if c.Key == ratelimit.ByLink && (op.Auth.NeedsSession() || p.Bearer == nil) {
+			return nil, errors.New("httpx: link-keyed rate class on a route with a session, or no Bearer reader: " + op.ID)
 		}
 		// A request that carries a session carries a verified proof, and a network
 		// bucket is never charged by one: a stolen cookie would escape it by moving
@@ -214,6 +223,15 @@ func (a *API) perOp(next http.Handler) http.Handler {
 		if network == "" {
 			Write(w, r, BadRequest())
 			return
+		}
+
+		// The page, the profile and every refusal of a route that carries a share or download link value are for one person and are
+		// never kept or indexed or passed on in a Referer (P3 7.1): the headers are set before the first answer, so a refusal
+		// carries them as a success does.
+		if class.Key == ratelimit.ByLink {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("X-Robots-Tag", "noindex")
+			w.Header().Set("Referrer-Policy", "no-referrer")
 		}
 
 		// Step 8: network-keyed class of the operation, or the bucket of the proof the
@@ -301,6 +319,41 @@ func (a *API) perOp(next http.Handler) http.Handler {
 				ctx = context.WithValue(ctx, keyHeld, hp)
 				r = r.WithContext(ctx)
 			}
+		}
+
+		// Step 8 for a route that carries a share or download link value (P3 7.1), BEFORE the schema check: the value is screened with
+		// no I/O, and one that fails, or that is in the dead set, is the same 404 as every other refusal (junk of any length or
+		// alphabet included) and charges nothing. The check is not cheap (it rebuilds the operation's schema for every request) and
+		// these routes have neither a session nor a network bucket, so a check ahead of the screen would be a cost that a stranger
+		// who holds no link could make the service pay without limit (p3-D4-r1-5). One that passes is charged to the class on the
+		// row it names, never to the network: a value is minted only by its tenant, so a stranger holds nothing that proves anything
+		// about his network. The schema check, and with it the 400 for a body that is not the document's, follows for a value that
+		// was charged.
+		if class.Key == ratelimit.ByLink {
+			key, ok := a.p.Bearer(r, op)
+			if !ok {
+				// A body over the limit cannot be read for its value, and it is 413 on every route: the size says nothing of a row,
+				// and what is left to read is at most the operation's limit.
+				if r.Body != nil && r.Body != http.NoBody {
+					var mbe *http.MaxBytesError
+					if _, err := io.Copy(io.Discard, r.Body); errors.As(err, &mbe) {
+						Write(w, r, New(http.StatusRequestEntityTooLarge, CodeTooLarge))
+						return
+					}
+				}
+				Write(w, r, NotFound())
+				return
+			}
+			if a.dead.has("link:" + key) {
+				Write(w, r, NotFound())
+				return
+			}
+			if e := a.charge(ctx, class, ratelimit.Subject{Network: network, Link: key}); e != nil {
+				a.refuse(w, r, e)
+				return
+			}
+			ctx = context.WithValue(ctx, keyLinkDead, &linkDeadMark{set: a.dead, key: "link:" + key})
+			r = r.WithContext(ctx)
 		}
 
 		// A route that needs a session answers 401 before it reads or checks the body. A
@@ -426,6 +479,14 @@ func (a *API) perOp(next http.Handler) http.Handler {
 					return
 				}
 			}
+			// A route that makes a share or download link spends the tenant's day budget of links too (P3 9.1): it bounds how many
+			// row ids can ever pass the check of a value, whatever the number of sessions the tenant holds.
+			if op.Rate == ratelimit.LinkWrite {
+				if e := a.chargeTenantDay(ctx, res, ratelimit.LinkCreate); e != nil {
+					a.refuse(w, r, e)
+					return
+				}
+			}
 			// The bulk gate (spec 6.2): after the session resolved and its class was charged, before the body is read.
 			if a.bulk(op) {
 				rsv, gb, e := a.openBulk(res, r)
@@ -479,7 +540,12 @@ func (a *API) charge(ctx context.Context, c ratelimit.Class, s ratelimit.Subject
 		// 503 sms_unavailable and hide the real outages in that noise (tenant-r12-2).
 		return &Error{Status: StatusClientClosedRequest, Code: "client_closed_request"}
 	case errors.Is(err, ratelimit.ErrUnavailable):
-		return New(http.StatusServiceUnavailable, CodeSMSUnavailable)
+		// The SMS classes say so; the other fail-closed class (link-create, P3 9.1) is a bound on rows and says only that the
+		// service cannot count.
+		if strings.HasPrefix(c.Name, "otp-send") {
+			return New(http.StatusServiceUnavailable, CodeSMSUnavailable)
+		}
+		return New(http.StatusServiceUnavailable, CodeServiceUnavailable)
 	case err != nil:
 		// An empty key is a wiring bug; refuse rather than skip the limit.
 		a.p.Log.Error("rate limit could not be applied", logattr.Enum("class", c.LogName()))
@@ -573,11 +639,16 @@ func writeFault(w http.ResponseWriter, r *http.Request, err error) *Error {
 // chargeBulkTenant charges the tenant's day budget of the bulk-write class. It comes before the gate, so a slow body from
 // one of many sessions has paid it before it holds any memory. A refusal is the answer: 429 rate_limited.
 func (a *API) chargeBulkTenant(ctx context.Context, res Resolved) *Error {
+	return a.chargeTenantDay(ctx, res, ratelimit.BulkWriteTenant)
+}
+
+// chargeTenantDay charges a class that counts a whole tenant (bulk-write-tenant, link-create) for the tenant of the resolved session.
+func (a *API) chargeTenantDay(ctx context.Context, res Resolved, class string) *Error {
 	if res.Tenant == "" {
-		// A bulk-write operation always has a live session, whose resolver names the tenant: a missing one is a wiring bug.
+		// Such an operation always has a live session, whose resolver names the tenant: a missing one is a wiring bug.
 		return Internal()
 	}
-	c, ok := ratelimit.Lookup(a.p.Service, ratelimit.BulkWriteTenant)
+	c, ok := ratelimit.Lookup(a.p.Service, class)
 	if !ok {
 		return Internal()
 	}

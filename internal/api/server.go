@@ -16,6 +16,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/appclock"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/audit"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/bearer"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/login"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/marker"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/otp"
@@ -109,6 +110,7 @@ type Server struct {
 	after        afterwork.Runner // what a floored handler owes after its answer: failed-login trail rows (tenant-r13-2)
 	prof         *profiles.Env    // the one write path of a profile (spec 3)
 	ep           *endpoints.Env   // the one write path of Endpoints, groups, schedules and clients (P3 spec 3)
+	bearer       *bearer.Signer   // the share and download link values (P3 spec 6.2, 7)
 	cat          locations.LocationCatalog
 	docs         *httpx.Validator // the schema check of a document (spec 6.2)
 }
@@ -179,9 +181,13 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	br, err := bearer.New(d.Keys, d.Now)
+	if err != nil {
+		return nil, nil, err
+	}
 	s := &Server{
 		after: after, gate: gate,
-		prof: &profiles.Env{Catalog: cat, Clock: d.Now}, ep: &endpoints.Env{Clock: d.Now, Keys: d.Keys, Catalog: cat}, cat: cat, docs: docs,
+		prof: &profiles.Env{Catalog: cat, Clock: d.Now}, ep: &endpoints.Env{Clock: d.Now, Keys: d.Keys, Catalog: cat, Bearer: br}, bearer: br, cat: cat, docs: docs,
 		inviteReads: netpool.New(inviteRead, d.Now),
 		d:           d, cfg: cfg, auth: auth, now: d.Now, keys: d.Keys, hasher: d.Hasher, strength: strength, strengthAnon: strengthAnon,
 		throttle: throttle.NewUser(auth, d.Keys).WithCeilingHook(throttle.CeilingLog(d.Log)).WithRefusalHook(throttle.RefusalLog(d.Log, refusals)), tickets: tickets, otp: otpSvc, markers: markers,
@@ -196,7 +202,7 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 		Log: d.Log, Strict: d.Strict, PlainHTTPOrigin: d.PlainHTTPOrigin, TrustedProxies: d.TrustedProxies, Limiter: d.Limiter, Service: ratelimit.Tenant, Ops: ops,
 		Doc:      api.Tenant(),
 		Resolver: resolver{m: d.Sessions}, BaseURL: "/api/v1",
-		Proof: markers.RequestProof(marker.User), TokenProof: s.tokenProof,
+		Proof: markers.RequestProof(marker.User), TokenProof: s.tokenProof, Bearer: s.linkKey,
 		Host:     panelHost(s.cfg, d.PanelHost),
 		BulkGate: gate,
 	}

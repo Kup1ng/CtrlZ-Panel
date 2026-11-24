@@ -40,6 +40,9 @@ const (
 	// no key kind for "the whole service": a bucket every stranger can empty for
 	// every honest user is not in the closed set of internal/budget.
 	BySession
+	// ByLink counts per bearer row: the id a share link or a download link names, read from the value after its tag checked
+	// (internal/auth/bearer). It is for the public routes of P3 7.1, which carry no session and are charged to no network.
+	ByLink
 )
 
 // SessionLookup is the class charged for a request that carries a session
@@ -63,7 +66,7 @@ const IPClaim = "ip-claim"
 // ChargedByThePipeline says the pipeline charges the class itself, around the session
 // lookup, and no operation names it as its rate class.
 func ChargedByThePipeline(name string) bool {
-	return name == SessionLookup || name == SessionMiss || name == BulkWriteTenant || name == IPClaim
+	return name == SessionLookup || name == SessionMiss || name == BulkWriteTenant || name == IPClaim || name == LinkCreate
 }
 
 // BulkWriteTenant is the day budget of a tenant for the bulk routes (spec 8.1). The pipeline charges it for an operation
@@ -71,6 +74,15 @@ func ChargedByThePipeline(name string) bool {
 const (
 	BulkWrite       = "bulk-write"
 	BulkWriteTenant = "bulk-write-tenant"
+)
+
+// LinkWrite is the class of the operations that make a share link or an Apple profile download link (P3 9.1): 60 a minute
+// per session, like user-write, and the tenant's day budget LinkCreate, 200 a day, which the pipeline charges once the session
+// resolved. PublicLink is the class of the three public routes that carry such a value (7.1).
+const (
+	LinkWrite  = "link-write"
+	LinkCreate = "link-create"
+	PublicLink = "public-link"
 )
 
 // SessionMiss is the class charged to the session a cookie opens, before the cookie is looked up
@@ -134,6 +146,8 @@ func Classes(s Service) []Class {
 		c := Class{Name: b.Name, Limits: b.Limits, FailClosed: b.FailClosed, Deferred: b.Deferred != ""}
 		if b.Source == budget.Network {
 			c.Key, c.ProofAlt, c.Held, c.HeldInvite = ByNetwork, b.ProofPart != "", b.HeldProof != "", b.HeldInvite
+		} else if len(b.Parts) == 1 && b.Parts[0] == budget.PartLink {
+			c.Key = ByLink
 		} else {
 			c.Key = BySession
 		}

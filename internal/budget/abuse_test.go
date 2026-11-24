@@ -399,6 +399,11 @@ func newHarnessCap(t *testing.T, svc ratelimit.Service, deadCap int) *harness {
 	pl := &httpx.Pipeline{
 		Log: slog.New(slog.DiscardHandler), Limiter: lim, Service: svc, Ops: ops, SkipRequestCheck: true, Resolver: res, BaseURL: "/api/v1", DeadCapacity: deadCap,
 		Host: httpx.StaticHost("panel.test"),
+		// A link value (P3 7.1) stands for itself: the header names the row it screens as, and no header is a value that fails.
+		Bearer: func(r *http.Request, _ apispec.Operation) (string, bool) {
+			id := r.Header.Get("X-Test-Link")
+			return id, id != ""
+		},
 		Proof: func(r *http.Request) (string, string, bool) {
 			id := r.Header.Get("X-Test-Marker")
 			// The account the marker was sealed for; one account unless the test names another.
@@ -455,6 +460,23 @@ func newHarnessCap(t *testing.T, svc ratelimit.Service, deadCap int) *harness {
 	return &harness{h: built.Router, limiter: lim, res: res}
 }
 
+// postLink sends one request that carries a share or download link value which screens as the row named (P3 7.1); an empty row is a
+// value that does not screen.
+func (h *harness) postLink(class, ip, row string) int {
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/c/"+class, nil)
+	r.Host = "panel.test"
+	r.RemoteAddr = hostPort(ip) + ":4000"
+	if row != "" {
+		r.Header.Set("X-Test-Link", row)
+	}
+	w := httptest.NewRecorder()
+	h.h.ServeHTTP(w, r)
+	return w.Code
+}
+
+// isLinkClass says the class is charged to the row a link value names.
+func isLinkClass(b budget.Bucket) bool { return len(b.Parts) == 1 && b.Parts[0] == budget.PartLink }
+
 // post sends one request from ip. marker and cookie are optional.
 func (h *harness) post(class, ip, marker, cookie string) int {
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/c/"+class, nil)
@@ -504,6 +526,22 @@ func TestAbuseARateClassesStrangersAndProofs(t *testing.T) {
 			t.Run(string(svc)+"/"+b.Name, func(t *testing.T) {
 				h := newHarness(t, svc)
 				max := b.Limits[0].Max
+				if isLinkClass(b) {
+					// A value that does not screen is refused at the door and spends nothing; every other row of the same network spends its
+					// own budget, so strangers cannot fill the owner's.
+					for i := 0; i < 3*max && i < 400; i++ {
+						h.postLink(b.Name, strangerV4(i), fmt.Sprintf("row-%d", i))
+					}
+					for i := 0; i < 200; i++ {
+						if code := h.postLink(b.Name, strangerV4(i), ""); code != http.StatusNotFound {
+							t.Fatalf("a value that does not screen got %d", code)
+						}
+					}
+					if code := h.postLink(b.Name, strangerV4(1), "owner"); code != http.StatusNoContent {
+						t.Fatalf("the owner's row got %d after strangers spent theirs", code)
+					}
+					return
+				}
 				switch b.Source {
 				case budget.Network:
 					// The /24, then the /64, then (wider factor) the /48, each filled by
@@ -567,6 +605,15 @@ func TestAbuseBRateClassesAProofThatMovesNetworks(t *testing.T) {
 				allowed := 0
 				for i := 0; i < max+20; i++ {
 					var code int
+					if isLinkClass(b) {
+						// One row from every network is one bucket, and no network adds to it.
+						code = h.postLink(b.Name, away(i), "owner")
+						if code == http.StatusTooManyRequests {
+							break
+						}
+						allowed++
+						continue
+					}
 					if b.Source == budget.Network {
 						if b.ProofPart == "" {
 							// Nothing to move: a request with no proof is the network's by

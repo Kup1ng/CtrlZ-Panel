@@ -41,6 +41,8 @@ const (
 	// KindTooManyChallenges is 429 too_many_attempts: the claim, or the tenant, holds as many live challenges as the function allows.
 	// RetryAfter is the seconds until one ends.
 	KindTooManyChallenges
+	// KindSetupUnavailable is 409 setup_unavailable: no zone or no pair is set, so nothing can be generated for a device (spec 8.1).
+	KindSetupUnavailable
 )
 
 func (k Kind) String() string {
@@ -71,6 +73,8 @@ func (k Kind) String() string {
 		return "needs_admin_approval"
 	case KindTooManyChallenges:
 		return "too_many_attempts"
+	case KindSetupUnavailable:
+		return "setup_unavailable"
 	}
 	return "unknown"
 }

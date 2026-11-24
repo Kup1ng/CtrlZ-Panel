@@ -57,6 +57,11 @@ const (
 	LabelSession     = "session"          // auth_mac and admin_mac: the tag inside a session token
 	LabelCeremony    = "passkey_ceremony" // auth_mac: the tag of a stateless passkey login ticket
 	LabelProof       = "proof"            // auth_mac: the tag inside a ticket, an OTP challenge id and a refresh token (internal/auth/proofmac)
+	// The three bearer values of P3 (spec 6.2, internal/auth/bearer): one format, one label each, so a tag made for a share
+	// link never verifies as a download link or an API token.
+	LabelAPIToken        = "api_token"        // auth_mac: the tag inside an API token
+	LabelSetupShare      = "setup_share"      // auth_mac: the tag inside a share link
+	LabelProfileDownload = "profile_download" // auth_mac: the tag inside an Apple profile download link
 )
 
 // Domains lists every defined domain, reserved ones included.

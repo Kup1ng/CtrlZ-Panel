@@ -27,8 +27,9 @@ info:
       last 10 minutes);
     - `x-ctrlz-rate`: the rate class of spec 14.1.
 
-    A third, optional, `x-ctrlz-max-body`, raises the request body limit above the
-    16 KiB default; the passkey finish routes and the bulk routes of P2 use it. An
+    A third, optional, `x-ctrlz-max-body`, sets the request body limit: above the
+    16 KiB default for the passkey finish routes and the bulk routes of P2, and below it for a public route whose only
+    valid body is a few dozen bytes (`openShare`), so that junk costs a read of that size and no more. An
     operation whose limit is above 64 KiB takes the bulk gate (a byte-weighted pool,
     one tenant's share of it) after its session resolved and before its body is read.
 
@@ -59,6 +60,8 @@ tags:
     description: Endpoints, their groups, schedules and clients.
   - name: profiles
     description: Profiles, their filters, services, rules, folders and options, documents, the lock, and the batch jobs.
+  - name: public
+    description: Share links and Apple profile downloads, which carry a bearer value and no session.
 # The alphabets of the string schemas below, written once so the two documents and
 # every field agree (rule boundary-input, spec 14.2). Each pattern is anchored and
 # excludes the control, format and private-use characters; internal/lint judges them
@@ -2677,6 +2680,228 @@ paths:
       responses:
         "204": {description: Released.}
         default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/resolvers:
+    get:
+      tags: [endpoints]
+      operationId: getEndpointResolvers
+      summary: The values to set a device up with
+      description: |
+        The Resolver view of one Endpoint and, with `client`, of one of its clients (P3 8.1): the host, the DoH URL, the Legacy
+        DNS addresses, the bootstrap addresses and the DNS Stamps. It carries the DoH token. While no domain or no pair is set
+        `ready` is false and `reason` says which.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - {$ref: "#/components/parameters/ClientLabel"}
+      responses:
+        "200":
+          description: The view.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ResolverView"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/generators:
+    get:
+      tags: [endpoints]
+      operationId: getEndpointGenerator
+      summary: One generated setup text
+      description: |
+        The output of one generator of the registry (P3 8.2) as `text/plain`: Windows commands, a Firefox or a Chromium policy, the
+        Android Private DNS host, the addresses for a router or a TV. The text carries the DoH token. Errors: `not_found` for a
+        generator that is not in the registry, `setup_unavailable` while no domain or no pair is set.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: read
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - name: generator
+          in: query
+          required: true
+          description: The id of a generator of the registry, such as `windows-doh`, `firefox-policy`, `chromium-policy`, `android-private-dns` or `address-list`.
+          schema: {type: string, minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9-]*$', x-ctrlz-rowref: false}
+        - {$ref: "#/components/parameters/ClientLabel"}
+      responses:
+        "200":
+          description: The text, as `text/plain`.
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/share-links:
+    get:
+      tags: [endpoints]
+      operationId: listShareLinks
+      summary: The share links of an Endpoint, newest first
+      description: The value of a link is shown once, when it is made, and never again.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "200":
+          description: The links.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ShareLinkList"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [endpoints]
+      operationId: createShareLink
+      summary: Make a share link
+      description: |
+        At most ten live links an Endpoint. Errors: `validation_failed` (`max_share_links_per_endpoint` exceeded, `out_of_range`
+        on `ttl_hours`), `setup_unavailable`, `service_unavailable`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: link-write
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ShareLinkCreate"}
+      responses:
+        "201":
+          description: The link, with the URL shown once.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ShareLinkCreated"}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/share-links/{sid}:
+    delete:
+      tags: [endpoints]
+      operationId: revokeShareLink
+      summary: Revoke a share link
+      description: The download links made through it end with it.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - {$ref: "#/components/parameters/ShareId"}
+      responses:
+        "204": {description: Revoked.}
+        default: {$ref: "#/components/responses/Problem"}
+  /endpoints/{id}/apple-profile:
+    post:
+      tags: [endpoints]
+      operationId: createAppleProfile
+      summary: Make a link to an Apple DNS profile
+      description: |
+        The link lives 15 minutes and opens three times; the folder and the common domains are expanded now and the profile is
+        built from the Endpoint's values when it is downloaded. At most twenty live links a tenant. Errors: `not_found` for a
+        folder that is not the tenant's, `validation_failed` (`invalid`, `exceeded`, `max_download_links_per_tenant`),
+        `setup_unavailable`, `service_unavailable`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: link-write
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      x-ctrlz-max-body: 65536
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AppleProfileRequest"}
+      responses:
+        "201":
+          description: The link.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AppleLink"}
+        default: {$ref: "#/components/responses/Problem"}
+  /public/share:
+    post:
+      tags: [public]
+      operationId: openShare
+      summary: Open a share link
+      description: |
+        Spends one use. A value that is junk, unknown, expired, revoked, used up, of a deleted Endpoint or of a tenant that is not
+        active is the same `404 not_found`. While no domain or no pair is set the answer is `409 setup_unavailable` and no use is
+        spent. The value is in the body and never in a query.
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: public-link
+      x-ctrlz-max-body: 256
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LinkValue"}
+      responses:
+        "200":
+          description: What the link shows.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ShareView"}
+        default: {$ref: "#/components/responses/Problem"}
+  /public/share/apple-profile:
+    post:
+      tags: [public]
+      operationId: createShareAppleProfile
+      summary: Make an Apple profile link through a share link
+      description: |
+        Spends one use of the share link. `params.client` is absent or the link's own when the link has a client. The new link
+        is bounded by the share link's uses. Errors: `not_found`, `validation_failed`, `setup_unavailable`.
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: public-link
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      x-ctrlz-max-body: 65536
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ShareAppleRequest"}
+      responses:
+        "201":
+          description: The link.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AppleLink"}
+        default: {$ref: "#/components/responses/Problem"}
+  /public/apple-profile/{link}:
+    get:
+      tags: [public]
+      operationId: downloadAppleProfile
+      summary: Download an Apple DNS profile
+      description: |
+        Spends one use and builds the profile from the Endpoint's values of the moment, `application/x-apple-aspen-config`,
+        as an attachment with an ASCII file name. Nothing is stored. A link preview that fetches the URL counts as a download.
+        Every refusal is the same `404 not_found`; `setup_unavailable` while no domain or no pair is set.
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: public-link
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - name: link
+          in: path
+          required: true
+          schema: {type: string, maxLength: 64, pattern: '^[A-Za-z0-9_-]{64}$', example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA, x-ctrlz-rowref: false}
+      responses:
+        "200":
+          description: The profile, as `application/x-apple-aspen-config`.
+        default: {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     session:
@@ -2688,6 +2913,17 @@ components:
       scheme: bearer
       description: A `read` or `write` token. `read` tokens cannot call a mutating route.
   parameters:
+    ClientLabel:
+      name: client
+      in: query
+      required: false
+      description: A client label of the Endpoint (SC 3.1). Without it the view is the Endpoint's own.
+      schema: {type: string, minLength: 1, maxLength: 36, pattern: '^[a-z0-9]([a-z0-9-]{0,34}[a-z0-9])?$', x-ctrlz-rowref: false}
+    ShareId:
+      name: sid
+      in: path
+      required: true
+      schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
     Id:
       name: id
       in: path
@@ -4582,6 +4818,153 @@ components:
       properties:
         claim: {$ref: "#/components/schemas/IPClaim"}
         outcome: {type: string, maxLength: 16, enum: [active, already_active, no_proof]}
+    IpAddress:
+      type: string
+      maxLength: 45
+      pattern: '^[0-9A-Fa-f:.]*$'
+    StampOfAddress:
+      type: object
+      required: [ip, stamp]
+      properties:
+        ip: {$ref: "#/components/schemas/IpAddress"}
+        stamp: {type: string, maxLength: 2048, pattern: '^sdns://[A-Za-z0-9_-]*$'}
+    ProtocolStamps:
+      type: object
+      required: [hostname_stamp, address_stamps]
+      properties:
+        hostname_stamp: {type: string, maxLength: 2048, pattern: '^sdns://[A-Za-z0-9_-]*$'}
+        address_stamps:
+          type: array
+          maxItems: 4
+          items: {$ref: "#/components/schemas/StampOfAddress"}
+    ResolverView:
+      type: object
+      required: [ready, resolver_id, protocols]
+      properties:
+        ready: {type: boolean}
+        reason: {type: string, maxLength: 16, enum: [zone_missing, pair_missing]}
+        resolver_id: {type: string, maxLength: 26, pattern: '^[a-z2-7]{26}$'}
+        client: {type: string, maxLength: 36, pattern: '^[a-z0-9]([a-z0-9-]{0,34}[a-z0-9])?$'}
+        host: {type: string, maxLength: 253, pattern: *host}
+        doh_url: {type: string, maxLength: 512, pattern: '^https://[A-Za-z0-9._/-]*$'}
+        legacy:
+          type: object
+          required: [dns1, dns2]
+          properties:
+            dns1: {$ref: "#/components/schemas/IpAddress"}
+            dns2: {$ref: "#/components/schemas/IpAddress"}
+        bootstrap:
+          type: array
+          maxItems: 2
+          items: {$ref: "#/components/schemas/IpAddress"}
+        stamps:
+          type: object
+          required: [doh, dot, doq]
+          properties:
+            doh: {$ref: "#/components/schemas/ProtocolStamps"}
+            dot: {$ref: "#/components/schemas/ProtocolStamps"}
+            doq: {$ref: "#/components/schemas/ProtocolStamps"}
+        protocols:
+          type: array
+          maxItems: 5
+          items: {type: string, maxLength: 8, enum: [plain, doh, doh3, dot, doq]}
+    ShareLink:
+      type: object
+      required: [id, expires_at, uses, max_uses, revoked, created_at]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        client: {type: string, maxLength: 36, pattern: '^[a-z0-9]([a-z0-9-]{0,34}[a-z0-9])?$'}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        uses: {type: integer, minimum: 0, maximum: 2147483647}
+        max_uses: {type: integer, minimum: 1, maximum: 2147483647}
+        revoked: {type: boolean}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    ShareLinkList:
+      type: object
+      required: [links]
+      properties:
+        links:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/ShareLink"}
+    ShareLinkCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        client: {type: string, minLength: 1, maxLength: 36, pattern: '^[a-z0-9]([a-z0-9-]{0,34}[a-z0-9])?$', x-ctrlz-rowref: false}
+        ttl_hours: {type: integer, minimum: 1, maximum: 168}
+    ShareLinkCreated:
+      type: object
+      required: [link, url]
+      properties:
+        link: {$ref: "#/components/schemas/ShareLink"}
+        url: {type: string, maxLength: 512, pattern: '^https://[A-Za-z0-9._:/-]*$'}
+    LinkValue:
+      type: object
+      additionalProperties: false
+      required: [link]
+      properties:
+        link: {type: string, minLength: 64, maxLength: 64, pattern: '^[A-Za-z0-9_-]{64}$', x-ctrlz-rowref: false}
+    ShareView:
+      type: object
+      required: [endpoint, resolvers, expires_at]
+      properties:
+        endpoint:
+          type: object
+          required: [name, type]
+          properties:
+            name: {type: string, maxLength: 64, pattern: *prose}
+            type: {type: string, maxLength: 32, pattern: '^[a-z][a-z0-9_-]*$'}
+        resolvers: {$ref: "#/components/schemas/ResolverView"}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    AppleProfileRequest:
+      type: object
+      additionalProperties: false
+      required: [protocol]
+      properties:
+        client: {type: string, minLength: 1, maxLength: 36, pattern: '^[a-z0-9]([a-z0-9-]{0,34}[a-z0-9])?$', x-ctrlz-rowref: false}
+        protocol: {type: string, maxLength: 3, enum: [doh, dot]}
+        excluded_ssids:
+          type: array
+          maxItems: 50
+          items: {type: string, minLength: 1, maxLength: 32, pattern: *nameprose, x-ctrlz-rowref: false}
+        excluded_domains:
+          type: array
+          maxItems: 100
+          items: {type: string, minLength: 1, maxLength: 253, pattern: *nametext, x-ctrlz-rowref: false}
+        from_folder_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        exclude_common: {type: boolean}
+        prohibit_disablement: {type: boolean}
+    ShareAppleParams:
+      type: object
+      additionalProperties: false
+      required: [protocol]
+      properties:
+        client: {type: string, minLength: 1, maxLength: 36, pattern: '^[a-z0-9]([a-z0-9-]{0,34}[a-z0-9])?$', x-ctrlz-rowref: false}
+        protocol: {type: string, maxLength: 3, enum: [doh, dot]}
+        excluded_ssids:
+          type: array
+          maxItems: 50
+          items: {type: string, minLength: 1, maxLength: 32, pattern: *nameprose, x-ctrlz-rowref: false}
+        excluded_domains:
+          type: array
+          maxItems: 100
+          items: {type: string, minLength: 1, maxLength: 253, pattern: *nametext, x-ctrlz-rowref: false}
+        exclude_common: {type: boolean}
+        prohibit_disablement: {type: boolean}
+    ShareAppleRequest:
+      type: object
+      additionalProperties: false
+      required: [link, params]
+      properties:
+        link: {type: string, minLength: 64, maxLength: 64, pattern: '^[A-Za-z0-9_-]{64}$', x-ctrlz-rowref: false}
+        params: {$ref: "#/components/schemas/ShareAppleParams"}
+    AppleLink:
+      type: object
+      required: [url, expires_at]
+      properties:
+        url: {type: string, maxLength: 512, pattern: '^https://[A-Za-z0-9._:/-]*$'}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
 security:
   - session: []
   - apiToken: []
