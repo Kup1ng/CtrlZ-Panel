@@ -341,8 +341,10 @@ func (t Tx) RecoveryCodesReplace(user uuid.UUID, hashes [][]byte) error {
 //   - the audit log of the two actions that touch a TOTP in force, the confirm that made it (totp.enable) and the
 //     disable that deleted the set (totp.disable). ctrlz_tenant holds SELECT and INSERT on the log and only the
 //     retention sweep deletes, past 365 days (qSweepAudit). A thief who disables TOTP leaves a totp.disable row a
-//     moment before they confirm a new one, so it is never older than the retention whatever the age of the
-//     enrolment it ended.
+//     moment before they confirm a new one, so for the 365 days after the disable it holds whatever the age of
+//     the enrolment it ended. A thief who disables and then waits past the retention with no second factor on the
+//     account finds the log swept and the codes already deleted, and their confirm reads as a first enrolment:
+//     the same state as an account that never had TOTP, which is the owner's open question.
 //
 // user_id is the author of the audit row; for these two actions it is the account itself.
 const qHadRecoveryCodes = `SELECT EXISTS (SELECT 1 FROM ctrlz.recovery_codes WHERE tenant_id = $1 AND user_id = $2)
