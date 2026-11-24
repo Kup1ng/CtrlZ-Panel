@@ -1,0 +1,12 @@
+#!/bin/sh
+# Every commit passes a secret scan, whatever made it. The Claude Code hook sees
+# only what is staged before its command runs, so an add and a commit in one
+# command would reach the commit unscanned without this.
+#
+# A fresh clone turns this on with: git config core.hooksPath .githooks
+PATH="$HOME/go/bin:$PATH"
+command -v gitleaks >/dev/null 2>&1 || {
+  echo "pre-commit: gitleaks is required: go install github.com/zricethezav/gitleaks/v8@latest" >&2
+  exit 1
+}
+exec gitleaks git --staged --no-banner --redact --verbose --log-level=warn .

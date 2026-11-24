@@ -1,0 +1,351 @@
+{
+  "format": 1,
+  "catalog": {
+    "key_hex": "00112233445566778899aabbccddeeff",
+    "version": 1,
+    "filters": [
+      {"name": "ads", "id": 1, "mode": 1, "domains": ["suffix:tracker.example", "full:exact.tracker.example", "suffix:ads.example.com", "suffix:ad.video.example", "suffix:both.example"]},
+      {"name": "ads-strict", "id": 1, "mode": 2, "domains": ["suffix:tracker.example", "suffix:strictonly.example"]},
+      {"name": "malware", "id": 3, "mode": 1, "domains": ["suffix:malware.example"]},
+      {"name": "oisd", "id": 1000, "mode": 1, "domains": ["suffix:oisd-listed.example", "suffix:both.example"]}
+    ],
+    "services": [
+      {"name": "video", "wire": 10, "domains": ["suffix:video.example", "suffix:cdn.video.example"]},
+      {"name": "social", "wire": 20, "domains": ["suffix:social.example"]},
+      {"name": "alpha", "wire": 5, "domains": ["suffix:overlap.example"]},
+      {"name": "shared", "wire": 30, "domains": ["suffix:overlap.example"]}
+    ],
+    "categories": [
+      {"domain": "suffix:tracker.example", "mask": 1, "svc_cat": 0},
+      {"domain": "suffix:video.example", "mask": 0, "svc_cat": 105},
+      {"domain": "suffix:malware.example", "mask": 8192, "svc_cat": 0}
+    ],
+    "safe_search": {"www.google.com": "forcesafesearch.google.com"},
+    "youtube": {"www.youtube.com": "restrict.youtube.com"}
+  },
+  "geo": {
+    "country": {
+      "93.184.216.34": "US", "151.101.1.1": "US", "2.176.0.1": "IR", "91.99.1.1": "IR", "5.9.1.1": "DE"
+    },
+    "asn": {"93.184.216.34": 15133, "151.101.1.1": 54113, "2.176.0.1": 44244}
+  },
+  "locations": {
+    "healthy": [1, 2, 3, 4],
+    "latency": {"1": 50, "2": 20, "3": 30}
+  },
+  "self": {
+    "dns_ip": "198.51.100.1",
+    "proxy_ip": "198.51.100.2",
+    "peer_proxy_ip": "198.51.100.3",
+    "peer_usable": true,
+    "panel_hostnames": ["panel.example.ir"]
+  },
+  "profiles": {
+    "empty": {},
+    "prec": {
+      "rules": [
+        {"name": "r-custom-bypass", "token": "ads.example.com", "action": "bypass"},
+        {"name": "r-custom-block", "token": "blocked.example.com", "action": "block"},
+        {"name": "r-cdn-bypass", "token": "cdn.video.example", "action": "bypass"}
+      ],
+      "services": [{"name": "video", "action": "block"}],
+      "filters": ["ads", "malware", "oisd"]
+    },
+    "defblock": {
+      "default": "block",
+      "rules": [{"name": "r-ok", "token": "ok.example.com", "action": "bypass"}]
+    },
+    "svcabsent": {
+      "default": "block",
+      "services": [{"name": "social", "action": "bypass"}]
+    },
+    "overlap": {
+      "services": [{"name": "shared", "action": "block"}, {"name": "alpha", "action": "bypass"}]
+    },
+    "plain": {
+      "rules": [
+        {"name": "p1", "token": "plain.example", "action": "bypass"},
+        {"name": "p2", "token": "a.plain.example", "action": "block"},
+        {"name": "p-tier", "token": "tier.example", "action": "bypass"},
+        {"name": "w-tier", "token": "*.a.tier.example", "action": "block"}
+      ]
+    },
+    "wild": {
+      "rules": [
+        {"name": "w1", "token": "*.wild.example", "action": "block"},
+        {"name": "w2", "token": "*.deep.wild.example", "action": "bypass"},
+        {"name": "g-srv", "token": "srv-*.wild.example", "action": "block"},
+        {"name": "g-sr", "token": "sr*.wild.example", "action": "bypass"},
+        {"name": "g-mid", "token": "a*b.wild.example", "action": "block"},
+        {"name": "g-end", "token": "ab*.wild.example", "action": "bypass"},
+        {"name": "g-label", "token": "a.*.wild.example", "action": "block"}
+      ]
+    },
+    "wt-blk": {"rules": [{"name": "t-blk", "token": "*.tie.example", "action": "block"}]},
+    "wt-byp": {"rules": [{"name": "t-byp", "token": "*.tie.example", "action": "bypass"}]},
+    "wt-more": {"rules": [{"name": "t-more", "token": "srv-*.tie.example", "action": "block"}]},
+    "wt-less": {"rules": [{"name": "t-less", "token": "sr*.tie.example", "action": "bypass"}]},
+    "wt-deep": {"rules": [{"name": "t-deep", "token": "*.deep.tie.example", "action": "bypass"}]},
+    "geo-two-as": {"rules": [
+      {"name": "g-as-hi", "token": "@AS54113", "action": "bypass"},
+      {"name": "g-as-lo", "token": "@AS15133", "action": "block"}
+    ]},
+    "geo-expired": {
+      "rules": [{"name": "g-exp", "token": "@US", "action": "block", "expires": "2026-11-06T09:00:00Z"}],
+      "filters": ["malware"]
+    },
+    "mergeA": {
+      "default": "redirect",
+      "default_target": {"kind": "location", "location": 1},
+      "options": {"block_response": {"mode": "nxdomain"}},
+      "rules": [
+        {"name": "dupA", "token": "dup.example", "action": "block"},
+        {"name": "domA", "token": "dom.example", "action": "block"},
+        {"name": "expA", "token": "exp.example", "action": "block", "expires": "2026-11-06T09:00:00Z"}
+      ],
+      "filters": ["ads"]
+    },
+    "mergeB": {
+      "default": "block",
+      "options": {"block_ttl": 5},
+      "rules": [
+        {"name": "dupB", "token": "dup.example", "action": "bypass"},
+        {"name": "xB", "token": "x.dom.example", "action": "bypass"},
+        {"name": "expB", "token": "exp.example", "action": "bypass"}
+      ],
+      "filters": ["malware", "ads-strict"]
+    },
+    "mergeOff": {
+      "disabled_until": "2026-11-07T00:00:00Z",
+      "default": "block",
+      "rules": [{"name": "offrule", "token": "off.example", "action": "block"}]
+    },
+    "sched-base": {"rules": [{"name": "sb", "token": "x.sched.example", "action": "block"}]},
+    "sched-base2": {"rules": [{"name": "sb2", "token": "p2.sched.example", "action": "block"}]},
+    "sched-w1": {"rules": [{"name": "sw1", "token": "w1.sched.example", "action": "block"}]},
+    "sched-w2": {"default": "block"},
+    "cl-base": {"rules": [{"name": "clb", "token": "c.example", "action": "block"}]},
+    "cl-win": {"rules": [{"name": "clw", "token": "c.example", "action": "bypass"}]},
+    "cl-kid": {"default": "block"},
+    "expiring": {
+      "rules": [{"name": "exp-rule", "token": "lapse.example", "action": "block", "expires": "2026-11-06T09:00:00Z"}]
+    },
+    "lapsing": {
+      "disabled_until": "2026-11-06T09:00:00Z",
+      "default": "block"
+    },
+    "geo-asn-country": {"rules": [
+      {"name": "g-as", "token": "@AS15133", "action": "bypass"},
+      {"name": "g-us", "token": "@US", "action": "block"}
+    ]},
+    "geo-country-src": {"rules": [
+      {"name": "g-us", "token": "@US", "action": "block"},
+      {"name": "g-src-ir", "token": "#IR", "action": "bypass"}
+    ]},
+    "geo-neg": {"rules": [
+      {"name": "g-pos-us", "token": "@US", "action": "bypass"},
+      {"name": "g-neg-ir", "token": "!@IR", "action": "block"}
+    ]},
+    "geo-neg-only": {"rules": [
+      {"name": "g-neg-ir", "token": "!@IR", "action": "block"}
+    ]},
+    "geo-neg-de": {"rules": [
+      {"name": "g-neg-de", "token": "!@DE", "action": "block"}
+    ]},
+    "geo-ir": {"rules": [
+      {"name": "g-ir", "token": "@IR", "action": "block"}
+    ]},
+    "geoA": {"rules": [{"name": "gA", "token": "@US", "action": "block"}]},
+    "geoB": {"rules": [{"name": "gB", "token": "@US", "action": "bypass"}]},
+    "geo-src-dest": {"rules": [
+      {"name": "g-src", "token": "#IR", "action": "block"},
+      {"name": "g-dst", "token": "@US", "action": "bypass"}
+    ]},
+    "geo-src": {"rules": [
+      {"name": "g-src-ir", "token": "#IR", "action": "block"},
+      {"name": "g-src-notir", "token": "!#IR", "action": "bypass"}
+    ]},
+    "geo-then-levels": {
+      "default": "block",
+      "rules": [{"name": "g-ir", "token": "@IR", "action": "bypass"}],
+      "services": [{"name": "video", "action": "block"}],
+      "filters": ["malware"]
+    },
+    "cn-bypassdef": {
+      "rules": [
+        {"name": "cn-blk", "token": "block-target.example", "action": "block"},
+        {"name": "cn-red", "token": "redir-target.example", "action": "redirect", "target": {"kind": "location", "location": 2}}
+      ],
+      "services": [{"name": "video", "action": "block"}],
+      "filters": ["malware"]
+    },
+    "cn-blockdef": {
+      "default": "block",
+      "rules": [
+        {"name": "cn-byp", "token": "bypass-target.example", "action": "bypass"},
+        {"name": "cn-direct", "token": "direct.example", "action": "bypass"}
+      ]
+    },
+    "qm-zero": {"rules": [{"name": "qb", "token": "bl.example", "action": "block"}]},
+    "qm-nx": {"options": {"block_response": {"mode": "nxdomain"}, "block_ttl": 90}, "rules": [{"name": "qb", "token": "bl.example", "action": "block"}]},
+    "qm-ref": {"options": {"block_response": {"mode": "refused"}}, "rules": [{"name": "qb", "token": "bl.example", "action": "block"}]},
+    "qm-custom": {"options": {"block_response": {"mode": "custom", "v4": "192.0.2.77", "v6": "2001:db8::77"}}, "rules": [{"name": "qb", "token": "bl.example", "action": "block"}]},
+    "qm-custom4": {"options": {"block_response": {"mode": "custom", "v4": "192.0.2.77"}}, "rules": [{"name": "qb", "token": "bl.example", "action": "block"}]},
+    "qm-custom6": {"options": {"block_response": {"mode": "custom", "v6": "2001:db8::77"}}, "rules": [{"name": "qb", "token": "bl.example", "action": "block"}]},
+    "qm-branded": {"options": {"block_response": {"mode": "branded"}}, "rules": [{"name": "qb", "token": "bl.example", "action": "block"}]},
+    "qm-redir-loc": {"options": {"redirect_ttl": 45}, "rules": [{"name": "qr", "token": "rd.example", "action": "redirect", "target": {"kind": "location", "location": 2}}]},
+    "qm-redir-ip": {"rules": [{"name": "qr", "token": "rd.example", "action": "redirect", "target": {"kind": "ip", "v4": "203.0.113.9", "v6": "2001:db8::9"}}]},
+    "qm-redir-ip4": {"rules": [{"name": "qr", "token": "rd.example", "action": "redirect", "target": {"kind": "ip", "v4": "203.0.113.9"}}]},
+    "qm-redir-host": {"rules": [{"name": "qr", "token": "rd.example", "action": "redirect", "target": {"kind": "host", "host": "target.example.net"}}]},
+    "qm-bypass": {},
+    "opt-rebind": {"options": {"rebind": true}, "default": "bypass", "rules": [{"name": "intranet", "token": "intranet.example", "action": "bypass"}]},
+    "opt-dns64": {"options": {"dns64": true}, "rules": [{"name": "qb", "token": "bl.example", "action": "block"}]},
+    "opt-dns64-rebind": {"options": {"dns64": true, "rebind": true}, "default": "bypass"},
+    "opt-rebind-loc": {"options": {"rebind": true}, "default": "bypass", "rules": [
+      {"name": "rl-far", "token": "far.example", "action": "redirect", "target": {"kind": "location", "location": 9}}
+    ]},
+    "opt-flatten": {"options": {"flatten": true}},
+    "opt-ecs-auto": {"options": {"ecs": {"mode": "auto"}}},
+    "opt-ecs-custom": {"options": {"ecs": {"mode": "custom", "v4": "203.0.113.0", "v4_bits": 24, "v6": "2001:db8::", "v6_bits": 48}}},
+    "opt-ttl": {"options": {"bypass_ttl": 120}},
+    "opt-exfil": {"options": {"exfiltration": true}},
+    "opt-dnssec-off": {"options": {"disable_dnssec": true}},
+    "opt-safe": {"options": {"safe_search": true, "restricted_youtube": true}},
+    "opt-safe-redir": {"options": {"safe_search": true}, "rules": [
+      {"name": "safe-redir", "token": "www.google.com", "action": "redirect", "target": {"kind": "location", "location": 2}}
+    ]},
+    "opt-safe-rebind": {"options": {"safe_search": true, "restricted_youtube": true, "rebind": true}},
+    "opt-safe-rebind-branded": {"options": {"safe_search": true, "rebind": true, "block_response": {"mode": "branded"}}},
+    "opt-safe-dns64": {"options": {"safe_search": true, "restricted_youtube": true, "dns64": true}},
+    "opt-safe-dns64-rebind": {"options": {"safe_search": true, "restricted_youtube": true, "dns64": true, "rebind": true}},
+    "loc-redir": {"rules": [
+      {"name": "l-loc", "token": "loc.example", "action": "redirect", "target": {"kind": "location", "location": 2}},
+      {"name": "l-far", "token": "far.example", "action": "redirect", "target": {"kind": "location", "location": 9}},
+      {"name": "l-down", "token": "down.example", "action": "redirect", "target": {"kind": "location", "location": 5}},
+      {"name": "l-flag", "token": "flag.example", "action": "redirect", "location_unavailable": true, "target": {"kind": "location", "location": 2}},
+      {"name": "l-auto", "token": "auto.example", "action": "redirect", "target": {"kind": "auto", "set": [1, 2, 3, 9]}},
+      {"name": "l-auto-none", "token": "autonone.example", "action": "redirect", "target": {"kind": "auto", "set": [9, 10]}},
+      {"name": "l-rand", "token": "rand.example", "action": "redirect", "target": {"kind": "random", "set": [1, 2, 3, 4]}},
+      {"name": "l-rand-one", "token": "randone.example", "action": "redirect", "target": {"kind": "random", "set": [3, 9]}},
+      {"name": "l-rand-wild", "token": "*.randw.example", "action": "redirect", "target": {"kind": "random", "set": [1, 2, 3, 4]}}
+    ], "default": "redirect", "default_target": {"kind": "location", "location": 9}},
+    "sys-block": {"default": "block"},
+    "sys-nx": {"default": "block", "options": {"block_response": {"mode": "nxdomain"}}},
+    "sys-ref": {"default": "block", "options": {"block_response": {"mode": "refused"}}},
+    "sys-custom": {"default": "block", "options": {"block_response": {"mode": "custom", "v4": "192.0.2.77"}}},
+    "sys-branded": {"default": "block", "options": {"block_response": {"mode": "branded"}}},
+    "catprof": {"services": [{"name": "video", "action": "bypass"}], "filters": ["ads", "malware"]}
+  },
+  "endpoints": {
+    "e-empty": {"profile1": "empty", "pair_locs": [1, 2, 3, 4]},
+    "e-prec": {"profile1": "prec", "pair_locs": [1, 2, 3, 4]},
+    "e-defblock": {"profile1": "defblock", "pair_locs": [1, 2, 3, 4]},
+    "e-svcabsent": {"profile1": "svcabsent", "pair_locs": [1, 2, 3, 4]},
+    "e-overlap": {"profile1": "overlap", "pair_locs": [1, 2, 3, 4]},
+    "e-plain": {"profile1": "plain", "pair_locs": [1, 2, 3, 4]},
+    "e-wild": {"profile1": "wild", "pair_locs": [1, 2, 3, 4]},
+    "e-wtie": {"profile1": "wt-blk", "profile2": "wt-byp", "pair_locs": [1, 2, 3, 4]},
+    "e-wtie-rev": {"profile1": "wt-byp", "profile2": "wt-blk", "pair_locs": [1, 2, 3, 4]},
+    "e-wtie-more-less": {"profile1": "wt-more", "profile2": "wt-less", "pair_locs": [1, 2, 3, 4]},
+    "e-wtie-less-more": {"profile1": "wt-less", "profile2": "wt-more", "pair_locs": [1, 2, 3, 4]},
+    "e-wtie-shallow-deep": {"profile1": "wt-blk", "profile2": "wt-deep", "pair_locs": [1, 2, 3, 4]},
+    "e-wtie-deep-shallow": {"profile1": "wt-deep", "profile2": "wt-blk", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-two-as": {"profile1": "geo-two-as", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-expired": {"profile1": "geo-expired", "pair_locs": [1, 2, 3, 4]},
+    "e-merge": {"profile1": "mergeA", "profile2": "mergeB", "pair_locs": [1, 2, 3, 4]},
+    "e-merge-rev": {"profile1": "mergeB", "profile2": "mergeA", "pair_locs": [1, 2, 3, 4]},
+    "e-merge-off": {"profile1": "mergeOff", "profile2": "mergeB", "pair_locs": [1, 2, 3, 4]},
+    "e-sched": {
+      "profile1": "sched-base", "profile2": "sched-base2", "pair_locs": [1, 2, 3, 4],
+      "schedule": {
+        "base_offset": 12600,
+        "windows": [
+          {"id": "win1", "profile1": "sched-w1"},
+          {"id": "win2", "profile1": "sched-w2"}
+        ],
+        "fill": [
+          {"from": 4, "to": 47, "window": 1},
+          {"from": 0, "to": 3, "window": 2},
+          {"from": 330, "to": 335, "window": 2}
+        ]
+      }
+    },
+    "e-sched-dst": {
+      "profile1": "sched-base", "pair_locs": [1, 2, 3, 4],
+      "schedule": {
+        "base_offset": 3600,
+        "transitions": [{"at": "2026-11-08T01:00:00Z", "offset": 0}],
+        "windows": [{"id": "win1", "profile1": "sched-w1"}],
+        "fill": [{"from": 2, "to": 3, "window": 1}]
+      }
+    },
+    "e-sched-spring": {
+      "profile1": "sched-base", "pair_locs": [1, 2, 3, 4],
+      "schedule": {
+        "base_offset": 0,
+        "transitions": [{"at": "2026-03-29T01:00:00Z", "offset": 3600}],
+        "windows": [{"id": "win1", "profile1": "sched-w1"}],
+        "fill": [{"from": 2, "to": 3, "window": 1}]
+      }
+    },
+    "e-client": {
+      "profile1": "cl-base", "pair_locs": [1, 2, 3, 4],
+      "schedule": {
+        "base_offset": 0,
+        "windows": [{"id": "all", "profile1": "cl-win"}],
+        "fill": [{"from": 0, "to": 335, "window": 1}]
+      },
+      "clients": {"kid": {"profile1": "cl-kid"}}
+    },
+    "e-expiring": {"profile1": "expiring", "pair_locs": [1, 2, 3, 4]},
+    "e-lapsing": {"profile1": "lapsing", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-asn": {"profile1": "geo-asn-country", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-cs": {"profile1": "geo-country-src", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-neg": {"profile1": "geo-neg", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-neg-only": {"profile1": "geo-neg-only", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-neg-de": {"profile1": "geo-neg-de", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-ir": {"profile1": "geo-ir", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-tie": {"profile1": "geoA", "profile2": "geoB", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-sd": {"profile1": "geo-src-dest", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-src": {"profile1": "geo-src", "pair_locs": [1, 2, 3, 4]},
+    "e-geo-levels": {"profile1": "geo-then-levels", "pair_locs": [1, 2, 3, 4]},
+    "e-cn-bypassdef": {"profile1": "cn-bypassdef", "pair_locs": [1, 2, 3, 4]},
+    "e-cn-blockdef": {"profile1": "cn-blockdef", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-zero": {"profile1": "qm-zero", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-nx": {"profile1": "qm-nx", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-ref": {"profile1": "qm-ref", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-custom": {"profile1": "qm-custom", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-custom4": {"profile1": "qm-custom4", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-custom6": {"profile1": "qm-custom6", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-branded": {"profile1": "qm-branded", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-redir-loc": {"profile1": "qm-redir-loc", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-redir-ip": {"profile1": "qm-redir-ip", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-redir-ip4": {"profile1": "qm-redir-ip4", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-redir-host": {"profile1": "qm-redir-host", "pair_locs": [1, 2, 3, 4]},
+    "e-qm-bypass": {"profile1": "qm-bypass", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-rebind": {"profile1": "opt-rebind", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-dns64": {"profile1": "opt-dns64", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-dns64-rebind": {"profile1": "opt-dns64-rebind", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-rebind-loc": {"profile1": "opt-rebind-loc", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-flatten": {"profile1": "opt-flatten", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-ecs-auto": {"profile1": "opt-ecs-auto", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-ecs-custom": {"profile1": "opt-ecs-custom", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-ttl": {"profile1": "opt-ttl", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-exfil": {"profile1": "opt-exfil", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-dnssec-off": {"profile1": "opt-dnssec-off", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-safe": {"profile1": "opt-safe", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-safe-redir": {"profile1": "opt-safe-redir", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-safe-rebind": {"profile1": "opt-safe-rebind", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-safe-rebind-branded": {"profile1": "opt-safe-rebind-branded", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-safe-dns64": {"profile1": "opt-safe-dns64", "pair_locs": [1, 2, 3, 4]},
+    "e-opt-safe-dns64-rebind": {"profile1": "opt-safe-dns64-rebind", "pair_locs": [1, 2, 3, 4]},
+    "e-loc": {"profile1": "loc-redir", "pair_locs": [1, 2, 3, 4]},
+    "e-loc-stale": {"profile1": "loc-redir", "pair_locs": [1, 3, 4]},
+    "e-sys-block": {"profile1": "sys-block", "pair_locs": [1, 2, 3, 4]},
+    "e-sys-nx": {"profile1": "sys-nx", "pair_locs": [1, 2, 3, 4]},
+    "e-sys-ref": {"profile1": "sys-ref", "pair_locs": [1, 2, 3, 4]},
+    "e-sys-custom": {"profile1": "sys-custom", "pair_locs": [1, 2, 3, 4]},
+    "e-sys-branded": {"profile1": "sys-branded", "pair_locs": [1, 2, 3, 4]},
+    "e-catprof": {"profile1": "catprof", "pair_locs": [1, 2, 3, 4]}
+  }
+}
