@@ -464,7 +464,7 @@ func (s *Server) GetJob(ctx context.Context, req gen.GetJobRequestObject) (gen.G
 			return httpx.NotFound()
 		}
 		if size > heldJobFloor {
-			if e := httpx.HoldAnswer(ctx, size+heldJobHead); e != nil {
+			if e := httpx.HoldAnswer(tx.Context(), size+heldJobHead); e != nil {
 				return e
 			}
 		}

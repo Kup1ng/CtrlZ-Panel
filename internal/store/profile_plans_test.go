@@ -59,7 +59,7 @@ func TestProfileStatementsReadOnlyWhatNamesTheProfile(t *testing.T) {
 	// clients that name B's profiles (another tenant's rows are in the same table and the same index).
 	e.exec(t, `INSERT INTO ctrlz.clients (tenant_id, endpoint_id, label) SELECT $1, $2, 'c' || g FROM generate_series(1, 20000) g`, e.A.Tenant, e.A.Endpoint)
 	e.exec(t, `INSERT INTO ctrlz.clients (tenant_id, endpoint_id, label, profile_id) VALUES ($1, $2, 'n1', $3), ($1, $2, 'n2', $3)`, e.A.Tenant, e.A.Endpoint, third)
-	e.exec(t, `INSERT INTO ctrlz.clients (tenant_id, endpoint_id, label, profile2_id) VALUES ($1, $2, 'n3', $3)`, e.A.Tenant, e.A.Endpoint, third)
+	e.exec(t, `INSERT INTO ctrlz.clients (tenant_id, endpoint_id, label, profile_id, profile2_id) VALUES ($1, $2, 'n3', $4, $3)`, e.A.Tenant, e.A.Endpoint, third, e.A.Profile)
 	e.exec(t, `INSERT INTO ctrlz.clients (tenant_id, endpoint_id, label, profile_id) SELECT $1, $2, 'b' || g, $3 FROM generate_series(1, 2000) g`, e.B.Tenant, e.B.Endpoint, e.B.Profile)
 	for _, tbl := range []string{"clients", "rules", "endpoints", "schedule_windows", "profiles"} {
 		e.exec(t, `VACUUM ANALYZE ctrlz.`+tbl)
