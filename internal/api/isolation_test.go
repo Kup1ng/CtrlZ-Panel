@@ -717,7 +717,11 @@ func TestIsolation(t *testing.T) {
 		f.env.Exec(t, `UPDATE ctrlz.tenants SET status = 'suspended' WHERE id = $1`, B.Tenant)
 		defer f.env.Exec(t, `UPDATE ctrlz.tenants SET status = 'active' WHERE id = $1`, B.Tenant)
 
-		loopStart := f.ck.now()
+		type walked struct {
+			c  *client
+			at time.Time
+		}
+		walk := map[bool]walked{}
 		for _, op := range docOps {
 			if op.Auth == apispec.None {
 				continue
@@ -726,8 +730,17 @@ func TestIsolation(t *testing.T) {
 			if !ok {
 				t.Fatalf("%s has no generated baseline", op.ID)
 			}
-			// A session that satisfies the class of the operation, so only the tenant's state can refuse it.
-			c := e.session(e.n[isolation.B], op.Auth == apispec.Reauth)
+			// A session that satisfies the class of the operation, so only the tenant's state can refuse it. One session of each
+			// class serves the whole walk: an account holds at most caps.MaxSessions live sessions and a login past it ends the
+			// oldest, which is the remembered browser of this case, so a session for each of the operations of the document (72
+			// with the profile routes) ended its refresh cookie. A logout ends the session that made it, so the next operation opens another.
+			reauth := op.Auth == apispec.Reauth
+			// The reauth window of a session is 10 minutes of the fake clock, which every operation spends one of, so a session is
+			// renewed after five: about 17 of each class in all, far below the cap.
+			if w, ok := walk[reauth]; !ok || f.ck.now().Sub(w.at) > 5*time.Minute {
+				walk[reauth] = walked{e.session(e.n[isolation.B], reauth), f.ck.now()}
+			}
+			c := walk[reauth].c
 			var body any
 			if base.Body != nil {
 				body = base.Body
@@ -742,6 +755,7 @@ func TestIsolation(t *testing.T) {
 				if r.Code != 204 {
 					t.Errorf("POST /auth/logout for a suspended tenant: %d %s", r.Code, r.Body)
 				}
+				delete(walk, reauth)
 			default:
 				if r.Code != 403 || r.code() != "account_suspended" {
 					t.Errorf("%s %s (%s) for a suspended tenant: %d %s, want 403 account_suspended", op.Method, op.Path, op.ID, r.Code, r.Body)
@@ -752,10 +766,7 @@ func TestIsolation(t *testing.T) {
 
 		// A session renewed from the refresh cookie is a session like any other: the renewal itself is
 		// allowed (it only swaps cookies), and the new session reaches /me and nothing else.
-		// The browser was restarted: only the refresh cookie remains. The loop above spent a minute for each operation, and every
-		// route added to the document spends one more, so the wait is what is left of three hours, which is above the idle bound of
-		// a session and below the life of a refresh token however many routes the document has.
-		f.ck.add(max(time.Minute, 3*time.Hour-f.ck.now().Sub(loopStart)))
+		f.ck.add(3 * time.Hour) // the browser was restarted: only the refresh cookie remains
 		delete(remembered.jar, session.CookieSession)
 		remembered.post("/auth/refresh", nil).want(204, "")
 		if remembered.jar[session.CookieSession] == nil {
