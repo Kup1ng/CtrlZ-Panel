@@ -1,0 +1,128 @@
+# Reviewed imports of non-test code (P1 auth review round 11, primitives-r11-2 and -3; rule
+# one-primitive-per-key, enforced by internal/lint TestEveryImportIsReviewed).
+#
+# Why this file exists. The RFC 6238 rule of spec 6.3 says a one-time code is verified in one place,
+# internal/auth/totp, which throttles first and spends the matched step after. Two rounds closed holes in
+# that rule by widening a list of NAMES (a path element called totp, hotp, otp or gotp), and a library
+# called dgoogauth, twofactor or go-otp passed, as did HMAC-SHA1 built from hkdf.Extract(crypto.SHA1.New,
+# ...). A block list fails open for every name nobody thought of, so the rule is an allow list that fails
+# closed: a package outside the standard library and this module may be imported by non-test code only if it
+# is listed here with the reason, in a diff a reviewer reads.
+#
+# Two lists, both compared with the source and go.mod in both directions:
+#
+#   code_primitives  the standard-library and x/crypto packages that can compute an HMAC or an HOTP
+#                    (directly, or as HKDF-Extract or PBKDF2 over SHA-1), with the only package
+#                    directories that may import each. Any other importer fails, and an entry whose
+#                    package no longer imports it fails too, so the list cannot rot into a free pass.
+#                    The directories of shared/ are judged as well (written "shared/identity"), and a
+#                    Panel directory that imports a shared package is taken to import every primitive
+#                    that package reaches, itself or through another shared package, so the module
+#                    cannot carry a primitive past the list (round 12, primitives-r12-4).
+#   third_party      every import path of non-test code outside the standard library and this module,
+#                    the shared module included.
+#                    Each path must lie under a direct requirement of go.mod, and each direct
+#                    requirement must have a path here or be listed under without_non_test_import.
+#
+# A test file may import anything: the rule is about what a route can reach.
+
+code_primitives:
+  crypto/hmac:
+    why: the MAC of the key ring subkeys, the HMAC an RFC 6238 code is made of, and shared/identity ProofCode (HMAC-SHA256 of a node label and a source address under the proof key of the DNS node, a 10 character TXT proof and no authenticator code)
+    only: [internal/keyring, internal/auth/totp, shared/identity]
+  crypto/hkdf:
+    why: the per-label subkeys of the key ring; hkdf.Extract(sha1.New, msg, key) is HMAC-SHA1(key, msg)
+    only: [internal/keyring]
+  crypto/sha1:
+    why: the hash of an RFC 6238 code, and the script digest EVALSHA takes in the rate limiter
+    only: [internal/auth/totp, internal/ratelimit]
+  crypto/pbkdf2:
+    why: PBKDF2 with one round over SHA-1 is an HMAC-SHA1 of the salt, so it is a way to compute a code
+    only: []
+  crypto:
+    why: the bare package names the hash (crypto.SHA1.New) that the HKDF or PBKDF2 above is given
+    only: []
+  golang.org/x/crypto/hkdf:
+    why: the same as crypto/hkdf, from the x/crypto module
+    only: []
+  golang.org/x/crypto/pbkdf2:
+    why: the same as crypto/pbkdf2, from the x/crypto module
+    only: []
+
+third_party:
+  - path: github.com/Kup1ng/CtrlZ-Shared/locations
+    why: AllowedLocations, EffectiveService and EffectiveSelection, the one definition of which locations a profile may use (P2 write path and locations route)
+  - path: github.com/Kup1ng/CtrlZ-Shared/names
+    why: names.ParseUser, the one conversion of a typed host name (Target host, rule search)
+  - path: github.com/Kup1ng/CtrlZ-Shared/noredirect
+    why: the one definition of an Iranian name (D42), shared with the evaluator
+  - path: github.com/Kup1ng/CtrlZ-Shared/rules
+    why: rules.Parse and MergeUpload, the one validator of a rule token
+  - path: github.com/ccojocar/zxcvbn-go
+    why: password strength score (4.2)
+  - path: github.com/ccojocar/zxcvbn-go/match
+    why: the match type of the same scorer
+  - path: github.com/fxamacker/cbor/v2
+    why: CBOR of the passkey test authenticator (internal/auth/passkey/passkeytest)
+  - path: github.com/getkin/kin-openapi/openapi3
+    why: the OpenAPI document the request boundary validates against
+  - path: github.com/getkin/kin-openapi/openapi3filter
+    why: request validation against that document
+  - path: github.com/getkin/kin-openapi/routers
+    why: route lookup for that validation
+  - path: github.com/go-chi/chi/v5
+    why: the HTTP router
+  - path: github.com/go-webauthn/webauthn/protocol
+    why: passkey ceremonies (6.4)
+  - path: github.com/go-webauthn/webauthn/webauthn
+    why: passkey ceremonies (6.4)
+  - path: github.com/google/uuid
+    why: identifiers
+  - path: github.com/jackc/pgx/v5
+    why: the Postgres driver, imported only where the store rule allows
+  - path: github.com/jackc/pgx/v5/pgconn
+    why: Postgres errors, for the SQLSTATE class
+  - path: github.com/jackc/pgx/v5/pgtype
+    why: Postgres types in the store
+  - path: github.com/jackc/pgx/v5/pgxpool
+    why: the connection pools of the store
+  - path: github.com/jackc/pgx/v5/stdlib
+    why: database/sql adapter of the migration runner
+  - path: github.com/riverqueue/river
+    why: the queue of the batch jobs of P2 (spec 3.5), run poll-only by the worker
+  - path: github.com/riverqueue/river/riverdriver/riverpgxv5
+    why: River's driver over the pool of the worker role, built in the store and nowhere else
+  - path: github.com/riverqueue/river/rivertype
+    why: the states of a River job, for the sweep that asks whether a live job holds a row
+  - path: github.com/moby/moby/api/types/container
+    why: container types of the test harness (testpg, testvalkey)
+  - path: github.com/moby/moby/api/types/network
+    why: network types of the test harness
+  - path: github.com/oapi-codegen/runtime
+    why: runtime of the generated API code
+  - path: github.com/oapi-codegen/runtime/types
+    why: types of the generated API code
+  - path: github.com/pressly/goose/v3
+    why: migrations
+  - path: github.com/pressly/goose/v3/lock
+    why: the migration lock
+  - path: github.com/santhosh-tekuri/jsonschema/v6
+    why: JSON schema checks of the request boundary
+  - path: github.com/testcontainers/testcontainers-go
+    why: containers of the shared test harness (internal/testpg, internal/testvalkey)
+  - path: github.com/testcontainers/testcontainers-go/exec
+    why: running the scripts of deploy/compose/postgres (the watchdog) inside the Postgres container of the test harness
+  - path: github.com/testcontainers/testcontainers-go/modules/postgres
+    why: the Postgres container of the test harness
+  - path: github.com/testcontainers/testcontainers-go/wait
+    why: wait strategies of the test harness
+  - path: github.com/valkey-io/valkey-go
+    why: the rate limiter and the counters in Valkey
+  - path: golang.org/x/crypto/argon2
+    why: password hashing (4.1)
+  - path: golang.org/x/net/publicsuffix
+    why: the cookie domain check of the admin API
+  - path: golang.org/x/text/unicode/norm
+    why: NFKC of passwords, phone numbers and OTP codes
+  - path: gopkg.in/yaml.v3
+    why: the OpenAPI, mutant and registry files that the checkers read

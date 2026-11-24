@@ -1,0 +1,564 @@
+# The SECURITY DEFINER allow-list (spec section 8, R3). Schema ctrlz_fn holds
+# exactly these functions and nothing else; each is owned by ctrlz_auth, pins
+# search_path to pg_catalog, pg_temp, has no PUBLIC EXECUTE, and no EXECUTE
+# statement in its body. args and returns are as Postgres prints them.
+# ranks is the order in which the body takes row locks (internal/lockrank, spec 4.4):
+# the first acquisition of each table, written by lockrank.Declare, "t:ks" for a key
+# share, "t:ins" for an insert. Check 21 compares it with the body in the database, and
+# store applies it when Go calls the function, so a function that locks in a new way
+# fails until this line says so.
+# trail and no_trail (rule role-reach, guarded.yaml, catalog check 23): a function whose body
+# writes a write-guarded table, or updates or deletes a trail table, says either `trail`,
+# the trail tables it inserts into in the same call (the body is checked, and
+# TestGuardedFunctionsLeaveATrail calls it), or `no_trail` with the reason there is
+# nothing to record or who records it. A function that writes nothing guarded says
+# neither. worker_, keytool_ and admin_ functions are executable by that one role.
+# isolation (rule isolation-success-coverage, catalogtest TestFunctionIsolation): what a function does with
+# tenants, and so which two-tenant fixture it needs. `tenant` acts for ctrlz.current_tenant_id() (the body
+# says so, and the test reads the body): a fixture brings B's call to success while A holds the same state, and
+# when the function takes an id a second call names A's id with B's setting and must be refused. `key` is a read
+# or a write keyed by a secret, a hash or a challenge: the fixture shows B's key reaches B's row and A's state is
+# untouched. `create` makes a new tenant. `none` touches no tenant table (the body is checked) and says why.
+# A function without the field fails; a `none` whose body names a tenant table fails.
+# owner (P1 auth review round 18, db-r18-1, catalog check 10): who the function runs as. `scoped` is ctrlz_scoped,
+# which has no policy but tenant_isolation, so a function that acts for the tenant of the call cannot see another
+# tenant's row even if its body forgets the predicate. `auth` is ctrlz_auth, whose auth_lookup, auth_claims and
+# global-table policies see every tenant: the CLOSED list of functions that need that, each with its reason in
+# auth_owner_reason. A function owned by ctrlz_auth with no reason, a reason on a scoped function, and a scoped
+# function whose isolation is not `tenant` all fail, so a function added in a later phase is scoped by default and
+# the one that needs the wider reach says so and why.
+security_definer:
+  - name: audit_lock
+    isolation: none
+    isolation_reason: "takes one advisory key, the audit chain's, and reads and writes no table"
+    args: ""
+    returns: "void"
+    owner: auth
+    auth_owner_reason: "takes the audit chain advisory lock and reads no table"
+    execute: [admin]
+    ranks: [audit_log]
+  - name: admin_account_bootstrap
+    isolation: none
+    isolation_reason: "admin_users only: the console account belongs to no tenant"
+    args: "p_username text, p_password_hash text"
+    returns: "uuid"
+    owner: auth
+    auth_owner_reason: "reads and writes admin_users, the console account, which belongs to no tenant and has no tenant column to scope by"
+    execute: [admin]
+    ranks: [admin_users:ins]
+    no_trail: "the CLI appends the chained admin audit row (audit.AdminBootstrap) in the same transaction"
+  - name: admin_totp_replace
+    isolation: none
+    isolation_reason: "admin_users only: the console account belongs to no tenant"
+    args: "p_admin_id uuid, p_old bytea, p_new bytea"
+    returns: "boolean"
+    owner: auth
+    auth_owner_reason: "reads and writes admin_users, the console account, which belongs to no tenant and has no tenant column to scope by"
+    execute: [admin]
+    ranks: [admin_users]
+    no_trail: "a compare-and-swap that re-seals an existing seed and cannot clear it; the rekey command reports the count"
+  - name: admin_account_reset
+    isolation: none
+    isolation_reason: "admin_users only: the console account belongs to no tenant"
+    args: "p_admin_id uuid, p_password_hash text, p_drop_totp boolean"
+    returns: "boolean"
+    owner: auth
+    auth_owner_reason: "reads and writes admin_users, the console account, which belongs to no tenant and has no tenant column to scope by"
+    execute: [admin]
+    ranks: [admin_users]
+    no_trail: "the CLI appends the chained admin audit row (audit.AdminPasswordResetCLI, AdminTOTPResetCLI) in the same transaction"
+  - name: admin_account_set_password
+    isolation: none
+    isolation_reason: "admin_users only: the console account belongs to no tenant"
+    args: "p_admin_id uuid, p_password_hash text"
+    returns: "TABLE(ok boolean, cred_state text)"
+    owner: auth
+    auth_owner_reason: "reads and writes admin_users, the console account, which belongs to no tenant and has no tenant column to scope by"
+    execute: [admin]
+    ranks: [admin_users]
+    no_trail: "the route appends the chained admin audit row (audit.AdminPasswordChange) in the same transaction"
+  - name: admin_account_totp_enable
+    isolation: none
+    isolation_reason: "admin_users only: the console account belongs to no tenant"
+    args: "p_admin_id uuid, p_step bigint"
+    returns: "TABLE(ok boolean, cred_state text)"
+    owner: auth
+    auth_owner_reason: "reads and writes admin_users, the console account, which belongs to no tenant and has no tenant column to scope by"
+    execute: [admin]
+    ranks: [admin_users]
+    no_trail: "the route appends the chained admin audit row (audit.AdminTOTPEnroll) in the same transaction"
+  - name: admin_create_user
+    isolation: create
+    isolation_reason: "makes a new tenant; the caller names no existing one"
+    args: "p_phone text, p_password_hash text, p_locale text"
+    returns: "TABLE(tenant_id uuid, user_id uuid)"
+    owner: auth
+    auth_owner_reason: "creates a tenant and its first user: INSERT into tenants and users is ctrlz_auth's auth_create policy, and there is no tenant setting yet"
+    execute: [admin]
+    ranks: [tenants:ins, users:ins, tenant_entitlements:ins]
+    no_trail: "the route appends the chained admin audit row (audit.Admin) in the same transaction"
+  - name: admin_one_time_state
+    isolation: tenant
+    args: "p_user_id uuid"
+    returns: "TABLE(cred_state text, no_second_factor boolean, tenant_status text)"
+    owner: scoped
+    execute: [admin]
+    ranks: [users]
+  - name: admin_reissue_one_time_password
+    isolation: tenant
+    args: "p_user_id uuid, p_password_hash text"
+    returns: "TABLE(outcome text, was_expired boolean, expires_at timestamp with time zone)"
+    owner: scoped
+    execute: [admin]
+    ranks: [users]
+    no_trail: "the route appends the chained admin audit row (audit.Admin) in the same transaction"
+  - name: admin_revoke_user_sessions
+    isolation: tenant
+    args: "p_user_id uuid"
+    returns: "integer"
+    owner: scoped
+    execute: [admin]
+    ranks: [sessions, refresh_tokens]
+    no_trail: "the route appends the chained admin audit row in the same transaction; revoked_at is one way"
+  - name: admin_sms_stats
+    isolation: none
+    isolation_reason: "reads the global SMS counters, which carry no tenant"
+    args: "p_days integer"
+    returns: "TABLE(day date, sent integer, outbox integer, cost text)"
+    owner: auth
+    auth_owner_reason: "reads the global rows of sms_counters (no tenant column): only ctrlz_auth sees them besides the worker"
+    execute: [admin]
+    ranks: []
+  - name: admin_throttle_hit
+    isolation: none
+    isolation_reason: "a rate-limit counter keyed by a hash, not by a tenant"
+    args: "p_scope text, p_key bytea, p_max integer, p_window_seconds integer"
+    returns: "TABLE(allowed boolean, retry_after_s integer, window_epoch bigint)"
+    owner: auth
+    auth_owner_reason: "auth_throttle is keyed by a scope and a hashed key, not by a tenant; there is no tenant row to scope to"
+    execute: [admin]
+    ranks: [auth_throttle]
+    no_trail: "a rate-limit counter, not a change to an account"
+  - name: admin_throttle_refund
+    isolation: none
+    isolation_reason: "a rate-limit counter keyed by a hash, not by a tenant"
+    args: "p_scope text, p_key bytea, p_window_seconds integer, p_epoch bigint"
+    returns: "void"
+    owner: auth
+    auth_owner_reason: "auth_throttle is keyed by a scope and a hashed key, not by a tenant; there is no tenant row to scope to"
+    execute: [admin]
+    ranks: [auth_throttle]
+    no_trail: "a rate-limit counter, not a change to an account"
+  - name: admin_throttle_reset
+    isolation: none
+    isolation_reason: "a rate-limit counter keyed by a hash, not by a tenant"
+    args: "p_scope text, p_key bytea"
+    returns: "void"
+    owner: auth
+    auth_owner_reason: "auth_throttle is keyed by a scope and a hashed key, not by a tenant; there is no tenant row to scope to"
+    execute: [admin]
+    ranks: [auth_throttle]
+    no_trail: "a rate-limit counter, not a change to an account"
+  - name: announcements_for_tenant
+    isolation: tenant
+    args: ""
+    returns: "TABLE(id uuid, audience text, body text, starts_at timestamp with time zone, ends_at timestamp with time zone)"
+    owner: scoped
+    execute: [tenant]
+    ranks: []
+  - name: auth_download_by_hash
+    isolation: key
+    args: "p_hash bytea"
+    returns: "TABLE(tenant_id uuid, endpoint_id uuid, params_hash bytea, expires_at timestamp with time zone, uses_left integer)"
+    owner: auth
+    auth_owner_reason: "a lookup made before any tenant is known (by the hash of a download token): the auth_lookup policies of ctrlz_auth are what let it find the row, and the body then states the tenant it found"
+    execute: [tenant]
+    ranks: []
+  - name: auth_invite_by_hash
+    isolation: key
+    args: "p_hash bytea"
+    returns: "TABLE(id uuid, phone_e164 text, expires_at timestamp with time zone, used_at timestamp with time zone, revoked_at timestamp with time zone, expired boolean)"
+    owner: auth
+    auth_owner_reason: "a lookup made before any tenant is known (by the hash of an invite token): the auth_lookup policies of ctrlz_auth are what let it find the row, and the body then states the tenant it found"
+    execute: [tenant]
+    ranks: []
+  - name: auth_otp_check
+    isolation: key
+    args: "p_id uuid, p_phone text, p_purpose text, p_code_hash bytea"
+    returns: "TABLE(outcome text)"
+    owner: auth
+    auth_owner_reason: "reads and marks otp_challenges, a table with no tenant column that only ctrlz_auth and the worker (its deliverable rows) may see"
+    execute: [tenant]
+    ranks: [otp_challenges]
+    no_trail: "login code state; the outcome goes to the caller who holds the code"
+  - name: auth_otp_consume
+    isolation: key
+    args: "p_id uuid, p_phone text, p_purpose text, p_code_hash bytea"
+    returns: "TABLE(outcome text)"
+    owner: auth
+    auth_owner_reason: "reads and marks otp_challenges, a table with no tenant column that only ctrlz_auth and the worker (its deliverable rows) may see"
+    execute: [tenant]
+    ranks: [otp_challenges]
+    no_trail: "login code state; the outcome goes to the caller who holds the code"
+  - name: auth_otp_issue
+    isolation: key
+    args: "p_phone text, p_purpose text, p_code_hash bytea, p_delivery_ct bytea, p_ip inet, p_trusted boolean"
+    returns: "TABLE(id uuid, allowed boolean)"
+    owner: auth
+    auth_owner_reason: "counts sms_counters and inserts otp_challenges, global tables with no tenant column, before any tenant is known"
+    execute: [tenant]
+    ranks: [otp_challenges, sms_counters]
+    no_trail: "login code state and the daily caps; the SMS delivery record is the trail"
+  - name: auth_passkey_by_credential
+    isolation: key
+    args: "p_credential_id bytea"
+    returns: "TABLE(tenant_id uuid, user_id uuid, id uuid, public_key bytea, sign_count bigint, rp_id text, stale_at timestamp with time zone, transports text[], aaguid uuid, backup_eligible boolean, backup_state boolean)"
+    owner: auth
+    auth_owner_reason: "a lookup made before any tenant is known (by a credential id): the auth_lookup policies of ctrlz_auth are what let it find the row, and the body then states the tenant it found"
+    execute: [tenant]
+    ranks: []
+  - name: auth_phone_change_complete
+    isolation: tenant
+    args: "p_request_id uuid"
+    returns: "TABLE(outcome text)"
+    owner: auth
+    auth_owner_reason: "reads the consumed codes of otp_challenges, a table with no tenant column that only ctrlz_auth and the worker may see"
+    execute: [tenant]
+    ranks: [users, phone_change_requests]
+    no_trail: "the tenant route writes the audit row and the notice in the same transaction"
+  - name: auth_phone_mark_verified
+    isolation: tenant
+    args: "p_user_id uuid, p_otp_id uuid"
+    returns: "TABLE(outcome text)"
+    owner: auth
+    auth_owner_reason: "reads the consumed codes of otp_challenges, a table with no tenant column that only ctrlz_auth and the worker may see"
+    execute: [tenant]
+    ranks: [users]
+    no_trail: "the tenant route writes the audit row in the same transaction"
+  - name: auth_public_config
+    isolation: none
+    isolation_reason: "reads the global settings every visitor sees"
+    args: ""
+    returns: "TABLE(registration_mode text, panel_host text, rp_id text, allowed_origins text[], passkey_enabled boolean, sms_available boolean, otp_cooldown_s integer)"
+    owner: auth
+    auth_owner_reason: "reads the global settings the login page needs, before any tenant is known"
+    execute: [tenant]
+    ranks: []
+  - name: auth_refresh_by_hash
+    isolation: key
+    args: "p_hash bytea"
+    returns: "TABLE(tenant_id uuid, user_id uuid, id uuid, family_id uuid, rotated_at timestamp with time zone, reuse_grace_until timestamp with time zone, expires_at timestamp with time zone, revoked_at timestamp with time zone)"
+    owner: auth
+    auth_owner_reason: "a lookup made before any tenant is known (by the hash of a refresh token): the auth_lookup policies of ctrlz_auth are what let it find the row, and the body then states the tenant it found"
+    execute: [tenant]
+    ranks: []
+  - name: auth_register_user
+    isolation: create
+    isolation_reason: "makes a new tenant from an invite or an open signup; the caller names no existing one"
+    args: "p_phone text, p_password_hash text, p_locale text, p_invite_id uuid, p_otp_id uuid"
+    returns: "TABLE(tenant_id uuid, user_id uuid)"
+    owner: auth
+    auth_owner_reason: "creates a tenant and its first user from a consumed code and an invite: it spends otp_challenges and invites, which have no tenant column"
+    execute: [tenant]
+    ranks: [otp_challenges, invites, tenants:ins, users:ins, tenant_entitlements:ins]
+    no_trail: "the tenant route writes the audit row in the same transaction"
+  - name: auth_session_by_hash
+    isolation: key
+    args: "p_hash bytea"
+    returns: "TABLE(tenant_id uuid, user_id uuid, session_id uuid, status text, idle_expires_at timestamp with time zone, absolute_expires_at timestamp with time zone, revoked_at timestamp with time zone, reauth_at timestamp with time zone, cred_state text)"
+    owner: auth
+    auth_owner_reason: "a lookup made before any tenant is known (by the hash of a session token): the auth_lookup policies of ctrlz_auth are what let it find the row, and the body then states the tenant it found"
+    execute: [tenant]
+    ranks: []
+  - name: auth_share_by_hash
+    isolation: key
+    args: "p_hash bytea"
+    returns: "TABLE(tenant_id uuid, endpoint_id uuid, client text, expires_at timestamp with time zone, uses_left integer)"
+    owner: auth
+    auth_owner_reason: "a lookup made before any tenant is known (by the hash of a share token): the auth_lookup policies of ctrlz_auth are what let it find the row, and the body then states the tenant it found"
+    execute: [tenant]
+    ranks: []
+  - name: auth_throttle_hit
+    isolation: none
+    isolation_reason: "a rate-limit counter keyed by a hash, not by a tenant"
+    args: "p_scope text, p_key bytea, p_max integer, p_window_seconds integer"
+    returns: "TABLE(allowed boolean, retry_after_s integer, window_epoch bigint)"
+    owner: auth
+    auth_owner_reason: "auth_throttle is keyed by a scope and a hashed key, not by a tenant; there is no tenant row to scope to"
+    execute: [tenant]
+    ranks: [auth_throttle]
+    no_trail: "a rate-limit counter, not a change to an account"
+  - name: auth_throttle_reset
+    isolation: none
+    isolation_reason: "a rate-limit counter keyed by a hash, not by a tenant"
+    args: "p_scope text, p_key bytea"
+    returns: "void"
+    owner: auth
+    auth_owner_reason: "auth_throttle is keyed by a scope and a hashed key, not by a tenant; there is no tenant row to scope to"
+    execute: [tenant]
+    ranks: [auth_throttle]
+    no_trail: "a rate-limit counter, not a change to an account"
+  - name: auth_throttle_refund
+    isolation: none
+    isolation_reason: "a rate-limit counter keyed by a hash, not by a tenant"
+    args: "p_scope text, p_key bytea, p_window_seconds integer, p_epoch bigint"
+    returns: "void"
+    owner: auth
+    auth_owner_reason: "auth_throttle is keyed by a scope and a hashed key, not by a tenant; there is no tenant row to scope to"
+    execute: [tenant]
+    ranks: [auth_throttle]
+    no_trail: "a rate-limit counter, not a change to an account"
+  - name: auth_ticket_peek
+    isolation: key
+    args: "p_token_hash bytea, p_kind text"
+    returns: "TABLE(subject_tenant uuid, subject_user uuid, remember_me boolean, first_factor text, payload bytea, subject_gen bigint)"
+    owner: auth
+    auth_owner_reason: "auth_tickets is keyed by the hash of a ticket handed out before a session exists; the ticket names its tenant and user"
+    execute: [tenant]
+    ranks: [auth_tickets]
+    no_trail: "a one-time ticket read; nothing about an account changes"
+  - name: auth_ticket_put
+    isolation: key
+    args: "p_token_hash bytea, p_kind text, p_tenant uuid, p_user uuid, p_remember boolean, p_first_factor text, p_payload bytea, p_ttl_seconds integer, p_subject_gen bigint"
+    returns: "TABLE(id uuid)"
+    owner: auth
+    auth_owner_reason: "auth_tickets is keyed by the hash of a ticket handed out before a session exists; the ticket names its tenant and user"
+    execute: [tenant]
+    ranks: [auth_tickets:ins]
+    no_trail: "a one-time ticket the caller proved a first factor for"
+  - name: auth_ticket_take
+    isolation: key
+    args: "p_token_hash bytea, p_kind text"
+    returns: "TABLE(subject_tenant uuid, subject_user uuid, remember_me boolean, first_factor text, payload bytea, subject_gen bigint)"
+    owner: auth
+    auth_owner_reason: "auth_tickets is keyed by the hash of a ticket handed out before a session exists; the ticket names its tenant and user"
+    execute: [tenant]
+    ranks: [auth_tickets]
+    no_trail: "a one-time ticket the caller proved a first factor for"
+  - name: auth_tickets_revoke
+    isolation: tenant
+    args: "p_user_id uuid"
+    returns: "void"
+    owner: auth
+    auth_owner_reason: "auth_tickets is a global table with no row-level security (subject_tenant is a plain column, a ticket is looked up by the hash of a token handed out before a session exists), so ctrlz_scoped would see every tenant's tickets and gain nothing; the predicate in the body is its isolation and the key fixture of TestFunctionIsolation reads it"
+    execute: [tenant, admin]
+    ranks: [auth_tickets]
+    no_trail: "closes open tickets after a credential change that the caller has already recorded"
+  - name: auth_token_by_hash
+    isolation: key
+    args: "p_hash bytea"
+    returns: "TABLE(tenant_id uuid, user_id uuid, token_id uuid, kind text, allowed_ips cidr[], status text, revoked_at timestamp with time zone)"
+    owner: auth
+    auth_owner_reason: "a lookup made before any tenant is known (by the hash of an API token): the auth_lookup policies of ctrlz_auth are what let it find the row, and the body then states the tenant it found"
+    execute: [tenant]
+    ranks: []
+  - name: auth_totp_seed
+    isolation: tenant
+    args: "p_user_id uuid, p_tenant_id uuid"
+    returns: "TABLE(totp_secret_ct bytea)"
+    owner: scoped
+    execute: [tenant]
+    ranks: []
+  - name: auth_user_by_phone
+    isolation: key
+    args: "p_phone text"
+    returns: "TABLE(tenant_id uuid, user_id uuid, password_hash text, status text, totp_enabled boolean, enforce_passkey boolean, enforce_lift_at timestamp with time zone, password_changed_at timestamp with time zone, cred_state text, credential_gen bigint)"
+    owner: auth
+    auth_owner_reason: "a lookup made before any tenant is known (by a phone number): the auth_lookup policies of ctrlz_auth are what let it find the row, and the body then states the tenant it found"
+    execute: [tenant]
+    ranks: []
+  - name: auth_user_flags
+    isolation: tenant
+    args: "p_user_id uuid"
+    returns: "TABLE(has_password boolean)"
+    owner: scoped
+    execute: [tenant]
+    ranks: []
+  - name: endpoint_pair_ips
+    isolation: tenant
+    args: ""
+    returns: "TABLE(endpoint_id uuid, primary_dns_ip inet, fallback_dns_ip inet)"
+    owner: scoped
+    execute: [tenant, worker]
+    ranks: []
+  - name: ip_claim_check
+    isolation: tenant
+    args: "p_cidr cidr"
+    returns: "TABLE(outcome text)"
+    owner: auth
+    auth_owner_reason: "looks across tenants by design: whether an address range overlaps a claim of any tenant (ip_claims policy auth_claims)"
+    execute: [tenant]
+    ranks: []
+  - name: ip_claim_open_challenge
+    isolation: tenant
+    args: "p_claim_id uuid"
+    returns: "TABLE(challenge_id uuid, label text, expires_at timestamp with time zone)"
+    owner: auth
+    auth_owner_reason: "looks across tenants by design: overlap and takeover of an address range (ip_claims policy auth_claims)"
+    execute: [tenant]
+    ranks: [ip_claims, ip_proof_challenges:ins]
+  - name: ip_claim_release
+    isolation: tenant
+    args: "p_claim_id uuid"
+    returns: "TABLE(outcome text)"
+    owner: auth
+    auth_owner_reason: "looks across tenants by design: releasing a claim re-judges the claims that overlapped it (ip_claims policy auth_claims)"
+    execute: [tenant]
+    ranks: [ip_claims]
+  - name: ip_claim_request
+    isolation: tenant
+    args: "p_endpoint_id uuid, p_cidr cidr, p_source text"
+    returns: "TABLE(claim_id uuid, outcome text)"
+    owner: auth
+    auth_owner_reason: "looks across tenants by design: overlap and takeover of an address range (ip_claims policy auth_claims)"
+    execute: [tenant, worker]
+    ranks: [ip_claims, endpoints:ks]
+  - name: ip_claim_take
+    isolation: tenant
+    args: "p_claim_id uuid, p_code text, p_batch_id uuid"
+    returns: "TABLE(outcome text)"
+    owner: auth
+    auth_owner_reason: "looks across tenants by design: it displaces the claims of other tenants that a proven range overlaps (ip_claims policy auth_claims)"
+    execute: [tenant, worker]
+    ranks: [ip_claims, ip_proof_challenges, policy_outbox:ins]
+  - name: keytool_totp_declare_lost
+    isolation: tenant
+    args: "p_key_number integer, p_user_ids uuid[], p_cts bytea[]"
+    returns: "integer"
+    owner: scoped
+    execute: [keytool]
+    ranks: [users, notifications:ins, tenant_audit_log:ins]
+    trail: [notifications, tenant_audit_log]
+  - name: keytool_audit_key_event
+    isolation: none
+    isolation_reason: "writes one row of the admin audit chain, which belongs to no tenant, and reads and writes no tenant table"
+    args: "p_action text, p_key_number integer, p_rewritten integer, p_changed integer, p_failed integer"
+    returns: "bigint"
+    owner: auth
+    auth_owner_reason: "the admin audit chain belongs to no tenant and ctrlz_scoped holds no grant on it: only the definer role that may read the last hash and insert one row (0059) can append to it (admin-r18-6)"
+    execute: [keytool]
+    ranks: [audit_log]
+  - name: keytool_totp_replace
+    isolation: tenant
+    args: "p_user_id uuid, p_old bytea, p_new bytea"
+    returns: "boolean"
+    owner: auth
+    auth_owner_reason: "a re-seal of a seed in force: only a function owned by ctrlz_auth leaves the credential generation alone (credential_gen_bump, db-r7-4)"
+    execute: [keytool]
+    ranks: [users]
+    no_trail: "a compare-and-swap that re-seals an existing seed and cannot clear it"
+  - name: profile_tenant_lock
+    isolation: tenant
+    args: ""
+    returns: "boolean"
+    owner: auth
+    auth_owner_reason: "takes the tenant's profile-creation advisory lock and reads no table; only ctrlz_auth may call pg_advisory_xact_lock (catalog_reach.yaml, advisory-locks), as for audit_lock, so ctrlz_scoped cannot own it"
+    execute: [tenant, worker]
+    ranks: [idempotency_keys]
+  - name: tenant_set_password
+    isolation: tenant
+    args: "p_user_id uuid, p_password_hash text"
+    returns: "boolean"
+    owner: scoped
+    execute: [tenant]
+    ranks: [users]
+    no_trail: "the route writes password.change or password.reset to tenant_audit_log in the same transaction"
+  - name: worker_enforce_clear_without_live
+    isolation: tenant
+    args: "p_rp_id text"
+    returns: "integer"
+    owner: scoped
+    execute: [worker]
+    ranks: [users, notifications:ins, tenant_audit_log:ins]
+    trail: [notifications, tenant_audit_log]
+  - name: worker_passkeys_mark_stale
+    isolation: tenant
+    args: "p_rp_id text"
+    returns: "TABLE(user_id uuid)"
+    owner: scoped
+    execute: [worker]
+    ranks: [webauthn_credentials]
+    no_trail: "ends only credentials of an RP ID no longer in force; the job notifies each returned user"
+  - name: worker_sweep_otp_challenges
+    isolation: none
+    isolation_reason: "deletes by age from a global table whose rows hold raw phones, decoys included, which the sender cannot see"
+    args: "p_limit integer"
+    returns: "integer"
+    owner: auth
+    auth_owner_reason: "a retention sweep over every row of a global table (no tenant column); it is called by the worker and acts for no tenant"
+    execute: [worker]
+    ranks: [otp_challenges:skip]
+    no_trail: "deletes only challenges more than 24 hours old, on the database clock; the code of one that old expired long ago"
+  - name: worker_sweep_pending_totp
+    isolation: tenant
+    args: "p_limit integer"
+    returns: "integer"
+    owner: scoped
+    execute: [worker]
+    ranks: [users:skip]
+    no_trail: "clears only a setup the user never confirmed, which protected nothing"
+  - name: worker_sweep_sms_counters
+    isolation: none
+    isolation_reason: "deletes by age from a global table whose keys are raw phones and networks"
+    args: "p_limit integer"
+    returns: "integer"
+    owner: auth
+    auth_owner_reason: "a retention sweep over every row of a global table (no tenant column); it is called by the worker and acts for no tenant"
+    execute: [worker]
+    ranks: [sms_counters:skip]
+    no_trail: "deletes only per-phone, per-network and per-address rows two Tehran days past, on the database clock; the guard trigger refuses anything inside the retention"
+  - name: worker_sweep_sms_deliveries
+    isolation: none
+    isolation_reason: "deletes by age from a global table that carries no tenant id"
+    args: "p_limit integer"
+    returns: "integer"
+    owner: auth
+    auth_owner_reason: "a retention sweep over every row of a global table (no tenant column); it is called by the worker and acts for no tenant"
+    execute: [worker]
+    ranks: [sms_deliveries]
+    no_trail: "deletes only rows past the 90 day retention on the database clock"
+  - name: worker_sweep_throttle
+    isolation: none
+    isolation_reason: "deletes by age from a global table of hashed keys"
+    args: "p_limit integer"
+    returns: "integer"
+    owner: auth
+    auth_owner_reason: "a retention sweep over every row of a global table (no tenant column); it is called by the worker and acts for no tenant"
+    execute: [worker]
+    ranks: [auth_throttle:skip]
+    no_trail: "deletes only windows older than a day on the database clock"
+  - name: worker_sweep_tickets
+    isolation: none
+    isolation_reason: "deletes by expiry from the global ticket table"
+    args: "p_limit integer"
+    returns: "integer"
+    owner: auth
+    auth_owner_reason: "a retention sweep over every row of a global table (no tenant column); it is called by the worker and acts for no tenant"
+    execute: [worker]
+    ranks: [auth_tickets:skip]
+    no_trail: "deletes only tickets already expired on the database clock"
+
+# Functions in ctrlz that are not SECURITY DEFINER. No PUBLIC EXECUTE.
+helpers:
+  - {name: cap_reached, args: "spent numeric, cap numeric", returns: boolean, ranks: [], execute: [auth, tenant, worker]}
+  - {name: credential_gen_bump, args: "", returns: trigger, ranks: []}
+  - {name: credential_state, args: "p_one_time boolean, p_expires_at timestamp with time zone, p_needs_second_factor boolean", returns: text, ranks: [], execute: [auth, scoped, tenant, admin]}
+  - {name: current_tenant_id, args: "", returns: uuid, ranks: []}
+  - {name: one_time_expiry, args: "p_one_time boolean, p_expires_at timestamp with time zone", returns: "timestamp with time zone", ranks: [], execute: [admin]}
+  - {name: otp_challenges_deliverable, args: "", returns: trigger, ranks: []}
+  - {name: promote_profile2, args: "", returns: trigger, ranks: [clients]}
+  - {name: revocation_stays, args: "", returns: trigger, ranks: []}
+  - {name: sms_counters_guard, args: "", returns: trigger, ranks: []}
+  - {name: suspended_claim_stays, args: "", returns: trigger, ranks: []}
+  - {name: touch_updated_at, args: "", returns: trigger, ranks: []}
+
+# Triggers on ctrlz tables besides the updated_at ones: the stored definition,
+# and enabled. A delete guard that is dropped or disabled fails check 11.
+triggers:
+  - "CREATE TRIGGER promote_profile2 BEFORE DELETE ON ctrlz.profiles FOR EACH ROW EXECUTE FUNCTION ctrlz.promote_profile2()"
+  - "CREATE TRIGGER suspended_claim_stays BEFORE DELETE ON ctrlz.ip_claims FOR EACH ROW EXECUTE FUNCTION ctrlz.suspended_claim_stays()"
+  - "CREATE TRIGGER revocation_stays BEFORE UPDATE OF revoked_at ON ctrlz.sessions FOR EACH ROW WHEN (((old.revoked_at IS NOT NULL) AND (new.revoked_at IS DISTINCT FROM old.revoked_at))) EXECUTE FUNCTION ctrlz.revocation_stays()"
+  - "CREATE TRIGGER revocation_stays BEFORE UPDATE OF revoked_at ON ctrlz.refresh_tokens FOR EACH ROW WHEN (((old.revoked_at IS NOT NULL) AND (new.revoked_at IS DISTINCT FROM old.revoked_at))) EXECUTE FUNCTION ctrlz.revocation_stays()"
+  - "CREATE TRIGGER revocation_stays BEFORE UPDATE OF revoked_at ON ctrlz.api_tokens FOR EACH ROW WHEN (((old.revoked_at IS NOT NULL) AND (new.revoked_at IS DISTINCT FROM old.revoked_at))) EXECUTE FUNCTION ctrlz.revocation_stays()"
+  - "CREATE TRIGGER sms_counters_guard BEFORE INSERT OR DELETE OR UPDATE ON ctrlz.sms_counters FOR EACH ROW EXECUTE FUNCTION ctrlz.sms_counters_guard()"
+  - "CREATE TRIGGER otp_challenges_deliverable BEFORE INSERT OR UPDATE ON ctrlz.otp_challenges FOR EACH ROW EXECUTE FUNCTION ctrlz.otp_challenges_deliverable()"

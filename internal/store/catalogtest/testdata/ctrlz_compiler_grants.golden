@@ -1,0 +1,102 @@
+execute ctrlz.current_tenant_id()
+policy analytics_read_floors tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy announcement_reads tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy block_pages tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy clients tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoint_ddns_hosts tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoint_groups tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoints tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy feedback_items tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy filter_preview_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy idempotency_keys tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy ip_claims tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy ip_proof_challenges tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy job_outbox tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy notifications tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy phone_change_requests tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy policy_outbox compiler_drain_delete DELETE PERMISSIVE using=true check=-
+policy policy_outbox compiler_drain_select SELECT PERMISSIVE using=true check=-
+policy policy_outbox tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_download_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_filters tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_options tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_services tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profiles tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy recovery_codes tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy refresh_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy rule_folders tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy rules tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy schedule_windows tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy sessions tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy setup_share_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_assets tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_audit_log tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_entitlements tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenants compiler_list SELECT PERMISSIVE using=true check=-
+policy tenants tenant_isolation ALL PERMISSIVE using=(id = ctrlz.current_tenant_id()) check=(id = ctrlz.current_tenant_id())
+policy unblock_requests tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy users tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy webauthn_credentials tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+schema ctrlz USAGE
+table alerts INSERT
+table authorized_ips SELECT (cidr, endpoint_id, id, tenant_id)
+table block_pages SELECT
+table bundles SELECT
+table catalog_common_domains SELECT
+table catalog_filter SELECT
+table catalog_filter_mode SELECT
+table catalog_filter_table SELECT
+table catalog_infra_denylist SELECT
+table catalog_no_redirect_domain SELECT
+table catalog_protected_domains SELECT
+table catalog_rewrites SELECT
+table catalog_service SELECT
+table catalog_service_alias SELECT
+table catalog_service_category SELECT
+table catalog_service_domain SELECT
+table catalog_versions SELECT
+table clients SELECT (alias, analytics_level, created_at, endpoint_id, first_seen_at, group_name, id, is_custom, label, last_seen_at, profile2_id, profile_id, source, tenant_id, updated_at)
+table config_log INSERT
+table config_log SELECT
+table config_snapshot DELETE
+table config_snapshot INSERT
+table config_snapshot SELECT
+table domain_settings SELECT
+table endpoint_groups SELECT
+table endpoint_types SELECT
+table endpoints SELECT (admin_hold, admin_state, analytics_level, apple_profile_generated_at, authorize_ddns, authorize_secure_dns, comment, created_at, doh_token_hash, expose_ip, first_query_at, group_id, id, last_query_at, legacy_dns, name, pair_override_node_a, pair_override_node_b, pair_version, prevent_deactivation, profile2_id, profile_id, require_authorized_ips, resolver_id, schedule_timezone, tenant_id, type, updated_at)
+table entitlement_defaults SELECT
+table geoip_versions SELECT
+table ip_claims SELECT
+table leases INSERT
+table leases SELECT
+table leases UPDATE
+table location_availability SELECT
+table locations SELECT
+table node_location_configs SELECT
+table node_pairs SELECT
+table node_quarantine SELECT
+table node_resolver_rules SELECT
+table node_upstreams SELECT
+table nodes SELECT
+table policy_artifacts INSERT
+table policy_artifacts SELECT
+table policy_artifacts UPDATE
+table policy_outbox DELETE
+table policy_outbox SELECT
+table profile_filters SELECT
+table profile_options SELECT
+table profile_presets SELECT
+table profile_services SELECT
+table profiles SELECT (compiled_hash, created_at, disabled_until, id, kind, lock_message, lock_state, locked_at, locked_by, name, tenant_id, updated_at, version)
+table public_settings SELECT
+table rule_folders SELECT
+table rules SELECT
+table schedule_windows SELECT
+table tenant_assets SELECT
+table tenant_entitlements SELECT
+table tenants SELECT (admin_hold, id, status)
+table update_status SELECT

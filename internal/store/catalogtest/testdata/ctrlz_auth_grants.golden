@@ -1,0 +1,169 @@
+execute ctrlz.cap_reached(spent numeric, cap numeric)
+execute ctrlz.credential_state(p_one_time boolean, p_expires_at timestamp with time zone, p_needs_second_factor boolean)
+execute ctrlz.current_tenant_id()
+execute ctrlz_fn.admin_account_bootstrap(p_username text, p_password_hash text)
+execute ctrlz_fn.admin_account_reset(p_admin_id uuid, p_password_hash text, p_drop_totp boolean)
+execute ctrlz_fn.admin_account_set_password(p_admin_id uuid, p_password_hash text)
+execute ctrlz_fn.admin_account_totp_enable(p_admin_id uuid, p_step bigint)
+execute ctrlz_fn.admin_create_user(p_phone text, p_password_hash text, p_locale text)
+execute ctrlz_fn.admin_sms_stats(p_days integer)
+execute ctrlz_fn.admin_throttle_hit(p_scope text, p_key bytea, p_max integer, p_window_seconds integer)
+execute ctrlz_fn.admin_throttle_refund(p_scope text, p_key bytea, p_window_seconds integer, p_epoch bigint)
+execute ctrlz_fn.admin_throttle_reset(p_scope text, p_key bytea)
+execute ctrlz_fn.admin_totp_replace(p_admin_id uuid, p_old bytea, p_new bytea)
+execute ctrlz_fn.audit_lock()
+execute ctrlz_fn.auth_download_by_hash(p_hash bytea)
+execute ctrlz_fn.auth_invite_by_hash(p_hash bytea)
+execute ctrlz_fn.auth_otp_check(p_id uuid, p_phone text, p_purpose text, p_code_hash bytea)
+execute ctrlz_fn.auth_otp_consume(p_id uuid, p_phone text, p_purpose text, p_code_hash bytea)
+execute ctrlz_fn.auth_otp_issue(p_phone text, p_purpose text, p_code_hash bytea, p_delivery_ct bytea, p_ip inet, p_trusted boolean)
+execute ctrlz_fn.auth_passkey_by_credential(p_credential_id bytea)
+execute ctrlz_fn.auth_phone_change_complete(p_request_id uuid)
+execute ctrlz_fn.auth_phone_mark_verified(p_user_id uuid, p_otp_id uuid)
+execute ctrlz_fn.auth_public_config()
+execute ctrlz_fn.auth_refresh_by_hash(p_hash bytea)
+execute ctrlz_fn.auth_register_user(p_phone text, p_password_hash text, p_locale text, p_invite_id uuid, p_otp_id uuid)
+execute ctrlz_fn.auth_session_by_hash(p_hash bytea)
+execute ctrlz_fn.auth_share_by_hash(p_hash bytea)
+execute ctrlz_fn.auth_throttle_hit(p_scope text, p_key bytea, p_max integer, p_window_seconds integer)
+execute ctrlz_fn.auth_throttle_refund(p_scope text, p_key bytea, p_window_seconds integer, p_epoch bigint)
+execute ctrlz_fn.auth_throttle_reset(p_scope text, p_key bytea)
+execute ctrlz_fn.auth_ticket_peek(p_token_hash bytea, p_kind text)
+execute ctrlz_fn.auth_ticket_put(p_token_hash bytea, p_kind text, p_tenant uuid, p_user uuid, p_remember boolean, p_first_factor text, p_payload bytea, p_ttl_seconds integer, p_subject_gen bigint)
+execute ctrlz_fn.auth_ticket_take(p_token_hash bytea, p_kind text)
+execute ctrlz_fn.auth_tickets_revoke(p_user_id uuid)
+execute ctrlz_fn.auth_token_by_hash(p_hash bytea)
+execute ctrlz_fn.auth_user_by_phone(p_phone text)
+execute ctrlz_fn.ip_claim_check(p_cidr cidr)
+execute ctrlz_fn.ip_claim_open_challenge(p_claim_id uuid)
+execute ctrlz_fn.ip_claim_release(p_claim_id uuid)
+execute ctrlz_fn.ip_claim_request(p_endpoint_id uuid, p_cidr cidr, p_source text)
+execute ctrlz_fn.ip_claim_take(p_claim_id uuid, p_code text, p_batch_id uuid)
+execute ctrlz_fn.keytool_audit_key_event(p_action text, p_key_number integer, p_rewritten integer, p_changed integer, p_failed integer)
+execute ctrlz_fn.keytool_totp_replace(p_user_id uuid, p_old bytea, p_new bytea)
+execute ctrlz_fn.profile_tenant_lock()
+execute ctrlz_fn.worker_sweep_otp_challenges(p_limit integer)
+execute ctrlz_fn.worker_sweep_sms_counters(p_limit integer)
+execute ctrlz_fn.worker_sweep_sms_deliveries(p_limit integer)
+execute ctrlz_fn.worker_sweep_throttle(p_limit integer)
+execute ctrlz_fn.worker_sweep_tickets(p_limit integer)
+policy analytics_read_floors tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy announcement_reads tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy api_tokens auth_lookup SELECT PERMISSIVE using=true check=-
+policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy block_pages tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy clients tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoint_ddns_hosts tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoint_groups tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoints auth_pair SELECT PERMISSIVE using=true check=-
+policy endpoints tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy feedback_items tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy filter_preview_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy idempotency_keys tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy ip_claims auth_claims ALL PERMISSIVE using=true check=-
+policy ip_claims tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy ip_proof_challenges tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy job_outbox tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy notifications tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy otp_challenges auth_challenges ALL PERMISSIVE using=true check=true
+policy phone_change_requests tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy policy_outbox auth_endpoint_set INSERT PERMISSIVE using=- check=((aggregate_type = 'endpoint_set'::text) AND (aggregate_id = tenant_id))
+policy policy_outbox tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_download_tokens auth_lookup SELECT PERMISSIVE using=true check=-
+policy profile_download_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_filters tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_options tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_services tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profiles tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy recovery_codes tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy refresh_tokens auth_lookup SELECT PERMISSIVE using=true check=-
+policy refresh_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy rule_folders tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy rules tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy schedule_windows tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy sessions auth_lookup SELECT PERMISSIVE using=true check=-
+policy sessions tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy setup_share_tokens auth_lookup SELECT PERMISSIVE using=true check=-
+policy setup_share_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy sms_counters auth_counters ALL PERMISSIVE using=true check=true
+policy tenant_assets tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_audit_log tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_entitlements auth_create INSERT PERMISSIVE using=- check=true
+policy tenant_entitlements auth_limits SELECT PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=-
+policy tenant_entitlements tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenants auth_create INSERT PERMISSIVE using=- check=true
+policy tenants auth_lookup SELECT PERMISSIVE using=true check=-
+policy tenants tenant_isolation ALL PERMISSIVE using=(id = ctrlz.current_tenant_id()) check=(id = ctrlz.current_tenant_id())
+policy unblock_requests tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy users auth_create INSERT PERMISSIVE using=- check=true
+policy users auth_lookup SELECT PERMISSIVE using=true check=-
+policy users tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy webauthn_credentials auth_lookup SELECT PERMISSIVE using=true check=-
+policy webauthn_credentials tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+schema ctrlz USAGE
+schema ctrlz_fn CREATE
+schema ctrlz_fn USAGE
+table admin_users INSERT (must_change_password, password_expires_at, password_hash, username)
+table admin_users SELECT (id, must_change_password, password_expires_at, totp_enabled_at, totp_last_step, totp_secret_ct)
+table admin_users UPDATE (must_change_password, password_changed_at, password_expires_at, password_hash, totp_enabled_at, totp_last_step, totp_secret_ct)
+table announcements SELECT
+table api_tokens SELECT (allowed_ips, id, kind, revoked_at, tenant_id, token_hash, user_id)
+table audit_log INSERT (action, admin_id, at, entry_hash, ip, params, prev_hash, target)
+table audit_log SELECT (entry_hash, id)
+table auth_throttle DELETE
+table auth_throttle INSERT
+table auth_throttle SELECT
+table auth_throttle UPDATE
+table auth_tickets DELETE
+table auth_tickets INSERT
+table auth_tickets SELECT
+table auth_tickets UPDATE
+table domain_settings SELECT (panel_host)
+table endpoints SELECT (admin_state, id, pair_override_node_a, pair_override_node_b, tenant_id)
+table entitlement_defaults SELECT (max_ip_claims)
+table invites SELECT (expires_at, id, phone_e164, revoked_at, token_hash, used_at)
+table invites UPDATE (accepted_tenant_id, used_at)
+table ip_claims INSERT
+table ip_claims SELECT
+table ip_claims UPDATE
+table ip_proof_challenges INSERT (claim_id, expires_at, label, tenant_id)
+table ip_proof_challenges SELECT
+table ip_proof_challenges UPDATE (attempts, consumed_at)
+table node_pairs SELECT
+table nodes SELECT (dns_advertised_ip, id)
+table notifications INSERT (kind, params, severity, tenant_id)
+table otp_challenges DELETE
+table otp_challenges INSERT
+table otp_challenges SELECT
+table otp_challenges UPDATE
+table phone_change_requests SELECT (completed_at, created_at, expires_at, id, new_otp_id, new_phone_e164, old_otp_id, tenant_id, user_id)
+table phone_change_requests UPDATE (completed_at)
+table policy_outbox INSERT
+table profile_download_tokens SELECT (endpoint_id, expires_at, id, max_uses, params_hash, tenant_id, token_hash, uses)
+table public_settings SELECT
+table refresh_tokens SELECT (expires_at, family_id, id, reuse_grace_until, revoked_at, rotated_at, tenant_id, token_hash, user_id)
+table refresh_tokens UPDATE (revoked_at)
+table sessions SELECT (absolute_expires_at, id, idle_expires_at, reauth_at, restricted, revoked_at, tenant_id, token_hash, user_id)
+table sessions UPDATE (revoked_at)
+table setup_share_tokens SELECT (client, endpoint_id, expires_at, id, max_uses, revoked_at, tenant_id, token_hash, uses)
+table sms_counters DELETE
+table sms_counters INSERT
+table sms_counters SELECT
+table sms_counters UPDATE
+table sms_deliveries DELETE
+table sms_deliveries SELECT (created_at, id)
+table sms_gateways SELECT (provider, role, unusable_now)
+table system_settings SELECT
+table tenant_audit_log INSERT (action, params, target, tenant_id, user_id)
+table tenant_entitlements INSERT
+table tenant_entitlements SELECT (max_ip_claims, tenant_id)
+table tenants INSERT
+table tenants SELECT (id, status)
+table users INSERT
+table users SELECT (credential_gen, enforce_lift_at, enforce_passkey, id, must_reset, password_changed_at, password_expires_at, password_hash, phone_e164, phone_verified_at, tenant_id, totp_enabled_at, totp_pending_at, totp_secret_ct)
+table users UPDATE (enforce_passkey, must_reset, password_changed_at, password_expires_at, password_hash, phone_e164, phone_verified_at, totp_enabled_at, totp_last_step, totp_pending_at, totp_secret_ct)
+table webauthn_config SELECT (allowed_origins, enabled, rp_id)
+table webauthn_credentials SELECT (aaguid, backup_eligible, backup_state, credential_id, id, public_key, rp_id, sign_count, stale_at, tenant_id, transports, user_id)
+table webauthn_credentials UPDATE (stale_at)
