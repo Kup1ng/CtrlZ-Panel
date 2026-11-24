@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "group": "manifest",
+  "cases": [
+    {"id": "mf-001", "why": "A SignedHead signed by the online policy key verifies", "op": "manifest_verify", "args": ["ctrlz/head", "policy", "p1", "100", "1000000", "1000000"], "expect": "ok"},
+    {"id": "mf-002", "why": "A PairTable is a policy payload too", "op": "manifest_verify", "args": ["ctrlz/pair-table", "policy", "p1", "100", "1000000", "1000000"], "expect": "ok"},
+    {"id": "mf-003", "why": "A node-binary manifest verifies with 2 of 3 offline keys", "op": "manifest_verify", "args": ["ctrlz/manifest/node", "bundle", "o1,o3", "100", "1000000", "1000000"], "expect": "ok"},
+    {"id": "mf-004", "why": "One offline key is below the threshold", "op": "manifest_verify", "args": ["ctrlz/manifest/node", "bundle", "o1", "100", "1000000", "1000000"], "expect": "threshold"},
+    {"id": "mf-005", "why": "The same offline key twice counts once", "op": "manifest_verify", "args": ["ctrlz/manifest/node", "bundle", "o2,o2", "100", "1000000", "1000000"], "expect": "threshold"},
+    {"id": "mf-006", "why": "The caller claiming the policy role for a node binary is refused, not trusted (review F06)", "op": "manifest_verify", "args": ["ctrlz/manifest/node", "policy", "p1", "100", "1000000", "1000000"], "expect": "role_mismatch"},
+    {"id": "mf-007", "why": "The online catalog key cannot sign an xray bundle", "op": "manifest_verify", "args": ["ctrlz/manifest/xray", "catalog", "c1", "100", "1000000", "1000000"], "expect": "role_mismatch"},
+    {"id": "mf-008", "why": "The online policy key cannot sign a filters manifest", "op": "manifest_verify", "args": ["ctrlz/manifest/filters", "policy", "p1", "100", "1000000", "1000000"], "expect": "role_mismatch"},
+    {"id": "mf-009", "why": "A filters manifest verifies under the catalog role", "op": "manifest_verify", "args": ["ctrlz/manifest/filters", "catalog", "c1", "100", "1000000", "1000000"], "expect": "ok"},
+    {"id": "mf-010", "why": "An unknown payload type is refused", "op": "manifest_verify", "args": ["ctrlz/manifest/firmware", "bundle", "o1,o2", "100", "1000000", "1000000"], "expect": "payload_type"},
+    {"id": "mf-011", "why": "An expired root blocks a binary install", "op": "manifest_verify", "args": ["ctrlz/manifest/node", "bundle", "o1,o2", "100", "50", "1000000"], "expect": "root_expired"},
+    {"id": "mf-012", "why": "An expired root does not stop tenant policy", "op": "manifest_verify", "args": ["ctrlz/head", "policy", "p1", "100", "50", "1000000"], "expect": "ok"},
+    {"id": "mf-013", "why": "An expired delegation blocks a catalog install", "op": "manifest_verify", "args": ["ctrlz/manifest/geoip", "catalog", "c1", "100", "1000000", "50"], "expect": "role_expired"},
+    {"id": "mf-014", "why": "An expired delegation does not stop tenant policy", "op": "manifest_verify", "args": ["ctrlz/head", "policy", "p1", "100", "1000000", "50"], "expect": "ok"},
+    {"id": "mf-015", "why": "A policy payload where another policy payload is expected: the same key signs a head and a pair table, so the type the caller expects must match (review L2-F20)", "op": "manifest_verify", "args": ["ctrlz/pair-table", "policy", "p1", "100", "1000000", "1000000", "ctrlz/head"], "expect": "payload_type"},
+    {"id": "mf-016", "why": "A filters manifest where a geoip manifest is expected", "op": "manifest_verify", "args": ["ctrlz/manifest/filters", "catalog", "c1", "100", "1000000", "1000000", "ctrlz/manifest/geoip"], "expect": "payload_type"},
+    {"id": "mf-017", "why": "A root with expires_at 0 is malformed, not eternal", "op": "manifest_verify", "args": ["ctrlz/manifest/node", "bundle", "o1,o2", "100", "0", "1000000"], "expect": "no_expiry"},
+    {"id": "mf-018", "why": "A role delegation with expires_at 0 is malformed, not eternal", "op": "manifest_verify", "args": ["ctrlz/manifest/node", "bundle", "o1,o2", "100", "1000000", "0"], "expect": "no_expiry"},
+    {"id": "mf-019", "why": "The policy role gets no exemption from a missing expiry: a root without one is malformed for every role", "op": "manifest_verify", "args": ["ctrlz/head", "policy", "p1", "100", "0", "1000000"], "expect": "no_expiry"},
+    {"id": "mf-020", "why": "A manifest at the highest seen version is fresh", "op": "manifest_fresh", "args": ["5", "3", "1000", "100", "5"], "expect": "ok"},
+    {"id": "mf-021", "why": "A replayed older manifest is refused although its signature is valid", "op": "manifest_fresh", "args": ["4", "3", "1000", "100", "5"], "expect": "rollback"},
+    {"id": "mf-022", "why": "An expired manifest is refused", "op": "manifest_fresh", "args": ["5", "3", "1000", "1000", "0"], "expect": "manifest_expired"},
+    {"id": "mf-023", "why": "A manifest with expires_at 0 never expires", "op": "manifest_fresh", "args": ["5", "3", "0", "999999", "0"], "expect": "ok"},
+    {"id": "mf-024", "why": "min_version above version is malformed", "op": "manifest_fresh", "args": ["2", "3", "0", "100", "0"], "expect": "bad_manifest"},
+    {"id": "mf-030", "why": "An automatic rollback to min_version is allowed", "op": "manifest_rollback", "args": ["3", "3"], "expect": "ok"},
+    {"id": "mf-031", "why": "An automatic rollback below min_version is refused", "op": "manifest_rollback", "args": ["3", "2"], "expect": "below_min"}
+  ]
+}
