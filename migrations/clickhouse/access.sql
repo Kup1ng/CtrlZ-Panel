@@ -28,8 +28,18 @@ CREATE ROW POLICY OR REPLACE maintenance ON ctrlz.* FOR SELECT
   USING 1
   TO ctrlz_migrator, ctrlz_janitor, ctrlz_ingest;
 
--- 60 seconds of execution time a minute for each tenant (6.2). The key is the one the reader sends as its
--- quota key, so more sessions, tokens or streams of one tenant buy nothing; a query of a table with no key is refused (a read of system.one is exempt from quotas altogether).
+-- The reader's budget, in the units this server charges while a query runs and when it fails (6.2). It is not
+-- execution_time, on purpose: in 26.8.46.6 that unit is charged only by the transform that checks the final
+-- result, and its stopwatch starts at the first result chunk, so the scan and the aggregation before it, a
+-- query that ends in max_execution_time, a memory or row limit or a client cancel, and a query that returns
+-- one chunk are charged about nothing. The four below are charged as follows: queries at admission, errors
+-- when a query fails, read_rows and read_bytes by the read progress callback while it reads, so a query that
+-- ends in an error has spent them and the next one is refused with code 201. The tenant's wall time is
+-- counted in the Go turn manager (6.2), which this quota does not replace. The numbers are provisional (D31).
+-- The key is the one the reader sends as its quota key, so more sessions, tokens or streams of one tenant buy
+-- nothing. A query that reads a ctrlz table with no key is refused (code 496), but the exemption of
+-- system.one is decided for the whole query, so the outer FROM of every reader query must be a ctrlz table
+-- (6.1), never a FROM-less SELECT or a UNION branch without one.
 CREATE QUOTA OR REPLACE reader KEYED BY client_key
-  FOR INTERVAL 1 minute MAX execution_time = 60
+  FOR INTERVAL 1 minute MAX queries = 300, errors = 30, read_rows = 5000000000, read_bytes = 68719476736
   TO ctrlz_api;

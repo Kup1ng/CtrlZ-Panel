@@ -25,6 +25,12 @@ import (
 // quota key reaches a quota keyed by client_key. If it fails, the fallback of 3.4 is readonly 2 for the two
 // readers with the same grants and constraints, and the test says so.
 
+// The server's codes for the two quota refusals (ErrorCodes.cpp): QUOTA_EXCEEDED and QUOTA_REQUIRES_CLIENT_KEY.
+const (
+	chQuotaExceeded          int32 = 201
+	chQuotaRequiresClientKey int32 = 496
+)
+
 const chFallbackNote = "if this is the custom-setting proof of 3.4 failing, the decided fallback is readonly 2 for ctrlz_api and ctrlz_preview in users.xml, with the same grants and constraints"
 
 // chConn opens one connection as a user, the way the reader will: the native protocol, no settings of the
@@ -78,6 +84,20 @@ func wantServerRefusal(t *testing.T, what string, err error) {
 		return
 	}
 	t.Logf("%s: refused with code %d", what, ex.Code)
+}
+
+// wantServerCode is wantServerRefusal that also pins the code, for the refusals whose cause matters: a quota
+// refusal that comes from a grant or a setting error instead would pass the plain check for the wrong reason.
+func wantServerCode(t *testing.T, what string, err error, code int32) {
+	t.Helper()
+	var ex *clickhouse.Exception
+	if !errors.As(err, &ex) {
+		t.Errorf("%s: want server exception %d, got: %v", what, code, err)
+		return
+	}
+	if ex.Code != code {
+		t.Errorf("%s: refused with code %d, want %d: %v", what, ex.Code, code, err)
+	}
 }
 
 func chCount(t *testing.T, conn clickhouse.Conn, ctx context.Context, query string) uint64 {
@@ -414,7 +434,7 @@ func TestClickHouseTwoTenants(t *testing.T) {
 	const quotaProbe = "SELECT count() FROM ctrlz.dns_raw" // a table both readers may read
 	t.Run("quota keyed by the client key", func(t *testing.T) {
 		ctx, cancel := chTenantCtx(tenA, "", 0, nil)
-		wantServerRefusal(t, "ctrlz_api reading a table with no quota key", api.QueryRow(ctx, quotaProbe).Scan(new(uint64)))
+		wantServerCode(t, "ctrlz_api reading a table with no quota key", api.QueryRow(ctx, quotaProbe).Scan(new(uint64)), chQuotaRequiresClientKey)
 		cancel()
 		ctx, cancel = chTenantCtx(tenA, "k-quota", 0, nil)
 		if err := api.QueryRow(ctx, quotaProbe).Scan(new(uint64)); err != nil {
@@ -438,7 +458,55 @@ func TestClickHouseTwoTenants(t *testing.T) {
 		if err := run("qb"); err != nil {
 			t.Errorf("the first query of key qb was refused although qa's quota is spent: %v", err)
 		}
-		wantServerRefusal(t, "a query with no key under the keyed quota", run(""))
+		wantServerCode(t, "a query with no key under the keyed quota", run(""), chQuotaRequiresClientKey)
+	})
+
+	// The budget of 6.2 on the units the server charges while a query runs and when it fails. The real quota
+	// of access.sql has the same four units with numbers a test cannot spend, so a lowered copy with the same
+	// KEYED BY is made for ctrlz_preview and removed afterwards. execution_time is not one of them: the first
+	// review of this package showed that the pinned server charges it only on a final result chunk, so a query
+	// that ends in an error spends none of it and a tenant could never be refused.
+	t.Run("budget spent by a failed query", func(t *testing.T) {
+		pconn := chConn(t, addr, "ctrlz_preview", pw["preview"])
+		run := func(key, query string) error {
+			c, cancel := chTenantCtx(tenA, key, 0, nil)
+			defer cancel()
+			return pconn.QueryRow(c, query).Scan(new(uint64))
+		}
+		// errors: a query that fails at run time is charged one, and the key is then refused (201) on a query
+		// that would have succeeded. The loop allows for the server's choice of "over" or "at" the maximum.
+		if err := mig.Exec(context.Background(), "CREATE QUOTA IF NOT EXISTS ctrlz_test_errors KEYED BY client_key FOR INTERVAL 1 hour MAX errors = 1 TO ctrlz_preview"); err != nil {
+			t.Fatalf("create the errors quota: %v", err)
+		}
+		t.Cleanup(func() { _ = mig.Exec(context.Background(), "DROP QUOTA IF EXISTS ctrlz_test_errors") })
+		const failing = "SELECT throwIf(count() > 0) FROM ctrlz.dns_raw" // tenant A has rows, so this throws while running
+		refused := false
+		for i := 0; i < 3 && !refused; i++ {
+			err := run("ea", failing)
+			var ex *clickhouse.Exception
+			if !errors.As(err, &ex) {
+				t.Fatalf("the failing query %d of key ea: want a server exception, got %v", i+1, err)
+			}
+			refused = ex.Code == chQuotaExceeded
+		}
+		if !refused {
+			t.Error("three failing queries of key ea were never refused with the quota code: errors are not charged")
+		}
+		wantServerCode(t, "a good query of key ea after its errors", run("ea", quotaProbe), chQuotaExceeded)
+		if err := run("eb", quotaProbe); err != nil {
+			t.Errorf("a good query of key eb was refused although only ea spent its errors: %v", err)
+		}
+		if err := mig.Exec(context.Background(), "DROP QUOTA IF EXISTS ctrlz_test_errors"); err != nil {
+			t.Fatalf("drop the errors quota: %v", err)
+		}
+
+		// read_rows: charged while the query reads, so a query that reads more than the limit ends in 201 itself.
+		// Tenant A has three rows in dns_raw, so a limit of one cannot be met by any read of that table.
+		if err := mig.Exec(context.Background(), "CREATE QUOTA IF NOT EXISTS ctrlz_test_rows KEYED BY client_key FOR INTERVAL 1 hour MAX read_rows = 1 TO ctrlz_preview"); err != nil {
+			t.Fatalf("create the read_rows quota: %v", err)
+		}
+		t.Cleanup(func() { _ = mig.Exec(context.Background(), "DROP QUOTA IF EXISTS ctrlz_test_rows") })
+		wantServerCode(t, "a read of more rows than the read_rows limit", run("ra", quotaProbe), chQuotaExceeded)
 	})
 
 	t.Run("the hub's user", func(t *testing.T) {

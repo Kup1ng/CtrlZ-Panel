@@ -494,7 +494,9 @@ func TestClickHouseRowPolicies(t *testing.T) {
 	for _, want := range []string{
 		"CREATE ROW POLICY OR REPLACE tenant_only ON ctrlz.* FOR SELECT USING tenant_id = toUUID(getSetting('SQL_tenant_id')) TO ctrlz_api, ctrlz_preview;",
 		"CREATE ROW POLICY OR REPLACE maintenance ON ctrlz.* FOR SELECT USING 1 TO ctrlz_migrator, ctrlz_janitor, ctrlz_ingest;",
-		"CREATE QUOTA OR REPLACE reader KEYED BY client_key FOR INTERVAL 1 minute MAX execution_time = 60 TO ctrlz_api;",
+		// Never execution_time: the pinned server charges it only on a final result chunk (access.sql), so it would
+		// look like a budget and limit nothing.
+		"CREATE QUOTA OR REPLACE reader KEYED BY client_key FOR INTERVAL 1 minute MAX queries = 300, errors = 30, read_rows = 5000000000, read_bytes = 68719476736 TO ctrlz_api;",
 	} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("access.sql lacks: %s", want)
