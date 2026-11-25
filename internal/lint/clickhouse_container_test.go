@@ -83,6 +83,13 @@ func wantServerRefusal(t *testing.T, what string, err error) {
 		t.Errorf("%s: failed, but not with a server exception (a broken connection proves nothing): %v", what, err)
 		return
 	}
+	// The reader's quota answers with these two before the grant, the policy or the constraint is judged, so
+	// accepting them here would let a missing denial pass for the quota's sake. A test of the quota itself pins
+	// them with wantServerCode.
+	if ex.Code == chQuotaExceeded || ex.Code == chQuotaRequiresClientKey {
+		t.Errorf("%s: refused by the quota (code %d), not by what the test is about: %v", what, ex.Code, err)
+		return
+	}
 	t.Logf("%s: refused with code %d", what, ex.Code)
 }
 
@@ -329,22 +336,27 @@ func TestClickHouseTwoTenants(t *testing.T) {
 			// queries, which no row policy covers, and are not on that list. system.tables and system.settings are
 			// on it, so they are not expected to be refused; what a reader may see in system.tables is checked below.
 			ctxA := func() (context.Context, context.CancelFunc) { return chTenantCtx(tenA, "k-denials", 0, nil) }
+			// The two source functions are refused by the grant (ACCESS_DENIED, 497), which is what 3.4 and 11.1
+			// claim, so the code is pinned: any other refusal would be a different reason.
+			grantCodes := map[string]int32{"url()": 497, "file()": 497}
 			for what, stmt := range map[string]string{
-				"an INSERT":                    "INSERT INTO ctrlz.counts_5m (tenant_id, ts, endpoint_id, protocol, action, ttl_months, queries) VALUES (generateUUIDv4(), now(), generateUUIDv4(), 'doh', 'block', 12, 1)",
-				"an ALTER":                     "ALTER TABLE ctrlz.dns_raw DELETE WHERE 1",
-				"a lightweight DELETE":         "DELETE FROM ctrlz.dns_raw WHERE 1",
-				"a CREATE TABLE":               "CREATE TABLE ctrlz.x (a UInt8) ENGINE = Memory",
-				"SET readonly":                 "SET readonly = 0",
-				"a view object":                "SELECT count() FROM ctrlz.mv_counts",
-				"the goose table":              "SELECT count() FROM ctrlz_meta.schema_migrations",
-				"system.users":                 "SELECT count() FROM system.users",
-				"system.row_policies":          "SELECT count() FROM system.row_policies",
-				"system.query_log":             "SELECT count() FROM system.query_log",
-				"system.processes":             "SELECT count() FROM system.processes",
-				"system.errors":                "SELECT count() FROM system.errors",
-				"information_schema.tables":    "SELECT count() FROM information_schema.tables",
-				"url()":                        "SELECT * FROM url('http://ctrlz-none.invalid/', 'CSV', 'x String')",
-				"file()":                       "SELECT * FROM file('/etc/passwd', 'CSV', 'x String')",
+				"an INSERT":                 "INSERT INTO ctrlz.counts_5m (tenant_id, ts, endpoint_id, protocol, action, ttl_months, queries) VALUES (generateUUIDv4(), now(), generateUUIDv4(), 'doh', 'block', 12, 1)",
+				"an ALTER":                  "ALTER TABLE ctrlz.dns_raw DELETE WHERE 1",
+				"a lightweight DELETE":      "DELETE FROM ctrlz.dns_raw WHERE 1",
+				"a CREATE TABLE":            "CREATE TABLE ctrlz.x (a UInt8) ENGINE = Memory",
+				"SET readonly":              "SET readonly = 0",
+				"a view object":             "SELECT count() FROM ctrlz.mv_counts",
+				"the goose table":           "SELECT count() FROM ctrlz_meta.schema_migrations",
+				"system.users":              "SELECT count() FROM system.users",
+				"system.row_policies":       "SELECT count() FROM system.row_policies",
+				"system.query_log":          "SELECT count() FROM system.query_log",
+				"system.processes":          "SELECT count() FROM system.processes",
+				"system.errors":             "SELECT count() FROM system.errors",
+				"information_schema.tables": "SELECT count() FROM information_schema.tables",
+				"url()":                     "SELECT * FROM url('http://ctrlz-none.invalid/', 'CSV', 'x String')",
+				// A relative path inside user_files: an absolute one such as /etc/passwd is refused by the path check
+				// (code 291) before the grant is judged, which would prove nothing about a FILE grant.
+				"file()":                       "SELECT * FROM file('ctrlz_probe.csv', 'CSV', 'x String')",
 				"a query SETTINGS clause":      "SELECT count() FROM ctrlz.dns_raw SETTINGS readonly = 0",
 				"a limit in a SETTINGS clause": "SELECT count() FROM ctrlz.dns_raw SETTINGS max_rows_to_read = 1",
 				"a SYSTEM statement":           "SYSTEM FLUSH LOGS",
@@ -359,6 +371,10 @@ func TestClickHouseTwoTenants(t *testing.T) {
 				ctx, cancel := ctxA()
 				err := r.conn.Exec(ctx, stmt)
 				cancel()
+				if code, pinned := grantCodes[what]; pinned {
+					wantServerCode(t, r.user+": "+what, err, code)
+					continue
+				}
 				wantServerRefusal(t, r.user+": "+what, err)
 			}
 
@@ -429,8 +445,9 @@ func TestClickHouseTwoTenants(t *testing.T) {
 	// system.one, quotas, quota_limits, quota_usage and quotas_usage from quotas and from their limits
 	// (shouldIgnoreQuotaAndLimits in InterpreterSelectQuery.cpp), so a quota is neither charged nor asked for
 	// its key by it. The first run of this test used SELECT 1 and so saw nothing keyed at all.
-	// The real quota is 60 s of execution time a minute, which a test cannot spend, so the keying is proved
-	// on a quota of one query an hour with the same KEYED BY, made for ctrlz_preview and removed afterwards.
+	// The real quota's four units (queries, errors, read_rows, read_bytes) have numbers a test cannot spend in
+	// a minute, so the keying is proved on a quota of one query an hour with the same KEYED BY, made for
+	// ctrlz_preview and removed afterwards.
 	const quotaProbe = "SELECT count() FROM ctrlz.dns_raw" // a table both readers may read
 	t.Run("quota keyed by the client key", func(t *testing.T) {
 		ctx, cancel := chTenantCtx(tenA, "", 0, nil)
@@ -454,7 +471,7 @@ func TestClickHouseTwoTenants(t *testing.T) {
 		if err := run("qa"); err != nil {
 			t.Fatalf("the first query of key qa: %v", err)
 		}
-		wantServerRefusal(t, "the second query of key qa", run("qa"))
+		wantServerCode(t, "the second query of key qa", run("qa"), chQuotaExceeded)
 		if err := run("qb"); err != nil {
 			t.Errorf("the first query of key qb was refused although qa's quota is spent: %v", err)
 		}
@@ -508,7 +525,23 @@ func TestClickHouseTwoTenants(t *testing.T) {
 		t.Cleanup(func() { _ = mig.Exec(context.Background(), "DROP QUOTA IF EXISTS ctrlz_test_rows") })
 		// A count() is answered from the primary key without reading rows (the first CI run of this subtest saw it
 		// pass under a limit of one), so the probe sums a column, which has to read them.
-		wantServerCode(t, "a read of more rows than the read_rows limit", run("ra", "SELECT sum(row_id) FROM ctrlz.dns_raw"), chQuotaExceeded)
+		const reading = "SELECT sum(row_id) FROM ctrlz.dns_raw"
+		wantServerCode(t, "a read of more rows than the read_rows limit", run("ra", reading), chQuotaExceeded)
+		// What access.sql claims: once the unit is spent the next query of the key is refused at admission, even
+		// one that reads nothing.
+		wantServerCode(t, "a good query of key ra after its read_rows", run("ra", quotaProbe), chQuotaExceeded)
+		if err := mig.Exec(context.Background(), "DROP QUOTA IF EXISTS ctrlz_test_rows"); err != nil {
+			t.Fatalf("drop the read_rows quota: %v", err)
+		}
+
+		// read_bytes: the fourth unit of the real quota, on its own lowered copy (the rows copy is dropped first,
+		// or it would refuse the read for its own unit and the proof would be for the wrong reason).
+		if err := mig.Exec(context.Background(), "CREATE QUOTA IF NOT EXISTS ctrlz_test_bytes KEYED BY client_key FOR INTERVAL 1 hour MAX read_bytes = 1 TO ctrlz_preview"); err != nil {
+			t.Fatalf("create the read_bytes quota: %v", err)
+		}
+		t.Cleanup(func() { _ = mig.Exec(context.Background(), "DROP QUOTA IF EXISTS ctrlz_test_bytes") })
+		wantServerCode(t, "a read of more bytes than the read_bytes limit", run("rb", reading), chQuotaExceeded)
+		wantServerCode(t, "a good query of key rb after its read_bytes", run("rb", quotaProbe), chQuotaExceeded)
 	})
 
 	t.Run("the hub's user", func(t *testing.T) {
