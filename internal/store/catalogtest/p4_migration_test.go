@@ -555,6 +555,10 @@ func TestP4ConfigLogLock(t *testing.T) {
 	// Nor can the compiler take any other advisory lock itself.
 	want(t, "the compiler calls pg_advisory_xact_lock", h.seq("compiler", nil, `SELECT pg_catalog.pg_advisory_xact_lock(1)`), "42501")
 
+	// h.super carries the compiler's transaction below, and SET LOCAL ROLE there makes pg_stat_activity
+	// unreadable (42501). The wait is therefore observed from a connection of its own that never leaves
+	// the superuser role.
+	observer := h.fresh()
 	first, err := h.super.Begin(h.ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -585,7 +589,7 @@ func TestP4ConfigLogLock(t *testing.T) {
 	workerPID := int(second.Conn().PgConn().PID())
 	testwait.Until(t, 10*time.Second, "the worker to wait for the config log lock", func() bool {
 		var n int
-		if err := h.super.QueryRow(h.ctx, "SELECT count(*) FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = 'Lock'", workerPID).Scan(&n); err != nil {
+		if err := observer.QueryRow(h.ctx, "SELECT count(*) FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = 'Lock'", workerPID).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n == 1
