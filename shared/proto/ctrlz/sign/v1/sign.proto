@@ -1,0 +1,100 @@
+// Signed envelopes and manifests (contract section 13, R20).
+syntax = "proto3";
+
+package ctrlz.sign.v1;
+
+import "ctrlz/policy/v1/policy.proto";
+
+option go_package = "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/sign/v1;signv1";
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_POLICY = 1;
+  ROLE_CATALOG = 2;
+  ROLE_BUNDLE = 3;
+}
+
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+  KIND_FILTERS = 1;
+  KIND_GEOIP = 2;
+  KIND_SERVICES = 3;
+  KIND_XRAY = 4;
+  KIND_IMAGES = 5;
+  KIND_NODE = 6;
+  KIND_UNBOUND = 7;
+  KIND_DNSROOT = 8;
+  KIND_CERTS = 9;
+  KIND_OS_DEBS = 10;
+  KIND_PANEL = 11;
+}
+
+message Envelope {
+  string payload_type = 1;
+  bytes payload = 2;
+  repeated Signature signatures = 3;
+}
+
+message Signature {
+  bytes key_id = 1;
+  bytes sig = 2;
+}
+
+// root_key_ids names the offline keys that sign the next Root. They are listed
+// instead of derived from the grants: a key that is merely absent from a policy
+// or catalog grant (a bundle key, or an online key retired from its role) must
+// never gain the power to rotate the root. Bundle grants may hold only these
+// keys, and no policy or catalog grant may hold any of them.
+message Root {
+  uint64 version = 1;
+  int64 expires_at = 2;
+  repeated PublicKey keys = 3;
+  uint32 threshold = 4;
+  repeated RoleGrant roles = 5;
+  repeated bytes root_key_ids = 6;
+}
+
+message PublicKey {
+  bytes key_id = 1;
+  bytes ed25519 = 2;
+}
+
+message RoleGrant {
+  Role role = 1;
+  repeated bytes key_ids = 2;
+  uint32 threshold = 3;
+  int64 expires_at = 4;
+}
+
+message Manifest {
+  Kind kind = 1;
+  uint64 version = 2;
+  int64 created_at = 3;
+  int64 expires_at = 4;
+  uint64 min_version = 5;
+  repeated FileEntry files = 6;
+  string tag = 7;
+  string source_hash = 8;
+}
+
+message FileEntry {
+  string path = 1;
+  bytes sha256 = 2;
+  uint64 size = 3;
+}
+
+message SignedHead {
+  uint64 seq = 1;
+  bytes entry_hash = 2;
+  int64 created_at = 3;
+}
+
+message Snapshot {
+  uint64 seq = 1;
+  bytes entry_hash = 2;
+  repeated ctrlz.policy.v1.BlobRef blobs = 3;
+  repeated ctrlz.policy.v1.EndpointRecord endpoints = 4;
+  repeated ctrlz.policy.v1.ClaimRecord claims = 5;
+  ctrlz.policy.v1.PairTable pair_table = 6;
+  ctrlz.policy.v1.CatalogRef catalog = 7;
+}

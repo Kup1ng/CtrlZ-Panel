@@ -1,0 +1,349 @@
+# Front door of the Panel. Caddy is the only service that publishes ports
+# (80 and 443). The database, ClickHouse and Valkey are on an internal network
+# with no published port at all.
+#
+# Until a domain is registered (P4), Caddy serves its own private CA ("tls
+# internal"), so nothing here needs the international internet to start: no
+# ACME, no OCSP, no external login. Hostnames come from the environment; the
+# defaults only work on the machine itself.
+
+{
+	# The admin endpoint would be a second door into the process.
+	admin off
+	# Never fetch a certificate from outside. P4 replaces this with the
+	# certificates the Panel manages itself.
+	local_certs
+	# Port 80 has a site of its own at the end of the file. Caddy's automatic redirect builds its Location from {http.request.uri} with no
+	# check, so an opaque request target (`x:@evil.example/`) became `https://panel.localhost@evil.example/` under the app's own Host
+	# (merge-r4-4). The site below does the same redirect after refusing a target that is not origin-form, so the automatic one is off.
+	auto_https disable_redirects
+
+	# Caddy has no read deadline of its own, so a request whose head or body is never finished would
+	# be held for as long as the client keeps the stream open. That matters most for the web handle,
+	# which buffers a body before it dials Next (request_buffers below): without a deadline a few
+	# hundred open POSTs would sit in the memory of the one process that fronts both dashboards and
+	# the API (merge-r3-5, merge-r3-12). 15 s for the body is what Go already allows on /api
+	# (ReadTimeout in internal/app/app.go), so no valid request is refused; a sign-in form is a few
+	# hundred bytes. The deadline also ends an HTTP/2 stream's read.
+	# Caddy 2.11.6 cut the request header limit from Go's 1 MB to 16 KiB, and a request over it gets Go's own bare 431 before any route
+	# runs, so the hardening headers would be missing. The old limit keeps the 431 that Node answers behind this edge, which the headers spec
+	# measures with a 20 KB header (gate-r19-2).
+	servers {
+		max_header_size 1MB
+		timeouts {
+			read_header 10s
+			read_body 15s
+		}
+	}
+
+	# The per-site filter below (quiet_log) covers the access logger only. When
+	# the upstream is down or resets a connection, Caddy writes a second kind
+	# of line, from the separate http.log.error logger, with the whole request
+	# URI and the client address, so an api restart would put every in-flight
+	# /s/<token> and /p/<token> link into the Docker log (R21). That logger goes
+	# to its own sink here, with the same fields removed, and is kept out of
+	# the default logger. The reverse proxy has a logger of its own too
+	# (http.handlers.reverse_proxy, for example "aborting with incomplete
+	# response" when an upstream closes in the middle of a body) that logs the same
+	# URI, so it takes the same route. Checked on caddy:2.10 with the upstream
+	# down and with an upstream that aborts mid-body: a canary token in the path
+	# and in the query appeared nowhere in the output.
+	#
+	# The access logger needs the same care for a request that matches neither
+	# site. The quiet_log filter hangs on the two site blocks, so a request with
+	# another Host (the server's IP address, a Host with a trailing dot, any
+	# name over a valid SNI) is logged by http.log.access through this default
+	# logger with the full URI. It is excluded here, so the only access lines are
+	# the filtered ones of the sites (the catch-all at the end of the file has the same filter).
+	log default {
+		output stdout
+		format json
+		exclude http.log.error http.handlers.reverse_proxy http.log.access
+	}
+	log errors {
+		output stdout
+		include http.log.error http.handlers.reverse_proxy
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+			}
+		}
+	}
+}
+
+# One log format for both sites. The URI and the headers are removed: a request
+# line can carry a token, and the cookie is a header (R21). What stays is the
+# status, the size and the time, enough to see an outage.
+(quiet_log) {
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+				resp_headers delete
+			}
+		}
+	}
+}
+
+# Site-level headers, written once for both sites. It takes the Permissions-Policy as its only
+# argument, because the two apps differ: the panel has passkeys and the admin has none (spec 15.1,
+# gate-r2-18). The string is copied from permissionsPolicy('panel') and permissionsPolicy('admin') in
+# packages/ui/src/proxy/headers.ts, and a test of the web workspace reads this file and compares them,
+# so the two cannot drift apart. Never one shared value: it would give the admin host passkey ceremonies.
+#
+# It sits at site level, outside both handles, so the answers of Go (/api/*), the files of public/
+# (/logo.png, /icon.png), Next's own 308s and Caddy's own errors get the same headers. Go sets none of them.
+(hardening) {
+	encode zstd gzip
+	header {
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	# The four that the Next proxy sets on its own answers too (COOP, CORP, Permissions-Policy, CSP).
+	# Without defer these lines run before reverse_proxy copies the upstream headers, and the copy ADDS:
+	# a page would carry two CSPs and a chunk two COOP lines, which a browser reads as a list and ignores.
+	# Deferred, they run when the response is written: the three plain lines replace what the proxy set,
+	# and the ? line only fills in a policy for an answer that has none (a 308, a file of public/, a
+	# 405 or 502 that Caddy makes, Go's JSON), so the proxy's own policy with its nonce stays the only one.
+	header {
+		defer
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy {args[0]}
+		?Content-Security-Policy "default-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+	}
+}
+
+# What only the web handle needs. It is imported inside `handle { ... }` of each site and nowhere else:
+# the API uses PATCH, PUT and DELETE, takes a Range of nothing, and must reach Go as it is. Every rule here
+# keeps a request away from a Next behaviour that answers a bare 500 or 400 with none of the headers above,
+# or that writes a stack trace to the log for each request an anonymous client can repeat (spec 15.1).
+(web_rules) {
+	# Hop-by-hop and range headers Next mishandles: the first two are how a request would say it is
+	# one of Next's own middleware subrequests, and the last four make Next's static server answer a
+	# 500, on /logo.png too, which skips the proxy. No asset of either app is fetched by range or edited.
+	# Never delete Next-Router-Prefetch, Next-Router-Segment-Prefetch or rsc: the client's own Link
+	# prefetch sends them.
+	request_header -X-Middleware-Subrequest
+	request_header -X-Middleware-Prefetch
+	request_header -Range
+	request_header -If-Range
+	request_header -If-Match
+	request_header -If-Unmodified-Since
+
+	# A request target that does not start with a slash is not one a browser sends: `GET *` (and HEAD and POST; Go answers only
+	# OPTIONS * itself), and an opaque target (`GET x:*?t=CANARY`, which Go parses with an empty path, so every path rule below sees
+	# nothing while Next receives the opaque text as its request target). Next answers a bare 500 with a logged TypeError for the
+	# first, writes the target and its query into its log for the second, and a 308 to another origin for `x:https://evil.example/x`
+	# (merge-r3-4). {http.request.uri} is the target as it was written. This rule comes first, so no other rule is judged on a
+	# request that has no path.
+	@bad_target not expression {http.request.uri}.matches('^/')
+	respond @bad_target 400
+
+	# No page of either app takes a body larger than a sign-in form (a few hundred bytes). Next reads every non-GET body to the end
+	# before it answers, holds up to 10 MB of it for each open request (its proxyClientMaxBodySize), and logs an aborted body as an
+	# error block, so the edge refuses what cannot be a form (merge-r2-4, merge-r2-5, merge-r3-5, merge-r3-6). Three lines:
+	#  - a POST that announces no length (chunked) is a 411. A browser form always sends Content-Length, and only a header can be
+	#    refused before the connection to Next exists;
+	#  - an announced length of 10000 bytes or more (five digits or more, no leading zero) is a 413 on the header alone. This is the
+	#    cap, 9999 bytes, the largest number with four digits;
+	#  - request_body max_size is the second line. Caddy's reader fails past the cap and the client gets its 413, but request_buffers
+	#    forwards what it had read and then aborts, so Next would still see one cut request. The two refusals above keep that from
+	#    happening to an announced body. A truncated one (100 announced, 50 sent, the client closes) can still reach Next that way.
+	#    Since Caddy 2.11.8 (#8337) request_body also answers 413 itself as soon as the announced length is over the cap, and it runs
+	#    before respond, so on that Caddy an announced body is already refused here and the respond line above stays only as the
+	#    defence for an older Caddy (same status; the 413 still carries the hardening headers through handle_errors).
+	# request_buffers (on each reverse_proxy of the web handle) reads the body to the end here, so a slow upload costs Next nothing,
+	# and costs Caddy at most the buffer until the read_body deadline of the global block ends it. It must be larger than max_size.
+	@post_unsized {
+		method POST
+		not header Content-Length *
+	}
+	respond @post_unsized "Length Required" 411
+	@body_too_large expression {header.Content-Length}.matches('^0*[1-9][0-9]{4,}$')
+	respond @body_too_large "Payload Too Large" 413
+	request_body {
+		max_size 9999B
+	}
+
+	# The pages take GET, HEAD and POST. Next answers PUT and DELETE on a page with 200, an unknown
+	# method with a bare 400 and TRACE with a 500 and a stack trace.
+	@method_not_allowed not method GET HEAD POST
+	header @method_not_allowed Allow "GET, HEAD, POST"
+	respond @method_not_allowed "Method Not Allowed" 405
+
+	# The files take GET and HEAD only. /logo.png and /icon.png skip the proxy, so only this rule keeps
+	# Next's bare 500 away from a POST on them.
+	@file_not_read {
+		path /_next/static/* /logo.png /icon.png
+		not method GET HEAD
+	}
+	header @file_not_read Allow "GET, HEAD"
+	respond @file_not_read "Method Not Allowed" 405
+
+	# Next answers /_next/data/<build id>/<not .json> itself, with a document that has no nonce, and logs
+	# ERR_HTTP_HEADERS_SENT with a stack for each request. Neither app has a data route. A name that ends in
+	# .json (case-sensitive, as Next reads it) is left to Next: it runs the proxy as an ordinary path, and the
+	# proxy answers its own plain 404 with the full policy (createProxy, gate-r3-6).
+	#
+	# Caddy's path matchers read the decoded path with the dot segments resolved, and reverse_proxy forwards the path as it was
+	# written. So a spelling can be one thing to a matcher here and another to Next: `login%2Ejson` is ".json" to a matcher and
+	# not to Next, and `..%2f..%2fx` is "/x" to a matcher and one name under the prefix to Next (merge-r2-1, merge-r2-6, merge-r2-17).
+	# The .json exception is therefore read from the request target as written ({http.request.uri} keeps %2E), and the next rule
+	# refuses every spelling that hides a dot, a slash or a backslash behind a percent sign anywhere under /_next/.
+	@next_data {
+		path /_next/data/*
+		not expression {http.request.uri}.matches('^[^?]*[.]json([?]|$)')
+	}
+	respond @next_data 404
+
+	# No built name under /_next/ holds an escaped slash, backslash or dot (a bracket in a chunk name is %5B, and the query is
+	# not looked at), so there is nothing to lose. It also covers the .rsc rule below: `/_next/static/..%2f..%2fa.rsc`.
+	@next_escaped expression {http.request.uri}.matches('(?i)^/_next/[^?]*%(2f|5c|2e)')
+	# With a body: a browser that opens such a name shows it as text, where an empty 404 is a network error page.
+	respond @next_escaped "Not Found" 404
+
+	# A dot segment in the decoded path, in any spelling a client can send (`/./`, `/../`, `%2e%2e/`), is something no link of
+	# either app has and no browser sends: it is cut here so no rule above or below is judged on a path that Caddy has already
+	# resolved into another one. {http.request.uri.path} is the path as decoded and not cleaned.
+	@dot_segment expression {http.request.uri.path}.matches('(^|/)[.][.]?(/|$)')
+	respond @dot_segment 404
+
+	# A name under /_next/static/ that ends in .rsc is served by Next's catch-all as a flight payload.
+	# The redirects() of next.config.ts cannot cut this spelling. The s flag lets the dot match a decoded newline too:
+	# `no%0Athing.rsc` is one name to Next (merge-r2-2).
+	@rsc_static path_regexp (?is)^/_next/static/.*\.rsc$
+	respond @rsc_static 404
+
+	# The router writes Next-Router-State-Tree as encodeURIComponent of a JSON array: it starts with %5B and
+	# holds only that function's output (upper case hex), at most 40000 characters. Next removes the header
+	# before the proxy sees it and answers 500 with sixteen log lines for a value that does not parse, so
+	# only this edge can refuse it. The length cannot be a {0,40000} repeat, because RE2 refuses a count above
+	# 1000, so it is an expression. The shape is read from the placeholder, which holds every line of the header joined with a comma,
+	# and a comma is outside the allowed set. header_regexp matched when ANY line matched, so a real tree on one line shielded junk on
+	# another, and Next then joined them and answered 500 with its stack (merge-r1-4). The value must also end with %5D, the closing
+	# bracket, which refuses a truncated one. The apostrophe is \x27 so that the expression has no quote inside its own. A value that
+	# has this shape and is still no tree (%5B1%5D) reaches Next, which answers 500 and writes sixteen lines of stack: the edge cannot
+	# parse JSON (spec 15.6).
+	@tree_shape {
+		header Next-Router-State-Tree *
+		not expression {header.Next-Router-State-Tree}.matches('^%5B(?:[A-Za-z0-9_.!~*()\x27-]|%[0-9A-F][0-9A-F])*%5D$')
+	}
+	respond @tree_shape 404
+	@tree_long expression {header.Next-Router-State-Tree}.size() > 40000
+	respond @tree_long 404
+
+	# Next ends the socket with no status line for a request that asks for an Upgrade, so Caddy would
+	# turn each one into a 502 and an error-log line without the headers. Neither app uses an Upgrade in
+	# production. Case-insensitive: "Connection: upgrade" is as common as "Upgrade".
+	@upgrade header_regexp Connection (?i)upgrade
+	respond @upgrade 400
+}
+
+{$CTRLZ_PANEL_HOST:panel.localhost} {
+	tls internal
+	import quiet_log
+	import hardening "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self), publickey-credentials-create=(self), clipboard-write=(self)"
+	handle /api/* {
+		reverse_proxy api:8080 {
+			# The Go services take the rightmost X-Forwarded-For value as the
+			# client (spec 2.3 step 5). Caddy already overwrites an incoming value
+			# because no trusted proxy list is set; this line says so in the file, so
+			# a later proxy list cannot let a client-written value through.
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle {
+		import web_rules
+		reverse_proxy web-panel:3000 {
+			# More than the max_size of web_rules, see there.
+			request_buffers 16KB
+		}
+	}
+	# A 502, 503 or 504 that Caddy makes itself (a web or API upstream restarting) has no Next code in
+	# its path, so the headers are repeated for it from the same snippet, with this site's own
+	# Permissions-Policy. The status is kept and the body is empty, as it was without this block.
+	handle_errors {
+		import hardening "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self), publickey-credentials-create=(self), clipboard-write=(self)"
+		respond "" {err.status_code}
+	}
+}
+
+# The admin dashboard has its own hostname, its own cookie and its own container.
+{$CTRLZ_ADMIN_HOST:admin.localhost} {
+	tls internal
+	import quiet_log
+	import hardening "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(), publickey-credentials-create=(), clipboard-write=(self)"
+	handle /api/* {
+		reverse_proxy admin:8081 {
+			# The Go services take the rightmost X-Forwarded-For value as the
+			# client (spec 2.3 step 5). Caddy already overwrites an incoming value
+			# because no trusted proxy list is set; this line says so in the file, so
+			# a later proxy list cannot let a client-written value through.
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle {
+		import web_rules
+		reverse_proxy web-admin:3000 {
+			# More than the max_size of web_rules, see there.
+			request_buffers 16KB
+		}
+	}
+	# A 502, 503 or 504 that Caddy makes itself (a web or API upstream restarting) has no Next code in
+	# its path, so the headers are repeated for it from the same snippet, with this site's own
+	# Permissions-Policy. The status is kept and the body is empty, as it was without this block.
+	handle_errors {
+		import hardening "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(), publickey-credentials-create=(), clipboard-write=(self)"
+		respond "" {err.status_code}
+	}
+}
+
+# Any other Host over TLS: the server's IP address, a Host with a trailing dot, and an absolute-form request
+# target (`GET http://evil.example/x`), which Go reads with the Host of the URL and not the Host header, so no
+# site above matches it. Without this block Caddy answers such a request with an empty 200 that has none of the
+# headers (measured on caddy:2.10, merge item A11). It is refused with a 400 and carries the same headers, with
+# the Permissions-Policy of the app whose name the TLS handshake asked for, and the admin's, which is the
+# stricter one, for any other name. `OPTIONS *` never gets here: Go's net/http answers it before any handler. Any other
+# non-origin target (`GET *`, an opaque `x:...`) has the app's own Host, so it reaches that app's web handle, where @bad_target refuses it.
+:443 {
+	import quiet_log
+	@panel_sni expression {http.request.tls.server_name} == "{$CTRLZ_PANEL_HOST:panel.localhost}"
+	handle @panel_sni {
+		import hardening "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self), publickey-credentials-create=(self), clipboard-write=(self)"
+		respond 400
+	}
+	handle {
+		import hardening "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(), publickey-credentials-create=(), clipboard-write=(self)"
+		respond 400
+	}
+}
+
+# Plain HTTP, every Host: a 308 to the https address of the same host and path, and nothing else. It is what Caddy's automatic redirect did
+# (merge-r1-3: no page, no API call, no Next code), except that a request target that does not start with a slash is a 400 first. Such a target is
+# not one a browser sends, and Go parses `x:@evil.example/` as an opaque URL whose request URI has no scheme, which the plain redirect would
+# have turned into a Location on another host (merge-r4-4). No hardening block: an empty answer over plain HTTP has no use for HSTS or a CSP.
+http:// {
+	import quiet_log
+	@bad_target not expression {http.request.uri}.matches('^/')
+	# A route, because Caddy sorts the directives of a site itself and puts redir before respond: without it the redirect answered
+	# every target, the opaque ones included (the first run through Caddy showed it).
+	route {
+		respond @bad_target 400
+		redir https://{host}{uri} 308
+	}
+}
