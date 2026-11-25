@@ -325,3 +325,74 @@ func TestNeededCostIsBoundedByDistinctStacks(t *testing.T) {
 		t.Errorf("3,000 clients took %v: the work is per client again", d)
 	}
 }
+
+// TestNeededReadsUntouchedClientsAsDistinctStacks: a request that does not touch a client leaves its own stack as it was, so the
+// clients are handed to Needed as the distinct stacks of Input.Rest and not one by one (p3-D6-r1-8: 50,000 clients read into memory
+// twice made one batch request cost 21 MiB). The answer must be the reference's over the full set, for every Away and for a delete.
+func TestNeededReadsUntouchedClientsAsDistinctStacks(t *testing.T) {
+	r := rand.New(rand.NewSource(11))
+	profiles := []uuid.UUID{pA, pB, pC, pD}
+	zones := []string{"Asia/Tehran", "UTC", "Asia/Kathmandu"}
+	for i := 0; i < 120; i++ {
+		before := randomInput(r, zones[r.Intn(len(zones))], profiles)
+		after := randomInput(r, before.Zone, profiles)
+		// The clients the request does not touch: the same on both sides, many of them with few distinct stacks.
+		other := map[string]Stack{}
+		for n := 0; n < 40; n++ {
+			other["u"+string(rune('a'+n%26))+string(rune('a'+n/26))] = Stack{profiles[r.Intn(3)], profiles[3-r.Intn(2)]}
+		}
+		if before.Clients == nil {
+			before.Clients = map[string]Stack{}
+		}
+		if after.Clients == nil {
+			after.Clients = map[string]Stack{}
+		}
+		for l, s := range other {
+			before.Clients[l] = s
+			after.Clients[l] = s
+		}
+		after.Away = Away(r.Intn(3))
+		var a *Input = after
+		if r.Intn(8) == 0 {
+			a = nil
+		}
+		want := reference(now0, before, a)
+
+		lean := func(in *Input) *Input {
+			c := *in
+			c.Clients = map[string]Stack{}
+			for l, s := range in.Clients {
+				if _, isOther := other[l]; !isOther {
+					c.Clients[l] = s
+				}
+			}
+			seen := map[Stack]bool{}
+			for _, s := range other {
+				if !seen[s] {
+					seen[s] = true
+					c.Rest = append(c.Rest, s)
+				}
+			}
+			return &c
+		}
+		lb, la := lean(before), (*Input)(nil)
+		if a != nil {
+			la = lean(a)
+		}
+		if got := Needed(now0, lb, la); !same(got, want) {
+			t.Fatalf("case %d: lean Needed %v, reference over every client %v\nbefore %+v\nafter %+v", i, got, want, lb, la)
+		}
+		if p := lb.Profiles(); len(p) < len(before.Profiles()) {
+			t.Fatalf("case %d: Profiles of the lean input lists %d profiles, the full one %d", i, len(p), len(before.Profiles()))
+		}
+	}
+	// And a request that does not delete or turn anyone away does not need what it leaves: an unchanged Endpoint with a thousand
+	// clients on locked profiles needs nothing.
+	big := &Input{Zone: "UTC", Base: Stack{pA, uuid.Nil}, Rest: []Stack{{pB, pC}, {pC, uuid.Nil}}}
+	if got := Needed(now0, big, big); len(got) != 0 {
+		t.Errorf("an unchanged Endpoint needs %v", got)
+	}
+	if got := Needed(now0, big, nil); !same(got, []uuid.UUID{pA, pB, pC}) {
+		t.Errorf("deleting an Endpoint whose clients hold B and C needs %v, want A, B and C", got)
+	}
+}

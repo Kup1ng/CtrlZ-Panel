@@ -33,6 +33,10 @@ type Env struct {
 	Bearer *bearer.Signer
 	// Trust says how devices trust the nodes' certificates, for the Apple profile (7.3); nil is the public setup.
 	Trust mobileconfig.Trust
+	// Turn takes the tenant's turn of an ordinary request (admission.Ordinary) for a public route, which has no session whose
+	// request the pipeline would have bounded. It returns the release and an error that is the refusal to send (503 server_busy).
+	// Nil takes none, which only tests do.
+	Turn func(ctx context.Context, tenant uuid.UUID) (release func(), err error)
 }
 
 func (e *Env) now() time.Time {
@@ -174,9 +178,17 @@ func uniqueIDs(in []uuid.UUID) []uuid.UUID {
 	return slices.Compact(out)
 }
 
-// Inputs reads the inputs of the stack that applies for the Endpoints, from the rows as they are in this transaction. An id
-// that is not an Endpoint of the tenant is absent from the answer.
+// Inputs reads the inputs of the stack that applies for the Endpoints, from the rows as they are in this transaction, for a request
+// that touches no client row. An id that is not an Endpoint of the tenant is absent from the answer.
 func (g *Guard) Inputs(tx store.Tx, endpoints []uuid.UUID) (map[uuid.UUID]*Input, error) {
+	return g.InputsFor(tx, endpoints, nil)
+}
+
+// InputsFor is Inputs for a request that writes the clients with the given labels: those are read one by one, as is the client
+// "default" (the identity of Plain DNS), and every other client that has a stack of its own is read as the distinct stacks of
+// Input.Rest, because the request leaves them as they are (p3-D6-r1-8). A request that touches more clients than it names here
+// would hide a change from Needed, so the callers pass the labels of every row they write.
+func (g *Guard) InputsFor(tx store.Tx, endpoints []uuid.UUID, labels []string) (map[uuid.UUID]*Input, error) {
 	rows, err := tx.EndpointsGet(endpoints)
 	if err != nil {
 		return nil, err
@@ -189,7 +201,12 @@ func (g *Guard) Inputs(tx store.Tx, endpoints []uuid.UUID) (map[uuid.UUID]*Input
 	if err != nil {
 		return nil, err
 	}
-	cs, err := tx.StackClients(ids)
+	named := append([]string{"default"}, labels...)
+	cs, err := tx.StackClientsNamed(ids, named)
+	if err != nil {
+		return nil, err
+	}
+	rest, err := tx.StackClientsRest(ids, named)
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +224,10 @@ func (g *Guard) Inputs(tx store.Tx, endpoints []uuid.UUID) (map[uuid.UUID]*Input
 	}
 	for _, c := range cs {
 		out[c.Endpoint].Clients[c.Label] = Stack{c.ProfileID, c.Profile2ID}
+	}
+	for _, c := range rest {
+		in := out[c.Endpoint]
+		in.Rest = append(in.Rest, Stack{c.ProfileID, c.Profile2ID})
 	}
 	legacy := map[uuid.UUID]bool{}
 	for _, r := range rows {

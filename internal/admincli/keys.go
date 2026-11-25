@@ -161,7 +161,12 @@ func runKeysStatus(ctx context.Context, env Env, args []string) error {
 			fmt.Fprintln(env.Stdout, "  sms_outbox.params_ct: not readable by the admin role; a pending row ends within 1 hour")
 		case keyring.DomainUserTOTP:
 			fmt.Fprintln(env.Stdout, "  users.totp_secret_ct: not readable by the admin role; the rekey tool prints its own counts")
-		case keyring.DomainDOHToken, keyring.DomainCertWrap:
+		case keyring.DomainDOHToken:
+			// The token of every Endpoint is sealed under this domain since P3. The admin role cannot read the column, so no count
+			// can be printed, and "reserved" here once led an operator to remove a line that still opened tokens (p3-D6-r2-9).
+			fmt.Fprintln(env.Stdout, "  endpoints.doh_token_ct: sealed under this domain for every Endpoint; not readable by the admin role")
+			fmt.Fprintln(env.Stdout, "  there is no re-encrypt tool for it: keep every older key line, or the resolver address and the DoH token of an Endpoint made under it stop opening (the Resolvers page, generators, share links and Apple profiles answer 500) until each such Endpoint is rotated")
+		case keyring.DomainCertWrap:
 			fmt.Fprintln(env.Stdout, "  reserved for a later phase")
 		case keyring.DomainAdminMAC, keyring.DomainAuthMAC, keyring.DomainOTPDelivery:
 			fmt.Fprintln(env.Stdout, "  no stored ciphertext column to re-encrypt")
@@ -200,7 +205,9 @@ func runDeclareLost(ctx context.Context, env Env, args []string) error {
 		return usageErr("--key-number is required (1 to 65535)")
 	}
 	switch domain {
-	case keyring.DomainDOHToken, keyring.DomainCertWrap:
+	case keyring.DomainDOHToken:
+		return errors.New("endpoints.doh_token_ct is sealed under this domain, which the admin role cannot read and no tool re-encrypts: a lost key is recovered by rotating each Endpoint (the owner does it from the Endpoint page), which seals a new token under the newest key")
+	case keyring.DomainCertWrap:
 		return errors.New("this domain is defined in a later phase")
 	case keyring.DomainAdminTOTP:
 		return errors.New("an admin's authenticator is reset with: ctrlz-admin reset-totp --user X")

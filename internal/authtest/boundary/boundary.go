@@ -963,6 +963,13 @@ func acceptedMark(s *openapi3.Schema, name string) bool {
 	if name == "ZWNJ" && strings.Contains(s.Pattern, "200C") {
 		return true
 	}
+	// The feedback body is a textarea message: the half-space, ZWJ and LRM of the bad characters are marks it accepts
+	// (httpx.MultilinePattern; the zero width space, the override and the rest stay refused there).
+	if s.Pattern == httpx.MultilinePattern {
+		for _, r := range badChars()[name] {
+			return httpx.MultilineMark(r)
+		}
+	}
 	if s.Pattern != digits.PastePattern && s.Pattern != digits.PasteContentPattern {
 		return false
 	}

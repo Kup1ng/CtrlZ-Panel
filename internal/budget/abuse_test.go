@@ -376,6 +376,8 @@ type harness struct {
 	h       http.Handler
 	limiter *ratelimit.Limiter
 	res     *stubResolver
+	// handled counts the requests that reached the handler, which for a link route is one lookup of the value in the store.
+	handled *atomic.Int64
 }
 
 func newHarness(t *testing.T, svc ratelimit.Service) *harness { return newHarnessCap(t, svc, 0) }
@@ -425,7 +427,14 @@ func newHarnessCap(t *testing.T, svc ratelimit.Service, deadCap int) *harness {
 	}
 	// A deferred class is answered by its handler (budget.Bucket.Deferred). X-Test-Exempt stands for the one
 	// request such a handler lets through (the console one-time password of the admin login).
+	handled := &atomic.Int64{}
 	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handled.Add(1)
+		// X-Test-Dead stands for the lookup of a link value that found no row at all: the pipeline then refuses the value at the
+		// door while its dead set remembers it (httpx.MarkLinkDead).
+		if r.Header.Get("X-Test-Dead") != "" {
+			httpx.MarkLinkDead(r.Context())
+		}
 		// X-Test-Held stands for a handler that found the device marker holds for the account asked about
 		// (budget.Bucket.HeldProof): it asks httpx.HeldProofHolds, which charges the marker's buckets and
 		// gives the plain token back.
@@ -462,7 +471,7 @@ func newHarnessCap(t *testing.T, svc ratelimit.Service, deadCap int) *harness {
 	for _, op := range ops {
 		built.Router.With(built.PerOp).Post("/api/v1"+op.Path, ok)
 	}
-	return &harness{h: built.Router, limiter: lim, res: res}
+	return &harness{h: built.Router, limiter: lim, res: res, handled: handled}
 }
 
 // postLink sends one request that carries a share or download link value which screens as the row named (P3 7.1); an empty row is a

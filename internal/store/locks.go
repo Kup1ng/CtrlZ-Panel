@@ -87,7 +87,7 @@ type analysis struct {
 	err     error
 }
 
-func (g *guardTx) admit(sql string) error {
+func (g *guardTx) admit(ctx context.Context, sql string) error {
 	var a analysis
 	if v, ok := g.own.Load(sql); ok {
 		a = v.(analysis)
@@ -105,21 +105,21 @@ func (g *guardTx) admit(sql string) error {
 }
 
 func (g *guardTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	if err := g.admit(sql); err != nil {
+	if err := g.admit(ctx, sql); err != nil {
 		return pgconn.CommandTag{}, err
 	}
 	return g.tx.Exec(ctx, sql, args...) // lint:sql-const forwarded; every caller is checked
 }
 
 func (g *guardTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
-	if err := g.admit(sql); err != nil {
+	if err := g.admit(ctx, sql); err != nil {
 		return nil, err
 	}
 	return g.tx.Query(ctx, sql, args...) // lint:sql-const forwarded; every caller is checked
 }
 
 func (g *guardTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	if err := g.admit(sql); err != nil {
+	if err := g.admit(ctx, sql); err != nil {
 		return errRow{err}
 	}
 	return g.tx.QueryRow(ctx, sql, args...) // lint:sql-const forwarded; every caller is checked

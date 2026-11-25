@@ -16,6 +16,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/digits"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
 )
 
 // Rule boundary-input (P1 auth review round 5, rules.md topic 9, spec 14.2 and
@@ -96,7 +97,9 @@ func p2Schemas() map[string]bool {
 		"Group": true, "GroupList": true, "GroupCreate": true, "GroupRename": true, "Client": true, "ClientPage": true, "ClientCreate": true, "ClientPatch": true,
 		"ClientBatch": true, "ClientBatchSet": true,
 		// The Apple profile request (P3 spec 7.3): an SSID may hold U+200C, as RULES 9 allows, and the share view shows the Endpoint's name.
-		"AppleProfileRequest": true, "ShareAppleParams": true, "ShareView": true}
+		"AppleProfileRequest": true, "ShareAppleParams": true, "ShareView": true,
+		// The name of an API token (P3 spec 3.8, 6.4): the same exception.
+		"ApiToken": true, "ApiTokenCreate": true, "ApiTokenPatch": true, "ApiTokenCreated": true, "ApiTokenList": true}
 }
 
 // p2Location says the path of the schema (at) is below an operation of /profiles or one of the components above.
@@ -167,6 +170,14 @@ func pastePattern(p string) bool {
 
 // pasteField is the exemption: a field of the list on one of the two patterns.
 func pasteField(at, pattern string) bool { return codeField(at) && pastePattern(pattern) }
+
+// multilineField is the exemption for the one message a person writes in a textarea: the body of the feedback request (P3 spec 9.2,
+// p3-D6-r2-1), on httpx.MultilinePattern and no other. The pattern lets line breaks, a tab and the direction marks through
+// (httpx.MultilineMark) and the lint holds that every other probe is still refused there. A body of another request, or this one
+// on another pattern, gets no exemption.
+func multilineField(at, pattern string) bool {
+	return fieldName(at) == "body" && strings.Contains(strings.ToLower(at), "feedback") && pattern == httpx.MultilinePattern
+}
 
 // checkBounds returns one finding per unbounded schema of the document.
 func checkBounds(raw []byte) ([]string, error) {
@@ -526,6 +537,9 @@ func (c *boundsCheck) str(at string, s *openapi3.Schema) {
 			if pasteField(at, s.Pattern) && digits.PasteMark(p) {
 				continue
 			}
+			if multilineField(at, s.Pattern) && httpx.MultilineMark(p) {
+				continue
+			}
 			for _, probe := range []string{"a" + string(p) + "a", "1" + string(p) + "1", string(p)} {
 				if re.MatchString(probe) {
 					c.add(at, "pattern %q accepts U+%04X (a control, format or private-use character)", s.Pattern, p)
@@ -683,6 +697,31 @@ func TestBoundsLintCanFail(t *testing.T) {
 			t.Errorf("%s: unexpected findings %v", name, found)
 		case c.want != "" && !strings.Contains(strings.Join(found, "\n"), c.want):
 			t.Errorf("%s: findings %v, want one containing %q", name, found, c.want)
+		}
+	}
+
+	// The feedback body is the one multi-line field (p3-D6-r2-1): httpx.MultilinePattern is clean there, and it is not a pass for another
+	// field, for another pattern, or for a pattern that also lets a bidi override or a zero width space through. The override case
+	// lets through U+202E and none of the other marks: the lint stops at the first probe a pattern accepts, so a pattern that also
+	// took the tab would report the tab and the case could not fail on the override (p3-D6-r3-1).
+	feedback := "openapi: 3.1.0\ninfo: {title: t, version: '1'}\npaths: {}\ncomponents:\n  schemas:\n    FeedbackCreate:\n      type: object\n      properties:\n        body: "
+	for label, c := range map[string]struct{ doc, want string }{
+		"the multiline pattern on the feedback body":    {feedback + "{type: string, maxLength: 9, pattern: '" + httpx.MultilinePattern + "'}\n", ""},
+		"the multiline pattern on another field":        {strings.Replace(feedback, "FeedbackCreate", "Other", 1) + "{type: string, maxLength: 9, pattern: '" + httpx.MultilinePattern + "'}\n", "accepts U+0009"},
+		"a wider pattern on the feedback body":          {feedback + "{type: string, maxLength: 9, pattern: '^[^\\p{Cc}]*$'}\n", "accepts U+00AD"},
+		"the override let through on the feedback body": {feedback + "{type: string, maxLength: 9, pattern: '^[^\\s\\p{C}](?:[^\\p{C}]|\\x{202E})*$'}\n", "accepts U+202E"},
+		"the nameprose pattern on the feedback body":    {feedback + "{type: string, maxLength: 9, pattern: '^(?:[^\\s\\p{C}])(?:[^\\p{C}]|\\x{200C})*$'}\n", ""},
+	} {
+		found, err := checkBounds([]byte(c.doc))
+		if err != nil {
+			t.Errorf("%s: %v", label, err)
+			continue
+		}
+		switch {
+		case c.want == "" && len(found) != 0:
+			t.Errorf("%s: unexpected findings %v", label, found)
+		case c.want != "" && !strings.Contains(strings.Join(found, "\n"), c.want):
+			t.Errorf("%s: findings %v, want one containing %q", label, found, c.want)
 		}
 	}
 

@@ -27,6 +27,7 @@ func p3Drivers() map[string]func(*testing.T, *raceEnv) {
 		"max_authorized_ips":       driveMaxAuthorizedIPs,
 		"ddns_host.create":         driveDDNSHostCap,
 		"authorized_ip.last":       driveAuthorizedLast,
+		"max_api_tokens":           driveMaxAPITokens,
 	}
 }
 
@@ -322,5 +323,55 @@ func driveAuthorizedLast(t *testing.T, e *raceEnv) {
 	// B's rows are its own.
 	if n := e.count(t, `SELECT count(*) FROM ctrlz.authorized_ips WHERE tenant_id = $1`, e.B.Tenant); n == 0 {
 		t.Error("B's rows went with A's")
+	}
+}
+
+// max_api_tokens counts the tenant's tokens under the quota lock: of the spenders only the room under the limit gets in, and B's
+// limit is its own (spec 3.5, 6.4).
+func driveMaxAPITokens(t *testing.T, e *raceEnv) {
+	have := e.count(t, `SELECT count(*) FROM ctrlz.api_tokens WHERE tenant_id = $1`, e.A.Tenant)
+	e.exec(t, `UPDATE ctrlz.tenant_entitlements SET max_api_tokens = $2 WHERE tenant_id = $1`, e.A.Tenant, have+3)
+	settle := newBarrier(spenders, 400*time.Millisecond)
+	got := wins(t, spenders, func(i int, hold func()) (bool, error) {
+		var w store.Won
+		err := e.tenant.WithTenant(e.ctx, e.A.Tenant, store.TxOpts{}, func(tx store.Tx) error {
+			hold()
+			if err := tx.QuotaLock(); err != nil {
+				return err
+			}
+			id, err := uuid.NewV7()
+			if err != nil {
+				return err
+			}
+			w, err = tx.APITokenInsert(store.APITokenNew{ID: id, User: e.A.User, Name: fmt.Sprintf("race-%d", i), Kind: "read",
+				Hash: []byte(fmt.Sprintf("race-token-hash-%d", i)), Prefix: "abcdef", Expires: time.Now().Add(time.Hour)})
+			settle()
+			return err
+		})
+		return w.Yes(), err
+	})
+	if got != 3 {
+		t.Errorf("%d tokens were made into 3 free slots", got)
+	}
+	if n := e.count(t, `SELECT count(*) FROM ctrlz.api_tokens WHERE tenant_id = $1`, e.A.Tenant); n != have+3 {
+		t.Errorf("the tenant holds %d tokens, want %d", n, have+3)
+	}
+	// B's limit is its own: A being full costs it nothing.
+	if err := e.tenant.WithTenant(e.ctx, e.B.Tenant, store.TxOpts{}, func(tx store.Tx) error {
+		if err := tx.QuotaLock(); err != nil {
+			return err
+		}
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		w, err := tx.APITokenInsert(store.APITokenNew{ID: id, User: e.B.User, Name: "b-first", Kind: "read", Hash: []byte("race-token-hash-b"),
+			Prefix: "abcdef", Expires: time.Now().Add(time.Hour)})
+		if err == nil && !w.Yes() {
+			t.Error("tenant B was refused a token because A is full")
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

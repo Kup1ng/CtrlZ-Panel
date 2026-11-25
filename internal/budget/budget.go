@@ -114,6 +114,7 @@ const (
 	PartProfile      Part = "profile"       // a profile of the session's own tenant: the tenant id with the profile id (the unlock scope, spec 7.2)
 	PartChallenge    Part = "challenge"     // the id of an OTP challenge whose tag checked (otp.Service.OpenChallenge)
 	PartLink         Part = "link"          // the id of the row a share link or an Apple profile download link names, read from the value whose tag checked (internal/auth/bearer, P3 7.1)
+	PartToken        Part = "token"         // the id of the API token a bearer value names, read from the value whose tag checked (internal/auth/bearer, P3 6.2, 6.3)
 )
 
 // IsNetwork says the part is made from the client address.
@@ -336,6 +337,9 @@ func All() []Bucket {
 		// Every claim request, release and challenge open of a tenant, from any of its sessions (P3 spec 4.5, T-529): the only bound on how
 		// many released rows a tenant accumulates. The pipeline charges it after the operation's own class (x-ctrlz-rate-also), on the tenant of the live session.
 		{Layer: RateClass, Service: Tenant, Name: "ip-claim", Source: Subject, Parts: []Part{PartTenant}, Limits: []Limit{{Max: 30, Per: time.Hour}}},
+		// POST /feedback (P3 9.1, T-125): 20 a day per tenant from any of its sessions, so a tenant cannot fill feedback_items however many
+		// sessions it holds. Charged by the pipeline after user-write (x-ctrlz-rate-also), on the tenant of the live session.
+		{Layer: RateClass, Service: Tenant, Name: "feedback", Source: Subject, Parts: []Part{PartTenant}, Limits: []Limit{{Max: 20, Per: d24}}},
 		// Share and download links (P3 7.1, 7.2, 9.1). The three public routes carry a bearer value whose tag the pipeline checks
 		// with no I/O; a value that checks is charged to the row it names, 30 a minute, and no network bucket is charged
 		// (a value is minted only by its tenant, so what a stranger holds is dead values, which cost at most this a minute per
@@ -345,6 +349,17 @@ func All() []Bucket {
 		{Layer: RateClass, Service: Tenant, Name: "public-link", Source: Proof, Parts: []Part{PartLink}, Limits: perMin(30)},
 		{Layer: RateClass, Service: Tenant, Name: "link-write", Source: Subject, Parts: []Part{PartSession}, Limits: perMin(60)},
 		{Layer: RateClass, Service: Tenant, Name: "link-create", Source: Subject, Parts: []Part{PartTenant}, Limits: []Limit{{Max: 200, Per: d24}}, FailClosed: true},
+		// API tokens (P3 6.2, 6.3, 9.1). A bearer value whose tag and expiry check names its row, and that id is the key of the three
+		// classes the pipeline charges before any lookup: the class of the operation (token-read or token-write), then token-miss, which
+		// is given back for a token that proves live, so a holder of dead values spends only what each value's own row allows and never
+		// a budget that another token shares. token-tenant is the one bound a tenant's tokens share (600 a minute), charged once the lookup
+		// found the tenant. token-create (20 a day per tenant) bounds how many ids can ever pass the check, and is closed for the same
+		// reason link-create is: a bound that fails open is no bound.
+		{Layer: RateClass, Service: Tenant, Name: "token-miss", Source: Proof, Parts: []Part{PartToken}, Limits: perMin(30)},
+		{Layer: RateClass, Service: Tenant, Name: "token-read", Source: Proof, Parts: []Part{PartToken}, Limits: perMin(300)},
+		{Layer: RateClass, Service: Tenant, Name: "token-write", Source: Proof, Parts: []Part{PartToken}, Limits: perMin(60)},
+		{Layer: RateClass, Service: Tenant, Name: "token-tenant", Source: Subject, Parts: []Part{PartTenant}, Limits: perMin(600)},
+		{Layer: RateClass, Service: Tenant, Name: "token-create", Source: Subject, Parts: []Part{PartTenant}, Limits: []Limit{{Max: 20, Per: d24}}, FailClosed: true},
 		{Layer: RateClass, Service: Tenant, Name: "session-lookup", Source: Proof, Parts: []Part{PartCookie}, Limits: perMin(120)},
 		// What dead cookies can cost in lookups once the dead set has forgotten some: one budget per session, taken
 		// before the lookup and given back unless the session is gone for good (round 7, primitives-r7-6; keyed on the

@@ -63,6 +63,19 @@ type Resolver interface {
 	Resolve(ctx context.Context, cookie string, op apispec.Operation) (Resolved, error)
 }
 
+// TokenReader is the API token path of a service (P3 6.3): an operation whose x-ctrlz-token is read or write also accepts
+// `Authorization: Bearer <token>` in place of the session cookie.
+type TokenReader interface {
+	// Screen says, with no I/O, whether the credential (the text after "Bearer ") can have been issued as an API token by this
+	// service and has not expired, and returns the id of the row it names. A credential that cannot is answered 401 token_invalid
+	// and charged to nothing, so junk never spends a budget that live tokens share.
+	Screen(credential string) (id string, ok bool)
+	// Resolve looks the token up and applies the gates that belong to the token: its tenant's status, the client address against
+	// its allowed list, and its kind against the operation. client is the address the pipeline found, never a header. The *Error
+	// it returns is the refusal.
+	Resolve(ctx context.Context, credential string, op apispec.Operation, client netip.Addr) (Resolved, error)
+}
+
 // Pipeline is the request pipeline of spec 2.3 for one service. The same type
 // serves the tenant and the admin API; only the resolver, the class table and
 // the document differ.
@@ -102,6 +115,9 @@ type Pipeline struct {
 	// at once and charges nothing; one that does is charged to the class on that id, and no network bucket is charged
 	// (P3 7.1). Build refuses a document with such an operation when it is nil.
 	Bearer func(r *http.Request, op apispec.Operation) (key string, ok bool)
+	// Tokens is the API token path (P3 6.3). Nil means the service takes no token: a bearer on any of its operations is then
+	// 403 token_not_allowed, as it is on an operation whose x-ctrlz-token is none.
+	Tokens TokenReader
 	// Doc is the OpenAPI document the Ops were read from. Every request is checked
 	// against its operation's schemas before any handler runs (Validator, rule
 	// boundary-input), so the document and the check are the same bytes.
@@ -177,6 +193,10 @@ func (p *Pipeline) Build() (*API, error) {
 		if c.Key == ratelimit.ByNetwork && op.Auth.NeedsSession() {
 			return nil, errors.New("httpx: network-keyed rate class on a route with a session: " + op.ID)
 		}
+		// A token reaches an operation only through the session path, so an operation that takes one has a session class and a tenant.
+		if (op.Token == "read" || op.Token == "write") && !op.Auth.NeedsSession() {
+			return nil, errors.New("httpx: an operation that takes an API token has no session: " + op.ID)
+		}
 		if op.MaxBody > BulkThreshold && op.Rate != ratelimit.BulkWrite && op.ID != ruleCreateID {
 			return nil, errors.New("httpx: an operation with a body limit above 64 KiB is neither of the bulk-write class nor a rule create: " + op.ID)
 		}
@@ -250,6 +270,20 @@ func (a *API) perOp(next http.Handler) http.Handler {
 		if network == "" {
 			Write(w, r, BadRequest())
 			return
+		}
+
+		// P3 6.3 steps 1 and 2: one credential per request, and a bearer only where the operation takes one. Both are answered before
+		// any lookup and charge nothing.
+		cred, bearerSent := bearerCredential(r)
+		if bearerSent {
+			if (op.Token != "read" && op.Token != "write") || a.p.Tokens == nil {
+				Write(w, r, TokenNotAllowed())
+				return
+			}
+			if a.p.Resolver != nil && cookieValue(r, a.p.Resolver.CookieName()) != "" {
+				Write(w, r, BadRequest())
+				return
+			}
 		}
 
 		// The page, the profile and every refusal of a route that carries a share or download link value are for one person and are
@@ -390,8 +424,30 @@ func (a *API) perOp(next http.Handler) http.Handler {
 		// is looked at first, in-process: no cookie, or one with a wrong tag or past its
 		// expiry, is refused here for the price of one MAC.
 		needsSession := op.Auth.NeedsSession()
-		var cookie, lookupKey, tokenSession string
-		if needsSession {
+		var cookie, lookupKey, tokenSession, tokenID string
+		if needsSession && bearerSent {
+			// Step 8 of 6.3: Screen, the dead set, then the operation's token class on the id the value names, before the body is
+			// read and before the lookup, and never given back: at most its limit a minute per token, live or not.
+			id, ok := a.p.Tokens.Screen(cred)
+			if !ok || a.dead.has("token:"+id) {
+				Write(w, r, TokenInvalid())
+				return
+			}
+			tokenID = id
+			name := ratelimit.TokenRead
+			if op.Token == "write" {
+				name = ratelimit.TokenWrite
+			}
+			tc, ok := ratelimit.Lookup(a.p.Service, name)
+			if !ok {
+				Write(w, r, Internal())
+				return
+			}
+			if e := a.charge(ctx, tc, ratelimit.Subject{Token: id}); e != nil {
+				a.refuse(w, r, e)
+				return
+			}
+		} else if needsSession {
 			cookie = cookieValue(r, a.p.Resolver.CookieName())
 			if cookie == "" {
 				Write(w, r, SessionExpired())
@@ -432,7 +488,17 @@ func (a *API) perOp(next http.Handler) http.Handler {
 		}
 
 		// Steps 8 (session-lookup) and 9: a route that needs a session.
-		if needsSession {
+		if needsSession && bearerSent {
+			res, ok := a.resolveToken(w, r, op, class, cred, tokenID)
+			if !ok {
+				return
+			}
+			base := ctx
+			ctx = res.Ctx
+			r = r.WithContext(ctx)
+			a.serveResolved(w, r, next, op, res, isHeavy, heavyIn{token: cred, tokenID: tokenID, base: base})
+			return
+		} else if needsSession {
 			lookup, _ := ratelimit.Lookup(a.p.Service, ratelimit.SessionLookup)
 			sub := ratelimit.Subject{Session: lookupKey}
 			if e := a.charge(ctx, lookup, sub); e != nil {
@@ -491,57 +557,124 @@ func (a *API) perOp(next http.Handler) http.Handler {
 			base := ctx
 			ctx = res.Ctx
 			r = r.WithContext(ctx)
-			// A second class of the operation, charged on the tenant of the live session (x-ctrlz-rate-also).
-			if op.Also != "" {
-				if e := a.chargeTenantClass(ctx, res, op.Also); e != nil {
-					a.refuse(w, r, e)
-					return
-				}
-			}
-			// A route that makes a share or download link spends the tenant's day budget of links too (P3 9.1): it bounds how many
-			// row ids can ever pass the check of a value, whatever the number of sessions the tenant holds.
-			if op.Rate == ratelimit.LinkWrite {
-				if e := a.chargeTenantDay(ctx, res, ratelimit.LinkCreate); e != nil {
-					a.refuse(w, r, e)
-					return
-				}
-			}
-			if isHeavy {
-				a.serveHeavy(w, r, next, op, res, heavyIn{cookie: cookie, lookupKey: lookupKey, base: base})
-				return
-			}
-			if a.p.Admission != nil && res.Tenant != "" {
-				// An ordinary operation of a tenant answers through answerWriter: a big answer is spilled to a file and
-				// sent from here, so a client that does not read holds disk, counted per tenant, and no memory (answer.go).
-				hold := &answerHold{adm: a.p.Admission, tenant: res.Tenant}
-				defer hold.releaseAll()
-				aw := &answerWriter{w: w, hold: hold, dir: a.p.Admission.Dir()}
-				defer aw.close()
-				r = r.WithContext(context.WithValue(ctx, keyAnswer, hold))
-				_, setWrite := deadlinesOf(w)
-				// A turn of the tenant's ordinary requests (p2-B3-r13-1): the rate classes count for each session, so
-				// without it one account's sessions fill the 16 connections. The line holds no connection, the turn
-				// ends with the handler, and the file of a spilled answer is sent after it, so a slow reader holds neither.
-				turn, err := a.p.Admission.Ordinary(ctx, res.Tenant)
-				if err != nil {
-					if ctx.Err() != nil {
-						a.refuse(w, r, &Error{Status: StatusClientClosedRequest, Code: "client_closed_request"})
-						return
-					}
-					a.refuse(w, r, busy())
-					return
-				}
-				func() {
-					defer turn()
-					next.ServeHTTP(aw, r)
-				}()
-				aw.finish(a, r, setWrite)
-				return
-			}
+			a.serveResolved(w, r, next, op, res, isHeavy, heavyIn{cookie: cookie, lookupKey: lookupKey, base: base})
+			return
 		}
-
 		next.ServeHTTP(w, r)
 	})
+}
+
+// resolveToken is steps 8 to 10 of the token path (P3 6.3), after the operation's token class has been charged: the token-miss
+// charge, the lookup with its gates, the miss given back for a live token whatever a gate then decides, the dead set for a value
+// that is gone for good, and then token-tenant on the tenant the lookup found and the operation's own class on the token. It
+// writes the refusal itself and returns false.
+func (a *API) resolveToken(w http.ResponseWriter, r *http.Request, op apispec.Operation, class ratelimit.Class, cred, id string) (Resolved, bool) {
+	ctx := r.Context()
+	miss, ok := ratelimit.Lookup(a.p.Service, ratelimit.TokenMiss)
+	if !ok {
+		Write(w, r, Internal())
+		return Resolved{}, false
+	}
+	missSub := ratelimit.Subject{Token: id}
+	if e := a.charge(ctx, miss, missSub); e != nil {
+		a.refuse(w, r, e)
+		return Resolved{}, false
+	}
+	res, err := a.p.Tokens.Resolve(ctx, cred, op, ClientIPFrom(ctx))
+	if res.Live {
+		a.p.Limiter.Refund(ctx, miss, missSub)
+	}
+	if res.Dead {
+		a.dead.add("token:" + id)
+	}
+	if err != nil {
+		a.fail(w, r, err)
+		return Resolved{}, false
+	}
+	// Step 10: the tenant's bound that all its tokens share, then the operation's own class on the token (so bulk-write is ten a
+	// minute for each token, and its day budget, charged later on the tenant, holds across tokens and sessions). Neither is given back.
+	if tt, ok := ratelimit.Lookup(a.p.Service, ratelimit.TokenTenant); ok && res.Tenant != "" {
+		if e := a.charge(ctx, tt, ratelimit.Subject{Tenant: res.Tenant}); e != nil {
+			a.refuse(w, r, e)
+			return Resolved{}, false
+		}
+	} else {
+		Write(w, r, Internal())
+		return Resolved{}, false
+	}
+	if res.SessionID == "" || class.Key != ratelimit.BySession {
+		return res, true
+	}
+	if e := a.charge(ctx, class, ratelimit.Subject{SessionID: res.SessionID}); e != nil {
+		a.refuse(w, r, e)
+		return Resolved{}, false
+	}
+	return res, true
+}
+
+// bearerCredential reads the credential of an `Authorization: Bearer` header: the text after the scheme, which is matched
+// without regard to case. ok is false for no header and for a scheme that is not Bearer, which this service does not read.
+func bearerCredential(r *http.Request) (string, bool) {
+	h := r.Header.Get("Authorization")
+	const scheme = "Bearer "
+	if len(h) < len(scheme) || !strings.EqualFold(h[:len(scheme)], scheme) {
+		return "", false
+	}
+	return h[len(scheme):], true
+}
+
+// serveResolved runs a request whose principal is settled, by session or by token: the second class of the operation, the day
+// budget of a link, then the heavy path or the ordinary one. ctx of r already carries the principal.
+func (a *API) serveResolved(w http.ResponseWriter, r *http.Request, next http.Handler, op apispec.Operation, res Resolved, isHeavy bool, in heavyIn) {
+	ctx := r.Context()
+	// A second class of the operation, charged on the tenant of the live session (x-ctrlz-rate-also).
+	if op.Also != "" {
+		if e := a.chargeTenantClass(ctx, res, op.Also); e != nil {
+			a.refuse(w, r, e)
+			return
+		}
+	}
+	// A route that makes a share or download link spends the tenant's day budget of links too (P3 9.1): it bounds how many
+	// row ids can ever pass the check of a value, whatever the number of sessions the tenant holds.
+	if op.Rate == ratelimit.LinkWrite {
+		if e := a.chargeTenantDay(ctx, res, ratelimit.LinkCreate); e != nil {
+			a.refuse(w, r, e)
+			return
+		}
+	}
+	if isHeavy {
+		a.serveHeavy(w, r, next, op, res, in)
+		return
+	}
+	if a.p.Admission != nil && res.Tenant != "" {
+		// An ordinary operation of a tenant answers through answerWriter: a big answer is spilled to a file and
+		// sent from here, so a client that does not read holds disk, counted per tenant, and no memory (answer.go).
+		hold := &answerHold{adm: a.p.Admission, tenant: res.Tenant}
+		defer hold.releaseAll()
+		aw := &answerWriter{w: w, hold: hold, dir: a.p.Admission.Dir()}
+		defer aw.close()
+		r = r.WithContext(context.WithValue(ctx, keyAnswer, hold))
+		_, setWrite := deadlinesOf(w)
+		// A turn of the tenant's ordinary requests (p2-B3-r13-1): the rate classes count for each session, so
+		// without it one account's sessions fill the 16 connections. The line holds no connection, the turn
+		// ends with the handler, and the file of a spilled answer is sent after it, so a slow reader holds neither.
+		turn, err := a.p.Admission.Ordinary(ctx, res.Tenant)
+		if err != nil {
+			if ctx.Err() != nil {
+				a.refuse(w, r, &Error{Status: StatusClientClosedRequest, Code: "client_closed_request"})
+				return
+			}
+			a.refuse(w, r, busy())
+			return
+		}
+		func() {
+			defer turn()
+			next.ServeHTTP(aw, r)
+		}()
+		aw.finish(a, r, setWrite)
+		return
+	}
+	next.ServeHTTP(w, r)
 }
 
 // refuse writes a refusal. A client that left while its request was being read
@@ -701,6 +834,8 @@ func busy() *Error {
 // heavyIn is what serveHeavy needs from the steps before it.
 type heavyIn struct {
 	cookie, lookupKey string
+	// token and tokenID are the credential and the token id of a request made with an API token, in place of cookie and lookupKey.
+	token, tokenID string
 	// base is the context of the request before the principal of the first resolve was put on it: the work resolves again
 	// from it, so the principal it ends with is the fresh one and no stale one is under it.
 	base context.Context
@@ -877,9 +1012,17 @@ func (a *API) work(w http.ResponseWriter, r *http.Request, next http.Handler, op
 
 	// 10. Authority is fresh: a body may take minutes to arrive, so the session is resolved again before anything is read or
 	// written with it. No lookup token is charged for it, and a refusal is not refunded.
-	res, err := a.p.Resolver.Resolve(wctx, in.cookie, op)
-	if res.Dead {
-		a.dead.add(in.lookupKey)
+	var res Resolved
+	if in.token != "" {
+		res, err = a.p.Tokens.Resolve(wctx, in.token, op, ClientIPFrom(wctx))
+		if res.Dead {
+			a.dead.add("token:" + in.tokenID)
+		}
+	} else {
+		res, err = a.p.Resolver.Resolve(wctx, in.cookie, op)
+		if res.Dead {
+			a.dead.add(in.lookupKey)
+		}
 	}
 	if err != nil {
 		a.fail(sw, r, err)

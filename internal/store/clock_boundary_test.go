@@ -557,10 +557,11 @@ func windowCases() []windowCase {
 			}
 		}},
 
-		// The expiry of an API token is written by Go from the application clock too (P3 2.2 item 12, 6.2). The token writer arrives
-		// with the token routes, whose own case replaces this one; until then the row is written here with an application time and
-		// read back, and the comparison of 6.3 is run with a parameter one second either side of it.
-		{[]string{"api_tokens.expires_at"}, func(e *windowEnv) {
+		// The expiry of an API token is written by Go from the application clock too (P3 2.2 item 12, 6.2), and so is the time of its
+		// last use (6.3 step 7). The row is written here with an application time and read back, and the comparison of 6.3 is run with
+		// a parameter one second either side of it; the touch of a request made with the token is run through the store at three
+		// application times, one at the start, one inside ten minutes of it and one after.
+		{[]string{"api_tokens.expires_at", "api_tokens.last_used_at"}, func(e *windowEnv) {
 			f := e.f
 			until := e.app(time.Hour)
 			var token uuid.UUID
@@ -578,6 +579,20 @@ func windowCases() []windowCase {
 					e.t.Errorf("api_tokens live at %v = %v, want %v", d, n == 1, live)
 				}
 			}
+			tenant := f.db.Store(f.ctx, e.t, store.RoleTenant)
+			use := func(at time.Time) {
+				if err := tenant.TouchAPIToken(f.ctx, f.A.Tenant, token, at); err != nil {
+					e.t.Fatal(err)
+				}
+			}
+			first := e.app(0)
+			use(first)
+			e.sameInstant("api_tokens.last_used_at at the first use", e.at("api_tokens", "last_used_at", "id = $1", token), first)
+			use(first.Add(9 * time.Minute))
+			e.sameInstant("api_tokens.last_used_at after a use inside ten minutes", e.at("api_tokens", "last_used_at", "id = $1", token), first)
+			later := first.Add(11 * time.Minute)
+			use(later)
+			e.sameInstant("api_tokens.last_used_at after a use past ten minutes", e.at("api_tokens", "last_used_at", "id = $1", token), later)
 		}},
 	}
 }

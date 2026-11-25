@@ -329,10 +329,13 @@ func parseEnv(s string) (Env, error) {
 // KeyDomains are the key domains this role holds (spec 2.1). The split is the
 // point of the design: a compromised api cannot read SMS credentials, and a
 // compromised worker cannot read TOTP seeds. hub and migrate hold none.
+//
+// The api holds doh_token from P3 (AUTH 8.1, P3 11.5): it seals the DoH token of every new Endpoint and opens it for every
+// resolver view, so a deployment without that key file must fail at start and not answer 500 at the first Endpoint.
 func (r Role) KeyDomains() []string {
 	switch r {
 	case RoleAPI:
-		return []string{keyring.DomainUserTOTP, keyring.DomainOTPDelivery, keyring.DomainAuthMAC}
+		return []string{keyring.DomainUserTOTP, keyring.DomainOTPDelivery, keyring.DomainAuthMAC, keyring.DomainDOHToken}
 	case RoleAdmin:
 		return []string{keyring.DomainAdminTOTP, keyring.DomainSMSCred, keyring.DomainAdminMAC}
 	case RoleWorker:

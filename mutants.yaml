@@ -16674,3 +16674,64 @@ mutants:
     must_fail:
       - pkg: ./internal/api
         tests: [TestADecoyFloodDoesNotRefuseARealOTPRequest]
+  # ---- the API token path (P3 spec 6.3, 11.2 E1) ----------------------------------------
+  - id: token-path-the-kind-of-the-token-is-ignored
+    rule: tests-that-cannot-fail
+    why: The lookup lets a read token through on an operation that writes, so the gate that says token_read_only never fires.
+    edits:
+      - file: internal/auth/apitoken/apitoken.go
+        old: |-
+          if writes && row.Kind != "write" {
+        new: |-
+          if false && writes && row.Kind != "write" {
+    must_fail:
+      - pkg: ./internal/auth/apitoken
+        tests: [TestScreenAndLookupGates]
+  - id: token-path-the-allowed-addresses-are-not-checked
+    rule: tests-that-cannot-fail
+    why: The lookup stops comparing the address of the request with the token's allowed_ips, so a leaked value works from anywhere.
+    edits:
+      - file: internal/auth/apitoken/apitoken.go
+        old: |-
+          if len(row.AllowedIPs) > 0 && !within(row.AllowedIPs, client) {
+        new: |-
+          if false && len(row.AllowedIPs) > 0 && !within(row.AllowedIPs, client) {
+    must_fail:
+      - pkg: ./internal/auth/apitoken
+        tests: [TestScreenAndLookupGates]
+  - id: token-path-a-revoked-token-is-live
+    rule: tests-that-cannot-fail
+    why: The lookup stops looking at revoked_at, so a token that a password change ended still works.
+    edits:
+      - file: internal/auth/apitoken/apitoken.go
+        old: |-
+          if !found || row.RevokedAt != nil {
+        new: |-
+          if !found {
+    must_fail:
+      - pkg: ./internal/auth/apitoken
+        tests: [TestScreenAndLookupGates]
+  - id: token-path-the-tenant-is-not-the-lookups
+    rule: tests-that-cannot-fail
+    why: The principal of a token request takes its tenant from something other than the row the lookup found, so the handler runs for a tenant the token never named (the spec's fourth E1 mutant, where WithTenant takes a value that is not the token's).
+    edits:
+      - file: internal/api/resolver.go
+        old: |-
+          p := session.Principal{TenantID: info.TenantID, UserID: info.UserID,
+        new: |-
+          p := session.Principal{TenantID: info.TokenID, UserID: info.UserID,
+    must_fail:
+      - pkg: ./internal/api
+        tests: [TestAPITokenPath]
+  - id: token-create-ignores-a-rotated-session
+    rule: tests-that-cannot-fail
+    why: The create stops comparing the cookie it was resolved with against the session row under the user's lock, so a token is minted after the password change that rotated the session and revoked the tokens.
+    edits:
+      - file: internal/api/routes_tokens.go
+        old: |-
+          } else if !held {
+        new: |-
+          } else if false && !held {
+    must_fail:
+      - pkg: ./internal/api
+        tests: [TestCreateTokenResolvedBeforeACredentialChangeOfTheSameSessionMintsNothing]

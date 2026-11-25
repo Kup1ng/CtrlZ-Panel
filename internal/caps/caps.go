@@ -199,6 +199,8 @@ func Entries() []Entry {
 		// statement that also holds the limit, the expiry and the revocation, so two requests cannot both have the last one.
 		{Name: "share_link.create", Kind: Cap, Consts: []string{"MaxShareLinksPerEndpoint"}, Wins: []string{"Tx.ShareLinkInsert"}},
 		{Name: "download_link.create", Kind: Cap, Consts: []string{"MaxDownloadLinksPerTenant"}, Wins: []string{"Tx.DownloadLinkInsert"}},
+		// API tokens (6.4): the tenant's count of tokens is decided by the INSERT, under the tenant quota lock.
+		{Name: "max_api_tokens", Kind: Cap, Entitlements: []string{"max_api_tokens"}, Wins: []string{"Tx.APITokenInsert"}},
 		{Name: "share_link.use", Kind: SingleUse, Wins: []string{"Tx.ShareLinkConsume"}},
 		{Name: "download_link.use", Kind: SingleUse, Wins: []string{"Tx.DownloadLinkConsume"}},
 	}
@@ -257,6 +259,8 @@ func Bounds() []Bound {
 		{"MaxPrefixesPerAdd", "prefixes in one authorized-IP add (D31): the items of one request, checked on the value in hand; max_authorized_ips is the cap"},
 		{"MaxHostnameBytes", "longest DDNS hostname DNS allows, checked on the one value in hand; a format limit, nothing shared that racing actors could spend"},
 		{"MaxShareHours", "range of one request field (ttl_hours of a share link, 1 to 168): checked on the value in hand; nothing is shared between requests that racing actors could spend (the live links of an Endpoint are capped by MaxShareLinksPerEndpoint)"},
+		{"MaxAllowed", "addresses in one token's allowed list (D31, 32): the items of one request, checked on the value in hand; nothing is shared that racing actors could spend (the number of tokens is capped by max_api_tokens)"},
+		{"MaxAPITokenListed", "rows one list of a user's tokens returns; reads only, and far above any plan's max_api_tokens"},
 		{"MaxClientsPerSelector", "clients one selector write resolves (spec 9.3): the write applies to the rows it locked and says whether more remain, so the caller repeats; a size of one request, not an amount racing actors spend"},
 	}
 }

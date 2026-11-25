@@ -59,7 +59,23 @@ tags:
   - name: endpoints
     description: Endpoints, their groups, schedules and clients.
   - name: profiles
-    description: Profiles, their filters, services, rules, folders and options, documents, the lock, and the batch jobs.
+    description: Profiles, their documents, the lock, and the batch jobs.
+  - name: options
+    description: The options of a profile, the Default Rule among them.
+  - name: filters
+    description: The catalog of filters and the filters a profile turns on.
+  - name: services
+    description: The services a profile blocks, bypasses or redirects.
+  - name: service-categories
+    description: The catalog of services and their categories.
+  - name: rule-folders
+    description: The folders of a profile's custom rules and their export and upload.
+  - name: custom-rules
+    description: The custom rules of a profile.
+  - name: locations
+    description: The locations a profile may use.
+  - name: authorized-ips
+    description: The addresses authorized to use an Endpoint.
   - name: public
     description: Share links and Apple profile downloads, which carry a bearer value and no session.
 # The alphabets of the string schemas below, written once so the two documents and
@@ -88,6 +104,11 @@ x-ctrlz-patterns:
   # asks every request string to refuse the empty and the blank value).
   nameprose: &nameprose '^(?:[^\s\p{C}])(?:[^\p{C}]|\x{200C})*$'
   nametext: &nametext '^[^\s\p{C}][^\p{C}]*$'
+  # A message a person writes in a textarea (the feedback dialog, P3 spec 9.2): several lines and the direction marks a
+  # Persian keyboard types. It takes line feed, carriage return and tab, ZWNJ, ZWJ (emoji sequences), LRM, RLM and ALM, and
+  # refuses every other control and format character, the bidi overrides and isolates among them. A message does not start
+  # with a blank. The text is httpx.MultilinePattern; TestMultilinePatternIsTheOnePatternOfTheDocument holds the two together.
+  multiline: &multiline '^[^\s\p{C}](?:[^\p{C}]|[\t\n\r\x{200C}\x{200D}\x{200E}\x{200F}\x{061C}])*$'
 
   # `prose` for a value that must be there (the name of a passkey): the first character is not a control,
   # format or separator character, so an empty or blank name is refused, except that a half-space (U+200C)
@@ -621,7 +642,7 @@ paths:
       summary: The quotas in force, read only
       x-ctrlz-auth: session
       x-ctrlz-rate: user-read
-      x-ctrlz-token: none
+      x-ctrlz-token: read
       x-ctrlz-lock: none
       x-ctrlz-outbox: none
       responses:
@@ -1038,7 +1059,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /catalog/filters:
     get:
-      tags: [profiles]
+      tags: [filters]
       operationId: listCatalogFilters
       summary: The 20 Native and 12 3rd Party filters with their modes
       description: |
@@ -1059,7 +1080,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /catalog/services:
     get:
-      tags: [profiles]
+      tags: [service-categories]
       operationId: listCatalogServices
       summary: The service categories and the services of the catalog
       x-ctrlz-auth: session
@@ -1352,7 +1373,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/locations:
     get:
-      tags: [profiles]
+      tags: [locations]
       operationId: getProfileLocations
       summary: The locations the profile may use, optionally limited to some services
       description: 'Errors: `validation_failed` (an unknown slug, or more than 100).'
@@ -1377,7 +1398,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/filters:
     get:
-      tags: [profiles]
+      tags: [filters]
       operationId: listProfileFilters
       summary: The filters the profile has switched on or off
       description: |
@@ -1399,7 +1420,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/filters/{filter_id}:
     put:
-      tags: [profiles]
+      tags: [filters]
       operationId: setProfileFilter
       summary: Switch a filter on or off and choose its mode
       description: 'Errors: `profile_locked`, `validation_failed`.'
@@ -1425,7 +1446,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/services:
     get:
-      tags: [profiles]
+      tags: [services]
       operationId: listProfileServices
       summary: The services the profile has
       x-ctrlz-auth: session
@@ -1444,7 +1465,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/services/{slug}:
     put:
-      tags: [profiles]
+      tags: [services]
       operationId: setProfileService
       summary: Set the state of one service
       description: 'Errors: `profile_locked`, `validation_failed` (`iranian_name` for a Redirect on a service that is never proxied).'
@@ -1469,7 +1490,7 @@ paths:
               schema: {$ref: "#/components/schemas/ProfileService"}
         default: {$ref: "#/components/responses/Problem"}
     delete:
-      tags: [profiles]
+      tags: [services]
       operationId: deleteProfileService
       summary: Remove a service from the profile
       description: 'Errors: `profile_locked`.'
@@ -1486,7 +1507,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/services:batch:
     post:
-      tags: [profiles]
+      tags: [services]
       operationId: batchProfileServices
       summary: Set or remove several services at once
       description: |
@@ -1514,7 +1535,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/folders:
     get:
-      tags: [profiles]
+      tags: [rule-folders]
       operationId: listFolders
       summary: The rule folders of the profile
       description: 'Errors: `server_busy` when the answer is large and the tenant already holds its share of answers that clients have not read yet; retry.'
@@ -1533,7 +1554,7 @@ paths:
               schema: {$ref: "#/components/schemas/FolderList"}
         default: {$ref: "#/components/responses/Problem"}
     post:
-      tags: [profiles]
+      tags: [rule-folders]
       operationId: createFolder
       summary: Create a folder
       description: 'Errors: `profile_locked`, `validation_failed`.'
@@ -1558,7 +1579,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/folders/{folder_id}:
     patch:
-      tags: [profiles]
+      tags: [rule-folders]
       operationId: updateFolder
       summary: Edit a folder
       description: 'Errors: `profile_locked`, `validation_failed`.'
@@ -1583,7 +1604,7 @@ paths:
               schema: {$ref: "#/components/schemas/Folder"}
         default: {$ref: "#/components/responses/Problem"}
     delete:
-      tags: [profiles]
+      tags: [rule-folders]
       operationId: deleteFolder
       summary: Delete a folder and the rules in it
       description: 'Errors: `profile_locked`.'
@@ -1600,7 +1621,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/folders/{folder_id}/export:
     get:
-      tags: [profiles]
+      tags: [rule-folders]
       operationId: exportFolderRules
       summary: Export Rules of a folder as a rules document
       description: 'Errors: `server_busy` when the process has no room to build the document now; the tenant may retry.'
@@ -1621,7 +1642,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/folders/{folder_id}:upload:
     post:
-      tags: [profiles]
+      tags: [rule-folders]
       operationId: uploadFolderRules
       summary: Upload Folder, merging a rules document into a folder
       description: |
@@ -1656,7 +1677,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/rules:
     get:
-      tags: [profiles]
+      tags: [custom-rules]
       operationId: listRules
       summary: One page of the profile's rules
       description: |
@@ -1700,7 +1721,7 @@ paths:
               schema: {$ref: "#/components/schemas/RulePage"}
         default: {$ref: "#/components/responses/Problem"}
     post:
-      tags: [profiles]
+      tags: [custom-rules]
       operationId: createRules
       summary: Create rules, one per pattern
       description: |
@@ -1727,7 +1748,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/rules/{rule_id}:
     patch:
-      tags: [profiles]
+      tags: [custom-rules]
       operationId: updateRule
       summary: Edit one rule
       description: 'Errors: `profile_locked`, `validation_failed`.'
@@ -1752,7 +1773,7 @@ paths:
               schema: {$ref: "#/components/schemas/Rule"}
         default: {$ref: "#/components/responses/Problem"}
     delete:
-      tags: [profiles]
+      tags: [custom-rules]
       operationId: deleteRule
       summary: Delete one rule
       description: 'Errors: `profile_locked`.'
@@ -1769,7 +1790,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/rules/{rule_id}:transfer:
     post:
-      tags: [profiles]
+      tags: [custom-rules]
       operationId: transferRule
       summary: Copy or move one rule
       description: 'The batch semantics for one id. Errors: `profile_locked`, `validation_failed`.'
@@ -1795,7 +1816,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/rules:batch:
     post:
-      tags: [profiles]
+      tags: [custom-rules]
       operationId: batchRules
       summary: Copy, move, edit, enable, disable or delete a selection of rules
       description: |
@@ -1829,7 +1850,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /profiles/{id}/options:
     get:
-      tags: [profiles]
+      tags: [options]
       operationId: getOptions
       summary: The options of the profile
       x-ctrlz-auth: session
@@ -1847,7 +1868,7 @@ paths:
               schema: {$ref: "#/components/schemas/Options"}
         default: {$ref: "#/components/responses/Problem"}
     patch:
-      tags: [profiles]
+      tags: [options]
       operationId: patchOptions
       summary: Set or clear options
       description: 'Errors: `profile_locked`, `validation_failed`.'
@@ -2458,7 +2479,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /endpoints/{id}/authorized-ips:
     get:
-      tags: [endpoints]
+      tags: [authorized-ips]
       operationId: listAuthorizedIps
       summary: The authorized addresses of an Endpoint, newest first
       description: '`is_current` marks the row that holds the address of this request: its delete is refused (spec 5 rule 1).'
@@ -2484,7 +2505,7 @@ paths:
               schema: {$ref: "#/components/schemas/AuthorizedPage"}
         default: {$ref: "#/components/responses/Problem"}
     post:
-      tags: [endpoints]
+      tags: [authorized-ips]
       operationId: addAuthorizedIps
       summary: Add up to 100 addresses or subnets
       description: |
@@ -2511,7 +2532,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /endpoints/{id}/authorized-ips/{aid}:
     patch:
-      tags: [endpoints]
+      tags: [authorized-ips]
       operationId: patchAuthorizedIp
       summary: Opt a row in or out of the automatic cleanup
       description: 'Turning it on while the Endpoint requires authorized IPs needs the lock passwords. Errors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.'
@@ -2537,7 +2558,7 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /endpoints/{id}/authorized-ips:delete:
     post:
-      tags: [endpoints]
+      tags: [authorized-ips]
       operationId: deleteAuthorizedIps
       summary: Delete authorized addresses
       description: |
@@ -2905,6 +2926,120 @@ paths:
         "200":
           description: The profile, as `application/x-apple-aspen-config`.
         default: {$ref: "#/components/responses/Problem"}
+  /api-tokens:
+    get:
+      tags: [account]
+      operationId: listApiTokens
+      summary: The user's API tokens, newest first
+      description: |
+        Never the value. A token past `expires_at` is expired, and one with `ended` was ended by a change of the password or the
+        phone number or by Forgot Password (the second factor and the passkeys keep it); both stay until the user deletes them.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-read
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      responses:
+        "200":
+          description: The tokens.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ApiTokenList"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [account]
+      operationId: createApiToken
+      summary: Make an API token
+      description: |
+        Needs a reauth window. The value is in the answer once and nowhere else. The token lives 365 days and is for `read` or `write`
+        for good: its kind cannot be changed. `allowed_ips` limits where it may be used from, at most 32 addresses or subnets, empty
+        for anywhere. A day budget of the tenant bounds how many a tenant makes (`rate_limited`). Errors: `reauth_required`,
+        `session_expired` (a credential changed while the request ran), `validation_failed` (`max_api_tokens` exceeded,
+        `/allowed_ips/<i>` `invalid`, `exceeded`), `service_unavailable`.
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      x-ctrlz-rate-also: token-create
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ApiTokenCreate"}
+      responses:
+        "201":
+          description: The token and its value, shown once.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ApiTokenCreated"}
+        default: {$ref: "#/components/responses/Problem"}
+  /api-tokens/{tid}:
+    patch:
+      tags: [account]
+      operationId: patchApiToken
+      summary: Rename a token or change where it may be used from
+      description: |
+        Needs a reauth window. Only `name` and `allowed_ips` change; an empty `allowed_ips` is anywhere. Errors:
+        `reauth_required`, `validation_failed`.
+      x-ctrlz-auth: reauth
+      x-ctrlz-rate: sensitive
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/ApiTokenId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ApiTokenPatch"}
+      responses:
+        "200":
+          description: The token.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ApiToken"}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [account]
+      operationId: deleteApiToken
+      summary: Delete a token
+      description: The value stops working at once. The screen asks for a confirmation first.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      parameters:
+        - {$ref: "#/components/parameters/ApiTokenId"}
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Problem"}
+  /feedback:
+    post:
+      tags: [account]
+      operationId: createFeedback
+      summary: Send a feature request or a message to us
+      description: |
+        The "Request Feature and Contact" dialog of the logo menu (T-125). `kind` is `feature` or `contact`; `body` is a message of at most 4000
+        characters. A tenant may send 20 a day, from all its sessions together (`rate_limited`, charged to the `feedback` class too). The
+        message is read in the admin console; nothing is answered here. An API token cannot call it. Errors: `validation_failed`,
+        `rate_limited`.
+      x-ctrlz-auth: session
+      x-ctrlz-rate: user-write
+      x-ctrlz-rate-also: feedback
+      x-ctrlz-token: none
+      x-ctrlz-lock: none
+      x-ctrlz-outbox: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FeedbackCreate"}
+      responses:
+        "201": {description: Received.}
+        default: {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     session:
@@ -2916,6 +3051,11 @@ components:
       scheme: bearer
       description: A `read` or `write` token. `read` tokens cannot call a mutating route.
   parameters:
+    ApiTokenId:
+      name: tid
+      in: path
+      required: true
+      schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
     ClientLabel:
       name: client
       in: query
@@ -3461,6 +3601,64 @@ components:
           type: array
           maxItems: 3
           items: {type: string, minLength: 2, maxLength: 2, pattern: *alpha2, x-ctrlz-rowref: false}
+    ApiToken:
+      type: object
+      required: [id, name, kind, token_prefix, allowed_ips, created_at, expires_at, ended]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        name: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose}
+        kind: {type: string, maxLength: 8, enum: [read, write]}
+        token_prefix: {type: string, minLength: 1, maxLength: 16, pattern: '^[A-Za-z0-9_-]*$'}
+        allowed_ips:
+          type: array
+          maxItems: 32
+          items: {type: string, maxLength: 43, pattern: '^[0-9A-Fa-f][0-9A-Fa-f:.]*(/[0-9]{1,3})?$'}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_used_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        ended: {type: boolean}
+    ApiTokenList:
+      type: object
+      required: [tokens]
+      properties:
+        tokens:
+          type: array
+          maxItems: 500
+          items: {$ref: "#/components/schemas/ApiToken"}
+    ApiTokenCreate:
+      type: object
+      additionalProperties: false
+      required: [name, kind]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        kind: {type: string, maxLength: 8, enum: [read, write]}
+        allowed_ips:
+          type: array
+          maxItems: 32
+          items: {type: string, minLength: 1, maxLength: 43, pattern: '^[0-9A-Fa-f][0-9A-Fa-f:.]*(/[0-9]{1,3})?$', x-ctrlz-rowref: false}
+    ApiTokenPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64, pattern: *nameprose, x-ctrlz-rowref: false}
+        allowed_ips:
+          type: array
+          maxItems: 32
+          items: {type: string, minLength: 1, maxLength: 43, pattern: '^[0-9A-Fa-f][0-9A-Fa-f:.]*(/[0-9]{1,3})?$', x-ctrlz-rowref: false}
+    FeedbackCreate:
+      type: object
+      additionalProperties: false
+      required: [kind, body]
+      properties:
+        kind: {type: string, maxLength: 8, enum: [feature, contact]}
+        body: {type: string, minLength: 1, maxLength: 4000, pattern: *multiline, x-ctrlz-rowref: false}
+    ApiTokenCreated:
+      type: object
+      required: [token, value]
+      properties:
+        token: {$ref: "#/components/schemas/ApiToken"}
+        value: {type: string, minLength: 68, maxLength: 68, pattern: '^ctz_[A-Za-z0-9_-]{64}$'}
     Limits:
       type: object
       required: [max_profiles, max_endpoints, max_clients_per_endpoint, max_authorized_ips, max_api_tokens, max_rules_per_request, max_rules_per_profile, max_wildcards_per_profile, max_realtime_sessions, max_publishes_per_hour, max_ip_claims]

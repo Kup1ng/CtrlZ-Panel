@@ -524,6 +524,14 @@ func TestKeyStatusAndRekey(t *testing.T) {
 	if code := r.run("keys", "status", "sms_cred"); code != 0 || !strings.Contains(r.out.String(), "key 2: 1") {
 		t.Fatalf("status after: %d %q", code, r.out.String())
 	}
+	// doh_token seals the token of every Endpoint since P3: the status says so and does not call the domain reserved, and a lost key is
+	// answered with the way out (p3-D6-r2-9).
+	if code := r.run("keys", "status", "doh_token"); code != 0 || strings.Contains(r.out.String(), "reserved") || !strings.Contains(r.out.String(), "endpoints.doh_token_ct") || !strings.Contains(r.out.String(), "keep every older key line") {
+		t.Fatalf("status doh_token: %d %q", code, r.out.String())
+	}
+	if code := r.run("keys", "declare-lost", "doh_token", "--key-number", "1", "--yes"); code != 1 || !strings.Contains(r.errb.String(), "rotating each Endpoint") {
+		t.Fatalf("declare-lost doh_token: %d %q", code, r.errb.String())
+	}
 	// Both values now open with key 2 alone.
 	two, err := keyring.FromRoot(root, map[string][]uint16{keyring.DomainAdminTOTP: {2}, keyring.DomainSMSCred: {2}})
 	if err != nil {

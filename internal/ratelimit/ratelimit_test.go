@@ -279,9 +279,12 @@ func TestClassTablesMatchTheSpec(t *testing.T) {
 	for _, c := range Classes(Tenant) {
 		// The SMS classes and the link budget of a tenant are closed on purpose (P3 9.1): a bound on how many ids can ever pass the
 		// check of a link value that fails open is no bound.
-		if c.Name != "otp-send" && c.Name != "otp-send-user" && c.Name != LinkCreate && c.FailClosed {
+		if c.Name != "otp-send" && c.Name != "otp-send-user" && c.Name != LinkCreate && c.Name != TokenCreate && c.FailClosed {
 			t.Errorf("%s must be open", c.Name)
 		}
+	}
+	if !cls(t, TokenCreate).FailClosed {
+		t.Error("token-create must be closed")
 	}
 	if !cls(t, LinkCreate).FailClosed {
 		t.Error("link-create must be closed")

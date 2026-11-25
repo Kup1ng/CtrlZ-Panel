@@ -4,10 +4,15 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/netip"
+	"time"
+
+	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/apitoken"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/password"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/session"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/token"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
 )
 
@@ -59,7 +64,9 @@ func (r resolver) Resolve(ctx context.Context, cookie string, op apispec.Operati
 	// A session that passed its gate is a proof: its hashes (reauth, a password change) are served
 	// before any stranger's when the Argon2 gate is full (password.Proved, tenant-r6-1), and one account has one
 	// hash in the lane at a time however many sessions it holds (password.ProvedAs, tenant-r7-6).
-	res.Ctx = password.ProvedAs(session.WithPrincipal(ctx, session.PrincipalOf(info)), info.UserID.String())
+	pr := session.PrincipalOf(info)
+	pr.CookieHash = token.HashString(cookie)
+	res.Ctx = password.ProvedAs(session.WithPrincipal(ctx, pr), info.UserID.String())
 	return res, nil
 }
 
@@ -76,4 +83,47 @@ func gateError(err error) *httpx.Error {
 		return httpx.New(http.StatusForbidden, httpx.CodeReauthRequired)
 	}
 	return httpx.Internal()
+}
+
+// tokenReader is the API token half of spec 2.3 step 9 (P3 6.3): a bearer value to a principal that has a tenant and a user and
+// no session.
+type tokenReader struct {
+	r     apitoken.Resolver
+	now   func() time.Time
+	touch *tokenToucher // nil in a test that has no store
+}
+
+func (t tokenReader) Screen(credential string) (string, bool) {
+	id, ok := t.r.Screen(credential)
+	if !ok {
+		return "", false
+	}
+	return id.String(), true
+}
+
+func (t tokenReader) Resolve(ctx context.Context, credential string, op apispec.Operation, client netip.Addr) (httpx.Resolved, error) {
+	info, out, err := t.r.Lookup(ctx, credential, client, op.Token == "write")
+	res := httpx.Resolved{Live: out.Live, Dead: out.Dead}
+	switch {
+	case err == nil:
+	case errors.Is(err, apitoken.ErrInvalid):
+		return res, httpx.TokenInvalid()
+	case errors.Is(err, apitoken.ErrSuspended):
+		return res, httpx.New(http.StatusForbidden, httpx.CodeAccountSuspended)
+	case errors.Is(err, apitoken.ErrIPNotAllowed):
+		return res, httpx.TokenIPNotAllowed()
+	case errors.Is(err, apitoken.ErrReadOnly):
+		return res, httpx.TokenReadOnly()
+	default:
+		// The database being unreachable: the request would hit it anyway, and nothing here says the token is bad.
+		return res, err
+	}
+	// The key of the operation's own class on this token, and the tenant of the tenant classes: both read from the row, never the request.
+	res.SessionID = info.TokenID.String()
+	res.Tenant = info.TenantID.String()
+	p := session.Principal{TenantID: info.TenantID, UserID: info.UserID, TenantStatus: "active", TokenID: info.TokenID, TokenKind: info.Kind}
+	// last_used_at is written here, best effort and in a transaction of its own, once the gates have passed (6.3 step 7).
+	t.touch.touch(ctx, info.TenantID, info.TokenID, t.now())
+	res.Ctx = session.WithPrincipal(ctx, p)
+	return res, nil
 }

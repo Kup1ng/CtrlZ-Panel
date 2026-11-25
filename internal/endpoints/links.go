@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math/rand/v2"
 	"net/netip"
 	"strings"
 	"time"
@@ -351,6 +352,39 @@ func (e *Env) AppleCreate(ctx context.Context, st *store.Store, tenant uuid.UUID
 // The public routes (7.1). A refusal is KindNotFound whatever the cause, and dead says the lookup found no row at all, so the
 // pipeline refuses the value at the door from then on.
 
+// public runs the transaction of one of the three public routes, for the tenant the lookup of the value found. These requests
+// carry no session and no token, so nothing before this point took the tenant's turn that an ordinary request takes (Env.Turn):
+// a holder of live links, with the Endpoint's row held by the owner's own long batch, could otherwise have each request wait on
+// the row lock with a pooled connection and fill the pool for every tenant (p3-D6-r1-7). The turn is taken before the
+// connection. The write is tried once and not again after a lock timeout: a retry would hold the connection three times as long
+// for a request that spends no use when it times out. One more try follows after a short pause, still inside the turn, so a lock
+// timeout or a deadlock against the owner's rotation, delete or batch is a retry and not an answer (11.4 says these routes never
+// answer 5xx against a concurrent rotation or delete); a second failure is the 503 the person can repeat (p3-D6-r2-6).
+func (e *Env) public(ctx context.Context, st *store.Store, tenant uuid.UUID, opts store.TxOpts, body func(tx store.Tx) error) error {
+	if e.Turn != nil {
+		release, err := e.Turn(ctx, tenant)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
+	err := st.WithTenant(ctx, tenant, opts, body)
+	if !errors.Is(err, store.ErrRetry) {
+		return err
+	}
+	select {
+	case <-time.After(publicRetryPause()):
+	case <-ctx.Done():
+		return err
+	}
+	return st.WithTenant(ctx, tenant, opts, body)
+}
+
+// publicRetryPause is 10 to 60 ms, so that two requests that met the same lock do not meet it again together.
+func publicRetryPause() time.Duration {
+	return 10*time.Millisecond + time.Duration(rand.Int64N(int64(50*time.Millisecond)))
+}
+
 // ShareView is what a share link shows: the Endpoint's name and type and the Resolver view for the link's client, nothing else.
 type ShareView struct {
 	Name, Type string
@@ -371,7 +405,7 @@ func (e *Env) OpenShare(ctx context.Context, st *store.Store, opts store.TxOpts,
 	if info.TenantStatus != "active" || info.UsesLeft <= 0 || !info.ExpiresAt.After(now) {
 		return ShareView{}, false, notFound()
 	}
-	err = e.Plain(ctx, st, info.TenantID, opts, func(tx store.Tx) error {
+	err = e.public(ctx, st, info.TenantID, opts, func(tx store.Tx) error {
 		out = ShareView{}
 		found, err := tx.EndpointsLock([]uuid.UUID{info.EndpointID})
 		if err != nil {
@@ -436,7 +470,7 @@ func (e *Env) OpenShareApple(ctx context.Context, st *store.Store, opts store.Tx
 	if err := appleprofile.Validate(req); err != nil {
 		return AppleOut{}, false, appleField(err, "/params")
 	}
-	err = e.Plain(ctx, st, info.TenantID, opts, func(tx store.Tx) error {
+	err = e.public(ctx, st, info.TenantID, opts, func(tx store.Tx) error {
 		out = AppleOut{}
 		found, err := tx.EndpointsLock([]uuid.UUID{info.EndpointID})
 		if err != nil {
@@ -508,7 +542,7 @@ func (e *Env) DownloadApple(ctx context.Context, st *store.Store, opts store.TxO
 	if e.Trust != nil && e.Trust.Mode() == mobileconfig.TrustPrivateDisabled {
 		return Profile{}, false, &Error{Kind: KindSetupUnavailable}
 	}
-	err = e.Plain(ctx, st, info.TenantID, opts, func(tx store.Tx) error {
+	err = e.public(ctx, st, info.TenantID, opts, func(tx store.Tx) error {
 		out = Profile{}
 		found, err := tx.EndpointsLock([]uuid.UUID{info.EndpointID})
 		if err != nil {

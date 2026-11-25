@@ -44,7 +44,9 @@ tables:
     # expires_at is written by Go from the application clock and compared with it (P3 2.2 item 12, 6.2):
     # the value of the token carries the same instant, so Screen and the row agree.
     expires_at: app
-    last_used_at: stamp
+    # last_used_at is written from the application time of the request that used the token and compared with it (a write
+    # at most once in ten minutes, P3 6.3 step 7), so it is on the application clock like the expiry.
+    last_used_at: app
     revoked_at: stamp
     created_at: stamp
     updated_at: stamp

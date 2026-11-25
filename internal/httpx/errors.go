@@ -67,6 +67,9 @@ const (
 	CodeEndpointHeld         = "endpoint_held"
 	CodeDestinationsLost     = "destinations_lost"
 	CodeTokenNotAllowed      = "token_not_allowed"
+	CodeTokenInvalid         = "token_invalid"
+	CodeTokenIPNotAllowed    = "token_ip_not_allowed"
+	CodeTokenReadOnly        = "token_read_only"
 	CodeIPUnavailable        = "ip_unavailable"
 	CodeIPSuspended          = "ip_suspended"
 	CodeNeedsAdminApproval   = "needs_admin_approval"
@@ -114,7 +117,16 @@ func SessionExpired() *Error { return New(http.StatusUnauthorized, CodeSessionEx
 func BadRequest() *Error     { return New(http.StatusBadRequest, CodeBadRequest) }
 func NotFound() *Error       { return New(http.StatusNotFound, CodeNotFound) }
 func Internal() *Error       { return New(http.StatusInternalServerError, CodeInternal) }
-func Unavailable() *Error    { return New(http.StatusServiceUnavailable, CodeServiceUnavailable) }
+
+// The refusals of the API token path (P3 6.3). A token that is not a live one of ours is 401, like a session cookie that is not;
+// the three 403 refusals say what the token may not do and are given only to a holder of a live value.
+func TokenInvalid() *Error    { return New(http.StatusUnauthorized, CodeTokenInvalid) }
+func TokenNotAllowed() *Error { return New(http.StatusForbidden, CodeTokenNotAllowed) }
+func TokenIPNotAllowed() *Error {
+	return New(http.StatusForbidden, CodeTokenIPNotAllowed)
+}
+func TokenReadOnly() *Error { return New(http.StatusForbidden, CodeTokenReadOnly) }
+func Unavailable() *Error   { return New(http.StatusServiceUnavailable, CodeServiceUnavailable) }
 func RateLimited(d time.Duration) *Error {
 	return New(http.StatusTooManyRequests, CodeRateLimited).WithRetry(d)
 }

@@ -537,7 +537,19 @@ type Principal struct {
 	SessionID    uuid.UUID
 	TenantStatus string
 	ReauthAt     *time.Time
+	// TokenID and TokenKind are set when the request came in with an API token (P3 6.3) and SessionID is then the nil id: the
+	// principal of a token has no session, no reauth window, and nothing that needs either. A handler that needs a session
+	// (every operation whose x-ctrlz-token is none) is never reached with one.
+	TokenID   uuid.UUID
+	TokenKind string
+	// CookieHash is the hash of the session cookie the request was resolved with (nil for a token request). A route that must
+	// not outlive a credential change compares it with the session row under the user lock (Tx.SessionHoldsCookie): a change
+	// rotates the session in place, so the id stays and only the hash moves.
+	CookieHash []byte
 }
+
+// ViaToken says the request was made with an API token.
+func (p Principal) ViaToken() bool { return p.TokenID != uuid.Nil }
 
 type principalKey struct{}
 

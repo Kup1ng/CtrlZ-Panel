@@ -318,6 +318,7 @@ var netCutAllowed = map[string]string{
 	"internal/httpx/middleware.go#Subject":              "the pipeline derives the network and the /48 once per request, for the rate classes of the registry",
 	"internal/httpx/pipeline.go#(API).perOp":            "charges the rate classes of the registry with the network keys httpx.Subject hands it; it makes no key of its own and keeps no bucket",
 	"internal/httpx/validate.go#(Validator).CheckHeavy": "reads the Content-Type header of a request body, which is a media type and not a client address",
+	"internal/httpx/pipeline.go#bearerCredential":       "reads the Authorization header of a request, which holds a credential and not a client address",
 
 	// Part 6, the readers of the peer and of header text (round 17, tenant-r17-7 and -10). Each reads one header by a
 	// name that is not the client address, or the peer of a connection to judge it and keep nothing.
@@ -373,6 +374,11 @@ var netCutAllowed = map[string]string{
 	// The access list and the claims of an Endpoint (P3 spec 4, 5): a prefix the owner typed is read, checked against the widths
 	// the list allows and handed to a statement, and a prefix read back is shown to the owner. Each one is the owner's own data
 	// on its way to or from the database, an answer and never a key.
+	// The allowed list of an API token (P3 6.3): an address or subnet the owner typed is read and checked for host bits, and handed to the
+	// statement that stores it. The owner's own data on its way to the database; it keys no bucket and keeps nothing.
+	"internal/api/routes_tokens.go#parseAllowed":      "reads each allowed address of a token request through apitoken.ParseAllowed and names the refused ones by index; it keys no bucket and keeps nothing",
+	"internal/auth/apitoken/apitoken.go#ParseAllowed": "reads an allowed address or subnet the owner typed and checks its host bits; it keys no bucket and keeps nothing",
+
 	"internal/endpoints/access.go#ParseAuthorized":     "reads an authorized prefix the owner typed and checks its host bits and width; it keys no bucket and keeps nothing",
 	"internal/endpoints/access.go#(Env).AddAuthorized": "reads each typed prefix through ParseAuthorized and hands the list to the statement that adds them; it keys no bucket and keeps nothing",
 	"internal/endpoints/claims.go#ParseClaimPrefix":    "reads a claim prefix the owner typed and checks its host bits; it keys no bucket and keeps nothing",

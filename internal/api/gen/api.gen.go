@@ -18,6 +18,42 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for ApiTokenKind.
+const (
+	ApiTokenKindRead  ApiTokenKind = "read"
+	ApiTokenKindWrite ApiTokenKind = "write"
+)
+
+// Valid indicates whether the value is a known member of the ApiTokenKind enum.
+func (e ApiTokenKind) Valid() bool {
+	switch e {
+	case ApiTokenKindRead:
+		return true
+	case ApiTokenKindWrite:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApiTokenCreateKind.
+const (
+	ApiTokenCreateKindRead  ApiTokenCreateKind = "read"
+	ApiTokenCreateKindWrite ApiTokenCreateKind = "write"
+)
+
+// Valid indicates whether the value is a known member of the ApiTokenCreateKind enum.
+func (e ApiTokenCreateKind) Valid() bool {
+	switch e {
+	case ApiTokenCreateKindRead:
+		return true
+	case ApiTokenCreateKindWrite:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AppleProfileRequestProtocol.
 const (
 	AppleProfileRequestProtocolDoh AppleProfileRequestProtocol = "doh"
@@ -828,6 +864,24 @@ func (e EndpointPatchClear) Valid() bool {
 	case EndpointPatchClearGroupId:
 		return true
 	case EndpointPatchClearProfile2Id:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FeedbackCreateKind.
+const (
+	Contact FeedbackCreateKind = "contact"
+	Feature FeedbackCreateKind = "feature"
+)
+
+// Valid indicates whether the value is a known member of the FeedbackCreateKind enum.
+func (e FeedbackCreateKind) Valid() bool {
+	switch e {
+	case Contact:
+		return true
+	case Feature:
 		return true
 	default:
 		return false
@@ -2252,6 +2306,49 @@ type AnnouncementPage struct {
 	UnreadCount int            `json:"unread_count"`
 }
 
+// ApiToken defines model for ApiToken.
+type ApiToken struct {
+	AllowedIps  []string           `json:"allowed_ips"`
+	CreatedAt   time.Time          `json:"created_at"`
+	Ended       bool               `json:"ended"`
+	ExpiresAt   time.Time          `json:"expires_at"`
+	Id          openapi_types.UUID `json:"id"`
+	Kind        ApiTokenKind       `json:"kind"`
+	LastUsedAt  *time.Time         `json:"last_used_at,omitempty"`
+	Name        string             `json:"name"`
+	TokenPrefix string             `json:"token_prefix"`
+}
+
+// ApiTokenKind defines model for ApiToken.Kind.
+type ApiTokenKind string
+
+// ApiTokenCreate defines model for ApiTokenCreate.
+type ApiTokenCreate struct {
+	AllowedIps *[]string          `json:"allowed_ips,omitempty"`
+	Kind       ApiTokenCreateKind `json:"kind"`
+	Name       string             `json:"name"`
+}
+
+// ApiTokenCreateKind defines model for ApiTokenCreate.Kind.
+type ApiTokenCreateKind string
+
+// ApiTokenCreated defines model for ApiTokenCreated.
+type ApiTokenCreated struct {
+	Token ApiToken `json:"token"`
+	Value string   `json:"value"`
+}
+
+// ApiTokenList defines model for ApiTokenList.
+type ApiTokenList struct {
+	Tokens []ApiToken `json:"tokens"`
+}
+
+// ApiTokenPatch defines model for ApiTokenPatch.
+type ApiTokenPatch struct {
+	AllowedIps *[]string `json:"allowed_ips,omitempty"`
+	Name       *string   `json:"name,omitempty"`
+}
+
 // AppleLink defines model for AppleLink.
 type AppleLink struct {
 	ExpiresAt time.Time `json:"expires_at"`
@@ -2904,6 +3001,15 @@ type Error struct {
 	RequestId   *string `json:"request_id,omitempty"`
 	RetryAfterS *int    `json:"retry_after_s,omitempty"`
 }
+
+// FeedbackCreate defines model for FeedbackCreate.
+type FeedbackCreate struct {
+	Body string             `json:"body"`
+	Kind FeedbackCreateKind `json:"kind"`
+}
+
+// FeedbackCreateKind defines model for FeedbackCreate.Kind.
+type FeedbackCreateKind string
 
 // Folder defines model for Folder.
 type Folder struct {
@@ -4010,6 +4116,9 @@ type TotpSetup struct {
 // isolation harness asks for a Cross call that carries another tenant's value in each.
 type WebAuthnResponse = json.RawMessage
 
+// ApiTokenId defines model for ApiTokenId.
+type ApiTokenId = openapi_types.UUID
+
 // AuthorizedId defines model for AuthorizedId.
 type AuthorizedId = openapi_types.UUID
 
@@ -4279,6 +4388,12 @@ type RegenerateRecoveryCodesJSONRequestBody = Empty
 // TotpSetupJSONRequestBody defines body for TotpSetup for application/json ContentType.
 type TotpSetupJSONRequestBody = Empty
 
+// CreateApiTokenJSONRequestBody defines body for CreateApiToken for application/json ContentType.
+type CreateApiTokenJSONRequestBody = ApiTokenCreate
+
+// PatchApiTokenJSONRequestBody defines body for PatchApiToken for application/json ContentType.
+type PatchApiTokenJSONRequestBody = ApiTokenPatch
+
 // LookupInviteJSONRequestBody defines body for LookupInvite for application/json ContentType.
 type LookupInviteJSONRequestBody = InviteLookupRequest
 
@@ -4383,6 +4498,9 @@ type RotateEndpointResolverJSONRequestBody = LockPasswordsBody
 
 // BatchEndpointsJSONRequestBody defines body for BatchEndpoints for application/json ContentType.
 type BatchEndpointsJSONRequestBody = EndpointBatch
+
+// CreateFeedbackJSONRequestBody defines body for CreateFeedback for application/json ContentType.
+type CreateFeedbackJSONRequestBody = FeedbackCreate
 
 // CreateProfileJSONRequestBody defines body for CreateProfile for application/json ContentType.
 type CreateProfileJSONRequestBody = ProfileCreate
@@ -4509,6 +4627,18 @@ type ServerInterface interface {
 	// ReadAnnouncement Mark an announcement read
 	// (POST /announcements/{id}/read)
 	ReadAnnouncement(w http.ResponseWriter, r *http.Request, id Id)
+	// ListApiTokens The user's API tokens, newest first
+	// (GET /api-tokens)
+	ListApiTokens(w http.ResponseWriter, r *http.Request)
+	// CreateApiToken Make an API token
+	// (POST /api-tokens)
+	CreateApiToken(w http.ResponseWriter, r *http.Request)
+	// DeleteApiToken Delete a token
+	// (DELETE /api-tokens/{tid})
+	DeleteApiToken(w http.ResponseWriter, r *http.Request, tid ApiTokenId)
+	// PatchApiToken Rename a token or change where it may be used from
+	// (PATCH /api-tokens/{tid})
+	PatchApiToken(w http.ResponseWriter, r *http.Request, tid ApiTokenId)
 	// GetAuthConfig What the login page needs before anyone is signed in
 	// (GET /auth/config)
 	GetAuthConfig(w http.ResponseWriter, r *http.Request)
@@ -4689,6 +4819,9 @@ type ServerInterface interface {
 	// BatchEndpoints Move, edit or delete a selection of Endpoints
 	// (POST /endpoints:batch)
 	BatchEndpoints(w http.ResponseWriter, r *http.Request)
+	// CreateFeedback Send a feature request or a message to us
+	// (POST /feedback)
+	CreateFeedback(w http.ResponseWriter, r *http.Request)
 	// GetActiveJob The tenant's queued or running job, if any
 	// (GET /jobs/active)
 	GetActiveJob(w http.ResponseWriter, r *http.Request)
@@ -4941,6 +5074,30 @@ func (_ Unimplemented) ListAnnouncements(w http.ResponseWriter, r *http.Request,
 // ReadAnnouncement Mark an announcement read
 // (POST /announcements/{id}/read)
 func (_ Unimplemented) ReadAnnouncement(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListApiTokens The user's API tokens, newest first
+// (GET /api-tokens)
+func (_ Unimplemented) ListApiTokens(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateApiToken Make an API token
+// (POST /api-tokens)
+func (_ Unimplemented) CreateApiToken(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteApiToken Delete a token
+// (DELETE /api-tokens/{tid})
+func (_ Unimplemented) DeleteApiToken(w http.ResponseWriter, r *http.Request, tid ApiTokenId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PatchApiToken Rename a token or change where it may be used from
+// (PATCH /api-tokens/{tid})
+func (_ Unimplemented) PatchApiToken(w http.ResponseWriter, r *http.Request, tid ApiTokenId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5301,6 +5458,12 @@ func (_ Unimplemented) RotateEndpointResolver(w http.ResponseWriter, r *http.Req
 // BatchEndpoints Move, edit or delete a selection of Endpoints
 // (POST /endpoints:batch)
 func (_ Unimplemented) BatchEndpoints(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateFeedback Send a feature request or a message to us
+// (POST /feedback)
+func (_ Unimplemented) CreateFeedback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5967,6 +6130,86 @@ func (siw *ServerInterfaceWrapper) ReadAnnouncement(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReadAnnouncement(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListApiTokens operation middleware
+func (siw *ServerInterfaceWrapper) ListApiTokens(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListApiTokens(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateApiToken operation middleware
+func (siw *ServerInterfaceWrapper) CreateApiToken(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateApiToken(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteApiToken operation middleware
+func (siw *ServerInterfaceWrapper) DeleteApiToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tid" -------------
+	var tid ApiTokenId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tid", chi.URLParam(r, "tid"), &tid, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tid", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteApiToken(w, r, tid)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchApiToken operation middleware
+func (siw *ServerInterfaceWrapper) PatchApiToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tid" -------------
+	var tid ApiTokenId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tid", chi.URLParam(r, "tid"), &tid, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tid", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchApiToken(w, r, tid)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7606,6 +7849,20 @@ func (siw *ServerInterfaceWrapper) BatchEndpoints(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.BatchEndpoints(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateFeedback operation middleware
+func (siw *ServerInterfaceWrapper) CreateFeedback(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateFeedback(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -9411,6 +9668,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/public/apple-profile/{link}", wrapper.DownloadAppleProfile)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api-tokens", wrapper.ListApiTokens)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api-tokens", wrapper.CreateApiToken)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api-tokens/{tid}", wrapper.DeleteApiToken)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/api-tokens/{tid}", wrapper.PatchApiToken)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/feedback", wrapper.CreateFeedback)
+	})
 
 	return r
 }
@@ -10304,6 +10576,172 @@ type ReadAnnouncementdefaultJSONResponse struct {
 }
 
 func (response ReadAnnouncementdefaultJSONResponse) VisitReadAnnouncementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListApiTokensRequestObject struct {
+}
+
+type ListApiTokensResponseObject interface {
+	VisitListApiTokensResponse(w http.ResponseWriter) error
+}
+
+type ListApiTokens200JSONResponse ApiTokenList
+
+func (response ListApiTokens200JSONResponse) VisitListApiTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListApiTokensdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListApiTokensdefaultJSONResponse) VisitListApiTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateApiTokenRequestObject struct {
+	Body *CreateApiTokenJSONRequestBody
+}
+
+type CreateApiTokenResponseObject interface {
+	VisitCreateApiTokenResponse(w http.ResponseWriter) error
+}
+
+type CreateApiToken201JSONResponse ApiTokenCreated
+
+func (response CreateApiToken201JSONResponse) VisitCreateApiTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateApiTokendefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateApiTokendefaultJSONResponse) VisitCreateApiTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteApiTokenRequestObject struct {
+	Tid ApiTokenId `json:"tid"`
+}
+
+type DeleteApiTokenResponseObject interface {
+	VisitDeleteApiTokenResponse(w http.ResponseWriter) error
+}
+
+type DeleteApiToken204Response struct {
+}
+
+func (response DeleteApiToken204Response) VisitDeleteApiTokenResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteApiTokendefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response DeleteApiTokendefaultJSONResponse) VisitDeleteApiTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchApiTokenRequestObject struct {
+	Tid  ApiTokenId `json:"tid"`
+	Body *PatchApiTokenJSONRequestBody
+}
+
+type PatchApiTokenResponseObject interface {
+	VisitPatchApiTokenResponse(w http.ResponseWriter) error
+}
+
+type PatchApiToken200JSONResponse ApiToken
+
+func (response PatchApiToken200JSONResponse) VisitPatchApiTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchApiTokendefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PatchApiTokendefaultJSONResponse) VisitPatchApiTokenResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -12931,6 +13369,43 @@ func (response BatchEndpointsdefaultJSONResponse) VisitBatchEndpointsResponse(w 
 	return err
 }
 
+type CreateFeedbackRequestObject struct {
+	Body *CreateFeedbackJSONRequestBody
+}
+
+type CreateFeedbackResponseObject interface {
+	VisitCreateFeedbackResponse(w http.ResponseWriter) error
+}
+
+type CreateFeedback201Response struct {
+}
+
+func (response CreateFeedback201Response) VisitCreateFeedbackResponse(w http.ResponseWriter) error {
+	w.WriteHeader(201)
+	return nil
+}
+
+type CreateFeedbackdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateFeedbackdefaultJSONResponse) VisitCreateFeedbackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetActiveJobRequestObject struct {
 }
 
@@ -14796,6 +15271,18 @@ type StrictServerInterface interface {
 	// ReadAnnouncement Mark an announcement read
 	// (POST /announcements/{id}/read)
 	ReadAnnouncement(ctx context.Context, request ReadAnnouncementRequestObject) (ReadAnnouncementResponseObject, error)
+	// ListApiTokens The user's API tokens, newest first
+	// (GET /api-tokens)
+	ListApiTokens(ctx context.Context, request ListApiTokensRequestObject) (ListApiTokensResponseObject, error)
+	// CreateApiToken Make an API token
+	// (POST /api-tokens)
+	CreateApiToken(ctx context.Context, request CreateApiTokenRequestObject) (CreateApiTokenResponseObject, error)
+	// DeleteApiToken Delete a token
+	// (DELETE /api-tokens/{tid})
+	DeleteApiToken(ctx context.Context, request DeleteApiTokenRequestObject) (DeleteApiTokenResponseObject, error)
+	// PatchApiToken Rename a token or change where it may be used from
+	// (PATCH /api-tokens/{tid})
+	PatchApiToken(ctx context.Context, request PatchApiTokenRequestObject) (PatchApiTokenResponseObject, error)
 	// GetAuthConfig What the login page needs before anyone is signed in
 	// (GET /auth/config)
 	GetAuthConfig(ctx context.Context, request GetAuthConfigRequestObject) (GetAuthConfigResponseObject, error)
@@ -14976,6 +15463,9 @@ type StrictServerInterface interface {
 	// BatchEndpoints Move, edit or delete a selection of Endpoints
 	// (POST /endpoints:batch)
 	BatchEndpoints(ctx context.Context, request BatchEndpointsRequestObject) (BatchEndpointsResponseObject, error)
+	// CreateFeedback Send a feature request or a message to us
+	// (POST /feedback)
+	CreateFeedback(ctx context.Context, request CreateFeedbackRequestObject) (CreateFeedbackResponseObject, error)
 	// GetActiveJob The tenant's queued or running job, if any
 	// (GET /jobs/active)
 	GetActiveJob(ctx context.Context, request GetActiveJobRequestObject) (GetActiveJobResponseObject, error)
@@ -15764,6 +16254,120 @@ func (sh *strictHandler) ReadAnnouncement(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReadAnnouncementResponseObject); ok {
 		if err := validResponse.VisitReadAnnouncementResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListApiTokens operation middleware
+func (sh *strictHandler) ListApiTokens(w http.ResponseWriter, r *http.Request) {
+	var request ListApiTokensRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListApiTokens(ctx, request.(ListApiTokensRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListApiTokens")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListApiTokensResponseObject); ok {
+		if err := validResponse.VisitListApiTokensResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateApiToken operation middleware
+func (sh *strictHandler) CreateApiToken(w http.ResponseWriter, r *http.Request) {
+	var request CreateApiTokenRequestObject
+
+	var body CreateApiTokenJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateApiToken(ctx, request.(CreateApiTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateApiToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateApiTokenResponseObject); ok {
+		if err := validResponse.VisitCreateApiTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteApiToken operation middleware
+func (sh *strictHandler) DeleteApiToken(w http.ResponseWriter, r *http.Request, tid ApiTokenId) {
+	var request DeleteApiTokenRequestObject
+
+	request.Tid = tid
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteApiToken(ctx, request.(DeleteApiTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteApiToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteApiTokenResponseObject); ok {
+		if err := validResponse.VisitDeleteApiTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchApiToken operation middleware
+func (sh *strictHandler) PatchApiToken(w http.ResponseWriter, r *http.Request, tid ApiTokenId) {
+	var request PatchApiTokenRequestObject
+
+	request.Tid = tid
+
+	var body PatchApiTokenJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchApiToken(ctx, request.(PatchApiTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchApiToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchApiTokenResponseObject); ok {
+		if err := validResponse.VisitPatchApiTokenResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -17533,6 +18137,37 @@ func (sh *strictHandler) BatchEndpoints(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(BatchEndpointsResponseObject); ok {
 		if err := validResponse.VisitBatchEndpointsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateFeedback operation middleware
+func (sh *strictHandler) CreateFeedback(w http.ResponseWriter, r *http.Request) {
+	var request CreateFeedbackRequestObject
+
+	var body CreateFeedbackJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateFeedback(ctx, request.(CreateFeedbackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateFeedback")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateFeedbackResponseObject); ok {
+		if err := validResponse.VisitCreateFeedbackResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

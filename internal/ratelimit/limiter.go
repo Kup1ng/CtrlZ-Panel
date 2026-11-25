@@ -95,6 +95,10 @@ type Subject struct {
 	// The public-link class counts on it and on nothing else: not on the network, which a stranger with dead values could
 	// fill for every honest holder behind the same carrier address (P3 7.1).
 	Link string
+	// Token is the id of the API token a bearer value names, read from a value whose tag and expiry checked (internal/auth/bearer).
+	// The token-read, token-write and token-miss classes count on it and on nothing else: not on the network, and not on the tenant,
+	// so the dead values of one token never refuse another (P3 6.3).
+	Token string
 	// TokenSession is the id of the session a cookie opens, read from the body its tag covers
 	// (session.Manager.Screen). The session-miss class counts on it and on nothing else: not on the account,
 	// or the dead cookies of one session would refuse every other session of it (round 8, tenant-r8-3).
@@ -180,6 +184,10 @@ func (l *Limiter) slots(c Class, s Subject) []slot {
 	case ByLink:
 		if s.Link != "" {
 			add("l", s.Link, 1)
+		}
+	case ByToken:
+		if s.Token != "" {
+			add("k", s.Token, 1)
 		}
 	case BySession:
 		if s.Session != "" {

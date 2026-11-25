@@ -462,3 +462,16 @@ func TestRateClassRefusalsAreCountedInTheLog(t *testing.T) {
 		}
 	}
 }
+
+// TestNewRefusesAKeyRingWithoutTheDOHTokenDomain: every Endpoint seals its DoH token under that domain, so a ring that lacks it
+// fails the build of the api and not the first POST /endpoints (P3 11.5, p3-D6-r1-6).
+func TestNewRefusesAKeyRingWithoutTheDOHTokenDomain(t *testing.T) {
+	ring, err := keyring.NewEphemeral(keyring.DomainUserTOTP, keyring.DomainOTPDelivery, keyring.DomainAuthMAC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = build(Deps{Keys: ring, Hasher: authtest.FastHasher(t), Log: slog.New(slog.NewJSONHandler(io.Discard, nil))}, httpx.NewHealth(http.NotFoundHandler()))
+	if err == nil || !strings.Contains(err.Error(), keyring.DomainDOHToken) {
+		t.Fatalf("build with no doh_token key = %v", err)
+	}
+}

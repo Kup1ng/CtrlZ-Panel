@@ -95,6 +95,7 @@ var insertOrderExempt = map[string]stmtExempt{
 	"qGroupInsert":        {"endpoint_groups", "one row: the source is a SELECT of the parameters with a WHERE on the group cap, no FROM", "50082951cc9a7ad465cd81a78b41337592588f925a69cf2b310364e93a9e9080"},
 	"qProfileCreate":      {"profiles", "one row: the source is a SELECT of the parameters with a WHERE on max_profiles, no FROM; the WITH only supplies the tenant's one row of limits (none: the cap reads 0)", "017e323d70e5916c5d6c553b8c575b9c0b408cdd616c598a05ad01de772184ee"},
 	"qShareLinkInsert":    {"setup_share_tokens", "one row: the source is a SELECT of the parameters with a WHERE on the live count of the Endpoint's links against the cap, no FROM", "add6ee23824409a091240755288fae6516eb3c9ed137df8ff17c9bfa58f6b13c"},
+	"qAPITokenInsert":     {"api_tokens", "one row: the source is a SELECT of the parameters with a WHERE on the tenant's count of tokens against max_api_tokens, no FROM; the WITH only supplies the tenant's one row of limits (none: the cap reads 0)", "525bfda99a793c0a3356446960db53a135866733253deb7c76a6960ad0662ce6"},
 	"qDownloadLinkInsert": {"profile_download_tokens", "one row: the source is a SELECT of the parameters with a WHERE on the live count of the tenant's own links against the cap, no FROM", "9c6d02aad24b7bdcb22ea9734eba993f309459d9aca45b7f48ffcf23e622909f"},
 }
 

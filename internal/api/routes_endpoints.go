@@ -142,7 +142,7 @@ func (v lockVerifier) LockPasswordsAccepted(ctx context.Context, profiles []uuid
 // before any charge, and who asks.
 func (s *Server) endpointAuth(ctx context.Context, pr session.Principal, lp *gen.LockPasswords) (endpoints.Auth, error) {
 	a := endpoints.Auth{
-		Actor:    endpoints.Actor{User: pr.UserID, IP: httpx.ClientIPFrom(ctx)},
+		Actor:    endpoints.Actor{User: pr.UserID, IP: httpx.ClientIPFrom(ctx), Token: pr.ViaToken()},
 		Verifier: lockVerifier{s: s, tenant: pr.TenantID, user: pr.UserID, ip: httpx.ClientIPFrom(ctx)},
 	}
 	if lp == nil {

@@ -92,7 +92,7 @@ func (e *Env) CreateClient(ctx context.Context, st *store.Store, tenant uuid.UUI
 		if len(found) != 1 {
 			return notFound()
 		}
-		before, err := g.Inputs(tx, []uuid.UUID{endpoint})
+		before, err := g.InputsFor(tx, []uuid.UUID{endpoint}, []string{label})
 		if err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func (e *Env) CreateClient(ctx context.Context, st *store.Store, tenant uuid.UUI
 		case !won.Yes():
 			return invalid(Field{"max_clients_per_endpoint", CodeExceeded})
 		}
-		after, err := g.Inputs(tx, []uuid.UUID{endpoint})
+		after, err := g.InputsFor(tx, []uuid.UUID{endpoint}, []string{label})
 		if err != nil {
 			return err
 		}
@@ -257,7 +257,7 @@ func (e *Env) editClients(ctx context.Context, st *store.Store, tenant uuid.UUID
 		if len(found) != 1 {
 			return notFound()
 		}
-		before, err := g.Inputs(tx, []uuid.UUID{endpoint})
+		before, err := g.InputsFor(tx, []uuid.UUID{endpoint}, clientLabels(rows))
 		if err != nil {
 			return err
 		}
@@ -296,7 +296,7 @@ func (e *Env) editClients(ctx context.Context, st *store.Store, tenant uuid.UUID
 				return err
 			}
 		}
-		after, err := g.Inputs(tx, []uuid.UUID{endpoint})
+		after, err := g.InputsFor(tx, []uuid.UUID{endpoint}, clientLabels(rows))
 		if err != nil {
 			return err
 		}
@@ -449,6 +449,16 @@ func clientProfiles(rows []store.ClientRow) []uuid.UUID {
 	var out []uuid.UUID
 	for _, r := range rows {
 		out = append(out, r.ProfileID, r.Profile2ID)
+	}
+	return out
+}
+
+// clientLabels lists the labels of the clients a write touches: Guard.InputsFor reads those one by one and every other client of
+// the Endpoint as distinct stacks, so what the stack check sees of the rows the write changes is exact (p3-D6-r1-8).
+func clientLabels(rows []store.ClientRow) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.Label
 	}
 	return out
 }

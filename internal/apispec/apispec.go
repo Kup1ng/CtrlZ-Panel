@@ -69,6 +69,8 @@ type Operation struct {
 	Token  string
 	Lock   string
 	Outbox string
+	// Tags are the OpenAPI tags of the operation. The operations an API token may call carry exactly one of PublicGroups.
+	Tags []string
 }
 
 // Key is what the router looks an operation up by: the method and the path
@@ -128,7 +130,7 @@ func Parse(doc []byte, service ratelimit.Service) ([]Operation, error) {
 			if isHealth(raw.Tags) {
 				continue
 			}
-			op := Operation{ID: raw.ID, Method: upper(method), Path: path, Auth: Auth(raw.Auth), Rate: raw.Rate, Also: raw.Also, MaxBody: raw.MaxBody, Token: raw.Token, Lock: raw.Lock, Outbox: raw.Outbox}
+			op := Operation{ID: raw.ID, Method: upper(method), Path: path, Auth: Auth(raw.Auth), Rate: raw.Rate, Also: raw.Also, MaxBody: raw.MaxBody, Token: raw.Token, Lock: raw.Lock, Outbox: raw.Outbox, Tags: raw.Tags}
 			if op.ID == "" {
 				return nil, fmt.Errorf("apispec: %s has no operationId", op.Key())
 			}
@@ -210,6 +212,52 @@ func CheckP2(op Operation) error {
 		return fmt.Errorf("apispec: %s has no valid x-ctrlz-lock", op.ID)
 	case !in(op.Outbox, "none", "profile", "profile+endpoint_set", "endpoint_set"):
 		return fmt.Errorf("apispec: %s has no valid x-ctrlz-outbox", op.ID)
+	}
+	return nil
+}
+
+// PublicGroups are the groups of the public API (P3 6.5, Plan "API و اسکلت"): the tag that names the group of each operation an
+// API token may call. Analytics has no operation before P5. The Default Rule is an option of a profile and has no route of its own,
+// so its operations are Options.
+func PublicGroups() []string {
+	return []string{"profiles", "options", "filters", "services", "rule-folders", "custom-rules", "locations", "endpoints",
+		"authorized-ips", "service-categories", "analytics", "account"}
+}
+
+// CheckToken fails an operation whose x-ctrlz-token is missing or not one of none, read and write, and one that takes a token
+// without being able to: the token path resolves a principal that has a tenant and a user and no session, so only a plain
+// session operation (not a reauth one, which asks for a window a token cannot have) may take one, and a read token is for a GET.
+// An operation an API token may call carries exactly one tag of PublicGroups (the group it is documented under). The admin service
+// takes no token at all: every operation of its document says none.
+func CheckToken(service ratelimit.Service, op Operation) error {
+	switch op.Token {
+	case "none":
+		return nil
+	case "read", "write":
+	default:
+		return fmt.Errorf("apispec: %s has no valid x-ctrlz-token", op.ID)
+	}
+	if service != ratelimit.Tenant {
+		return fmt.Errorf("apispec: %s takes an API token, which the %s service does not accept", op.ID, service)
+	}
+	if op.Auth != Session {
+		return fmt.Errorf("apispec: %s takes an API token and has x-ctrlz-auth %q: a token has no session and no reauth window", op.ID, op.Auth)
+	}
+	if op.Token == "read" && op.Method != "GET" {
+		return fmt.Errorf("apispec: %s is %s and declares a read token: a read token is for a GET", op.ID, op.Method)
+	}
+	groups := map[string]bool{}
+	for _, g := range PublicGroups() {
+		groups[g] = true
+	}
+	n := 0
+	for _, t := range op.Tags {
+		if groups[t] {
+			n++
+		}
+	}
+	if n != 1 {
+		return fmt.Errorf("apispec: %s takes an API token and has %d of the public group tags, want exactly one", op.ID, n)
 	}
 	return nil
 }

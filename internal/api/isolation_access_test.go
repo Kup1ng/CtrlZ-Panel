@@ -248,6 +248,8 @@ func (e *isoEnv) cleanEndpointTables(w isolation.Who) {
 		`DELETE FROM ctrlz.endpoint_groups WHERE tenant_id = $1`,
 		`DELETE FROM ctrlz.clients WHERE tenant_id = $1 AND source = 'manual'`,
 		`DELETE FROM ctrlz.schedule_windows WHERE tenant_id = $1`,
+		// The tokens a case made (P3 6.4); the seed's own is named ci.
+		`DELETE FROM ctrlz.api_tokens WHERE tenant_id = $1 AND name <> 'ci'`,
 	} {
 		f.env.Exec(f.t, sql, s.Tenant)
 	}

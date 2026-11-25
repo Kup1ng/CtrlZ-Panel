@@ -408,6 +408,11 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 			Call: func() isolation.Result {
 				return result(b().sess.do("PUT", "/account/home-countries", e.forged(map[string]any{"countries": []string{"DE"}})))
 			}},
+		// POST /feedback (P3 9.2): B's message is B's row, and A's feedback_items stay as they were (the digest covers the table).
+		"createFeedback": {Effect: isolation.Changes, Status: 201, Arrange: plain,
+			Call: func() isolation.Result {
+				return result(b().sess.post("/feedback", e.forged(map[string]any{"kind": "feature", "body": "please add a dark theme"})))
+			}},
 		"getLimits": {Effect: isolation.Shows, Status: 200, Arrange: plain,
 			Call: func() isolation.Result { return result(b().sess.get("/account/limits")) }},
 		"listSessions": {Effect: isolation.Shows, Status: 200,
@@ -591,6 +596,8 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 	maps.Copy(fixes, e.accessFixtures())
 	// The Resolver view, the generators and the links likewise (isolation_links_test.go).
 	maps.Copy(fixes, e.linkFixtures())
+	// The API token routes have theirs in isolation_tokens_test.go.
+	maps.Copy(fixes, e.tokenFixtures())
 	return fixes
 }
 

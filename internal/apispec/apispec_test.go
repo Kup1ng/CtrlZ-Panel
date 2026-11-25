@@ -179,3 +179,57 @@ func TestEveryStateChangingAdminOperationIsFresh(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryOperationOfBothDocumentsDeclaresItsTokenRule is the x-ctrlz-token rule of P3 6.5 over the tenant and the admin
+// documents: a value on every operation, none on every admin one, and on an operation an API token may call a session class, a GET
+// for a read token and exactly one group tag.
+func TestEveryOperationOfBothDocumentsDeclaresItsTokenRule(t *testing.T) {
+	for _, tc := range []struct {
+		svc ratelimit.Service
+		doc []byte
+	}{{ratelimit.Tenant, api.Tenant()}, {ratelimit.Admin, api.Admin()}} {
+		ops, err := apispec.Parse(tc.doc, tc.svc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, op := range ops {
+			if op.Token == "" {
+				t.Errorf("%s %s has no x-ctrlz-token", tc.svc, op.ID)
+				continue
+			}
+			if err := apispec.CheckToken(tc.svc, op); err != nil {
+				t.Errorf("%s: %v", tc.svc, err)
+			}
+		}
+	}
+}
+
+func TestCheckTokenRefusesWhatATokenCannotDo(t *testing.T) {
+	good := apispec.Operation{ID: "a", Method: "GET", Auth: apispec.Session, Token: "read", Tags: []string{"profiles"}}
+	if err := apispec.CheckToken(ratelimit.Tenant, good); err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(*apispec.Operation){
+		"no value":          func(o *apispec.Operation) { o.Token = "" },
+		"unknown value":     func(o *apispec.Operation) { o.Token = "rw" },
+		"a reauth class":    func(o *apispec.Operation) { o.Auth = apispec.Reauth },
+		"no session":        func(o *apispec.Operation) { o.Auth = apispec.None },
+		"a read on a POST":  func(o *apispec.Operation) { o.Method = "POST" },
+		"no group tag":      func(o *apispec.Operation) { o.Tags = []string{"auth"} },
+		"two group tags":    func(o *apispec.Operation) { o.Tags = []string{"profiles", "options"} },
+		"a tag with a case": func(o *apispec.Operation) { o.Tags = []string{"Profiles"} },
+	} {
+		o := good
+		mutate(&o)
+		if apispec.CheckToken(ratelimit.Tenant, o) == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	if apispec.CheckToken(ratelimit.Admin, good) == nil {
+		t.Error("the admin service accepted an operation that takes a token")
+	}
+	adminNone := apispec.Operation{ID: "a", Method: "POST", Auth: apispec.Admin, Token: "none"}
+	if err := apispec.CheckToken(ratelimit.Admin, adminNone); err != nil {
+		t.Error(err)
+	}
+}

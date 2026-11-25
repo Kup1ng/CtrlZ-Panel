@@ -116,7 +116,7 @@ func TestComposeNetworks(t *testing.T) {
 func TestComposeKeyFilesFollowTheDomains(t *testing.T) {
 	c := loadCompose(t)
 	want := map[string][]string{
-		"api":    {"kek_auth_mac", "kek_otp_delivery", "kek_user_totp"},
+		"api":    {"kek_auth_mac", "kek_doh_token", "kek_otp_delivery", "kek_user_totp"},
 		"admin":  {"kek_admin_mac", "kek_admin_totp", "kek_sms_cred"},
 		"worker": {"kek_otp_delivery", "kek_sms_cred"},
 		"rekey":  {"kek_user_totp"},

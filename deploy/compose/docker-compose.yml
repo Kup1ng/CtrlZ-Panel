@@ -220,7 +220,7 @@ services:
     # empty at start (the image owns /spool).
     volumes:
       - api_spool:/spool
-    secrets: [pg_tenant_password, valkey_password_api, kek_user_totp, kek_otp_delivery, kek_auth_mac]
+    secrets: [pg_tenant_password, valkey_password_api, kek_user_totp, kek_otp_delivery, kek_auth_mac, kek_doh_token]
     healthcheck: &go-health-8080
       test: ["CMD", "/usr/local/bin/ctrlz", "healthcheck", "http://127.0.0.1:8080/healthz"]
       interval: 10s
@@ -701,5 +701,7 @@ secrets:
     file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_admin_totp
   kek_sms_cred:
     file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_sms_cred
+  kek_doh_token:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_doh_token
   kek_admin_mac:
     file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_admin_mac

@@ -134,6 +134,7 @@ paths:
       security: []
       x-ctrlz-auth: none
       x-ctrlz-rate: admin-login
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -154,6 +155,7 @@ paths:
       summary: End this admin session
       x-ctrlz-auth: admin-setup
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       responses:
         "204": {description: Signed out. The cookie is cleared.}
         "401": {$ref: "#/components/responses/SessionExpired"}
@@ -167,6 +169,7 @@ paths:
       description: 'Errors: `totp_invalid`, `totp_step_reused`, `too_many_attempts`.'
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -186,6 +189,7 @@ paths:
       summary: The shell's bootstrap
       x-ctrlz-auth: admin-setup
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: The admin, their setup state and any console-reset notices.
@@ -207,6 +211,7 @@ paths:
         to the audit log as `admin.notices_ack`.
       x-ctrlz-auth: admin-setup
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       responses:
         "204": {description: Cleared.}
         default: {$ref: "#/components/responses/Problem"}
@@ -226,6 +231,7 @@ paths:
         `validation_failed`, `totp_step_reused`, `too_many_attempts`, `server_busy`.
       x-ctrlz-auth: admin-setup
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -242,6 +248,7 @@ paths:
       description: 'Errors: `totp_already_enabled`.'
       x-ctrlz-auth: admin-setup
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: false
         content:
@@ -262,6 +269,7 @@ paths:
       description: 'Errors: `totp_invalid`, `totp_step_reused`, `totp_not_pending`, `totp_already_enabled`, `too_many_attempts`.'
       x-ctrlz-auth: admin-setup
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -278,6 +286,7 @@ paths:
       description: 'Filtered by a phone prefix. Lists no log data (D19). Errors: `validation_failed`.'
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - name: q
           in: query
@@ -303,6 +312,7 @@ paths:
         `validation_failed`, `server_busy`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -329,6 +339,7 @@ paths:
         `totp_fresh_required`, `server_busy`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - name: tenant_id
           in: path
@@ -358,6 +369,7 @@ paths:
       description: Never holds a code.
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Cursor"}
         - {$ref: "#/components/parameters/Limit"}
@@ -375,6 +387,7 @@ paths:
       description: 'The code and link are in this response and nowhere else. Errors: `phone_unavailable`, `invalid_phone`, `totp_fresh_required`.'
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -395,6 +408,7 @@ paths:
       description: 'Errors: `totp_fresh_required`.'
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       responses:
@@ -407,6 +421,7 @@ paths:
       summary: The registration mode
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: The settings.
@@ -421,6 +436,7 @@ paths:
       description: 'An unknown mode or a grace outside 1 to 365 days is refused by the schema, 400 `bad_request`. A mode change ends an unfinished transition job of its own (a newer change replaces it), so `conflict` means another admin changed the mode at the same moment and this one retries. Errors: `conflict`, `totp_fresh_required`.'
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -441,6 +457,7 @@ paths:
       description: 'An unknown mode is refused by the schema, 400 `bad_request`.'
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - name: to
           in: query
@@ -460,6 +477,7 @@ paths:
       summary: The Passkey configuration
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: The configuration.
@@ -481,6 +499,7 @@ paths:
         Errors: `validation_failed`, `conflict`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -501,6 +520,7 @@ paths:
       description: 'Errors: `validation_failed`.'
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - name: rp_id
           in: query
@@ -520,6 +540,7 @@ paths:
       summary: The gateways, never their credentials
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: One row per provider.
@@ -549,6 +570,7 @@ paths:
         `pending_confirmation` (see `putSmsRouting`).
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Provider"}
       requestBody:
@@ -571,6 +593,7 @@ paths:
       description: 'Errors: `validation_failed` (an unknown provider, one with no credentials (code `not_configured`) or with credentials that still wait for the console (code `pending_confirmation`), the same one twice, or `noop` outside dev and test), `totp_fresh_required`.'
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -594,6 +617,7 @@ paths:
         `invalid_phone`, `validation_failed`, `not_found`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Provider"}
       requestBody:
@@ -616,6 +640,7 @@ paths:
       description: Never the phone number or the text.
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       responses:
@@ -632,6 +657,7 @@ paths:
       summary: The templates and their provider mappings
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: One row per template and locale.
@@ -647,6 +673,7 @@ paths:
       description: 'Errors: `validation_failed` (a wrong number of placeholders, or a link), `not_found`, `totp_fresh_required`.'
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/TemplateKey"}
         - {$ref: "#/components/parameters/Locale"}
@@ -670,6 +697,7 @@ paths:
       description: 'The number of parameter names must equal the template''s placeholders. Errors: `validation_failed`, `totp_fresh_required`.'
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Provider"}
         - {$ref: "#/components/parameters/TemplateKey"}
@@ -693,6 +721,7 @@ paths:
       summary: The OTP caps and the SMS spending caps
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: The limits.
@@ -707,6 +736,7 @@ paths:
       description: 'Errors: `validation_failed`, `totp_fresh_required`.'
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -727,6 +757,7 @@ paths:
       description: Holds no phone number and no text.
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - name: days
           in: query
@@ -746,6 +777,7 @@ paths:
       summary: The admin audit log, newest first
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Cursor"}
         - {$ref: "#/components/parameters/Limit"}
@@ -768,6 +800,7 @@ paths:
       summary: Operator alerts, unresolved first
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Cursor"}
         - {$ref: "#/components/parameters/Limit"}
@@ -786,6 +819,7 @@ paths:
       description: 'Errors: `totp_fresh_required`.'
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       responses:

@@ -108,7 +108,7 @@ func TestRegistryRowsFollowTheKeySourceRule(t *testing.T) {
 		for _, p := range b.Parts {
 			switch p {
 			case budget.PartNetwork, budget.PartWide, budget.PartPhone, budget.PartUsername, budget.PartUser,
-				budget.PartAdmin, budget.PartSession, budget.PartCookie, budget.PartTokenSession, budget.PartMarker, budget.PartInvite, budget.PartAdminSession, budget.PartUserSession, budget.PartTenant, budget.PartProfile, budget.PartChallenge, budget.PartLink:
+				budget.PartAdmin, budget.PartSession, budget.PartCookie, budget.PartTokenSession, budget.PartMarker, budget.PartInvite, budget.PartAdminSession, budget.PartUserSession, budget.PartTenant, budget.PartProfile, budget.PartChallenge, budget.PartLink, budget.PartToken:
 			default:
 				t.Errorf("%s has a key part %q that is not in the closed set", id, p)
 			}

@@ -43,7 +43,7 @@ const (
 	DomainOTPDelivery = "otp_delivery" // otp_challenges.delivery_ct
 	DomainAuthMAC     = "auth_mac"     // OTP code hash, throttle keys, device cookie
 	DomainAdminMAC    = "admin_mac"    // admin throttle keys
-	DomainDOHToken    = "doh_token"    // reserved for P3
+	DomainDOHToken    = "doh_token"    // endpoints.doh_token_ct (P3); no rekey tool, see `ctrlz-admin keys status doh_token`
 	DomainCertWrap    = "cert_wrap"    // reserved for P6
 )
 

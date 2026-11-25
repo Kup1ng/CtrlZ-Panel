@@ -62,7 +62,7 @@ func runRole(t *testing.T, role app.Role, vars map[string]string) (string, error
 
 func TestRoleKeyDomains(t *testing.T) {
 	want := map[app.Role]string{
-		app.RoleAPI:     "user_totp otp_delivery auth_mac",
+		app.RoleAPI:     "user_totp otp_delivery auth_mac doh_token",
 		app.RoleAdmin:   "admin_totp sms_cred admin_mac",
 		app.RoleWorker:  "sms_cred otp_delivery",
 		app.RoleHub:     "",
@@ -129,7 +129,7 @@ func TestStartsWithKeyFiles(t *testing.T) {
 // TestMissingKeyFileNamesTheDomain is 18.3 "Key file missing": start refused,
 // names the domain, not a value.
 func TestMissingKeyFileNamesTheDomain(t *testing.T) {
-	dir := keyDir(t, "user_totp", "auth_mac") // otp_delivery is missing
+	dir := keyDir(t, "user_totp", "auth_mac", "doh_token") // otp_delivery is missing
 	out, err := runRole(t, app.RoleAPI, map[string]string{"CTRLZ_ENV": "production", "CTRLZ_KEK_DIR": dir})
 	if err == nil || !strings.Contains(err.Error(), "otp_delivery") {
 		t.Fatalf("err = %v", err)
@@ -139,7 +139,7 @@ func TestMissingKeyFileNamesTheDomain(t *testing.T) {
 	}
 
 	// A malformed file is refused the same way, and the text is not repeated.
-	bad := keyDir(t, "user_totp", "auth_mac", "otp_delivery")
+	bad := keyDir(t, "user_totp", "auth_mac", "otp_delivery", "doh_token")
 	const junk = "KEY-CANARY-3b7f"
 	if err := os.Remove(filepath.Join(bad, "kek_auth_mac")); err != nil {
 		t.Fatal(err)
@@ -194,5 +194,27 @@ func TestEnvAndArgonSettingsAreValidated(t *testing.T) {
 	c, err := app.LoadConfig(app.RoleAPI, func(k string) string { return map[string]string{"CTRLZ_KEK_DIR": "/run/secrets"}[k] })
 	if err != nil || c.Env != app.EnvProduction || c.KEKDir != "/run/secrets" || c.Argon2.Params.MemoryKiB != 47104 || c.Argon2.Concurrency != 2 {
 		t.Errorf("defaults: %+v %v", c, err)
+	}
+}
+
+// TestAPIRefusesToStartWithoutTheDOHTokenKey is P3 11.5 "doh_token key missing at api start": the api seals the DoH token of every
+// new Endpoint and opens it for every resolver view, so a deployment that forgot kek_doh_token must fail here, naming the domain,
+// and not answer 500 at the first Endpoint (p3-D6-r1-6).
+func TestAPIRefusesToStartWithoutTheDOHTokenKey(t *testing.T) {
+	dir := keyDir(t, "user_totp", "otp_delivery", "auth_mac")
+	out, err := runRole(t, app.RoleAPI, map[string]string{"CTRLZ_ENV": "production", "CTRLZ_KEK_DIR": dir})
+	if err == nil || !strings.Contains(err.Error(), "doh_token") {
+		t.Fatalf("err = %v", err)
+	}
+	if strings.Contains(out, "keys loaded") {
+		t.Errorf("the api started: %s", out)
+	}
+	// Its siblings do not hold the domain, so they start without it.
+	for _, role := range []app.Role{app.RoleAdmin, app.RoleWorker} {
+		for _, d := range role.KeyDomains() {
+			if d == "doh_token" {
+				t.Errorf("%s holds doh_token", role)
+			}
+		}
 	}
 }

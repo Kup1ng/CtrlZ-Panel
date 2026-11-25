@@ -80,6 +80,11 @@ type Input struct {
 	// Clients are the clients that have a stack of their own, by label. A label with no row, and a client with no stack of
 	// its own, resolve as no client.
 	Clients map[string]Stack
+	// Rest are the distinct stacks of the clients that have one of their own and are not in Clients: the clients a request does not
+	// touch, which are the same on both sides, so one evaluation per distinct stack stands for every client that holds it. It keeps a
+	// request on an Endpoint with thousands of clients from reading each of them into memory twice (p3-D6-r1-8). Only the before
+	// side is read; an Endpoint that is deleted or turns identities away gives them the empty stack after, as it does Clients.
+	Rest []Stack
 	// Plain are the ids of the claims that stand for a Plain DNS identity: active or grace claims of an Endpoint with Legacy
 	// DNS on. Each resolves as the client "default".
 	Plain []uuid.UUID
@@ -159,6 +164,15 @@ func Needed(now time.Time, before, after *Input) []uuid.UUID {
 			}
 		}
 	}
+	// The clients the request does not touch: their stack is the same after, unless the request turns every identity away.
+	for _, s := range before.Rest {
+		k := reduced{bOwn: true, aOwn: true, b: s, a: restAfter(as, s)}
+		if done[k] {
+			continue
+		}
+		done[k] = true
+		eval(k.b, k.a)
+	}
 	out := make([]uuid.UUID, 0, len(removed))
 	for p := range removed {
 		out = append(out, p)
@@ -210,6 +224,15 @@ func newSide(in *Input) *side {
 		return nil
 	}
 	return &side{in: in, ws: sortedWindows(in.Windows)}
+}
+
+// restAfter is the stack of an untouched client after the change: the same, unless the change deletes the Endpoint or turns
+// identities away (ownAfter gives the touched ones the same answer).
+func restAfter(s *side, st Stack) Stack {
+	if s == nil || s.in.Away != AwayNone {
+		return Stack{}
+	}
+	return st
 }
 
 // cell is the stack the base or a window gives at grid value c (0 is the base).
@@ -331,6 +354,9 @@ func (in *Input) Profiles() []uuid.UUID {
 		add(w.Stack)
 	}
 	for _, s := range in.Clients {
+		add(s)
+	}
+	for _, s := range in.Rest {
 		add(s)
 	}
 	out := make([]uuid.UUID, 0, len(set))

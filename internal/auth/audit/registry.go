@@ -21,6 +21,7 @@ func TenantEvents() []TenantEvent {
 		Register{}, TOTPLost{},
 		ProfileLock{}, ProfileUnlock{}, ProfileUnlockFailed{}, ProfileLockPasswordUsed{}, ProfileLockPasswordFailed{},
 		ShareLinkCreate{}, ShareLinkRevoke{},
+		APITokenCreate{}, APITokenUpdate{}, APITokenDelete{},
 	}
 }
 

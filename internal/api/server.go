@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/netip"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/Kup1ng/CtrlZ-Panel/api"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/admission"
@@ -16,6 +18,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/api/gen"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/appclock"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/apitoken"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/audit"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/bearer"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/login"
@@ -47,7 +50,7 @@ type Deps struct {
 	Store    *store.Store
 	Sessions *session.Manager
 	Limiter  *ratelimit.Limiter
-	// Keys holds the api's key domains (user_totp, otp_delivery, auth_mac). New
+	// Keys holds the api's key domains (user_totp, otp_delivery, auth_mac, doh_token). New
 	// refuses to build without them: a route that needed a missing domain would
 	// fail at its first request, in front of a user, instead of at start-up.
 	Keys *keyring.Ring
@@ -128,6 +131,21 @@ func New(d Deps, health httpx.Health) (http.Handler, error) {
 	return h, err
 }
 
+// publicTurn is Env.Turn of the three public link routes: the turn of an ordinary request for the tenant the value belongs to,
+// taken before a connection (p3-D6-r1-7). No turn is 503 server_busy; a client that left is its own error and is not counted as a fault.
+func publicTurn(adm *admission.Admission) func(context.Context, uuid.UUID) (func(), error) {
+	return func(ctx context.Context, tenant uuid.UUID) (func(), error) {
+		release, err := adm.Ordinary(ctx, tenant.String())
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, httpx.New(http.StatusServiceUnavailable, httpx.CodeServerBusy).WithRetry(5 * time.Second)
+		}
+		return release, nil
+	}
+}
+
 // build is New that also hands back the Server, which a test reads the proof decisions of (tokenProof) off.
 func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	if d.Now == nil {
@@ -136,6 +154,11 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	if d.Keys == nil || d.Hasher == nil {
 		return nil, nil, errors.New("api: Keys and Hasher are required")
 	}
+	// Every Endpoint seals its DoH token and every resolver view opens it. A ring without the domain would answer 500 at the first
+	// Endpoint in front of a tenant, so it fails here, as a missing auth_mac does (P3 11.5; p3-D6-r1-6).
+	if err := d.Keys.Require(keyring.DomainDOHToken); err != nil {
+		return nil, nil, fmt.Errorf("api: %w", err)
+	}
 	if d.Log == nil {
 		// The caches say their own failures to it (cachex.Config.Log is required, round 16).
 		return nil, nil, errors.New("api: Log is required")
@@ -143,6 +166,12 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	ops, err := apispec.Parse(api.Tenant(), ratelimit.Tenant)
 	if err != nil {
 		return nil, nil, err
+	}
+	// Every operation says what an API token may do with it, and the ones a token may call are in exactly one group (P3 6.5).
+	for _, op := range ops {
+		if err := apispec.CheckToken(ratelimit.Tenant, op); err != nil {
+			return nil, nil, err
+		}
 	}
 	auth := d.Store.Auth()
 	cfg := newConfigCache(auth.PublicConfig, d.Now, d.Log)
@@ -192,7 +221,7 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	}
 	s := &Server{
 		after: after,
-		prof:  &profiles.Env{Catalog: cat, Clock: d.Now}, ep: &endpoints.Env{Clock: d.Now, Keys: d.Keys, Catalog: cat, Bearer: br}, bearer: br, cat: cat, docs: docs,
+		prof:  &profiles.Env{Catalog: cat, Clock: d.Now}, ep: &endpoints.Env{Clock: d.Now, Keys: d.Keys, Catalog: cat, Bearer: br, Turn: publicTurn(adm)}, bearer: br, cat: cat, docs: docs,
 		inviteReads: netpool.New(inviteRead, d.Now),
 		d:           d, cfg: cfg, auth: auth, now: d.Now, keys: d.Keys, hasher: d.Hasher, strength: strength, strengthAnon: strengthAnon,
 		throttle: throttle.NewUser(auth, d.Keys).WithCeilingHook(throttle.CeilingLog(d.Log)).WithRefusalHook(throttle.RefusalLog(d.Log, refusals)), tickets: tickets, otp: otpSvc, markers: markers,
@@ -208,6 +237,7 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 		Doc:      api.Tenant(),
 		Resolver: resolver{m: d.Sessions}, BaseURL: "/api/v1",
 		Proof: markers.RequestProof(marker.User), TokenProof: s.tokenProof, Bearer: s.linkKey,
+		Tokens:    tokenReader{r: apitoken.Resolver{Signer: br, Auth: auth}, now: d.Now, touch: newTokenToucher(d.Store)},
 		Host:      panelHost(s.cfg, d.PanelHost),
 		Admission: adm,
 	}

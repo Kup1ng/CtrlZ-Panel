@@ -319,12 +319,13 @@ type StackClaim struct {
 	ID       uuid.UUID
 }
 
-const qStackClients = `SELECT endpoint_id, label, profile_id, profile2_id FROM ctrlz.clients
-WHERE tenant_id = $1 AND endpoint_id = ANY($2::uuid[]) AND profile_id IS NOT NULL ORDER BY endpoint_id, label`
+const qStackClientsNamed = `SELECT endpoint_id, label, profile_id, profile2_id FROM ctrlz.clients
+WHERE tenant_id = $1 AND endpoint_id = ANY($2::uuid[]) AND label = ANY($3::text[]) AND profile_id IS NOT NULL ORDER BY endpoint_id, label`
 
-// StackClients reads the clients of the Endpoints that have a stack of their own.
-func (t Tx) StackClients(endpoints []uuid.UUID) ([]StackClient, error) {
-	rows, err := t.tx.Query(t.ctx, qStackClients, t.tenant, endpoints)
+// StackClientsNamed reads, of the Endpoints, the clients with the given labels that have a stack of their own. The labels are the
+// ones a request touches (and "default", the identity of Plain DNS): the other clients are read as StackClientsRest.
+func (t Tx) StackClientsNamed(endpoints []uuid.UUID, labels []string) ([]StackClient, error) {
+	rows, err := t.tx.Query(t.ctx, qStackClientsNamed, t.tenant, endpoints, labels)
 	if err != nil {
 		return nil, sanitize(err)
 	}
@@ -334,6 +335,36 @@ func (t Tx) StackClients(endpoints []uuid.UUID) ([]StackClient, error) {
 		var c StackClient
 		var p2 *uuid.UUID
 		if err := rows.Scan(&c.Endpoint, &c.Label, &c.ProfileID, &p2); err != nil {
+			return nil, sanitize(err)
+		}
+		if p2 != nil {
+			c.Profile2ID = *p2
+		}
+		out = append(out, c)
+	}
+	return out, sanitize(rows.Err())
+}
+
+const qStackClientsRest = `SELECT DISTINCT endpoint_id, profile_id, profile2_id FROM ctrlz.clients
+WHERE tenant_id = $1 AND endpoint_id = ANY($2::uuid[]) AND NOT (label = ANY($3::text[])) AND profile_id IS NOT NULL
+ORDER BY endpoint_id, profile_id, profile2_id`
+
+// StackClientsRest reads the distinct stacks of the clients of the Endpoints that are not among the given labels and have a stack
+// of their own. A request that touches no client needs no more than that to tell which profiles it takes from an identity (the
+// stack of a client is the same before and after, so one evaluation per distinct stack answers for all the clients that hold it),
+// and the answer is at most one row per pair of profiles whatever the number of clients: a plan of 50 Endpoints with 1,000 clients
+// each no longer puts 50,000 rows in memory twice for one batch request (p3-D6-r1-8).
+func (t Tx) StackClientsRest(endpoints []uuid.UUID, except []string) ([]StackClient, error) {
+	rows, err := t.tx.Query(t.ctx, qStackClientsRest, t.tenant, endpoints, except)
+	if err != nil {
+		return nil, sanitize(err)
+	}
+	defer rows.Close()
+	var out []StackClient
+	for rows.Next() {
+		var c StackClient
+		var p2 *uuid.UUID
+		if err := rows.Scan(&c.Endpoint, &c.ProfileID, &p2); err != nil {
 			return nil, sanitize(err)
 		}
 		if p2 != nil {

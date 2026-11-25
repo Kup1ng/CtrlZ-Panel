@@ -1188,3 +1188,19 @@ func (t Tx) RecoveryCodeLive(user uuid.UUID, hash []byte) (bool, error) {
 	}
 	return live, nil
 }
+
+const qSessionHoldsCookie = `SELECT (revoked_at IS NULL AND token_hash = $3::bytea) FROM ctrlz.sessions WHERE tenant_id = $1 AND id = $2`
+
+// SessionHoldsCookie says the session is not revoked and still has the token whose hash the request was resolved with. A
+// rotation (a password change, a phone change, a reauth) gives the session a new token and keeps its id and its revoked_at, so
+// "not revoked" alone does not tell a request resolved before the change from one resolved after it. An empty hash holds for
+// nothing. A route that must not outlive a credential change reads this under UserLock (P3 6.4).
+func (t Tx) SessionHoldsCookie(id uuid.UUID, hash []byte) (bool, error) {
+	if len(hash) == 0 {
+		return false, nil
+	}
+	var holds bool
+	err := t.tx.QueryRow(t.ctx, qSessionHoldsCookie, t.tenant, id, hash).Scan(&holds)
+	ok, err := notFound(err)
+	return ok && holds, err
+}

@@ -138,6 +138,13 @@ func New(d Deps, health httpx.Health) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The admin service takes no API token: every operation of its document says so (P3 6.5), and one that did not would be refused
+	// at start-up and not found at the first request.
+	for _, op := range ops {
+		if err := apispec.CheckToken(ratelimit.Admin, op); err != nil {
+			return nil, err
+		}
+	}
 	markers := marker.New(d.Keys, d.Sessions.Now)
 	pl := &httpx.Pipeline{
 		Log: d.Log, Strict: d.Strict, PlainHTTPOrigin: d.PlainHTTPOrigin, TrustedProxies: d.TrustedProxies, Limiter: d.Limiter, Service: ratelimit.Admin, Ops: ops,

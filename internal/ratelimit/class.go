@@ -43,6 +43,9 @@ const (
 	// ByLink counts per bearer row: the id a share link or a download link names, read from the value after its tag checked
 	// (internal/auth/bearer). It is for the public routes of P3 7.1, which carry no session and are charged to no network.
 	ByLink
+	// ByToken counts per API token: the id its bearer value names after the tag and the expiry checked, read with no I/O
+	// (internal/auth/bearer). The token-read, token-write and token-miss classes count on it and on nothing else (P3 6.3).
+	ByToken
 )
 
 // SessionLookup is the class charged for a request that carries a session
@@ -63,11 +66,32 @@ const SessionLookup = "session-lookup"
 // the live session, after the operation's own class has passed (x-ctrlz-rate-also); no operation names it as its rate class.
 const IPClaim = "ip-claim"
 
+// Feedback is the day budget of a tenant for POST /feedback (P3 9.1): 20 a day, from any of its sessions, charged by the pipeline
+// after the operation's own class (x-ctrlz-rate-also). It is open when Valkey is down, because a message to us is not a bound on
+// stored rows the way a link id is: the table takes one row per request and the in-process bucket still bounds each instance.
+const Feedback = "feedback"
+
 // ChargedByThePipeline says the pipeline charges the class itself, around the session
 // lookup, and no operation names it as its rate class.
 func ChargedByThePipeline(name string) bool {
-	return name == SessionLookup || name == SessionMiss || name == BulkWriteTenant || name == IPClaim || name == LinkCreate
+	switch name {
+	case SessionLookup, SessionMiss, BulkWriteTenant, IPClaim, Feedback, LinkCreate, TokenMiss, TokenRead, TokenWrite, TokenTenant, TokenCreate:
+		return true
+	}
+	return false
 }
+
+// The classes of the API token path (P3 6.3, 9.1). The pipeline charges TokenRead or TokenWrite (by what the operation does) and
+// TokenMiss on the token id before the lookup, and TokenTenant on the tenant the lookup found; no operation names any of them.
+// TokenCreate is the day budget of a tenant for minting tokens: the pipeline charges it for the operation that creates one,
+// after the session resolved, as it charges LinkCreate for a link.
+const (
+	TokenMiss   = "token-miss"
+	TokenRead   = "token-read"
+	TokenWrite  = "token-write"
+	TokenTenant = "token-tenant"
+	TokenCreate = "token-create"
+)
 
 // BulkWriteTenant is the day budget of a tenant for the bulk routes (spec 8.1). The pipeline charges it for an operation
 // of the class BulkWrite once the session resolved, before the bulk gate takes any memory and before the body is read.
@@ -148,6 +172,8 @@ func Classes(s Service) []Class {
 			c.Key, c.ProofAlt, c.Held, c.HeldInvite = ByNetwork, b.ProofPart != "", b.HeldProof != "", b.HeldInvite
 		} else if len(b.Parts) == 1 && b.Parts[0] == budget.PartLink {
 			c.Key = ByLink
+		} else if len(b.Parts) == 1 && b.Parts[0] == budget.PartToken {
+			c.Key = ByToken
 		} else {
 			c.Key = BySession
 		}

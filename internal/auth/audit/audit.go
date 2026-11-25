@@ -149,6 +149,17 @@ type (
 	ProfileUnlockFailed struct {
 		ProfileID uuid.UUID `json:"profile_id"`
 	}
+	// APITokenCreate, APITokenUpdate and APITokenDelete are an API token made, edited or removed (P3 6.4): the token's row id, never
+	// the value, its prefix or its name.
+	APITokenCreate struct {
+		TokenID uuid.UUID `json:"token_id"`
+	}
+	APITokenUpdate struct {
+		TokenID uuid.UUID `json:"token_id"`
+	}
+	APITokenDelete struct {
+		TokenID uuid.UUID `json:"token_id"`
+	}
 	// TOTPLost is written by ctrlz_fn.keytool_totp_declare_lost, not by Go: the
 	// database function writes its own row so a lost-key declaration is never
 	// silent (review round 3). The type keeps the vocabulary in one place; its
@@ -189,6 +200,9 @@ func (ProfileLockPasswordUsed) Action() string   { return "profile.lock_password
 func (ProfileLockPasswordFailed) Action() string { return "profile.lock_password_failed" }
 func (ShareLinkCreate) Action() string           { return "share_link.create" }
 func (ShareLinkRevoke) Action() string           { return "share_link.revoke" }
+func (APITokenCreate) Action() string            { return "api_token.create" }
+func (APITokenUpdate) Action() string            { return "api_token.update" }
+func (APITokenDelete) Action() string            { return "api_token.delete" }
 
 func (LoginOK) tenantEvent()                   {}
 func (LoginFailed) tenantEvent()               {}
@@ -220,6 +234,9 @@ func (ProfileLockPasswordUsed) tenantEvent()   {}
 func (ProfileLockPasswordFailed) tenantEvent() {}
 func (ShareLinkCreate) tenantEvent()           {}
 func (ShareLinkRevoke) tenantEvent()           {}
+func (APITokenCreate) tenantEvent()            {}
+func (APITokenUpdate) tenantEvent()            {}
+func (APITokenDelete) tenantEvent()            {}
 
 // Tenant writes the event into the transaction of the change it records, so a
 // change without its audit row cannot commit (13.1). user is the actor, the nil

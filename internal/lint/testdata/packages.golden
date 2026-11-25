@@ -15,6 +15,7 @@ internal/apispec
 internal/app
 internal/appclock
 internal/auth/adminnotice
+internal/auth/apitoken
 internal/auth/audit
 internal/auth/bearer
 internal/auth/credstate
@@ -58,6 +59,7 @@ internal/mutant
 internal/netkey
 internal/netpool
 internal/profiles
+internal/publicapi
 internal/ratelimit
 internal/reachcheck
 internal/reqledger
@@ -81,4 +83,5 @@ internal/worker/sweep
 migrations/catalog
 migrations/postgres
 tools/genmig
+tools/genpublicapi
 tools/mutants

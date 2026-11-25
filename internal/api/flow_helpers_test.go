@@ -184,6 +184,9 @@ type client struct {
 	ip  string
 	jar map[string]*http.Cookie
 	hdr map[string]string
+	// lockSent says the body of the last request carried lock_passwords, which a token request never may (P3 3.3): the cross-tenant
+	// replay of a token (TestTokenCrossTenant) expects that request refused as token_not_allowed and not as the 404 of the id.
+	lockSent bool
 }
 
 func (f *frig) client() *client {
@@ -239,6 +242,7 @@ func (c *client) do(method, path string, body any, extra ...map[string]string) *
 	t := c.f.t
 	t.Helper()
 	var rd io.Reader
+	c.lockSent = false
 	switch b := body.(type) {
 	case nil:
 	case []byte:
@@ -250,6 +254,7 @@ func (c *client) do(method, path string, body any, extra ...map[string]string) *
 		if err != nil {
 			t.Fatal(err)
 		}
+		c.lockSent = bytes.Contains(raw, []byte(`"lock_passwords"`))
 		rd = bytes.NewReader(raw)
 	}
 	req := httptest.NewRequest(method, "/api/v1"+path, rd)

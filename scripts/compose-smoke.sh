@@ -58,7 +58,7 @@ cleanup() {
 trap cleanup EXIT
 
 sh scripts/gen-secrets.sh "$secrets" >/dev/null || fail "gen-secrets failed"
-for f in kek_root kek_user_totp kek_admin_totp kek_sms_cred kek_otp_delivery kek_auth_mac kek_admin_mac; do
+for f in kek_root kek_user_totp kek_admin_totp kek_sms_cred kek_otp_delivery kek_auth_mac kek_admin_mac kek_doh_token; do
   [ -s "$secrets/$f" ] || fail "gen-secrets did not make $f"
 done
 
@@ -237,10 +237,10 @@ done
 export CTRLZ_CANARY_RUNTIME_DIR="$runtime"
 export CTRLZ_CANARY_CONSUMERS="$consumers"
 # Secret files that no running container reads, each with its reason. kek_root is never mounted: the owner
-# copies it off the server and `keys derive` reads it from the host (8.3). kek_cert_wrap and kek_doh_token
-# belong to the certificate and endpoint features of later phases, which no service of the stack reads
+# copies it off the server and `keys derive` reads it from the host (8.3). kek_cert_wrap belongs to the certificate
+# feature of a later phase, which no service of the stack reads
 # yet; the day one does, the entry goes and the check requires that container's log.
-export CTRLZ_CANARY_UNCONSUMED="kek_root kek_cert_wrap kek_doh_token"
+export CTRLZ_CANARY_UNCONSUMED="kek_root kek_cert_wrap"
 sh scripts/secret-canary.sh "$secrets" "$logs" "$work/rows" "$work/refused" "$work/exec.out" "$work/bootstrap.stdout" "$work/reset.stdout" "$work/bootstrap.stderr" "$work/reset.stderr" || fail "a secret of the stack is in a log, a row or an output (named above)"
 for pw in "$pw1" "$pw2"; do
   grep -qF -- "$pw" "$logs" && fail "a one-time password is in a docker log"

@@ -325,7 +325,7 @@ func newOracleWorld(t *testing.T) *oracleWorld {
 	var err error
 	// One ring for the API (which seals the payload) and the worker (which opens
 	// it), with every domain either needs.
-	w.ring, err = keyring.NewEphemeral(keyring.DomainUserTOTP, keyring.DomainOTPDelivery, keyring.DomainAuthMAC, keyring.DomainSMSCred)
+	w.ring, err = keyring.NewEphemeral(keyring.DomainUserTOTP, keyring.DomainOTPDelivery, keyring.DomainAuthMAC, keyring.DomainSMSCred, keyring.DomainDOHToken)
 	if err != nil {
 		t.Fatal(err)
 	}

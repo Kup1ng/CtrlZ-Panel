@@ -419,11 +419,11 @@ var allowedEnvironmentAssignments = map[string]map[string]string{
 	"scripts/compose-smoke.sh": {
 		`dc() { docker compose -p "$project" -f deploy/compose/docker-compose.yml --env-file "$(host_path "$envfile")" "$@"; }`: "Compose's own " +
 			"--env-file: the substitution file of the throw-away project, made by this script from image names, ports and a directory path",
-		`export MSYS_NO_PATHCONV=1`:                                             "a Git Bash path-conversion switch",
-		`export CTRLZ_CANARY_RUNTIME_DIR="$runtime"`:                            "a directory path read by secret-canary.sh, which holds the values it looks for",
-		`export CTRLZ_CANARY_CONSUMERS="$consumers"`:                            "the path of the list of logs the canary reads",
-		`export CTRLZ_CANARY_UNCONSUMED="kek_root kek_cert_wrap kek_doh_token"`: "the names of secrets no container may hold, not their values",
-		`export CTRLZ_COMPOSE_ENV="$(host_path "$envfile")"`:                    "the path of the environment file of the run",
+		`export MSYS_NO_PATHCONV=1`:                               "a Git Bash path-conversion switch",
+		`export CTRLZ_CANARY_RUNTIME_DIR="$runtime"`:              "a directory path read by secret-canary.sh, which holds the values it looks for",
+		`export CTRLZ_CANARY_CONSUMERS="$consumers"`:              "the path of the list of logs the canary reads",
+		`export CTRLZ_CANARY_UNCONSUMED="kek_root kek_cert_wrap"`: "the names of secrets no container may hold, not their values",
+		`export CTRLZ_COMPOSE_ENV="$(host_path "$envfile")"`:      "the path of the environment file of the run",
 	},
 	"scripts/gen-secrets.sh":  {`MSYS_NO_PATHCONV=1 docker run --pull never --rm --network none --read-only --cap-drop ALL \`: "a Git Bash path-conversion switch for one docker run"},
 	"scripts/go-pin-check.sh": {`have=$(GOTOOLCHAIN=local go env GOVERSION)`: "asks the host compiler, not a downloaded one"},
