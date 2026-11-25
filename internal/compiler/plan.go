@@ -107,7 +107,7 @@ func blobSizes(blobs map[string]*Profile) map[string]int {
 	out := make(map[string]int, len(blobs))
 	for h, p := range blobs {
 		if p != nil {
-			out[h] = len(p.Bytes)
+			out[h] = p.Len()
 		}
 	}
 	return out

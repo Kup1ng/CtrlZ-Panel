@@ -27,14 +27,32 @@ type ProfileData struct {
 }
 
 // Profile is a compiled profile: the CZPB bytes, their SHA-256 and what a StackRecord needs of the blob.
+//
+// Bytes is nil once the blob has been put in the artifact store as it was built (TenantInput.Sink): a tenant with 20 maxed
+// profiles would otherwise hold 100 MiB of them while it compiles (W4-r4-4). Len says the size either way.
 type Profile struct {
 	Bytes []byte
 	Hash  []byte
-	Opts  *blob.Options
+	// size is the length of Bytes once they are released.
+	size int
+	Opts *blob.Options
 	// MaxLabels, HasDestGeo and Explicit are the header facts a stack folds over its two slots (policy.NewStack).
 	MaxLabels  uint32
 	HasDestGeo bool
 	Explicit   bool
+}
+
+// Len is the size of the blob in bytes, whether or not the bytes are still held.
+func (p *Profile) Len() int {
+	if p.Bytes != nil {
+		return len(p.Bytes)
+	}
+	return p.size
+}
+
+// release drops the bytes after they are in the store, and keeps the size.
+func (p *Profile) release() {
+	p.size, p.Bytes = len(p.Bytes), nil
 }
 
 // ErrProfile is wrapped by every failure to compile one profile. The tenant's other profiles still compile: an
@@ -134,7 +152,9 @@ func CompileProfile(p *ProfileData, m *store.CompilerMaps) (*Profile, error) {
 	}
 	h := opened.Hash()
 	hdr := opened.Header()
-	return &Profile{Bytes: data, Hash: h[:], Opts: opened.Options(), MaxLabels: uint32(hdr.MaxLabels), HasDestGeo: hdr.HasDestGeo(), Explicit: hdr.Explicit()}, nil
+	// A copy: the pointer into the opened blob would keep it and the bytes it reads from alive as long as a stack names it.
+	opts := *opened.Options()
+	return &Profile{Bytes: data, Hash: h[:], Opts: &opts, MaxLabels: uint32(hdr.MaxLabels), HasDestGeo: hdr.HasDestGeo(), Explicit: hdr.Explicit()}, nil
 }
 
 // filterMode is the wire id of the mode a profile names. A filter with one mode stores none: that mode is it. A filter

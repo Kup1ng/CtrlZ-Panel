@@ -67,6 +67,8 @@ func TestAPassHoldsNoBlobBytesOfTheTenantsItHasCompiled(t *testing.T) {
 		}}
 	})
 	e.c.compile = func(in *TenantInput, now time.Time, prev func(string) *policyv1.EndpointRecord) *Output {
+		// The blobs are made here and not stored by the sink, so that the compiler's own handling of held bytes is what is judged.
+		in.Sink = nil
 		out := CompileTenantWith(in, now, prev)
 		blobs := map[string]*Profile{}
 		for h, p := range out.Blobs {
@@ -264,47 +266,6 @@ func TestAPoisonTenantDoesNotBlockTheOrphanSweep(t *testing.T) {
 	}
 	if !e.alertFor(ReasonProfile, b) {
 		t.Fatal("the poison tenant raised no alert")
-	}
-}
-
-// W4-r3-8: a tenant that causes more new blob files than its share in a window waits for the window; the others go on.
-func TestATenantPastItsBlobBudgetWaitsForTheWindow(t *testing.T) {
-	e := newEnv(t, func(c *Config) { c.TenantBlobBytes = 1 })
-	a, b := uid(1, 1), uid(1, 2)
-	ia, ib := newTenantInput(), newTenantInput()
-	ia.profile(uid(2, 1), "a.example")
-	ia.endpoint(uid(3, 1), uid(2, 1))
-	ib.profile(uid(2, 2), "b.example")
-	ib.endpoint(uid(3, 2), uid(2, 2))
-	e.m.tenants[a], e.m.tenants[b] = ia, ib
-	e.m.mark(a, uuid.New())
-	e.m.mark(b, uuid.New())
-	e.tick(0) // the full pass is not held back
-	e.c.blobUse = map[uuid.UUID]*blobUse{}
-
-	addRule(ia, uid(2, 1), 1)
-	e.m.mark(a, uuid.New())
-	e.settle()
-	n := e.m.seqs()
-	if e.c.blobUse[a] == nil {
-		t.Fatal("the new blob files of A were not counted")
-	}
-	// A changes again and so does B: A is past its share, B goes on.
-	addRule(ia, uid(2, 1), 2)
-	addRule(ib, uid(2, 2), 1)
-	e.m.mark(a, uuid.New())
-	e.m.mark(b, uuid.New())
-	e.settle()
-	if e.m.seqs() != n+1 || len(e.m.marks) != 1 || e.m.marks[0].Tenant != a {
-		t.Fatalf("%d new entries and %d marks left: B was not written alone, or A's mark was consumed", e.m.seqs()-n, len(e.m.marks))
-	}
-	e.clk.add(11 * time.Minute)
-	e.settle()
-	if e.m.seqs() != n+2 || len(e.m.marks) != 0 {
-		t.Fatalf("after the window %d new entries and %d marks", e.m.seqs()-n, len(e.m.marks))
-	}
-	if len(e.node().Endpoints) != 2 {
-		t.Fatal("the node lacks an endpoint")
 	}
 }
 

@@ -45,6 +45,16 @@ type TenantInput struct {
 	Filters  []store.ProfileFilter
 	Options  []store.ProfileOptions
 	Maps     store.CompilerMaps
+
+	// Degraded compiles the tenant with no new blob: no profile is built, and a stack or schedule comes from the record the log
+	// holds. What says who may query (the state and hold, tokens, authorized addresses, legacy DNS, claims, clients) still follows
+	// the rows, and what is only a setting of the Endpoint (expose_ip, analytics, the pair, the client cap) stays as the log has it.
+	// It is how a tenant past its budget, or one whose blob could not be stored, goes on being revoked (W4-r4-2, W4-r4-5, W4-r4-9).
+	Degraded bool
+	// Sink, when set, is given each profile as it is built and is to put the file in the artifact store. The bytes are released
+	// once it returns nil, so one tenant never holds all its blobs at once (W4-r4-4). An error ends the compile and is the
+	// output's readErr.
+	Sink func(p *Profile) error
 }
 
 // Output is what one tenant compiles to. Keys are the raw ids as strings, so no array travels by value.
@@ -75,6 +85,10 @@ func CompileTenantWith(in *TenantInput, now time.Time, prev func(key string) *po
 	out := &Output{Endpoints: map[string]*policyv1.EndpointRecord{}, Claims: map[string]*policyv1.ClaimRecord{},
 		Blobs: map[string]*Profile{}, Kept: map[string]bool{}}
 	problem := func(r Reason) {
+		// A degraded compile builds nothing, so a profile or a schedule that is not built is no failure to report.
+		if in.Degraded && (r == ReasonProfile || r == ReasonSchedule) {
+			return
+		}
 		if !slices.Contains(out.Problems, r) {
 			out.Problems = append(out.Problems, r)
 		}
@@ -127,7 +141,7 @@ func CompileTenantWith(in *TenantInput, now time.Time, prev func(key string) *po
 	compiled := map[uuid.UUID]*Profile{}
 	for i := range in.Profiles {
 		p := &in.Profiles[i]
-		if !used[p.ID] {
+		if !used[p.ID] || in.Degraded {
 			continue
 		}
 		pd := &ProfileData{ID: p.ID, Folders: folders[p.ID], Services: services[p.ID], Filters: filters[p.ID], Options: options[p.ID]}
@@ -150,6 +164,13 @@ func CompileTenantWith(in *TenantInput, now time.Time, prev func(key string) *po
 		if err != nil {
 			problem(ReasonProfile)
 			continue
+		}
+		if in.Sink != nil {
+			if err := in.Sink(blob); err != nil {
+				out.readErr = err
+				return out
+			}
+			blob.release()
 		}
 		compiled[p.ID] = blob
 	}
@@ -191,6 +212,9 @@ func CompileTenantWith(in *TenantInput, now time.Time, prev func(key string) *po
 		if !ok {
 			out.Kept[key] = true
 			continue
+		}
+		if in.Degraded && old != nil {
+			rec.ExposeIp, rec.AnalyticsLevel, rec.PairVersion, rec.ClientCap = old.ExposeIp, old.AnalyticsLevel, old.PairVersion, old.ClientCap
 		}
 		out.Endpoints[key] = rec
 		for _, h := range bindings(rec) {

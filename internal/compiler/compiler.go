@@ -69,9 +69,10 @@ type Config struct {
 	// the pass goes on with the rest (5 s). Without it nothing of a pass is visible until the last tenant is compiled, and a
 	// revocation waits behind every large tenant of the fleet (W4-r3-7).
 	Slice time.Duration
-	// TenantBlobBytes is the bytes of new blob files one tenant may cause in TenantBlobWindow (128 MiB in 10 minutes). Past
-	// it the tenant's marks wait for the window to end while the others go on: a tenant that changes one rule in each of 20
-	// maxed profiles a second would otherwise fill the artifacts volume (W4-r3-8).
+	// TenantBlobBytes is the bytes one tenant may cause in TenantBlobWindow (128 MiB in 10 minutes): new blob files, and the
+	// encoded records it puts in the log, which fill config_log and every node the way files fill the volume. Past it the tenant is
+	// compiled with no new blob (TenantInput.Degraded): what says who may query goes out at once, the rest waits for the window to
+	// end, and the others go on (W4-r3-8, W4-r4-2, W4-r4-8).
 	TenantBlobBytes  uint64
 	TenantBlobWindow time.Duration
 }
@@ -152,6 +153,9 @@ type Compiler struct {
 	// its marks are gone with the pass that met the failure. It lives in memory: a new lease starts with a full pass.
 	retry    map[uuid.UUID]bool
 	retryDue time.Time
+	// waiting is the tenants that were compiled with no new blob because they were past their budget, with the end of the
+	// window they wait for. Like retry it lives in memory: a new lease starts with a full pass (W4-r4-2).
+	waiting map[uuid.UUID]time.Time
 	// sweepOwed says a full pass could not take out the records no tenant owns, because a tenant was skipped and its
 	// records would have been taken for orphans.
 	sweepOwed bool
@@ -178,7 +182,7 @@ func New(cfg Config) (*Compiler, error) {
 		return nil, errors.New("compiler: a backend and an artifact store are required")
 	}
 	cfg.defaults()
-	return &Compiler{cfg: cfg, seen: map[uuid.UUID]time.Time{}, alerted: map[string]time.Time{}, retry: map[uuid.UUID]bool{}, compile: CompileTenantWith,
+	return &Compiler{cfg: cfg, seen: map[uuid.UUID]time.Time{}, alerted: map[string]time.Time{}, retry: map[uuid.UUID]bool{}, waiting: map[uuid.UUID]time.Time{}, compile: CompileTenantWith,
 		cost: map[uuid.UUID]uint64{}, blobUse: map[uuid.UUID]*blobUse{}}, nil
 }
 
@@ -323,7 +327,7 @@ func (c *Compiler) renew(ctx context.Context) error {
 // drop forgets everything learned from the log, as when the lease is lost.
 func (c *Compiler) drop() {
 	c.owed, c.sweepOwed, c.unmet = false, false, nil
-	c.retry, c.retryDue = map[uuid.UUID]bool{}, time.Time{}
+	c.retry, c.retryDue, c.waiting = map[uuid.UUID]bool{}, time.Time{}, map[uuid.UUID]time.Time{}
 	c.view, c.loaded = nil, false
 	c.seen = map[uuid.UUID]time.Time{}
 	c.first, c.last = time.Time{}, time.Time{}
@@ -573,7 +577,7 @@ func (c *Compiler) pass(ctx context.Context, now time.Time) error {
 		vanished = c.owed
 	}
 	retryNow := len(c.retry) > 0 && !now.Before(c.retryDue)
-	if len(marks) == 0 && !c.full && !src.differs() && !vanished && !retryNow {
+	if len(marks) == 0 && !c.full && !src.differs() && !vanished && !retryNow && !c.waitDue(now) {
 		c.first, c.last = time.Time{}, time.Time{}
 		// The hour of a snapshot runs with the clock and not with the writes (6.5).
 		return c.snapshotIfDue(ctx, now)
@@ -628,15 +632,31 @@ func transient(ctx context.Context, err error) bool {
 		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
+// tenantResult is what compileOne found of one tenant.
+type tenantResult struct {
+	// out is nil for a tenant that was skipped.
+	out *Output
+	// known says the tenant's Endpoints were read, so the view may learn who owns them even when the compile did not finish: a
+	// tenant that panics has Endpoints in the log that are its own and not orphans (W4-r3-4).
+	known bool
+	// written is the bytes of new blob files the sink put in the store.
+	written uint64
+	// storeFailed says the artifact store refused a file: the tenant is compiled again with no new blob.
+	storeFailed bool
+	// compileFailed says the compile itself panicked or could not read the rules, which a compile with no blob does not do.
+	compileFailed bool
+}
+
 // compileOne reads and compiles one tenant. A tenant whose read fails for its own reasons, or whose compile panics, is
 // skipped (nil output and nil error) and not allowed to stop the others: one poison tenant would otherwise hold back every
 // change, revocation and snapshot of the fleet. The error is for what stops the pass.
 //
-// known says the tenant's Endpoints were read, so the view may learn who owns them even when the compile did not finish: a
-// tenant that panics has Endpoints in the log that are its own and not orphans (W4-r3-4).
-func (c *Compiler) compileOne(ctx context.Context, id uuid.UUID, alive bool, now time.Time) (out *Output, known bool, err error) {
+// degraded compiles with no new blob (TenantInput.Degraded); otherwise each blob is put in the store as it is built, with the
+// full pass making sure of the file that is there (the row of a bound blob says the nodes may fetch it, not that the file is still
+// there: a restored database, a volume that lost a directory entry).
+func (c *Compiler) compileOne(ctx context.Context, id uuid.UUID, alive bool, now time.Time, degraded, full bool) (res tenantResult, err error) {
 	if !alive {
-		return emptyOutput(), false, nil
+		return tenantResult{out: emptyOutput()}, nil
 	}
 	v := c.view
 	var (
@@ -644,7 +664,39 @@ func (c *Compiler) compileOne(ctx context.Context, id uuid.UUID, alive bool, now
 		rerr     error
 		renewErr error
 		keys     []string
+		out      *Output
+		// The sink's two kinds of failure differ: a lease or a head that moved (or a context that ended) stops the pass, and a file
+		// the store would not take only costs the tenant its new blobs.
+		fenceErr, putErr error
+		written          uint64
+		fenced           bool
 	)
+	sink := func(p *Profile) error {
+		had := c.cfg.Artifacts.Has(p.Hash, int64(len(p.Bytes)))
+		if !fenced && (full || !had) {
+			// A compiler that is no longer the writer finds out before it writes a file, so a refused entry leaves none
+			// behind (W4-r1-17); the commit asks again under the lock.
+			if fenceErr = c.renew(ctx); fenceErr == nil {
+				fenceErr = c.cfg.Backend.Check(ctx, c.fence())
+			}
+			if fenceErr != nil {
+				return fenceErr
+			}
+			fenced = true
+		}
+		if full {
+			putErr = c.cfg.Artifacts.Ensure(p.Hash, p.Bytes)
+		} else if !had {
+			putErr = c.cfg.Artifacts.Put(p.Hash, p.Bytes)
+		}
+		if putErr != nil {
+			return putErr
+		}
+		if !had {
+			written += uint64(len(p.Bytes))
+		}
+		return nil
+	}
 	// The compile runs inside the read snapshot, which reads the rules a profile at a time. A panic unwinds through the
 	// transaction, which rolls back. The lease is renewed before each profile's rules are read: one maxed tenant takes longer
 	// than the lease, and a second worker would take it in the middle (W4-r3-7).
@@ -661,47 +713,64 @@ func (c *Compiler) compileOne(ctx context.Context, id uuid.UUID, alive bool, now
 					return orig(p)
 				}
 			}
+			// Both are set on every call: a backend may hand the same input again.
+			in.Degraded = degraded
+			in.Sink = nil
+			if !degraded {
+				in.Sink = sink
+			}
 			return c.compile(in, now, func(k string) *policyv1.EndpointRecord { return v.Endpoints[k] })
 		})
 	})
 	if renewErr != nil {
-		return nil, false, renewErr
+		return res, renewErr
+	}
+	if fenceErr != nil {
+		return res, fenceErr
 	}
 	for _, k := range keys {
 		if _, ok := v.owner[k]; !ok {
 			v.owner[k] = id
 		}
 	}
-	known = len(keys) != 0 || (!panicked && rerr == nil && found)
+	res.known = len(keys) != 0 || (!panicked && rerr == nil && found)
+	if putErr != nil {
+		res.storeFailed = true
+		return res, nil
+	}
+	fromCompile := panicked
 	if rerr == nil && out != nil {
 		rerr = out.readErr
+		fromCompile = fromCompile || rerr != nil
 	}
+	res.compileFailed = fromCompile
 	switch {
 	case panicked:
-		return nil, known, nil
+		return res, nil
 	case rerr != nil:
 		if !transient(ctx, rerr) {
-			return nil, known, nil
+			return res, nil
 		}
 		if ctx.Err() != nil || errors.Is(rerr, context.Canceled) {
-			return nil, known, rerr
+			return res, rerr
 		}
 		// A timeout of the tenant's own read (statement, idle or transaction timeout) looks like the database's. Ask it a cheap
 		// question: when it answers, the failure is this tenant's and the others go on; when it does not, or the lease or the
 		// head moved, the pass ends as before (W4-r3-9).
 		if perr := c.cfg.Backend.Check(ctx, c.fence()); perr != nil {
 			if errors.Is(perr, ErrLeaseLost) || errors.Is(perr, ErrHeadMoved) {
-				return nil, known, perr
+				return res, perr
 			}
-			return nil, known, rerr
+			return res, rerr
 		}
 		// Last in the order of the next pass: it is the one that costs the database its timeouts.
 		c.cost[id] = costClass(1 << 62)
-		return nil, known, nil
+		return res, nil
 	case !found:
-		return emptyOutput(), false, nil
+		return tenantResult{out: emptyOutput()}, nil
 	}
-	return out, true, nil
+	res.out, res.written = out, written
+	return res, nil
 }
 
 // retriable says a problem is a failure to compile and not a fact about the data: it may mend with no event the tenant makes.
@@ -709,27 +778,63 @@ func retriable(r Reason) bool {
 	return r == ReasonProfile || r == ReasonSchedule || r == ReasonRecordInvalid
 }
 
-// fire compiles what is owed and writes it. The tenants go in groups of one batch, the small ones first, and what is finished
-// is written once Config.Slice of compile time has passed: a pass that compiled every tenant before it wrote anything made a
-// revocation wait behind every large tenant of the fleet (W4-r3-7). A pass that is not long is one slice, as before.
+// markRetry puts a tenant in the retry set at once, and not when the pass ends: the marks of a tenant go with the slice that
+// meets it, and a pass that fails after that slice would otherwise leave the tenant with neither a mark nor a retry (W4-r4-1).
+func (c *Compiler) markRetry(id uuid.UUID, now time.Time) {
+	c.retry[id] = true
+	if c.retryDue.IsZero() {
+		c.retryDue = now.Add(c.cfg.Reconcile)
+	}
+}
+
+// windowEnd is when the budget window of a tenant ends.
+func (c *Compiler) windowEnd(id uuid.UUID, now time.Time) time.Time {
+	if u := c.blobUse[id]; u != nil {
+		return u.start.Add(c.cfg.TenantBlobWindow)
+	}
+	return now.Add(c.cfg.TenantBlobWindow)
+}
+
+// waitDue says a tenant that waits for its budget window has come to the end of it.
+func (c *Compiler) waitDue(now time.Time) bool {
+	for _, due := range c.waiting {
+		if !now.Before(due) {
+			return true
+		}
+	}
+	return false
+}
+
+// fire compiles what is owed and writes it. The tenants go in groups of one batch, the marked ones first and the small ones
+// before the large, and what is finished is written once Config.Slice of compile time has passed or enough bytes are pending: a
+// pass that compiled every tenant before it wrote anything made a revocation wait behind every large tenant of the fleet
+// (W4-r3-7). After each write the outbox is read again, and a tenant that was marked meanwhile goes to the front of what is left
+// (W4-r4-7). A pass that is not long is one slice, as before.
 func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 	be, v := c.cfg.Backend, c.view
 	marks, err := be.Marks(ctx, 5000)
 	if err != nil {
 		return err
 	}
-	// Tenants to compile: those with a mark, every tenant on a full pass, and the ones whose last compile failed once
-	// their time has come.
+	// Tenants to compile: those with a mark, every tenant on a full pass, the ones whose last compile failed once their time has
+	// come, and the ones that waited for their blob budget once their window has ended.
 	tenants := map[uuid.UUID]bool{}
 	markIDs := map[uuid.UUID][]uuid.UUID{}
+	knownMark := map[uuid.UUID]bool{}
 	for _, m := range marks {
 		tenants[m.Tenant] = true
 		markIDs[m.Tenant] = append(markIDs[m.Tenant], m.ID)
+		knownMark[m.ID] = true
 	}
 	full := c.full
 	retryNow := len(c.retry) > 0 && !now.Before(c.retryDue)
 	if retryNow {
 		for t := range c.retry {
+			tenants[t] = true
+		}
+	}
+	for t, due := range c.waiting {
+		if !now.Before(due) {
 			tenants[t] = true
 		}
 	}
@@ -771,16 +876,19 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 		}
 	}
 	first := map[uuid.UUID]uuid.UUID{}
-	for _, m := range marks {
-		f, ok := first[m.Batch]
-		if !ok {
-			first[m.Batch] = m.Tenant
-			continue
-		}
-		if a, b := find(f), find(m.Tenant); a != b {
-			rep[b] = a
+	join := func(ms []store.OutboxMark) {
+		for _, m := range ms {
+			f, ok := first[m.Batch]
+			if !ok {
+				first[m.Batch] = m.Tenant
+				continue
+			}
+			if a, b := find(f), find(m.Tenant); a != b {
+				rep[b] = a
+			}
 		}
 	}
+	join(marks)
 
 	if full {
 		c.unmet = make(map[uuid.UUID]bool, len(ids))
@@ -788,27 +896,49 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 			c.unmet[id] = true
 		}
 	}
-	// The groups, in the order they are compiled: by the size class of what the tenants compiled to last (a tenant not met yet is
-	// the smallest), then by id. A group is never split by a slice, since its tenants share an entry.
-	groupOf := map[uuid.UUID][]uuid.UUID{}
-	var reps []uuid.UUID
-	class := map[uuid.UUID]uint64{}
-	for _, id := range sortedIDs(tenants) {
-		r := find(id)
-		if _, ok := groupOf[r]; !ok {
-			reps = append(reps, r)
+	// The groups, in the order they are compiled: the tenants with a mark first, then by the size class of what the tenants
+	// compiled to last (a tenant not met yet is the smallest), then by id. A group is never split by a slice, since its tenants
+	// share an entry.
+	done := map[uuid.UUID]bool{}
+	plan := func() [][]uuid.UUID {
+		groupOf := map[uuid.UUID][]uuid.UUID{}
+		var reps []uuid.UUID
+		class := map[uuid.UUID]uint64{}
+		marked := map[uuid.UUID]bool{}
+		for _, id := range sortedIDs(tenants) {
+			if done[id] {
+				continue
+			}
+			r := find(id)
+			if _, ok := groupOf[r]; !ok {
+				reps = append(reps, r)
+			}
+			groupOf[r] = append(groupOf[r], id)
+			class[r] = max(class[r], c.cost[id])
+			if len(markIDs[id]) != 0 {
+				marked[r] = true
+			}
 		}
-		groupOf[r] = append(groupOf[r], id)
-		class[r] = max(class[r], c.cost[id])
+		sort.SliceStable(reps, func(i, j int) bool {
+			a, b := reps[i], reps[j]
+			if marked[a] != marked[b] {
+				return marked[a]
+			}
+			return class[a] < class[b]
+		})
+		out := make([][]uuid.UUID, len(reps))
+		for i, r := range reps {
+			out[i] = groupOf[r]
+		}
+		return out
 	}
-	sort.SliceStable(reps, func(i, j int) bool { return class[reps[i]] < class[reps[j]] })
 
 	var (
 		pending      []*diff
 		pendingMarks []uuid.UUID
+		pendingBytes int
 		problems     []Alert
 	)
-	failed := map[uuid.UUID]bool{}
 	// flush writes the diffs of the slice and deletes the marks of the tenants in it. final also carries what belongs to the
 	// whole pass and not to a tenant: the catalog entry and the bump.
 	flush := func(final bool) error {
@@ -872,88 +1002,145 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 				return err
 			}
 		}
-		pending, pendingMarks = nil, nil
+		pending, pendingMarks, pendingBytes = nil, nil, 0
 		return nil
 	}
 
 	deferred := false
-	sliceStart := c.cfg.Clock()
-	for gi, r := range reps {
-		for _, id := range groupOf[r] {
-			// A tenant past its share of new blob files waits for its window to end; its marks stay. A full pass learns every
-			// tenant's Endpoints, and the retry set is not a flood: neither is held back.
-			if !full && !retryNow && c.overBudget(id, now) {
-				deferred = true
-				failed[id] = true
-				continue
-			}
+	// one compiles a tenant and queues what it changes.
+	one := func(id uuid.UUID) error {
+		// A tenant past its share of new blob files and of record bytes is compiled with no new blob: what says who may query
+		// still goes out at once, and the rest waits for its window to end (W4-r4-2, W4-r4-5). A group stays whole, since the
+		// tenant is compiled and written with the others of its batch.
+		over := alive[id] && c.overBudget(id, now)
+		degraded := over
+		var fallback Reason
+		var (
+			res tenantResult
+			d   *diff
+			n   uint64
+		)
+		for {
 			if err := c.renew(ctx); err != nil {
 				return err
 			}
-			out, known, err := c.compileOne(ctx, id, alive[id], now)
+			var err error
+			res, err = c.compileOne(ctx, id, alive[id], now, degraded, full)
 			if err != nil {
 				return err
 			}
-			if known {
+			if res.known {
 				// The view knows who owns its Endpoints now, compiled or not.
 				delete(c.unmet, id)
 			}
-			// Its marks go with the pass, as every tenant's do, and the retry set brings a failed one back.
-			pendingMarks = append(pendingMarks, markIDs[id]...)
-			if out == nil {
-				failed[id] = true
-				problems = append(problems, Alert{Reason: ReasonProfile, Tenant: id})
+			// A compile that panics, or a file the store would not take, costs the tenant its new blobs and not its revocations
+			// (W4-r4-5, W4-r4-9).
+			if !degraded && (res.storeFailed || (res.out == nil && res.compileFailed)) {
+				degraded, fallback = true, ReasonProfile
+				if res.storeFailed {
+					fallback = ReasonArtifacts
+				}
 				continue
 			}
-			if alive[id] {
-				var bytesOf uint64
-				for _, p := range out.Blobs {
-					if p != nil {
-						bytesOf += uint64(len(p.Bytes))
-					}
-				}
-				c.cost[id] = costClass(bytesOf)
-			}
-			var ensured uint64
-			if full {
-				// The row of a bound blob says the nodes may fetch it, not that the file is still there (a restored
-				// database, a volume that lost a directory entry). The full pass has every compiled blob in hand.
-				for _, h := range sortedKeys(out.Blobs) {
-					if p := out.Blobs[h]; p != nil {
-						had := c.cfg.Artifacts.Has([]byte(h), int64(len(p.Bytes)))
-						if err := c.cfg.Artifacts.Ensure([]byte(h), p.Bytes); err != nil {
-							return err
-						}
-						if !had {
-							ensured += uint64(len(p.Bytes))
-						}
-					}
-				}
+			if res.out == nil {
+				break
 			}
 			sort.Strings(byOwner[id])
-			d := diffTenant(v, id, out, byOwner[id], claimsOf)
-			// The files of the blobs the records bind go to the store now and the diff keeps their sizes: the bytes of every
-			// changed tenant of the fleet at once would not fit in the worker (W4-r3-1, W4-r3-6).
-			n, err := c.putBlobs(ctx, d, out)
-			if err != nil {
-				return err
+			d = diffTenant(v, id, res.out, byOwner[id], claimsOf)
+			var perr error
+			if n, perr = c.putBlobs(ctx, d, res.out, full); perr != nil {
+				var ae *artifactError
+				if errors.As(perr, &ae) && !degraded {
+					degraded, fallback = true, ReasonArtifacts
+					continue
+				}
+				return perr
 			}
-			n += ensured
-			c.addBlobUse(id, n, now)
-			c.sinceSnap += n
-			pending = append(pending, d)
-			for _, r := range out.Problems {
-				problems = append(problems, Alert{Reason: r, Tenant: id})
-				if retriable(r) {
-					failed[id] = true
+			break
+		}
+		// Its marks go with the slice, as every tenant's do, and the retry set brings a failed one back.
+		pendingMarks = append(pendingMarks, markIDs[id]...)
+		done[id] = true
+		out := res.out
+		if out == nil {
+			c.markRetry(id, now)
+			problems = append(problems, Alert{Reason: ReasonProfile, Tenant: id})
+			return nil
+		}
+		if alive[id] && !degraded {
+			var bytesOf uint64
+			for _, p := range out.Blobs {
+				if p != nil {
+					bytesOf += uint64(p.Len())
 				}
 			}
+			c.cost[id] = costClass(bytesOf)
 		}
-		if gi < len(reps)-1 && c.cfg.Clock().Sub(sliceStart) >= c.cfg.Slice {
-			if err := flush(false); err != nil {
+		pending = append(pending, d)
+		pendingBytes += d.bytes
+		for _, r := range out.Problems {
+			problems = append(problems, Alert{Reason: r, Tenant: id})
+		}
+		switch {
+		case over:
+			// The retry set is left as it is: a tenant that waits for its window is not one that failed to compile.
+			deferred = true
+			c.waiting[id] = c.windowEnd(id, now)
+		case degraded:
+			c.markRetry(id, now)
+			problems = append(problems, Alert{Reason: fallback, Tenant: id})
+		default:
+			n += res.written
+			c.addBlobUse(id, n+uint64(d.bytes), now)
+			c.sinceSnap += n
+			delete(c.waiting, id)
+			failed := false
+			for _, r := range out.Problems {
+				failed = failed || retriable(r)
+			}
+			if failed {
+				c.markRetry(id, now)
+			} else {
+				delete(c.retry, id)
+			}
+		}
+		return nil
+	}
+
+	sliceStart := c.cfg.Clock()
+	groups := plan()
+	for gi := 0; gi < len(groups); gi++ {
+		for _, id := range groups[gi] {
+			if err := one(id); err != nil {
 				return err
 			}
-			sliceStart = c.cfg.Clock()
+		}
+		if gi == len(groups)-1 || (c.cfg.Clock().Sub(sliceStart) < c.cfg.Slice && pendingBytes < c.cfg.MaxEntryBytes) {
+			continue
+		}
+		if err := flush(false); err != nil {
+			return err
+		}
+		sliceStart = c.cfg.Clock()
+		// A change marked while the pass worked is served before the large tenants that are left. A mark of a tenant that is done
+		// stays for the next pass: it came after the compile.
+		fresh, err := be.Marks(ctx, 5000)
+		if err != nil {
+			return err
+		}
+		var added []store.OutboxMark
+		for _, m := range fresh {
+			if knownMark[m.ID] || done[m.Tenant] {
+				continue
+			}
+			knownMark[m.ID] = true
+			markIDs[m.Tenant] = append(markIDs[m.Tenant], m.ID)
+			tenants[m.Tenant] = true
+			added = append(added, m)
+		}
+		if len(added) != 0 {
+			join(added)
+			groups, gi = plan(), -1
 		}
 	}
 	// A tenant that is gone and had an Endpoint that was kept (no record in the log) left an owner behind that nothing deletes:
@@ -1001,36 +1188,42 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 	if deferred {
 		c.cfg.Log.Warn("compiler: tenants wait for their blob budget")
 	}
-	// The retry set keeps the tenants this pass did not meet and adds the ones that failed in it.
-	next := map[uuid.UUID]bool{}
-	for t := range c.retry {
-		if !tenants[t] {
-			next[t] = true
-		}
-	}
-	for t := range failed {
-		next[t] = true
-	}
+	// The retry set was kept as the tenants were met: the ones that failed are in it and the ones that compiled are not.
 	switch {
-	case len(next) == 0:
+	case len(c.retry) == 0:
 		c.retryDue = time.Time{}
-	case retryNow || c.retryDue.IsZero():
+	case retryNow:
 		c.retryDue = now.Add(c.cfg.Reconcile)
 	}
-	c.retry = next
 	for _, a := range problems {
 		c.alert(ctx, a, now)
 	}
 	return nil
 }
 
-// putBlobs puts in the store the files of the blobs a diff's put records bind that it does not hold, and returns the bytes it
-// wrote. A compiler that is no longer the writer finds out before it writes a file, so a refused entry leaves none
+// artifactError is a refusal of the artifact store (a full volume, an I/O error), told from a lease or a head that moved: the
+// first costs a tenant its new blobs, the second ends the pass.
+type artifactError struct{ err error }
+
+func (e *artifactError) Error() string { return "compiler: artifact store: " + e.err.Error() }
+func (e *artifactError) Unwrap() error { return e.err }
+
+// putBlobs puts in the store the files of the blobs a diff's put records bind that it does not hold and whose bytes are still
+// held (a compile with a sink has put its own), and returns the bytes it wrote. The full pass makes sure of every blob it holds:
+// the row of a bound blob says the nodes may fetch it, not that the file is still there (a restored database, a volume that lost
+// a directory entry). A compiler that is no longer the writer finds out before it writes a file, so a refused entry leaves none
 // behind (W4-r1-17); the commit asks again under the lock.
-func (c *Compiler) putBlobs(ctx context.Context, d *diff, out *Output) (uint64, error) {
+func (c *Compiler) putBlobs(ctx context.Context, d *diff, out *Output, full bool) (uint64, error) {
 	var need []string
-	for _, h := range sortedKeys(d.blobs) {
-		if p := out.Blobs[h]; p != nil && !c.cfg.Artifacts.Has([]byte(h), int64(len(p.Bytes))) {
+	for _, h := range sortedKeys(out.Blobs) {
+		p := out.Blobs[h]
+		if p == nil || p.Bytes == nil {
+			continue
+		}
+		if _, bound := d.blobs[h]; !full && !bound {
+			continue
+		}
+		if full || !c.cfg.Artifacts.Has([]byte(h), int64(len(p.Bytes))) {
 			need = append(need, h)
 		}
 	}
@@ -1046,10 +1239,19 @@ func (c *Compiler) putBlobs(ctx context.Context, d *diff, out *Output) (uint64, 
 	var n uint64
 	for _, h := range need {
 		p := out.Blobs[h]
-		if err := c.cfg.Artifacts.Put([]byte(h), p.Bytes); err != nil {
-			return 0, err
+		had := c.cfg.Artifacts.Has([]byte(h), int64(len(p.Bytes)))
+		var err error
+		if full {
+			err = c.cfg.Artifacts.Ensure([]byte(h), p.Bytes)
+		} else {
+			err = c.cfg.Artifacts.Put([]byte(h), p.Bytes)
 		}
-		n += uint64(len(p.Bytes))
+		if err != nil {
+			return 0, &artifactError{err}
+		}
+		if !had {
+			n += uint64(len(p.Bytes))
+		}
 	}
 	return n, nil
 }

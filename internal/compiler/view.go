@@ -66,6 +66,7 @@ func (v *View) bind(e *policyv1.EndpointRecord, d int) {
 // Apply moves the view to the state after one entry that the caller has validated and chained. The order is the
 // node's (quarantine.Apply): deletes of Endpoints, then puts; deletes of claims, then puts.
 func (v *View) Apply(e *policyv1.ConfigEntry, hash []byte) {
+	tab := stackTable{}
 	for _, id := range e.DelEndpoints {
 		if old := v.Endpoints[string(id)]; old != nil {
 			v.bind(old, -1)
@@ -74,6 +75,7 @@ func (v *View) Apply(e *policyv1.ConfigEntry, hash []byte) {
 		delete(v.owner, string(id))
 	}
 	for _, rec := range e.PutEndpoints {
+		tab.intern(rec)
 		if old := v.Endpoints[string(rec.EndpointId)]; old != nil {
 			v.bind(old, -1)
 		}
@@ -142,7 +144,9 @@ func (v *View) Chain(seq uint64, prev, hash, payload []byte) error {
 func FromSnapshot(s *signv1.Snapshot, major uint32) *View {
 	v := NewView(major)
 	v.Seq, v.Head = s.Seq, s.EntryHash
+	tab := stackTable{}
 	for _, e := range s.Endpoints {
+		tab.intern(e)
 		v.Endpoints[string(e.EndpointId)] = e
 		v.bind(e, 1)
 	}
@@ -200,4 +204,39 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// stackKey is the content of a StackRecord, so equal stacks can be told apart from different ones without marshalling.
+type stackKey struct {
+	p1, p2, opts string
+	depth        uint32
+	geo, exp     bool
+}
+
+// stackTable makes equal stacks of what it is given one object. The clients of an Endpoint usually share a few stacks, and each
+// decoded client carries its own copy (two hashes and the merged options): at 50,000 clients that is most of what the view
+// holds. The table lives for one entry or one snapshot, so it cannot grow with the log (W4-r4-4).
+type stackTable map[stackKey]*policyv1.StackRecord
+
+func (t stackTable) of(s *policyv1.StackRecord) *policyv1.StackRecord {
+	if s == nil {
+		return nil
+	}
+	k := stackKey{string(s.Profile1Hash), string(s.Profile2Hash), string(s.MergedOptions), s.MaxDepth, s.HasDestGeo, s.Explicit}
+	if have, ok := t[k]; ok {
+		return have
+	}
+	t[k] = s
+	return s
+}
+
+// intern replaces the stacks of a decoded record by the shared ones. The record is the caller's own, fresh from a decode.
+func (t stackTable) intern(rec *policyv1.EndpointRecord) {
+	rec.Base = t.of(rec.Base)
+	for _, w := range rec.GetSchedule().GetWindows() {
+		w.Stack = t.of(w.Stack)
+	}
+	for _, c := range rec.Clients {
+		c.Stack = t.of(c.Stack)
+	}
 }
