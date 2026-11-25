@@ -1,6 +1,7 @@
 package store
 
 import (
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -650,28 +651,25 @@ type LockHash struct {
 	Hash secret.String
 }
 
-const qProfileLockHashes = `SELECT id, lock_password_hash FROM ctrlz.profiles WHERE tenant_id = $1 AND id = ANY($2::uuid[]) AND lock_state = 'locked' ORDER BY id`
-
-// ProfileLockHashes reads the hashes of the locked profiles among the ids. The caller keeps them in a secret.String.
+// ProfileLockHashes reads the hashes of the locked profiles among the ids, in id order; an id that is missing, not the tenant's or
+// not locked has no entry. It goes through ProfileLockHash, the one read of the column (P2 S9), so the lint that keeps the hash
+// out of every other statement has one statement to judge. An endpoint request names a handful of profiles, so one read each is
+// no cost. The caller keeps the hashes in a secret.String.
 func (t Tx) ProfileLockHashes(ids []uuid.UUID) ([]LockHash, error) {
-	rows, err := t.tx.Query(t.ctx, qProfileLockHashes, t.tenant, ids)
-	if err != nil {
-		return nil, sanitize(err)
-	}
-	defer rows.Close()
+	ids = slices.Clone(ids)
+	slices.SortFunc(ids, func(a, b uuid.UUID) int { return slices.Compare(a[:], b[:]) })
+	ids = slices.Compact(ids)
 	var out []LockHash
-	for rows.Next() {
-		var h LockHash
-		var hash *string
-		if err := rows.Scan(&h.ID, &hash); err != nil {
-			return nil, sanitize(err)
+	for _, id := range ids {
+		h, ok, err := t.ProfileLockHash(id)
+		if err != nil {
+			return nil, err
 		}
-		if hash != nil {
-			h.Hash = secret.New(*hash)
+		if ok {
+			out = append(out, LockHash{ID: id, Hash: h})
 		}
-		out = append(out, h)
 	}
-	return out, sanitize(rows.Err())
+	return out, nil
 }
 
 const qProfileTargetLocations = `SELECT DISTINCT l FROM (

@@ -92,6 +92,8 @@ func newHeavyRig(t *testing.T, cfg admission.Config) *heavyRig {
 	pl := &httpx.Pipeline{
 		Log: slog.New(slog.DiscardHandler), Service: ratelimit.Tenant, Ops: ops, Doc: api.Tenant(), BaseURL: "/api/v1",
 		Limiter: rig.lim, Resolver: rig.res, Host: want, Admission: adm,
+		// The document has link-keyed routes (P3), which Build refuses without a reader. No request of these tests is for one.
+		Bearer: func(*http.Request, apispec.Operation) (string, bool) { return "", false },
 	}
 	built, err := pl.Build()
 	if err != nil {
