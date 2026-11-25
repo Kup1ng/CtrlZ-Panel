@@ -1,0 +1,57 @@
+-- P1 auth review round 4 (finding primitives-r4-3): auth_otp_check.
+--
+-- POST /auth/register used to score and Argon2-hash the password before it asked
+-- the database whether the code was right, because a weak password must not burn
+-- the code (spec 5.6). A request with a made-up challenge has proved nothing, but it
+-- cost one scoring and one hash on the gates that every password login shares.
+-- auth_otp_check answers the same question as auth_otp_consume and leaves a right
+-- code alone: nothing is consumed and no try is spent, so the route can learn that
+-- the challenge, the phone and the code are real before it does any expensive work,
+-- and consume the code afterwards as before. A wrong code spends a try, exactly as
+-- it does in auth_otp_consume, so a guesser gains nothing from the extra call.
+--
+-- A new file and not an edit of an applied one (README, Rules).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+SET ROLE ctrlz_auth;
+
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.auth_otp_check(p_id uuid, p_phone text, p_purpose text, p_code_hash bytea)
+RETURNS TABLE (outcome text)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  r record;
+BEGIN
+  -- The row is locked so a check and a consume (or two checks) cannot both read
+  -- the same count of tries.
+  SELECT o.code_hash, o.attempts, o.expires_at, o.consumed_at INTO r
+  FROM ctrlz.otp_challenges o
+  WHERE o.id = p_id AND o.phone_e164 = p_phone AND o.purpose = p_purpose
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 'invalid'::text;
+  ELSIF r.consumed_at IS NOT NULL THEN
+    RETURN QUERY SELECT 'consumed'::text;
+  ELSIF r.expires_at <= pg_catalog.now() THEN
+    RETURN QUERY SELECT 'expired'::text;
+  ELSIF r.attempts >= 5 THEN
+    RETURN QUERY SELECT 'locked'::text;
+  ELSIF r.code_hash = p_code_hash THEN
+    -- The one difference from auth_otp_consume: the code stays usable.
+    RETURN QUERY SELECT 'ok'::text;
+  ELSE
+    UPDATE ctrlz.otp_challenges SET attempts = attempts + 1 WHERE id = p_id;
+    RETURN QUERY SELECT 'invalid'::text;
+  END IF;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.auth_otp_check(uuid, text, text, bytea) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.auth_otp_check(uuid, text, text, bytea) TO ctrlz_tenant;
+
+RESET ROLE;

@@ -1,0 +1,71 @@
+# The complete list of policies besides tenant_isolation (spec section 3).
+# tenant_isolation on every tenant table is derived from tables.yaml. A policy
+# in the database that is not here fails the test, and so does one here that
+# is missing from the database. qual and with_check are the stored forms.
+named:
+  - {table: tenants, name: auth_lookup, cmd: SELECT, role: ctrlz_auth, qual: "true", with_check: null}
+  - {table: tenants, name: auth_create, cmd: INSERT, role: ctrlz_auth, qual: null, with_check: "true"}
+  - {table: tenants, name: backfill_list, cmd: SELECT, role: ctrlz_backfill, qual: "true", with_check: null}
+  - {table: tenants, name: worker_list, cmd: SELECT, role: ctrlz_worker, qual: "true", with_check: null}
+  - {table: tenants, name: compiler_list, cmd: SELECT, role: ctrlz_compiler, qual: "true", with_check: null}
+  - {table: tenants, name: admin_read, cmd: SELECT, role: ctrlz_admin, qual: "true", with_check: null}
+  - {table: tenants, name: keytool_list, cmd: SELECT, role: ctrlz_keytool, qual: "true", with_check: null}
+  - {table: tenant_entitlements, name: auth_create, cmd: INSERT, role: ctrlz_auth, qual: null, with_check: "true"}
+  - {table: tenant_entitlements, name: auth_limits, cmd: SELECT, role: ctrlz_auth, qual: "(tenant_id = ctrlz.current_tenant_id())", with_check: null}
+  - {table: users, name: auth_lookup, cmd: SELECT, role: ctrlz_auth, qual: "true", with_check: null}
+  - {table: users, name: auth_create, cmd: INSERT, role: ctrlz_auth, qual: null, with_check: "true"}
+  - {table: users, name: admin_read, cmd: SELECT, role: ctrlz_admin, qual: "true", with_check: null}
+  - {table: sessions, name: auth_lookup, cmd: SELECT, role: ctrlz_auth, qual: "true", with_check: null}
+  - {table: api_tokens, name: auth_lookup, cmd: SELECT, role: ctrlz_auth, qual: "true", with_check: null}
+  - {table: refresh_tokens, name: auth_lookup, cmd: SELECT, role: ctrlz_auth, qual: "true", with_check: null}
+  - {table: webauthn_credentials, name: auth_lookup, cmd: SELECT, role: ctrlz_auth, qual: "true", with_check: null}
+  - {table: setup_share_tokens, name: auth_lookup, cmd: SELECT, role: ctrlz_auth, qual: "true", with_check: null}
+  - {table: profile_download_tokens, name: auth_lookup, cmd: SELECT, role: ctrlz_auth, qual: "true", with_check: null}
+  - {table: endpoints, name: hub_index, cmd: SELECT, role: ctrlz_hub, qual: "true", with_check: null}
+  - {table: endpoints, name: auth_pair, cmd: SELECT, role: ctrlz_auth, qual: "true", with_check: null}
+  - {table: endpoints, name: admin_read, cmd: SELECT, role: ctrlz_admin, qual: "true", with_check: null}
+  - {table: endpoints, name: hold_blocks_delete, cmd: DELETE, role: ctrlz_tenant, restrictive: true, qual: "((NOT admin_hold) AND (NOT (EXISTS ( SELECT 1\n   FROM ctrlz.ip_claims c\n  WHERE ((c.tenant_id = endpoints.tenant_id) AND (c.endpoint_id = endpoints.id) AND (c.state = 'suspended'::text))))))", with_check: null}
+  - {table: webauthn_credentials, name: admin_read, cmd: SELECT, role: ctrlz_admin, qual: "true", with_check: null}
+  - {table: profiles, name: admin_read, cmd: SELECT, role: ctrlz_admin, qual: "true", with_check: null}
+  - {table: ip_proof_challenges, name: hub_label, cmd: SELECT, role: ctrlz_hub, qual: "true", with_check: null}
+  - {table: ip_claims, name: auth_claims, cmd: ALL, role: ctrlz_auth, qual: "true", with_check: null}
+  - {table: ip_claims, name: admin_read, cmd: SELECT, role: ctrlz_admin, qual: "true", with_check: null}
+  - {table: feedback_items, name: admin_read, cmd: SELECT, role: ctrlz_admin, qual: "true", with_check: null}
+  - {table: policy_outbox, name: compiler_drain_select, cmd: SELECT, role: ctrlz_compiler, qual: "true", with_check: null}
+  - {table: policy_outbox, name: compiler_drain_delete, cmd: DELETE, role: ctrlz_compiler, qual: "true", with_check: null}
+  - {table: policy_outbox, name: auth_endpoint_set, cmd: INSERT, role: ctrlz_auth, qual: null, with_check: "((aggregate_type = 'endpoint_set'::text) AND (aggregate_id = tenant_id))"}
+  - {table: job_outbox, name: worker_drain_select, cmd: SELECT, role: ctrlz_worker, qual: "true", with_check: null}
+  - {table: job_outbox, name: worker_drain_delete, cmd: DELETE, role: ctrlz_worker, qual: "true", with_check: null}
+  - {table: tenant_audit_log, name: worker_retention, cmd: DELETE, role: ctrlz_worker, restrictive: true, qual: "(at < (now() - '365 days'::interval))", with_check: null}
+  # sms_counters is a global table with row-level security on, for one reason (sms-r8-3, sms-r8-7):
+  # its per-phone, per-network and per-address keys are raw numbers and addresses, and the sender
+  # must not read them. ctrlz_auth (the issue function, the stats function and the sweep) sees all
+  # rows; ctrlz_worker sees and writes the global rows only.
+  - {table: sms_counters, name: auth_counters, cmd: ALL, role: ctrlz_auth, qual: "true", with_check: "true"}
+  - {table: sms_counters, name: worker_global_rows, cmd: ALL, role: ctrlz_worker, qual: "(scope = 'global'::text)", with_check: "(scope = 'global'::text)"}
+  # otp_challenges is a global table with row-level security on, for one reason (db-r9-3): a decoy
+  # (an unknown phone) has a row with the phone and purpose and no sealed code, so a sender that read
+  # every row would learn which numbers have no account. ctrlz_auth (the issue, consume and sweep
+  # functions) sees all rows; ctrlz_worker sees the rows that were sealed for sending, marked at insert.
+  - {table: otp_challenges, name: auth_challenges, cmd: ALL, role: ctrlz_auth, qual: "true", with_check: "true"}
+  - {table: otp_challenges, name: worker_deliverable_rows, cmd: ALL, role: ctrlz_worker, qual: "deliverable", with_check: "deliverable"}
+  # P4 (migration 0100). certificates is a global table with row-level security on (tables.yaml global_rls):
+  # every role that holds a grant on it has a policy, and a role sees and writes the rows of its own kinds.
+  # The hub issues and retires the rows of the private CAs only; the admin uploads an active wildcard, panel
+  # or admin certificate and retires an uploaded one; the tenant reads the zone CA (the Apple profile's root
+  # time); ctrlz_domain_apply reads the two web certificates it installs.
+  - {table: certificates, name: hub_read, cmd: SELECT, role: ctrlz_hub, qual: "(kind = ANY (ARRAY['wildcard'::text, 'node_ca'::text, 'zone_ca'::text]))", with_check: null}
+  - {table: certificates, name: hub_issue, cmd: INSERT, role: ctrlz_hub, qual: null, with_check: "((kind = ANY (ARRAY['node_ca'::text, 'zone_ca'::text])) AND (source = 'issued'::text))"}
+  - {table: certificates, name: hub_retire, cmd: UPDATE, role: ctrlz_hub, qual: "((kind = ANY (ARRAY['node_ca'::text, 'zone_ca'::text])) AND (source = 'issued'::text))", with_check: "((kind = ANY (ARRAY['node_ca'::text, 'zone_ca'::text])) AND (source = 'issued'::text))"}
+  - {table: certificates, name: worker_all, cmd: ALL, role: ctrlz_worker, qual: "true", with_check: "true"}
+  - {table: certificates, name: admin_read, cmd: SELECT, role: ctrlz_admin, qual: "true", with_check: null}
+  - {table: certificates, name: admin_upload, cmd: INSERT, role: ctrlz_admin, qual: null, with_check: "((kind = ANY (ARRAY['wildcard'::text, 'panel'::text, 'admin'::text])) AND (source = 'uploaded'::text) AND (state = 'active'::text))"}
+  - {table: certificates, name: admin_retire, cmd: UPDATE, role: ctrlz_admin, qual: "(source = 'uploaded'::text)", with_check: "(source = 'uploaded'::text)"}
+  - {table: certificates, name: tenant_zone_ca, cmd: SELECT, role: ctrlz_tenant, qual: "(kind = 'zone_ca'::text)", with_check: null}
+  - {table: certificates, name: domain_apply_read, cmd: SELECT, role: ctrlz_domain_apply, qual: "(kind = ANY (ARRAY['panel'::text, 'admin'::text]))", with_check: null}
+  # The hub learns secure_dns rows and marks the endpoint_set of its tenant, and nothing else. RESTRICTIVE, so
+  # the check is ANDed with tenant_isolation instead of ORed (a permissive one would admit every source).
+  - {table: authorized_ips, name: hub_secure_dns_only, cmd: INSERT, role: ctrlz_hub, restrictive: true, qual: null, with_check: "(source = 'secure_dns'::text)"}
+  - {table: policy_outbox, name: hub_endpoint_set_only, cmd: INSERT, role: ctrlz_hub, restrictive: true, qual: null, with_check: "((aggregate_type = 'endpoint_set'::text) AND (aggregate_id = tenant_id))"}
+  # ctrlz_fn.node_taken_claims lists, across tenants, the claims taken on one node's observations (4.5).
+  - {table: ip_proof_challenges, name: auth_node_reports, cmd: SELECT, role: ctrlz_auth, qual: "(observed_by_node_id IS NOT NULL)", with_check: null}
