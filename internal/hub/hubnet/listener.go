@@ -315,9 +315,21 @@ func (l *Listener) acceptOne(conn net.Conn) {
 	})
 }
 
+// handshake runs in a goroutine that safego keeps alive after a panic, so what the connection holds is
+// given back by defer: the handshake slot, the source's connection count and the socket. Without it a
+// panic in the parsing of a client's certificate would cost the process nothing and the listener a slot
+// for good (W3-r5-7). Both releases are once-only, so the early release after the handshake stays.
 func (l *Listener) handshake(rc *rawConn, relHS func()) {
+	handed := false
+	defer func() {
+		relHS()
+		if !handed {
+			_ = rc.Close()
+		}
+	}()
 	tc := tls.Server(rc, l.base)
 	ctx, cancel := context.WithTimeout(context.Background(), l.cfg.HandshakeTimeout)
+	defer cancel()
 	err := tc.HandshakeContext(ctx)
 	cancel()
 	relHS()
@@ -343,6 +355,7 @@ func (l *Listener) handshake(rc *rawConn, relHS func()) {
 	}
 	select {
 	case l.ready <- tc:
+		handed = true
 	case <-l.done:
 		_ = tc.Close()
 	default:

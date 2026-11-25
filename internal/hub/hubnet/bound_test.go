@@ -168,8 +168,8 @@ func TestServerStreamingBodyIsReadWhole(t *testing.T) {
 	node := uuid.New()
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, nodeReq("/ctrlz.hub.v1.NodeHub/FetchBlob", node, strings.NewReader(strings.Repeat("x", UnaryBodyBytes+1))))
-	if w.Header().Get("Grpc-Status") != "3" || read != 0 {
-		t.Fatalf("an oversized transfer request: status %q, read %d", w.Header().Get("Grpc-Status"), read)
+	if grpcStatus(w) != "3" || read != 0 {
+		t.Fatalf("an oversized transfer request: status %q, read %d", grpcStatus(w), read)
 	}
 	h.ServeHTTP(httptest.NewRecorder(), nodeReq("/ctrlz.hub.v1.NodeHub/FetchBlob", node, strings.NewReader(strings.Repeat("x", 100))))
 	if read != 100 {

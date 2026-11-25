@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubnet"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
@@ -110,5 +112,48 @@ func TestRecheckEndsAStreamPastItsCertificate(t *testing.T) {
 	}
 	if !cancelled(ctxB.Done()) || cancelled(ctxA.Done()) {
 		t.Fatalf("expired ended: %v, current ended: %v", cancelled(ctxB.Done()), cancelled(ctxA.Done()))
+	}
+}
+
+// The 60-day renewal window is judged at every open and not only at the handshake: a connection kept up
+// past it cannot call RenewCert (W3-r5-1, W3-r5-5). The reader errors, so reaching it shows the window
+// let the call through, and being denied before it shows the window shut.
+func TestRenewCertIsRefusedPastTheWindowOnAnOpenConnection(t *testing.T) {
+	notAfter := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	cert := &x509.Certificate{RawSubjectPublicKeyInfo: []byte{2}, SerialNumber: big.NewInt(7), NotBefore: notAfter.Add(-30 * 24 * time.Hour), NotAfter: notAfter}
+	ctx := hubnet.WithIdentity(context.Background(), hubnet.Identity{Node: true, NodeID: uuid.New(), Cert: cert})
+	now := notAfter.Add(59 * 24 * time.Hour)
+	c := &Checker{Open: openReader{}, Now: func() time.Time { return now }}
+
+	// Day 59 past not_after, the id as the handshake saw it: RenewCert gets as far as the row.
+	if _, err := c.CheckOpen(ctx, RenewMethod); status.Code(err) != codes.Unavailable {
+		t.Fatalf("inside the window RenewCert should reach the row read, got %v", err)
+	}
+	// Any other method is refused for an expired certificate.
+	if _, err := c.CheckOpen(ctx, "/ctrlz.hub.v1.NodeHub/Control"); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("an expired certificate called another method: %v", err)
+	}
+	// The same connection on day 80: the identity still says what it said at the handshake.
+	now = notAfter.Add(80 * 24 * time.Hour)
+	if _, err := c.CheckOpen(ctx, RenewMethod); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("RenewCert past the window on an open connection was not refused: %v", err)
+	}
+}
+
+// A panic in a handler costs the call and not the hub (W3-r5-6): the caller gets INTERNAL.
+func TestRecoverInterceptorsTurnAPanicIntoInternal(t *testing.T) {
+	_, err := RecoverUnary(nil)(context.Background(), nil, &grpc.UnaryServerInfo{}, func(context.Context, any) (any, error) {
+		panic("test")
+	})
+	if status.Code(err) != codes.Internal {
+		t.Fatalf("a unary panic gave %v", err)
+	}
+	err = RecoverStream(nil)(nil, nil, &grpc.StreamServerInfo{}, func(any, grpc.ServerStream) error { panic("test") })
+	if status.Code(err) != codes.Internal {
+		t.Fatalf("a stream panic gave %v", err)
+	}
+	resp, err := RecoverUnary(nil)(context.Background(), nil, &grpc.UnaryServerInfo{}, func(context.Context, any) (any, error) { return 5, nil })
+	if err != nil || resp != 5 {
+		t.Fatalf("a call that did not panic: %v, %v", resp, err)
 	}
 }

@@ -77,7 +77,8 @@ var composeEnvTable = map[string]map[string]string{
 	"admin": {
 		"CTRLZ_ADMIN_HOST": "${CTRLZ_ADMIN_HOST:-admin.localhost}", "CTRLZ_ARGON2_BUDGET_MIB": "${CTRLZ_ADMIN_ARGON2_BUDGET_MIB:-64}",
 		"CTRLZ_ARGON2_CONCURRENCY": "1", "CTRLZ_DB_MAX_CONNS": "${CTRLZ_ADMIN_DB_MAX_CONNS:-5}", "CTRLZ_DB_PASSWORD_FILE": composeEnvFile,
-		"CTRLZ_LISTEN": ":8081", "CTRLZ_PANEL_HOST": "${CTRLZ_PANEL_HOST:-panel.localhost}", "CTRLZ_TRUSTED_PROXY": "10.213.78.200",
+		"CTRLZ_HUB_HOST": "${CTRLZ_HUB_HOST:-localhost}",
+		"CTRLZ_LISTEN":   ":8081", "CTRLZ_PANEL_HOST": "${CTRLZ_PANEL_HOST:-panel.localhost}", "CTRLZ_TRUSTED_PROXY": "10.213.78.200",
 		"CTRLZ_VALKEY_ADDR": "valkey-admin:6379", "CTRLZ_VALKEY_PASSWORD_FILE": composeEnvFile, "CTRLZ_VALKEY_USER": "admin",
 		"GOMEMLIMIT": "${GOMEMLIMIT_ADMIN:-96MiB}",
 	},

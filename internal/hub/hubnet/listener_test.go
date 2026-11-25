@@ -9,8 +9,11 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"io"
+	"log/slog"
 	"math/big"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -223,5 +226,58 @@ func TestRawConnCapEndsWithTheHandshake(t *testing.T) {
 			t.Fatal(err)
 		}
 		got += n
+	}
+}
+
+// A panic inside the handshake costs the connection and nothing else: the slot, the count and the socket
+// come back (W3-r5-7). The clock is what panics here; any code that runs while a client certificate is
+// judged would do.
+func TestHandshakePanicGivesBackWhatTheConnectionHeld(t *testing.T) {
+	now := time.Now()
+	ca, hubCert := testNodeCA(t, now)
+	nk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	iss, err := ca.IssueClient(&nk.PublicKey, uuid.New(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var boom atomic.Bool
+	conns, hs, nc, nodeConns := NewLimits(func() time.Time { return now })
+	inner, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := NewListener(inner, ListenerConfig{TLS: &tls.Config{Certificates: []tls.Certificate{hubCert}}, CA: ca,
+		Now: func() time.Time {
+			if boom.Load() {
+				panic("test: the handshake fails")
+			}
+			return now
+		},
+		Conns: conns, Handshakes: hs, NoCert: nc, NodeConns: nodeConns, HandshakeTimeout: 3 * time.Second,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	boom.Store(true)
+
+	c, err := tls.Dial("tcp", inner.Addr().String(), &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS13,
+		Certificates: []tls.Certificate{{Certificate: [][]byte{iss.DER}, PrivateKey: nk}}})
+	if err == nil {
+		defer c.Close()
+		// The socket is closed by the hub, not left open until the client gives up.
+		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		if _, err := c.Read(make([]byte, 1)); err == nil {
+			t.Fatal("the connection stayed usable after the handshake panicked")
+		} else if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			t.Fatal("the socket of a handshake that panicked was left open")
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for hs.InProgress() != 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := hs.InProgress(); n != 0 {
+		t.Fatalf("%d handshake slots held after a panic", n)
 	}
 }

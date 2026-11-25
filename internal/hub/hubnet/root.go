@@ -210,12 +210,17 @@ func isTransfer(method string) bool {
 	return false
 }
 
+// grpcRefuse answers a gRPC call with a status and no message. The status goes out as real trailers and
+// not as a headers-only ("trailers-only") answer: bound()'s release flushes the response before the
+// handler returns, and over HTTP/2 that sends the HEADERS frame without END_STREAM, which a gRPC client
+// then does not read a status from and reports as INTERNAL. With trailers it does not matter whether a
+// flush came first (W3-r5-4).
 func grpcRefuse(w http.ResponseWriter, code codes.Code, msg string) {
 	h := w.Header()
 	h.Set("Content-Type", "application/grpc")
-	h.Set("Grpc-Status", strconv.Itoa(int(code)))
-	h.Set("Grpc-Message", msg)
 	w.WriteHeader(http.StatusOK)
+	h.Set(http.TrailerPrefix+"Grpc-Status", strconv.Itoa(int(code)))
+	h.Set(http.TrailerPrefix+"Grpc-Message", msg)
 }
 
 func (h *Root) ServeHTTP(w http.ResponseWriter, r *http.Request) {

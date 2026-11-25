@@ -34,9 +34,12 @@ const (
 	unitRecheck  unit = "hub_recheck"
 	unitClear    unit = "hub_clear_prev"
 	unitStreamIO unit = "hub_stream_io"
+	unitRPC      unit = "hub_rpc"
 )
 
-func (u unit) Valid() bool { return u == unitRecheck || u == unitClear || u == unitStreamIO }
+func (u unit) Valid() bool {
+	return u == unitRecheck || u == unitClear || u == unitStreamIO || u == unitRPC
+}
 
 // OpenTimeout is the time bound of the check at open (SC 8a.11 L3): a check that cannot complete in it
 // is refused with UNAVAILABLE, and the node retries as after any error.
@@ -70,6 +73,10 @@ type Checker struct {
 	// kill mark before it reads the row, so a stream registered after a Kill that the row did not yet
 	// show is ended on arrival (G2, W3-r2-2).
 	Reg *Registry
+	// Now is the hub clock. The handshake judged the 60-day renewal window only when the connection was
+	// opened; a connection that outlives it must not renew on the strength of that old verdict, so every
+	// RPC is judged against not_after again (W3-r5-1, W3-r5-5).
+	Now func() time.Time
 }
 
 func errDenied() error { return status.Error(codes.Unauthenticated, "certificate not accepted") }
@@ -97,6 +104,17 @@ func (c *Checker) CheckOpen(ctx context.Context, method string) (hubnet.Identity
 	}
 	if c.Reg != nil {
 		id.KillGen = c.Reg.Gen()
+	}
+	if c.Now != nil {
+		// Judged at every open and not taken from the handshake: HTTP/2 keeps a connection for as long as
+		// the peer likes. Past the window not even RenewCert is accepted and the node enrols again (4.3).
+		now := c.Now()
+		if !now.Before(id.Cert.NotAfter) {
+			id.Expired = true
+		}
+		if _, ok := hubpki.ClientVerifyTime(id.Cert, now, method == RenewMethod); !ok {
+			return id, errDenied()
+		}
 	}
 	if id.Expired && method != RenewMethod {
 		return id, errDenied()
@@ -230,3 +248,29 @@ func EnrollmentGuard() grpc.UnaryServerInterceptor {
 		return h(ctx, req)
 	}
 }
+
+// RecoverUnary and RecoverStream are the outermost interceptors of both gRPC servers. grpc-go runs each
+// handler in a goroutine of its own with no recover, also under ServeHTTP, so net/http's recover does not
+// cover it, and one panic in a handler, an interceptor or the parsing of a request would end the hub
+// and with it every node's Control stream. The panic costs this call: the caller gets INTERNAL and the
+// kept panic is logged by unit name only (W3-r5-6). Put first, ahead of the checks.
+func RecoverUnary(log *slog.Logger) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (resp any, err error) {
+		if safego.Run(log, unitRPC, func() { resp, err = h(ctx, req) }) {
+			return nil, errInternal()
+		}
+		return resp, err
+	}
+}
+
+// RecoverStream is the stream counterpart of RecoverUnary.
+func RecoverStream(log *slog.Logger) grpc.StreamServerInterceptor {
+	return func(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, h grpc.StreamHandler) (err error) {
+		if safego.Run(log, unitRPC, func() { err = h(srv, ss) }) {
+			return errInternal()
+		}
+		return err
+	}
+}
+
+func errInternal() error { return status.Error(codes.Internal, "internal error") }

@@ -20,7 +20,8 @@ import (
 // with none serves the health mux alone, as it did before P4, and every other file variable is then refused,
 // so a half-configured hub cannot start looking like a whole one.
 //
-//	CTRLZ_HUB_HOST            the names and addresses of the hub leaf, comma separated (the install command's host)
+//	CTRLZ_HUB_HOST            the names and addresses of the hub leaf, comma separated (the install command's host); the admin
+//	                          role reads it too, for that command, and no other variable of this list
 //	CTRLZ_HUB_LISTEN          the node port, default 0.0.0.0:9443
 //	CTRLZ_NODE_CA_KEY_FILE    the node CA key (PKCS#8 PEM)
 //	CTRLZ_NODE_CA_PEM_FILE    the node CA certificate
@@ -45,10 +46,19 @@ func loadHubConfig(role Role, getenv Getenv, c *Config) error {
 	names := []string{"CTRLZ_HUB_HOST", "CTRLZ_HUB_LISTEN", "CTRLZ_NODE_CA_KEY_FILE", "CTRLZ_NODE_CA_PEM_FILE", "CTRLZ_HUB_TLS_KEY_FILE",
 		"CTRLZ_ZONE_CA_KEY_FILE", "CTRLZ_HUB_PUBLIC_DIR", "CTRLZ_BUNDLES_DIR"}
 	if role != RoleHub {
+		// The admin builds the install command of POST /node-enrollments and so needs the host (4.2 step 1)
+		// and nothing else: no key file, no listen address. Host is then only the text of that command;
+		// the node port starts for the hub role alone (app.go).
 		for _, n := range names {
+			if role == RoleAdmin && n == "CTRLZ_HUB_HOST" {
+				continue
+			}
 			if getenv(n) != "" {
 				return fmt.Errorf("%s is for the hub only", n)
 			}
+		}
+		if role == RoleAdmin {
+			c.Hub = HubConfig{Host: getenv("CTRLZ_HUB_HOST")}
 		}
 		return nil
 	}

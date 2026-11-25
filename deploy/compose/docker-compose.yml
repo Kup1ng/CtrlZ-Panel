@@ -233,6 +233,8 @@ services:
       CTRLZ_DB_PASSWORD_FILE: /run/secrets/pg_admin_password
       CTRLZ_DB_MAX_CONNS: ${CTRLZ_ADMIN_DB_MAX_CONNS:-5}
       CTRLZ_ADMIN_HOST: ${CTRLZ_ADMIN_HOST:-admin.localhost}
+      # The install command of a node enrolment carries the hub's host (p4-nodes 4.2 step 1).
+      CTRLZ_HUB_HOST: ${CTRLZ_HUB_HOST:-localhost}
       # Invite links and the Passkey origin check read the panel host (spec 7.2).
       CTRLZ_PANEL_HOST: ${CTRLZ_PANEL_HOST:-panel.localhost}
       CTRLZ_VALKEY_ADDR: valkey-admin:6379

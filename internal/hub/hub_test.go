@@ -1145,6 +1145,27 @@ func TestNodeCARowReplacementRaisesAnAlert(t *testing.T) {
 	}
 }
 
+// The node CA alert follows the row write (W3-r5-3): a write that fails at every start raises nothing, and
+// the start that writes raises one.
+func TestNodeCAReplacementAlertWaitsForTheRowWrite(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.db.cas["node_ca"] = []*fCA{{row: store.HubCertRow{ID: uuid.New(), ChainPEM: "an older CA"}}}
+	h.db.replaceErr = context.DeadlineExceeded
+	for i := 0; i < 3; i++ {
+		if err := h.hub.CAs.EnsureNodeRow(ctx); err == nil {
+			t.Fatal("a failed row write was not reported")
+		}
+	}
+	if h.db.alerts != 0 {
+		t.Fatalf("%d alerts raised for a row that was never written", h.db.alerts)
+	}
+	h.db.replaceErr = nil
+	if err := h.hub.CAs.EnsureNodeRow(ctx); err != nil || h.db.alerts != 1 || h.db.kinds[0] != store.HubAlertNodeCAChanged {
+		t.Fatalf("the start that wrote the row: %v, %d alerts %v", err, h.db.alerts, h.db.kinds)
+	}
+}
+
 // A live upload body is held to an unread budget (W3-r2-6) that the handler's own reads give back: a long
 // run of messages of every size, from empty to a megabyte, goes through without the stream stalling, so
 // the accounting of what was taken out of the queue matches what the transport read.

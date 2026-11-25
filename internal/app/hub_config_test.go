@@ -85,6 +85,11 @@ func TestHubNodePortConfigRefusals(t *testing.T) {
 			t.Errorf("%s: %v, want an error naming %q", name, err, tc.want)
 		}
 	}
+	// The admin takes the host for the install command of an enrolment and nothing else (W3-r5-2).
+	am := map[string]string{"CTRLZ_DB_HOST": "db", "CTRLZ_DB_PASSWORD_FILE": hubEnv(t, nil)["CTRLZ_DB_PASSWORD_FILE"], "CTRLZ_HUB_HOST": "hub.example.net"}
+	if ac, err := app.LoadConfig(app.RoleAdmin, env(am)); err != nil || ac.Hub.Host != "hub.example.net" {
+		t.Errorf("the admin with CTRLZ_HUB_HOST: %v, host %q", err, ac.Hub.Host)
+	}
 	// A hub with no CTRLZ_HUB_HOST serves the health mux alone, and a leftover file variable is a mistake.
 	m := hubEnv(t, nil)
 	delete(m, "CTRLZ_HUB_HOST")

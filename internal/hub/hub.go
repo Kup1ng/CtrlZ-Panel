@@ -157,12 +157,12 @@ func Build(ctx context.Context, d Deps) (*Hub, error) {
 		h.nodeAddr.replace(addrs)
 	}
 
-	h.checker = &hubnodes.Checker{Open: d.Stores.L3, Clear: d.Stores.Control, Log: d.Log, Seen: h.nodeAddr.add, Reg: h.Streams}
+	h.checker = &hubnodes.Checker{Open: d.Stores.L3, Clear: d.Stores.Control, Log: d.Log, Seen: h.nodeAddr.add, Reg: h.Streams, Now: d.Now}
 	h.recheck = &hubnodes.Rechecker{Reg: h.Streams, Nodes: d.Stores.Control, Log: d.Log, Now: d.Now}
 
-	enrollSrv := grpc.NewServer(grpc.MaxRecvMsgSize(hubnet.EnrollBodyBytes), grpc.UnaryInterceptor(hubnodes.EnrollmentGuard()))
+	enrollSrv := grpc.NewServer(grpc.MaxRecvMsgSize(hubnet.EnrollBodyBytes), grpc.ChainUnaryInterceptor(hubnodes.RecoverUnary(d.Log), hubnodes.EnrollmentGuard()), grpc.ChainStreamInterceptor(hubnodes.RecoverStream(d.Log)))
 	enrollv1.RegisterEnrollmentServer(enrollSrv, &hubenroll.Service{Store: d.Stores.Enrollment, CA: ca, Now: d.Now})
-	nodeSrv := grpc.NewServer(grpc.UnaryInterceptor(h.checker.Unary()), grpc.StreamInterceptor(h.checker.Stream(h.Streams)))
+	nodeSrv := grpc.NewServer(grpc.ChainUnaryInterceptor(hubnodes.RecoverUnary(d.Log), h.checker.Unary()), grpc.ChainStreamInterceptor(hubnodes.RecoverStream(d.Log), h.checker.Stream(h.Streams)))
 	hubv1.RegisterNodeHubServer(nodeSrv, hubnodes.NewService(d.Next, ca, d.Stores.Control, d.Now))
 
 	h.root = &hubnet.Root{

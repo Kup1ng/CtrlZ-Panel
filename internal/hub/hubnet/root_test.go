@@ -76,7 +76,7 @@ func TestRootEnrollmentRateAndBody(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		// 40 calls from different hosts of one /24.
 		w := grpcPost(h, "/ctrlz.enroll.v1.Enrollment/Poll", fmt.Sprintf("203.0.113.%d:4000", i+1), nil)
-		if w.Header().Get("Grpc-Status") == "8" {
+		if grpcStatus(w) == "8" {
 			refused++
 		}
 	}
@@ -84,19 +84,19 @@ func TestRootEnrollmentRateAndBody(t *testing.T) {
 		t.Fatalf("%d of 40 calls refused, want 10 past the 30 a minute", refused)
 	}
 	// Another network is not held back by it.
-	if w := grpcPost(h, "/ctrlz.enroll.v1.Enrollment/Poll", "198.51.100.7:4000", nil); w.Header().Get("Grpc-Status") == "8" {
+	if w := grpcPost(h, "/ctrlz.enroll.v1.Enrollment/Poll", "198.51.100.7:4000", nil); grpcStatus(w) == "8" {
 		t.Fatal("another /24 was limited")
 	}
 	// The body is read here through a cap of 8 KiB: one over it is refused before the handler is reached,
 	// and one inside it reaches the handler whole.
 	read = -1
 	w := grpcPost(h, "/ctrlz.enroll.v1.Enrollment/Poll", "192.0.2.1:4000", bytes.Repeat([]byte{1}, 64<<10))
-	if w.Header().Get("Grpc-Status") != "3" || read != -1 {
-		t.Fatalf("a 64 KiB body: read %d bytes (status %q)", read, w.Header().Get("Grpc-Status"))
+	if grpcStatus(w) != "3" || read != -1 {
+		t.Fatalf("a 64 KiB body: read %d bytes (status %q)", read, grpcStatus(w))
 	}
 	w = grpcPost(h, "/ctrlz.enroll.v1.Enrollment/Poll", "192.0.2.2:4000", bytes.Repeat([]byte{1}, EnrollBodyBytes))
-	if w.Header().Get("Grpc-Status") != "" || read != EnrollBodyBytes {
-		t.Fatalf("a body at the cap: read %d bytes (status %q)", read, w.Header().Get("Grpc-Status"))
+	if grpcStatus(w) != "" || read != EnrollBodyBytes {
+		t.Fatalf("a body at the cap: read %d bytes (status %q)", read, grpcStatus(w))
 	}
 }
 
@@ -117,8 +117,8 @@ func TestRootEnrollmentInProgressCap(t *testing.T) {
 		<-release
 	}
 	// Four are in progress: the fifth, from yet another network, is refused without waiting.
-	if w := grpcPost(h, "/ctrlz.enroll.v1.Enrollment/Poll", "172.16.0.1:4000", nil); w.Header().Get("Grpc-Status") != "8" {
-		t.Fatalf("a fifth call in progress was served: %q", w.Header().Get("Grpc-Status"))
+	if w := grpcPost(h, "/ctrlz.enroll.v1.Enrollment/Poll", "172.16.0.1:4000", nil); grpcStatus(w) != "8" {
+		t.Fatalf("a fifth call in progress was served: %q", grpcStatus(w))
 	}
 	close(block)
 	for i := 0; i < EnrollInProgress; i++ {
@@ -155,8 +155,8 @@ func TestRootChecksTheNodeBeforeTheBody(t *testing.T) {
 	for _, m := range []string{"RenewCert", "GetHead", "Control", "UploadLogs"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, nodeReq("/ctrlz.hub.v1.NodeHub/"+m, uuid.New(), failReader{t}))
-		if w.Header().Get("Grpc-Status") != "16" || reached {
-			t.Fatalf("%s: status %q, handler reached %v", m, w.Header().Get("Grpc-Status"), reached)
+		if grpcStatus(w) != "16" || reached {
+			t.Fatalf("%s: status %q, handler reached %v", m, grpcStatus(w), reached)
 		}
 	}
 }
@@ -173,8 +173,8 @@ func TestRootUnaryBodyCap(t *testing.T) {
 	node := uuid.New()
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, nodeReq("/ctrlz.hub.v1.NodeHub/RenewCert", node, bytes.NewReader(make([]byte, UnaryBodyBytes+1))))
-	if w.Header().Get("Grpc-Status") != "3" || read != 0 {
-		t.Fatalf("an oversized unary body: status %q, read %d", w.Header().Get("Grpc-Status"), read)
+	if grpcStatus(w) != "3" || read != 0 {
+		t.Fatalf("an oversized unary body: status %q, read %d", grpcStatus(w), read)
 	}
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, nodeReq("/ctrlz.hub.v1.NodeHub/RenewCert", node, bytes.NewReader(make([]byte, 4096))))
@@ -202,8 +202,8 @@ func TestRootOpenRPCsPerNode(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, nodeReq("/ctrlz.hub.v1.NodeHub/Control", a, nil))
-	if w.Header().Get("Grpc-Status") != "8" {
-		t.Fatalf("a call past the cap: status %q", w.Header().Get("Grpc-Status"))
+	if grpcStatus(w) != "8" {
+		t.Fatalf("a call past the cap: status %q", grpcStatus(w))
 	}
 	wg.Add(1)
 	go func() {
@@ -248,4 +248,10 @@ func TestRootEnrollmentSlotEndsWithTheWork(t *testing.T) {
 	}
 	close(block)
 	wg.Wait()
+}
+
+// grpcStatus is the status a refusal carries. It is a trailer (see grpcRefuse), so it is read from the
+// result and not from the header map.
+func grpcStatus(w *httptest.ResponseRecorder) string {
+	return w.Result().Trailer.Get("Grpc-Status")
 }
