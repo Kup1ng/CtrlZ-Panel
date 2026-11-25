@@ -1,0 +1,36 @@
+# Build output
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Node
+node_modules/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# Local index of the code graph
+.codegraph/
+
+# Local secrets and state
+.env
+.env.*
+!.env.example
+secrets/
+.claude/settings.local.json
+
+# Playwright output
+apps/*/e2e/test-results/
+apps/*/e2e/playwright-report/
+
+# Next.js writes this on every build and dev start
+apps/*/next-env.d.ts
+playwright-report/
+test-results/
+.eslintcache
+coverage/
+
+# Written by next dev on each start; agent notes for this repo live in .claude/.
+apps/*/AGENTS.md

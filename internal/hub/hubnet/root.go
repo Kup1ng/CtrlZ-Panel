@@ -1,0 +1,374 @@
+package hubnet
+
+import (
+	"bytes"
+	"context"
+	"crypto/x509"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/netip"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	enrollv1 "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/enroll/v1"
+	hubv1 "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/hub/v1"
+
+	"github.com/Kup1ng/CtrlZ-Panel/internal/appclock"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hublimit"
+)
+
+// Identity is what a request is known by, decided once by the root handler and read by everything
+// below it. A request that did not come over an admitted node connection has Node false, and nothing
+// below the root trusts a certificate it finds in the request on its own.
+type Identity struct {
+	Source  netip.Addr
+	Node    bool
+	NodeID  uuid.UUID
+	Cert    *x509.Certificate
+	Expired bool // now is past the certificate's not_after (inside the renewal window)
+	// Checked says the root handler already ran the row check of 4.4 for this very RPC before it read a
+	// byte of the body, so the interceptors do not pay for it a second time. Only the root sets it.
+	Checked bool
+}
+
+type identityKey struct{}
+type connKey struct{}
+
+// WithIdentity and IdentityFrom carry the identity in a context.
+func WithIdentity(ctx context.Context, id Identity) context.Context {
+	return context.WithValue(ctx, identityKey{}, id)
+}
+
+// IdentityFrom returns the identity the root handler set; the zero Identity (no node) if none.
+func IdentityFrom(ctx context.Context) Identity {
+	id, _ := ctx.Value(identityKey{}).(Identity)
+	return id
+}
+
+// ConnContext is http.Server.ConnContext: it remembers the connection of every request.
+func ConnContext(ctx context.Context, c net.Conn) context.Context {
+	if rc := connOf(c); rc != nil {
+		return context.WithValue(ctx, connKey{}, rc)
+	}
+	return ctx
+}
+
+func identityOf(r *http.Request, now time.Time) Identity {
+	rc, _ := r.Context().Value(connKey{}).(*rawConn)
+	if rc == nil {
+		return Identity{Source: sourceOf(r)}
+	}
+	id := Identity{Source: rc.src}
+	if nid, ok := rc.Node(); ok && r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+		id.Node, id.NodeID, id.Cert = true, nid, r.TLS.PeerCertificates[0]
+		id.Expired = !now.Before(id.Cert.NotAfter)
+	}
+	return id
+}
+
+func sourceOf(r *http.Request) netip.Addr {
+	if ap, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
+		return ap.Addr().Unmap()
+	}
+	return netip.Addr{}
+}
+
+// Limits of 5.1 and 5.7 held by the root handler (D31).
+const (
+	EnrollPerMinute   = 30
+	EnrollInProgress  = 4
+	EnrollBodyBytes   = 8 << 10
+	EnrollReadTimeout = 10 * time.Second
+	NodeOpensPerSec   = 20
+	NodeOpensBurst    = 40
+	NodeBytesPerSec   = 2 << 20
+	NodeBytesBurst    = 16 << 20
+	MaxTransfers      = 8
+	// MaxOpenRPCs is the RPCs one node holds open at once: its streams (Control, three uploads, up to
+	// MaxTransfers transfers) and the unary calls in flight, with room to spare.
+	MaxOpenRPCs = 32
+	// A unary NodeHub request is one small message; RenewCert needs about 8 KiB.
+	UnaryBodyBytes   = 16 << 10
+	UnaryReadTimeout = 10 * time.Second
+	// ResponseWriteTimeout bounds how long an answer to an enrolment or a unary call may take to be
+	// written: a peer that gives no window must not hold a goroutine for as long as it likes.
+	ResponseWriteTimeout = 10 * time.Second
+)
+
+// RootLimits are the root handler's limiters; NewRootLimits builds them with the numbers above.
+type RootLimits struct {
+	EnrollSource *hublimit.Keyed
+	EnrollSlots  *hublimit.Slots
+	NodeOpens    *hublimit.Keyed
+	NodeBytes    *hublimit.Keyed
+	Transfers    *hublimit.Counts
+	OpenRPCs     *hublimit.Counts
+}
+
+// NewRootLimits builds the limiters of the root handler.
+func NewRootLimits(now func() time.Time) RootLimits {
+	return RootLimits{
+		EnrollSource: hublimit.NewKeyed(EnrollPerMinute/60.0, EnrollPerMinute, now),
+		EnrollSlots:  hublimit.NewSlots(EnrollInProgress),
+		NodeOpens:    hublimit.NewKeyed(NodeOpensPerSec, NodeOpensBurst, now),
+		NodeBytes:    hublimit.NewKeyed(NodeBytesPerSec, NodeBytesBurst, now),
+		Transfers:    hublimit.NewCounts(MaxTransfers),
+		OpenRPCs:     hublimit.NewCounts(MaxOpenRPCs),
+	}
+}
+
+// Root is the one handler of the port.
+type Root struct {
+	Now        func() time.Time
+	Enrollment http.Handler // the Enrollment grpc.Server's ServeHTTP
+	NodeHub    http.Handler // the NodeHub grpc.Server's ServeHTTP
+	Install    http.Handler // GET /install/...
+	// NodeCheck is the row check of 4.4 for a NodeHub RPC (hubnodes.Checker.CheckOpen). The root runs it
+	// before it reads the body; nil skips it, for tests of the other rules.
+	NodeCheck func(ctx context.Context, method string) (Identity, error)
+	Limits    RootLimits
+	Log       *slog.Logger
+}
+
+// isTransfer says whether a NodeHub method is one of the four transfer RPCs, at most 8 of which a node holds
+// open (SC 12).
+// isUnary says whether a NodeHub method takes one request message, from the service descriptor.
+func isUnary(method string) bool {
+	for _, m := range hubv1.NodeHub_ServiceDesc.Methods {
+		if m.MethodName == method {
+			return true
+		}
+	}
+	return false
+}
+
+func isTransfer(method string) bool {
+	switch method {
+	case "FetchEntries", "FetchBlob", "GetSnapshot", "FetchBundle":
+		return true
+	}
+	return false
+}
+
+func grpcRefuse(w http.ResponseWriter, code codes.Code, msg string) {
+	h := w.Header()
+	h.Set("Content-Type", "application/grpc")
+	h.Set("Grpc-Status", strconv.Itoa(int(code)))
+	h.Set("Grpc-Message", msg)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Root) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	now := h.Now()
+	id := identityOf(r, now)
+	r = r.WithContext(WithIdentity(r.Context(), id))
+
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+		h.serveGRPC(w, r, id)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/install/") && h.Install != nil {
+		h.Install.ServeHTTP(w, r)
+		return
+	}
+	http.NotFound(w, r)
+}
+
+func (h *Root) serveGRPC(w http.ResponseWriter, r *http.Request, id Identity) {
+	path := r.URL.Path
+	switch {
+	case strings.HasPrefix(path, "/"+enrollv1.Enrollment_ServiceDesc.ServiceName+"/"):
+		h.serveEnrollment(w, r, id)
+	case strings.HasPrefix(path, "/"+hubv1.NodeHub_ServiceDesc.ServiceName+"/"):
+		h.serveNodeHub(w, r, id)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+// serveEnrollment bounds an anonymous call in rate, bytes, time and work. Before any database read,
+// keyed by source: the per-/24 or /56 call rate (5.7). The body is read here, whole, into one buffer of
+// at most 8 KiB under a read deadline, and gRPC gets those bytes: handed the live body, grpc-go reads it
+// in 16 KiB pooled buffers and keeps each whole however few bytes arrived, so one byte per DATA frame
+// would cost 16 KiB a byte. The slot of calls in progress is held only while the handler works and is
+// given back when it starts to answer, so a client that never takes the answer (a window of zero) holds
+// a goroutine for the write deadline and no slot (5.1, 5.7).
+func (h *Root) serveEnrollment(w http.ResponseWriter, r *http.Request, id Identity) {
+	if !h.Limits.EnrollSource.Allow(hublimit.NetKey(id.Source)) {
+		grpcRefuse(w, codes.ResourceExhausted, "rate limited")
+		return
+	}
+	if err := preread(w, r, EnrollBodyBytes, EnrollReadTimeout); err != nil {
+		grpcRefuse(w, codes.InvalidArgument, "bad request")
+		return
+	}
+	rel, ok := h.Limits.EnrollSlots.Try()
+	if !ok {
+		grpcRefuse(w, codes.ResourceExhausted, "busy")
+		return
+	}
+	defer rel()
+	h.Enrollment.ServeHTTP(newStartWriter(w, func() { rel(); setWriteDeadline(w) }), r)
+}
+
+func (h *Root) serveNodeHub(w http.ResponseWriter, r *http.Request, id Identity) {
+	// A NodeHub path on a connection that did not admit a node certificate gets 403 before gRPC sees
+	// it, so an anonymous peer never gets a goroutine that reads into an unbounded buffer.
+	if !id.Node {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	key := id.NodeID.String()
+	path := r.URL.Path
+	method := path[strings.LastIndexByte(path, '/')+1:]
+	// Each RPC a node opens counts against its rate, transfers included, and the check that follows
+	// is not paid for an RPC refused here (SC 12).
+	if !h.Limits.NodeOpens.Allow(key) {
+		grpcRefuse(w, codes.ResourceExhausted, "rate limited")
+		return
+	}
+	// The row check of 4.4 runs here, before a byte of the body is read. A revoked or removed node's
+	// certificate still chains to the node CA for 30 + 60 days, and a unary message is read and decoded
+	// by gRPC before any interceptor runs, so checking later would let that node hold a 4 MiB buffer per
+	// stream it opens (G2).
+	if h.NodeCheck != nil {
+		checked, err := h.NodeCheck(WithIdentity(r.Context(), id), path)
+		if err != nil {
+			st := status.Convert(err)
+			grpcRefuse(w, st.Code(), st.Message())
+			return
+		}
+		checked.Checked = true
+		r = r.WithContext(WithIdentity(r.Context(), checked))
+	}
+	rel, ok := h.Limits.OpenRPCs.Take(key)
+	if !ok {
+		grpcRefuse(w, codes.ResourceExhausted, "too many calls")
+		return
+	}
+	defer rel()
+	if isTransfer(method) {
+		relT, ok := h.Limits.Transfers.Take(key)
+		if !ok {
+			grpcRefuse(w, codes.ResourceExhausted, "too many transfers")
+			return
+		}
+		defer relT()
+	}
+	r.Body = &rateBody{rc: r.Body, k: h.Limits.NodeBytes, key: key, ctx: r.Context()}
+	if isUnary(method) {
+		// A unary request is one small message (RenewCert about 8 KiB): bounded and read whole like an
+		// enrolment, so it never holds gRPC's per-read buffers either.
+		if err := preread(w, r, UnaryBodyBytes, UnaryReadTimeout); err != nil {
+			grpcRefuse(w, codes.InvalidArgument, "bad request")
+			return
+		}
+		h.NodeHub.ServeHTTP(newStartWriter(w, func() { setWriteDeadline(w) }), r)
+		return
+	}
+	h.NodeHub.ServeHTTP(w, r)
+}
+
+// preread replaces r.Body by the whole body, read through a cap and a read deadline from the real clock
+// (a test's frozen clock must not move the deadline).
+func preread(w http.ResponseWriter, r *http.Request, limit int64, within time.Duration) error {
+	rc := http.NewResponseController(w)
+	_ = rc.SetReadDeadline(appclock.Now().Add(within))
+	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
+	_ = rc.SetReadDeadline(time.Time{})
+	if err != nil {
+		return err
+	}
+	r.Body = io.NopCloser(bytes.NewReader(b))
+	return nil
+}
+
+func setWriteDeadline(w http.ResponseWriter) {
+	_ = http.NewResponseController(w).SetWriteDeadline(appclock.Now().Add(ResponseWriteTimeout))
+}
+
+// startWriter runs start once, when the handler first writes: gRPC writes nothing until the handler
+// has finished, so that moment is the end of the work and the start of the answer.
+type startWriter struct {
+	http.ResponseWriter
+	once  sync.Once
+	start func()
+}
+
+func newStartWriter(w http.ResponseWriter, start func()) *startWriter {
+	return &startWriter{ResponseWriter: w, start: start}
+}
+
+func (s *startWriter) begin() { s.once.Do(s.start) }
+
+func (s *startWriter) WriteHeader(code int) { s.begin(); s.ResponseWriter.WriteHeader(code) }
+
+func (s *startWriter) Write(b []byte) (int, error) { s.begin(); return s.ResponseWriter.Write(b) }
+
+func (s *startWriter) Flush() { s.begin(); _ = http.NewResponseController(s.ResponseWriter).Flush() }
+
+func (s *startWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+// rateBody paces what a node's request bodies may read. A read that must wait does not read, so the
+// HTTP/2 window credit of that stream is withheld and a flood stalls at the sender's connection.
+type rateBody struct {
+	rc  io.ReadCloser
+	k   *hublimit.Keyed
+	key string
+	ctx context.Context
+}
+
+func (b *rateBody) Close() error { return b.rc.Close() }
+
+func (b *rateBody) Read(p []byte) (int, error) {
+	if len(p) > 64<<10 {
+		p = p[:64<<10]
+	}
+	n := float64(len(p))
+	for !b.k.AllowN(b.key, n) {
+		wait := b.k.Wait(b.key, n)
+		if wait < time.Millisecond {
+			wait = time.Millisecond
+		}
+		t := time.NewTimer(wait)
+		select {
+		case <-b.ctx.Done():
+			t.Stop()
+			return 0, b.ctx.Err()
+		case <-t.C:
+		}
+	}
+	return b.rc.Read(p)
+}
+
+// NewServer builds the http.Server of the port (5.1). Keepalive is the server's, since gRPC's own
+// options do not apply under ServeHTTP: it pings a connection that sent no frame for 10 s and drops it
+// after 10 s without an ack.
+func NewServer(root http.Handler, base *http.Server, log *slog.Logger) *http.Server {
+	srv := base
+	if srv == nil {
+		srv = &http.Server{}
+	}
+	srv.Handler = root
+	srv.ReadHeaderTimeout = 10 * time.Second
+	srv.IdleTimeout = 60 * time.Second
+	srv.MaxHeaderBytes = 16 << 10
+	srv.ConnContext = ConnContext
+	srv.HTTP2 = &http.HTTP2Config{
+		MaxConcurrentStreams: 100,
+		SendPingTimeout:      10 * time.Second,
+		PingTimeout:          10 * time.Second,
+	}
+	// The server's own error log would print request lines and peer addresses; this one keeps the class.
+	srv.ErrorLog = httpx.ErrorLog(log)
+	return srv
+}

@@ -1,0 +1,23 @@
+{
+"table": "catalog_common_domains",
+"columns": ["version","pattern"],
+"rows": [
+  [0,"local"],
+  [0,"lan"],
+  [0,"home.arpa"],
+  [0,"captive.apple.com"],
+  [0,"www.appleiphonecell.com"],
+  [0,"www.itools.info"],
+  [0,"www.ibook.info"],
+  [0,"www.airport.us"],
+  [0,"www.thinkdifferent.us"],
+  [0,"connectivitycheck.gstatic.com"],
+  [0,"connectivitycheck.android.com"],
+  [0,"clients3.google.com"],
+  [0,"www.msftconnecttest.com"],
+  [0,"ipv6.msftconnecttest.com"],
+  [0,"www.msftncsi.com"],
+  [0,"dns.msftncsi.com"],
+  [0,"detectportal.firefox.com"]
+]
+}
