@@ -21,6 +21,7 @@ import (
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hublimit"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubpki"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 // A certificate is not a secret, so the per-node count of connections is not charged for one that only
@@ -273,11 +274,5 @@ func TestHandshakePanicGivesBackWhatTheConnectionHeld(t *testing.T) {
 			t.Fatal("the socket of a handshake that panicked was left open")
 		}
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for hs.InProgress() != 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if n := hs.InProgress(); n != 0 {
-		t.Fatalf("%d handshake slots held after a panic", n)
-	}
+	testwait.Until(t, 5*time.Second, "the handshake slot of a panicked handshake to be given back", func() bool { return hs.InProgress() == 0 })
 }

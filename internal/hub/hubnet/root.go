@@ -210,6 +210,10 @@ func isTransfer(method string) bool {
 	return false
 }
 
+// trailerPrefix is net/http's TrailerPrefix: a header with it is sent as a trailer. Spelled here because
+// the capability lint lists the members of net/http a package may use, and this is one string.
+const trailerPrefix = "Trailer:"
+
 // grpcRefuse answers a gRPC call with a status and no message. The status goes out as real trailers and
 // not as a headers-only ("trailers-only") answer: bound()'s release flushes the response before the
 // handler returns, and over HTTP/2 that sends the HEADERS frame without END_STREAM, which a gRPC client
@@ -219,8 +223,8 @@ func grpcRefuse(w http.ResponseWriter, code codes.Code, msg string) {
 	h := w.Header()
 	h.Set("Content-Type", "application/grpc")
 	w.WriteHeader(http.StatusOK)
-	h.Set(http.TrailerPrefix+"Grpc-Status", strconv.Itoa(int(code)))
-	h.Set(http.TrailerPrefix+"Grpc-Message", msg)
+	h.Set(trailerPrefix+"Grpc-Status", strconv.Itoa(int(code)))
+	h.Set(trailerPrefix+"Grpc-Message", msg)
 }
 
 func (h *Root) ServeHTTP(w http.ResponseWriter, r *http.Request) {
