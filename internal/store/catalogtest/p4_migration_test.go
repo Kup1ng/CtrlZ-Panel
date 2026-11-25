@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/testpg"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 // Tests of migration 0100 (P4 W2, docs/specs/p4-nodes.md 3.2): the node tables, the triggers, the policies of
@@ -579,10 +580,20 @@ func TestP4ConfigLogLock(t *testing.T) {
 		_, err := second.Exec(h.ctx, `SELECT ctrlz_fn.config_log_lock()`)
 		done <- err
 	}()
+	// The proof that the worker waits is the server's own: its backend is in a Lock wait, which a granted
+	// lock never shows. A fixed pause would pass for a worker that was merely slow.
+	workerPID := int(second.Conn().PgConn().PID())
+	testwait.Until(t, 10*time.Second, "the worker to wait for the config log lock", func() bool {
+		var n int
+		if err := h.super.QueryRow(h.ctx, "SELECT count(*) FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = 'Lock'", workerPID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n == 1
+	})
 	select {
 	case err := <-done:
 		t.Fatalf("the worker took the lock while the compiler held it (%v)", err)
-	case <-time.After(500 * time.Millisecond):
+	default:
 	}
 	if err := first.Commit(h.ctx); err != nil {
 		t.Fatal(err)

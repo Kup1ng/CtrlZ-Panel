@@ -245,8 +245,11 @@ export CTRLZ_CANARY_CONSUMERS="$consumers"
 # Secret files that no running container reads, each with its reason. kek_root is never mounted: the owner
 # copies it off the server and `keys derive` reads it from the host (8.3). kek_cert_wrap belongs to the certificate
 # feature of a later phase, which no service of the stack reads
-# yet; the day one does, the entry goes and the check requires that container's log.
-export CTRLZ_CANARY_UNCONSUMED="kek_root kek_cert_wrap"
+# yet; the day one does, the entry goes and the check requires that container's log. policy_key_pub is a public
+# file that only `ctrlz root init` reads, run by the owner on the host and not as a service. web_intake_key is
+# read by domain-apply alone, a service of the `tools` profile, which `dc config` leaves out and this smoke does
+# not start; if the smoke starts that profile, the entry goes with it.
+export CTRLZ_CANARY_UNCONSUMED="kek_root kek_cert_wrap policy_key_pub web_intake_key"
 sh scripts/secret-canary.sh "$secrets" "$logs" "$work/rows" "$work/refused" "$work/exec.out" "$work/bootstrap.stdout" "$work/reset.stdout" "$work/bootstrap.stderr" "$work/reset.stderr" || fail "a secret of the stack is in a log, a row or an output (named above)"
 for pw in "$pw1" "$pw2"; do
   grep -qF -- "$pw" "$logs" && fail "a one-time password is in a docker log"

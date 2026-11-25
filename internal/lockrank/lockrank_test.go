@@ -42,6 +42,7 @@ func TestAnalyze(t *testing.T) {
 		{"an upsert is a write on the conflicting row", `INSERT INTO ctrlz.sms_counters AS c (day, scope, key, count) VALUES ($1, $2, $3, 1) ON CONFLICT (day, scope, key) DO UPDATE SET count = c.count + 1`, "sms_counters"},
 		{"DO NOTHING is an insert", `INSERT INTO ctrlz.alerts (severity, kind, params) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, "alerts:ins"},
 		{"the audit advisory lock", `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('ctrlz.audit_log', 0))`, "audit_log"},
+		{"the config log advisory lock", `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('ctrlz.config_log', 0))`, "config_log"},
 		{"a comment hides nothing and shows nothing", "-- FOR UPDATE ctrlz.users\nSELECT 1 /* UPDATE ctrlz.sessions */", ""},
 		{"a string hides its words", `SELECT 'FOR UPDATE' FROM ctrlz.sessions`, ""},
 		{"a function call applies the declared ranks", `SELECT * FROM ctrlz_fn.admin_reissue_one_time_password($1, $2)`, "users"},
