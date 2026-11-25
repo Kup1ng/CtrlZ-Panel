@@ -69,6 +69,12 @@ var byValueSharedReasons = map[string]string{
 	"shared/rules/":        "rule patterns: country codes",
 	"shared/vectors/":      "the golden test vectors of the shared contract: ids and hashes",
 	"shared/wire/":         "the hash chain of the wire format: SHA-256 values of public content",
+	// P4: the failover zone shared by the Panel's hub and the nodes. Its fixed-size values are the 16-byte
+	// ids of nodes and pairs, which are public identifiers (they are in the pair table every node holds and
+	// in the activity feed), never a credential: a node's secret is its mTLS key, which no code of this
+	// package sees.
+	"shared/zone/":                 "the failover zone: 16-byte node ids and pair ids, public identifiers of the pair table",
+	"shared/internal/failovergen/": "the generator of the zone-failover vectors: the same node ids, as test data",
 }
 
 // byValueSharedGolden is the list of declarations of shared/ that may hold an array by value.
