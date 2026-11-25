@@ -1,6 +1,7 @@
 package profiles
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -37,9 +38,18 @@ const (
 	// DocDepth is how deep a document may nest. The schema needs 6 (document, array, rule, target, location), so 8 leaves
 	// room and stops an adversarial tree before it is built.
 	DocDepth = 8
-	// DocValues bounds the values and object members of one file, derived from the schema: 10,000 rules of at most
-	// 24 values each, 500 folders, the filters, the services and the fixed part, with room to spare (spec 6.2).
-	DocValues = 300000
+	// DocValues bounds the tokens of one file: every key, value and closing delimiter. The schema allows at most 455,577
+	// values (httpx.Validator.DocumentValueBudget) and fewer than 60,000 closing delimiters (an object or array for each
+	// of 10,000 rules, 5,000 services, 500 folders and 1,000 filters, with a target and a location in each), so this has
+	// room to spare; TestDocValuesHoldsAMaximalDocument holds it above the schema's own count (spec 6.2, p2-B3-r8-2).
+	DocValues = 600000
+	// DocMembers is the most members of one object, DocElements the most elements of one array and DocDigits the most digits
+	// of a number, which is an integer and nothing else (spec 6.5 property 6). The most members any object of the schema
+	// has is 16 (options) and the most elements 10,000 (rules). The number rule is there because the schema engine makes a
+	// big.Rat of every number it looks at: one literal of a million digits, or 1e-999999, costs seconds or megabytes.
+	DocMembers  = 32
+	DocElements = 10000
+	DocDigits   = 10
 )
 
 // DocLoc names a location by its key.
@@ -192,7 +202,13 @@ func (d *RulesDocument) Canonical() {
 	sort.SliceStable(d.Rules, func(i, j int) bool { return d.Rules[i].Pattern < d.Rules[j].Pattern })
 }
 
-type enc struct{ b bytes.Buffer }
+// enc writes the canonical bytes through a buffer of its own to any writer: an export goes straight into the file of its
+// request, so no encoded copy of the document is in memory (spec 6.5 property 8). The buffered writer keeps the first error
+// and returns it from Flush, so no call below checks one.
+type enc struct{ b *bufio.Writer }
+
+// encBuffer is the size of the buffer between the encoder and its writer.
+const encBuffer = 64 << 10
 
 func (e *enc) raw(s string) { e.b.WriteString(s) }
 
@@ -339,9 +355,17 @@ func (e *enc) options(o DocOptions) {
 	e.raw("}")
 }
 
-// Encode writes the canonical bytes of the document. It does not sort: call Canonical first.
+// Encode returns the canonical bytes of the document. It does not sort: call Canonical first. Prefer EncodeTo for anything
+// that is sent: this one holds the whole encoding.
 func (d Document) Encode() []byte {
-	var e enc
+	var b bytes.Buffer
+	_ = d.EncodeTo(&b) // a bytes.Buffer does not fail
+	return b.Bytes()
+}
+
+// EncodeTo writes the canonical bytes of the document to w through a 64 KiB buffer. It does not sort: call Canonical first.
+func (d Document) EncodeTo(w io.Writer) error {
+	e := enc{b: bufio.NewWriterSize(w, encBuffer)}
 	e.raw("{")
 	first := true
 	e.field(&first, "format")
@@ -431,12 +455,19 @@ func (d Document) Encode() []byte {
 	e.field(&first, "options")
 	e.options(d.Options)
 	e.raw("}")
-	return e.b.Bytes()
+	return e.b.Flush()
 }
 
-// Encode writes the canonical bytes of a rules document.
+// Encode returns the canonical bytes of a rules document.
 func (d RulesDocument) Encode() []byte {
-	var e enc
+	var b bytes.Buffer
+	_ = d.EncodeTo(&b)
+	return b.Bytes()
+}
+
+// EncodeTo writes the canonical bytes of a rules document to w through a 64 KiB buffer.
+func (d RulesDocument) EncodeTo(w io.Writer) error {
+	e := enc{b: bufio.NewWriterSize(w, encBuffer)}
 	e.raw(`{"format":"` + RulesFormat + `","version":` + strconv.Itoa(DocVersion) + `,"rules":[`)
 	for i, r := range d.Rules {
 		if i > 0 {
@@ -445,7 +476,7 @@ func (d RulesDocument) Encode() []byte {
 		e.rule(r, false)
 	}
 	e.raw("]}")
-	return e.b.Bytes()
+	return e.b.Flush()
 }
 
 // ---------------------------------------------------------------------------
@@ -490,13 +521,16 @@ type scanFrame struct {
 }
 
 // ScanJSON reads the file as a token stream before any tree is built: valid UTF-8, no duplicate key, a nesting depth of
-// DocDepth at most and a cap on the values (spec 6.2). The one problem it finds is returned as a field pointing at the
-// parent of the problem, built from member names and indexes only.
+// DocDepth at most, a cap on the values, DocMembers members in an object, DocElements elements in an array and numbers that
+// are integers of DocDigits digits at most (spec 6.2, 6.5). The one problem it finds is returned as a field pointing at the
+// parent of the problem, built from member names and indexes only. The keys it remembers are those of the objects that are
+// open, at most DocDepth objects of DocMembers.
 func ScanJSON(raw []byte) *Field {
 	if !utf8.Valid(raw) {
 		return &Field{"", CodeJSONSyntax}
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
 	members := documentMembers()
 	var stack []scanFrame
 	values := 0
@@ -549,7 +583,9 @@ func ScanJSON(raw []byte) *Field {
 				stack = stack[:len(stack)-1]
 				if len(stack) > 0 {
 					if top := &stack[len(stack)-1]; !top.obj {
-						top.idx++
+						if top.idx++; top.idx > DocElements {
+							return &Field{pointer(), CodeExceeded}
+						}
 					}
 				}
 				havePending = false
@@ -560,13 +596,27 @@ func ScanJSON(raw []byte) *Field {
 				if _, dup := top.keys[t]; dup {
 					return &Field{pointer(), CodeJSONSyntax}
 				}
+				if len(top.keys) >= DocMembers {
+					return &Field{pointer(), CodeUnknownMember}
+				}
 				top.keys[t] = struct{}{}
 				pendingKey, havePending = t, true
 				continue
 			}
-			scalarDone(stack, &havePending)
+			if f := scalarDone(stack, &havePending, pointer); f != nil {
+				return f
+			}
+		case json.Number:
+			if !smallInteger(string(t)) {
+				return &Field{pointer() + childSeg(), CodeType}
+			}
+			if f := scalarDone(stack, &havePending, pointer); f != nil {
+				return f
+			}
 		default:
-			scalarDone(stack, &havePending)
+			if f := scalarDone(stack, &havePending, pointer); f != nil {
+				return f
+			}
 		}
 	}
 	if len(stack) != 0 {
@@ -575,18 +625,36 @@ func ScanJSON(raw []byte) *Field {
 	return nil
 }
 
-func scalarDone(stack []scanFrame, havePending *bool) {
+// scalarDone ends a scalar value: it counts the element of an array and says when the array has too many.
+func scalarDone(stack []scanFrame, havePending *bool, pointer func() string) *Field {
+	*havePending = false
 	if len(stack) > 0 {
 		if top := &stack[len(stack)-1]; !top.obj {
-			top.idx++
+			if top.idx++; top.idx > DocElements {
+				return &Field{pointer(), CodeExceeded}
+			}
 		}
 	}
-	*havePending = false
+	return nil
+}
+
+// smallInteger says whether a number literal is an optional minus and one to DocDigits digits, and nothing else.
+func smallInteger(lit string) bool {
+	lit = strings.TrimPrefix(lit, "-")
+	if len(lit) == 0 || len(lit) > DocDigits {
+		return false
+	}
+	for i := 0; i < len(lit); i++ {
+		if lit[i] < '0' || lit[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // Schema checks a value against a component of the OpenAPI document and returns its problems as fields, at most 100,
 // in document order. The api passes httpx.Validator.CheckComponent.
-type Schema func(component string, raw []byte) []Field
+type Schema func(component string, raw []byte) ([]Field, error)
 
 // DecodeDocument reads a profile document: the token stream, the format and version, the schema and then the typed
 // value. Every problem is a field; none echoes a value or a name from the file.
@@ -640,7 +708,11 @@ func decodeInto(raw []byte, check Schema, component, format string, dst any) err
 		return invalid(Field{"/version", CodeVersionUnsupported})
 	}
 	if check != nil {
-		if fs := check(component, raw); len(fs) > 0 {
+		fs, err := check(component, raw)
+		if err != nil {
+			return err // a deadline or a fault of the check: the caller answers it, it is not a finding about the file
+		}
+		if len(fs) > 0 {
 			return invalid(fs...)
 		}
 	}

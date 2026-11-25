@@ -72,7 +72,7 @@ var composeEnvTable = map[string]map[string]string{
 		"CTRLZ_DB_MAX_CONNS": "${CTRLZ_API_DB_MAX_CONNS:-16}", "CTRLZ_DB_PASSWORD_FILE": composeEnvFile,
 		"CTRLZ_LISTEN": ":8080", "CTRLZ_PANEL_HOST": "${CTRLZ_PANEL_HOST:-panel.localhost}", "CTRLZ_TRUSTED_PROXY": "10.213.78.200",
 		"CTRLZ_VALKEY_ADDR": "valkey-api:6379", "CTRLZ_VALKEY_PASSWORD_FILE": composeEnvFile, "CTRLZ_VALKEY_USER": "api",
-		"GOMEMLIMIT": "${GOMEMLIMIT_API:-200MiB}",
+		"CTRLZ_SPOOL_DIR": "/spool", "GOMEMLIMIT": "${GOMEMLIMIT_API:-200MiB}",
 	},
 	"admin": {
 		"CTRLZ_ADMIN_HOST": "${CTRLZ_ADMIN_HOST:-admin.localhost}", "CTRLZ_ARGON2_BUDGET_MIB": "${CTRLZ_ADMIN_ARGON2_BUDGET_MIB:-64}",
@@ -84,6 +84,7 @@ var composeEnvTable = map[string]map[string]string{
 	"worker": {
 		"CTRLZ_DB_COMPILER_PASSWORD_FILE": composeEnvFile, "CTRLZ_DB_MAX_CONNS": "${CTRLZ_WORKER_DB_MAX_CONNS:-4}",
 		"CTRLZ_DB_PASSWORD_FILE": composeEnvFile, "CTRLZ_LISTEN": "127.0.0.1:8083",
+		"GOMEMLIMIT": "${GOMEMLIMIT_WORKER:-200MiB}",
 	},
 	"hub": {
 		"CTRLZ_DB_MAX_CONNS": "${CTRLZ_HUB_DB_MAX_CONNS:-4}", "CTRLZ_DB_PASSWORD_FILE": composeEnvFile,
@@ -123,7 +124,7 @@ var composeHostVariables = map[string]string{
 	"CTRLZ_ENV_FORMAT_2":          "the marker of the .env layout",
 	"CTRLZ_API_ARGON2_BUDGET_MIB": "a number", "CTRLZ_API_ARGON2_CONCURRENCY": "a number", "CTRLZ_ADMIN_ARGON2_BUDGET_MIB": "a number",
 	"CTRLZ_API_DB_MAX_CONNS": "a number", "CTRLZ_ADMIN_DB_MAX_CONNS": "a number", "CTRLZ_WORKER_DB_MAX_CONNS": "a number", "CTRLZ_HUB_DB_MAX_CONNS": "a number",
-	"GOMEMLIMIT_API": "a size", "GOMEMLIMIT_ADMIN": "a size",
+	"GOMEMLIMIT_API": "a size", "GOMEMLIMIT_ADMIN": "a size", "GOMEMLIMIT_WORKER": "a size",
 	"CTRLZ_PG_CONN_ADMIN": "a number", "CTRLZ_PG_CONN_COMPILER": "a number", "CTRLZ_PG_CONN_HUB": "a number", "CTRLZ_PG_CONN_MIGRATOR": "a number",
 	"CTRLZ_PG_CONN_TENANT": "a number", "CTRLZ_PG_CONN_TOOLS": "a number", "CTRLZ_PG_CONN_WORKER": "a number",
 	"CTRLZ_PG_IDLE_TX_TIMEOUT": "a duration", "CTRLZ_PG_LOCK_TIMEOUT": "a duration", "CTRLZ_PG_STATEMENT_TIMEOUT": "a duration",

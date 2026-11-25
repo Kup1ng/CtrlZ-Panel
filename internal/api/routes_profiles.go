@@ -91,6 +91,16 @@ func uid(p *openapi_types.UUID) uuid.UUID {
 	return uuid.UUID(*p)
 }
 
+// bodyID reads an id that a body names: a folder or profile of this tenant. The all-zero id is what uid answers for an
+// absent member, so a sent one would be read as "not sent" (a rule out of its folder, a move to the root). It names
+// nothing, so it is the same 404 as an id that is not found (spec 3.7, p2-B3-r15-2).
+func bodyID(p *openapi_types.UUID) (uuid.UUID, error) {
+	if p != nil && uuid.UUID(*p) == uuid.Nil {
+		return uuid.Nil, httpx.NotFound()
+	}
+	return uid(p), nil
+}
+
 func uidp(id uuid.UUID) *openapi_types.UUID {
 	if id == uuid.Nil {
 		return nil
@@ -198,12 +208,10 @@ func (s *Server) ListCatalogServices(ctx context.Context, _ gen.ListCatalogServi
 // ---------------------------------------------------------------------------
 // Profiles.
 
-// profileOut builds the profile of a response: the row, its counters, and the Default Rule flag of the list (T-127).
-func (s *Server) profileOut(tx store.Tx, p store.Profile, counts store.ProfileCounts, keys locationKeys, refs []store.ProfileEndpointRef) (gen.Profile, error) {
-	o, _, err := tx.Options(p.ID)
-	if err != nil {
-		return gen.Profile{}, err
-	}
+// profileOut builds the profile of a response: the row, its counters, the endpoints that use it and the Default Rule flag of the
+// list (T-127). The options row and the endpoint refs are the caller's to read, one for a single profile and one statement
+// for the list (p2-B3-r13-2).
+func (s *Server) profileOut(p store.Profile, counts store.ProfileCounts, o store.OptionsRow, keys locationKeys, refs []store.ProfileEndpointRef) (gen.Profile, error) {
 	out := gen.Profile{Id: openapi_types.UUID(p.ID), Name: p.Name, Kind: gen.ProfileKind(p.Kind), UpdatedAt: p.UpdatedAt, CreatedAt: p.CreatedAt,
 		Locked: p.Locked, DisabledUntil: p.DisabledUntil, LockMessage: p.LockMessage, LockedAt: p.LockedAt,
 		Counts:    gen.ProfileCounts{Endpoints: counts.Endpoints, Filters: counts.Filters, Services: counts.Services, Rules: counts.Rules, Options: counts.Options},
@@ -229,7 +237,12 @@ func (s *Server) profileView(tx store.Tx, id uuid.UUID) (gen.Profile, error) {
 	if !ok {
 		return gen.Profile{}, httpx.NotFound()
 	}
-	counts, err := tx.ProfileCounts()
+	// The counters of this profile only: the view counts the rules of every profile it is asked for (p2-B3-r13-2).
+	counts, err := tx.ProfileCountsOf(id)
+	if err != nil {
+		return gen.Profile{}, err
+	}
+	o, _, err := tx.Options(id)
 	if err != nil {
 		return gen.Profile{}, err
 	}
@@ -241,7 +254,7 @@ func (s *Server) profileView(tx store.Tx, id uuid.UUID) (gen.Profile, error) {
 	if err != nil {
 		return gen.Profile{}, err
 	}
-	return s.profileOut(tx, p, counts[id], keys, refs[id])
+	return s.profileOut(p, counts, o, keys, refs[id])
 }
 
 // ListProfiles is GET /profiles.
@@ -256,7 +269,39 @@ func (s *Server) ListProfiles(ctx context.Context, _ gen.ListProfilesRequestObje
 		if err != nil {
 			return err
 		}
-		counts, err := tx.ProfileCounts()
+		counts, err := tx.ProfileCountsLight()
+		if err != nil {
+			return err
+		}
+		// The rules are counted only for a profile whose version the cache has not seen, in this snapshot, so the version and
+		// the count agree (rulecount_cache.go).
+		var stale []uuid.UUID
+		for _, p := range ps {
+			c := counts[p.ID]
+			if n, ok := s.ruleCounts.get(pr.TenantID, p.ID, p.Version); ok {
+				c.Rules = n
+				counts[p.ID] = c
+			} else {
+				stale = append(stale, p.ID)
+			}
+		}
+		if len(stale) > 0 {
+			n, err := tx.RuleCountsIn(stale)
+			if err != nil {
+				return err
+			}
+			versions := map[uuid.UUID]int64{}
+			for _, p := range ps {
+				versions[p.ID] = p.Version
+			}
+			for _, id := range stale {
+				c := counts[id]
+				c.Rules = n[id]
+				counts[id] = c
+				s.ruleCounts.put(pr.TenantID, id, versions[id], n[id])
+			}
+		}
+		opts, err := tx.OptionsAll()
 		if err != nil {
 			return err
 		}
@@ -269,7 +314,7 @@ func (s *Server) ListProfiles(ctx context.Context, _ gen.ListProfilesRequestObje
 			return err
 		}
 		for _, p := range ps {
-			v, err := s.profileOut(tx, p, counts[p.ID], keys, refs[p.ID])
+			v, err := s.profileOut(p, counts[p.ID], opts[p.ID], keys, refs[p.ID])
 			if err != nil {
 				return err
 			}

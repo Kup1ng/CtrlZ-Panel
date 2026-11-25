@@ -7,6 +7,7 @@ internal/adminapi
 internal/adminapi/gen
 internal/admincli
 internal/adminname
+internal/admission
 internal/afterwork
 internal/api
 internal/api/gen
@@ -38,7 +39,6 @@ internal/auth/ticket
 internal/auth/token
 internal/auth/totp
 internal/budget
-internal/bulkgate
 internal/cachex
 internal/caps
 internal/clockrule

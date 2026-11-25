@@ -128,6 +128,8 @@ third_party:
     why: password hashing (4.1)
   - path: golang.org/x/net/publicsuffix
     why: the cookie domain check of the admin API
+  - path: golang.org/x/sync/semaphore
+    why: the first-in-first-out weighted work pool of the heavy operations (internal/admission, spec 6.5), whose large waiter is not passed by small ones that arrive later
   - path: golang.org/x/text/unicode/norm
     why: NFKC of passwords, phone numbers and OTP codes
   - path: gopkg.in/yaml.v3

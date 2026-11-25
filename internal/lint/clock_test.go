@@ -129,6 +129,8 @@ func wallClockAllowed() map[string]wallUse {
 		"internal/worker/smssend/worker.go::Worker.claim":  {1, "a length: the reading before the claim, plus the lease the database reports, is the end of the send budget (a database length, never a stamp compared with the clock)"},
 		"internal/worker/smssend/worker.go::Worker.send":   {1, "a length: the reading before the claim, plus the lease the database reports, is the end of the send budget (a database length, never a stamp compared with the clock)"},
 		"internal/httpx/floor.go::sanitizedWriter.Write":   {1, "a length: the spacing of the log lines of a recovered write error, measured between two readings of one machine"},
+		"internal/httpx/spool.go::connNow":                 {1, "a length: the start of a fresh or earned write deadline of a connection, counted from now and never stored or compared with a stamp (6.5 property 3)"},
+		"internal/httpx/pipeline.go::API.serveHeavy":       {2, "a length: the start of the body and the start of the answer of a heavy request, from which the earned deadlines of the connection are counted (6.5 property 3; no stored stamp)"},
 		"internal/migrate/migrate.go::WaitReady":           {2, "a length: the retry deadline of the migrate start against a database that is not up yet"},
 		"internal/authtest/oracle/oracle.go::Fire":         {2, "a length: the duration of one request, the timing floor's measurement of the oracle test (a test harness)"},
 		"internal/testpg/testpg.go::Cluster.StartPostgres": {2, "a length: the wait for a container to accept connections (a test harness)"},

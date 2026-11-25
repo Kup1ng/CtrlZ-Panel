@@ -73,7 +73,7 @@ func (e *Env) ReadDocument(tx store.Tx, id uuid.UUID) (Document, error) {
 	for _, s := range sv {
 		d.Services = append(d.Services, DocService{Slug: s.Slug, Enabled: optBool(s.Enabled), Action: s.Action, Target: docTarget(s.Target, key)})
 	}
-	fo, err := tx.Folders(id)
+	fo, err := tx.FoldersBare(id)
 	if err != nil {
 		return Document{}, err
 	}
@@ -134,15 +134,12 @@ func (e *Env) ReadRulesDocument(tx store.Tx, profile, folder uuid.UUID) (RulesDo
 		r, ok := snap.ByID(id)
 		return r.Key, ok
 	}
-	rs, err := tx.RulesAll(profile)
+	rs, err := tx.RulesInFolder(profile, folder)
 	if err != nil {
 		return RulesDocument{}, err
 	}
 	d := RulesDocument{Format: RulesFormat, Version: DocVersion, Rules: []DocRule{}}
 	for _, r := range rs {
-		if r.FolderID != folder {
-			continue
-		}
 		dr := DocRule{Pattern: r.Key, Action: r.Action, Target: docTarget(r.Target, key), Enabled: optBool(r.Enabled), Comment: r.Comment}
 		if r.ExpiresAt != nil {
 			dr.ExpiresAt = formatExpiry(*r.ExpiresAt)
@@ -284,6 +281,9 @@ func (w *wtx) applyDocument(d Document) (int, error) {
 		}
 		seen := map[string]bool{}
 		for i, f := range d.Filters {
+			if err := w.tx.Context().Err(); err != nil {
+				return 0, err
+			}
 			p := fmt.Sprintf("/filters/%d", i)
 			c, ok := cat[f.ID]
 			switch {
@@ -324,6 +324,9 @@ func (w *wtx) applyDocument(d Document) (int, error) {
 	{
 		seen := map[string]bool{}
 		for i, f := range d.Folders {
+			if err := w.tx.Context().Err(); err != nil {
+				return 0, err
+			}
 			p := fmt.Sprintf("/folders/%d", i)
 			if f.Ref == "" {
 				fs = append(fs, Field{p + "/ref", CodeRequired})
@@ -371,6 +374,9 @@ func (w *wtx) applyDocument(d Document) (int, error) {
 		}
 		seen := map[string]bool{}
 		for i, s := range d.Services {
+			if err := w.tx.Context().Err(); err != nil {
+				return 0, err
+			}
 			p := fmt.Sprintf("/services/%d", i)
 			c, ok := cat[s.Slug]
 			switch {
@@ -418,6 +424,10 @@ func (w *wtx) applyDocument(d Document) (int, error) {
 		var ps []rules.Pattern
 		var at []int
 		for i, r := range d.Rules {
+			// The work has a deadline (6.5 property 5): the CPU part of an import looks at it between two items.
+			if err := w.tx.Context().Err(); err != nil {
+				return 0, err
+			}
 			p := fmt.Sprintf("/rules/%d", i)
 			ruleFs := len(fs)
 			pat, err := parse(r.Pattern)
@@ -620,6 +630,9 @@ func (e *Env) CheckUploadShape(tx store.Tx, d RulesDocument, mode string) error 
 	}
 	var fs []Field
 	for i, r := range d.Rules {
+		if err := tx.Context().Err(); err != nil {
+			return err
+		}
 		_, _, f := e.uploadItemShape(fmt.Sprintf("/rules/%d", i), r)
 		fs = append(fs, f...)
 	}
@@ -664,6 +677,9 @@ func (e *Env) UploadRules(tx store.Tx, profile, folderID uuid.UUID, d RulesDocum
 	var redirects []rules.Pattern
 	var redirectAt []int
 	for i, r := range d.Rules {
+		if err := w.tx.Context().Err(); err != nil {
+			return BatchResult{}, err
+		}
 		p := fmt.Sprintf("/rules/%d", i)
 		ruleFs := len(fs)
 		pat, exp, shape := e.uploadItemShape(p, r)

@@ -1,6 +1,7 @@
 package httpx_test
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -28,10 +29,12 @@ func TestCheckDocumentAnswersWhatCheckComponentAnswers(t *testing.T) {
 		"no rules":           {"ProfileDocument", head + `"filters":[{}]}`},
 		"bad rest":           {"ProfileDocument", head + `"folders":[{}],"rules":[{"pattern":"a"}]}`},
 		"many":               {"ProfileDocument", head + `"rules":[` + many + `]}`},
+		"folders past max":   {"ProfileDocument", head + `"folders":[` + strings.Repeat(`{},`, 600) + `{}],"rules":[]}`},
+		"filters bad":        {"ProfileDocument", head + `"filters":[{"id":"A"},{}],"rules":[]}`},
 		"rules document":     {"RulesDocument", `{"format":"ctrlz-rules","version":1,"rules":[{"pattern":"a","action":"block","folder":"f1"},{}]}`},
 	} {
 		want, err1 := v.CheckComponent(c.component, []byte(c.doc))
-		got, err2 := v.CheckDocument(c.component, []byte(c.doc))
+		got, err2 := v.CheckDocument(context.Background(), c.component, []byte(c.doc))
 		if err1 != nil || err2 != nil {
 			t.Fatalf("%s: %v, %v", name, err1, err2)
 		}
@@ -41,13 +44,13 @@ func TestCheckDocumentAnswersWhatCheckComponentAnswers(t *testing.T) {
 	}
 	// Past maxItems the rules are not looked at: one problem at /rules, whatever the rules are.
 	over := head + `"rules":[` + strings.Repeat(`{},`, 10000) + `{}]}`
-	got, err := v.CheckDocument("ProfileDocument", []byte(over))
+	got, err := v.CheckDocument(context.Background(), "ProfileDocument", []byte(over))
 	if err != nil || len(got) != 1 || got[0].Pointer != "/rules" || got[0].Code != "exceeded" {
 		t.Errorf("10,001 rules: %+v, %v", got, err)
 	}
 	// And never more than 100 problems, in document order.
 	bad := head + `"rules":[` + strings.Repeat(`{},`, 500) + `{}]}`
-	got, _ = v.CheckDocument("ProfileDocument", []byte(bad))
+	got, _ = v.CheckDocument(context.Background(), "ProfileDocument", []byte(bad))
 	if len(got) != 100 || got[0].Pointer != "/rules/0" {
 		t.Errorf("500 bad rules: %d problems, first %+v", len(got), got[0])
 	}

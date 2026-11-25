@@ -3,6 +3,7 @@ package profiles_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -330,5 +331,73 @@ func TestEveryMemberOfTheDocumentTypesIsNamedInAPointer(t *testing.T) {
 	}
 	if len(names) < 40 {
 		t.Errorf("only %d members found: the document the test fills is not whole", len(names))
+	}
+}
+
+// TestScanJSONRefusesNumbersTheSchemaEngineWouldExpand: the schema engine makes a big.Rat of every number it looks at, so a
+// number that is not an integer of ten digits at most is refused by the scan at its pointer, before any engine sees it (6.5
+// property 6). At the scan before this one options.block_ttl of 0.000...1 (4 MiB) and 1e-999999 were accepted.
+func TestScanJSONRefusesNumbersTheSchemaEngineWouldExpand(t *testing.T) {
+	for name, c := range map[string]struct{ in, pointer string }{
+		"a fraction of 4 MiB": {`{"options":{"block_ttl":0.` + strings.Repeat("0", 4<<20-64) + `1}}`, "/options/block_ttl"},
+		"an exponent":         {`{"options":{"block_ttl":1e-999999}}`, "/options/block_ttl"},
+		"a plain fraction":    {`{"version":1.5}`, "/version"},
+		"eleven digits":       {`{"version":12345678901}`, "/version"},
+		"in an array":         {`{"rules":[{"pattern":"a"},2.5]}`, "/rules/1"},
+		"a long integer":      {`{"options":{"block_ttl":` + strings.Repeat("9", 1<<20) + `}}`, "/options/block_ttl"},
+	} {
+		f := profiles.ScanJSON([]byte(c.in))
+		if f == nil || f.Code != profiles.CodeType || f.Name != c.pointer {
+			t.Errorf("%s: %v, want type at %s", name, f, c.pointer)
+		}
+	}
+	for _, ok := range []string{`{"version":1}`, `{"options":{"block_ttl":-1234567890}}`, `{"a":"1.5e3","b":[0,10,9999999999]}`} {
+		if f := profiles.ScanJSON([]byte(ok)); f != nil {
+			t.Errorf("%s: refused: %+v", ok, *f)
+		}
+	}
+}
+
+// TestScanJSONKeepsAtMost32Keys: an object of more than 32 members is unknown_member at the object, so the duplicate-key
+// map of one object is 32 keys and the whole scan remembers at most 8 objects of 32 (6.5 property 6). A document of
+// 300,000 members grew that map to 300,000 keys.
+func TestScanJSONKeepsAtMost32Keys(t *testing.T) {
+	obj := func(n int) string {
+		var b strings.Builder
+		b.WriteString("{")
+		for i := 0; i < n; i++ {
+			if i > 0 {
+				b.WriteString(",")
+			}
+			fmt.Fprintf(&b, `"k%d":0`, i)
+		}
+		b.WriteString("}")
+		return b.String()
+	}
+	if f := profiles.ScanJSON([]byte(obj(32))); f != nil {
+		t.Errorf("32 members were refused: %+v", *f)
+	}
+	for name, in := range map[string]string{"top level": obj(33), "300,000": obj(300000)} {
+		if f := profiles.ScanJSON([]byte(in)); f == nil || f.Code != profiles.CodeUnknownMember || f.Name != "" {
+			t.Errorf("%s: %v, want unknown_member at the object", name, f)
+		}
+	}
+	if f := profiles.ScanJSON([]byte(`{"options":` + obj(33) + `}`)); f == nil || f.Code != profiles.CodeUnknownMember || f.Name != "/options" {
+		t.Errorf("a nested object: %v, want unknown_member at /options", f)
+	}
+}
+
+// TestScanJSONCapsTheElementsOfAnArray: more than 10,000 elements in one array is exceeded at the array.
+func TestScanJSONCapsTheElementsOfAnArray(t *testing.T) {
+	arr := func(n int) string { return `{"rules":[` + strings.TrimSuffix(strings.Repeat("{},", n), ",") + `]}` }
+	if f := profiles.ScanJSON([]byte(arr(profiles.DocElements))); f != nil {
+		t.Errorf("%d elements were refused: %+v", profiles.DocElements, *f)
+	}
+	if f := profiles.ScanJSON([]byte(arr(profiles.DocElements + 1))); f == nil || f.Code != profiles.CodeExceeded || f.Name != "/rules" {
+		t.Errorf("one more than the cap: %v, want exceeded at /rules", f)
+	}
+	scalars := `{"rules":[` + strings.TrimSuffix(strings.Repeat("1,", profiles.DocElements+1), ",") + `]}`
+	if f := profiles.ScanJSON([]byte(scalars)); f == nil || f.Code != profiles.CodeExceeded || f.Name != "/rules" {
+		t.Errorf("scalars past the cap: %v, want exceeded at /rules", f)
 	}
 }

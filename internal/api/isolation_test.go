@@ -52,6 +52,7 @@ type tn struct {
 	announceID string
 	invite     string // the invite code a person would type
 	notes      []string
+	sc         *scn // the profile scenario of the P2 routes (p2scenario_test.go)
 }
 
 // note remembers an identifier of this tenant that must never show up in the other's answers.
@@ -228,7 +229,7 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 	reauthed := each(func(n *tn) { n.sess = e.session(n, true) })
 	plain := each(func(n *tn) { n.sess = e.session(n, false) })
 
-	fx := map[string]isolation.Fixture{
+	fixes := map[string]isolation.Fixture{
 		"getAuthConfig": {Effect: isolation.Shows, Status: 200, Arrange: nothing,
 			Call: func() isolation.Result { return result(anon().get("/auth/config")) }},
 		"loginPassword": {Effect: isolation.Changes, Status: 200, Arrange: nothing,
@@ -577,13 +578,20 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 			CrossStatus: 404,
 			Cross:       func() isolation.Result { return result(b().sess.post("/announcements/"+a().announceID+"/read", nil)) }},
 	}
+	// The P2 routes: one scenario table drives their fixtures, the structural walks and the flow tests (p2scenario_test.go).
+	for id, fx := range e.p2Fixtures() {
+		if _, dup := fixes[id]; dup {
+			f.t.Fatalf("%s has two fixtures", id)
+		}
+		fixes[id] = fx
+	}
 	// The Endpoint routes keep their fixtures in a file of their own (isolation_endpoints_test.go).
-	maps.Copy(fx, e.endpointFixtures())
+	maps.Copy(fixes, e.endpointFixtures())
 	// The access routes (Dynamic DNS hosts, Authorized IPs, claims) have theirs in isolation_access_test.go.
-	maps.Copy(fx, e.accessFixtures())
+	maps.Copy(fixes, e.accessFixtures())
 	// The Resolver view, the generators and the links likewise (isolation_links_test.go).
-	maps.Copy(fx, e.linkFixtures())
-	return fx
+	maps.Copy(fixes, e.linkFixtures())
+	return fixes
 }
 
 // TestIsolation is T-386 and spec 18.1, rule isolation-success-coverage: one harness over
@@ -719,6 +727,11 @@ func TestIsolation(t *testing.T) {
 		f.env.Exec(t, `UPDATE ctrlz.tenants SET status = 'suspended' WHERE id = $1`, B.Tenant)
 		defer f.env.Exec(t, `UPDATE ctrlz.tenants SET status = 'active' WHERE id = $1`, B.Tenant)
 
+		type walked struct {
+			c  *client
+			at time.Time
+		}
+		walk := map[bool]walked{}
 		for _, op := range docOps {
 			if op.Auth == apispec.None {
 				continue
@@ -727,12 +740,17 @@ func TestIsolation(t *testing.T) {
 			if !ok {
 				t.Fatalf("%s has no generated baseline", op.ID)
 			}
-			// A session that satisfies the class of the operation, so only the tenant's state can refuse it.
-			c := e.session(e.n[isolation.B], op.Auth == apispec.Reauth)
-			// A user holds at most MaxSessions live sessions and a login past it ends the oldest, which would be the remembered browser
-			// of this case (its refresh cookie is the last step): the session made for one operation is gone before the next is made, so
-			// the number of operations of the document is no bound on the case.
-			sessionOfTheCall := e.latestSessionID(e.n[isolation.B])
+			// A session that satisfies the class of the operation, so only the tenant's state can refuse it. One session of each
+			// class serves the whole walk: an account holds at most caps.MaxSessions live sessions and a login past it ends the
+			// oldest, which is the remembered browser of this case, so a session for each of the operations of the document (72
+			// with the profile routes) ended its refresh cookie. A logout ends the session that made it, so the next operation opens another.
+			reauth := op.Auth == apispec.Reauth
+			// The reauth window of a session is 10 minutes of the fake clock, which every operation spends one of, so a session is
+			// renewed after five: about 17 of each class in all, far below the cap.
+			if w, ok := walk[reauth]; !ok || f.ck.now().Sub(w.at) > 5*time.Minute {
+				walk[reauth] = walked{e.session(e.n[isolation.B], reauth), f.ck.now()}
+			}
+			c := walk[reauth].c
 			var body any
 			if base.Body != nil {
 				body = base.Body
@@ -747,12 +765,12 @@ func TestIsolation(t *testing.T) {
 				if r.Code != 204 {
 					t.Errorf("POST /auth/logout for a suspended tenant: %d %s", r.Code, r.Body)
 				}
+				delete(walk, reauth)
 			default:
 				if r.Code != 403 || r.code() != "account_suspended" {
 					t.Errorf("%s %s (%s) for a suspended tenant: %d %s, want 403 account_suspended", op.Method, op.Path, op.ID, r.Code, r.Body)
 				}
 			}
-			f.env.Exec(t, `DELETE FROM ctrlz.sessions WHERE id = $1`, sessionOfTheCall)
 			f.ck.add(time.Minute)
 		}
 
@@ -824,6 +842,12 @@ func idLocations(doc *openapi3.T, needsSession map[string]bool) map[string][]str
 					// holder owns, like a ticket in a body: there is no session of B to put A's value beside, and whoever holds it is its
 					// owner. The document says so by marking the string x-ctrlz-rowref false; an unmarked path parameter is still a row.
 				case pr.Value.In == "path":
+					// A path value the document itself marks x-ctrlz-rowref false is the key of a global catalog row (a
+					// filter id, a service slug) and no tenant owns it, so there is no id of "another tenant" to put there
+					// (P2, B8). A path value with no mark, or marked true, is a place a row id is taken.
+					if v, marked := rowRefMarked(pr.Value.Schema); marked && !v {
+						continue
+					}
 					locs = append(locs, base)
 				case !session:
 					// A ticket, a challenge or an invite a caller holds with no session is a bearer proof.

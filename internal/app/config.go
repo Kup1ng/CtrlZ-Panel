@@ -143,6 +143,11 @@ type Config struct {
 	// pick its own address for every per-network limit (review round 3, admin-r3-13).
 	TrustedProxies []netip.Prefix
 
+	// SpoolDir is the api's spool directory for the heavy operations (CTRLZ_SPOOL_DIR, spec 6.5): a disk volume, never a
+	// tmpfs, whose pages would count as the container's memory. It is required outside the test environment, emptied at start
+	// and must be writable.
+	SpoolDir string
+
 	// NoopSMSFile is where the noop SMS gateway appends messages. dev and test
 	// only: it exists so a flow test can read an OTP, and a deployment that set
 	// it would write codes to disk.
@@ -152,6 +157,16 @@ type Config struct {
 	Argon2 password.Settings
 
 	ShutdownTimeout time.Duration
+}
+
+// SpoolDirProblem is the refusal of an api that has no spool directory outside the test environment (spec 6.5 property 11). It
+// is asked where the api is built and not in LoadConfig, so that the other refusals of a start (the keys, the hashing
+// settings) are the ones a person sees first.
+func (c Config) SpoolDirProblem() error {
+	if c.Role == RoleAPI && c.SpoolDir == "" && c.Env != EnvTest {
+		return errors.New("CTRLZ_SPOOL_DIR is required for the api outside the test environment")
+	}
+	return nil
 }
 
 // Getenv is os.Getenv, replaceable in tests.
@@ -172,6 +187,7 @@ type Getenv func(string) string
 //	CTRLZ_PANEL_HOST, CTRLZ_ADMIN_HOST     the hostnames of the api and admin services
 //	CTRLZ_VALKEY_ADDR, _PASSWORD_FILE      rate limit store (optional)
 //	CTRLZ_TRUSTED_PROXY            api and admin: addresses or prefixes allowed to set X-Forwarded-For (required in production)
+//	CTRLZ_SPOOL_DIR                api: the spool directory of the heavy operations (required outside test)
 //	CTRLZ_NOOP_SMS_FILE                    dev and test only
 func LoadConfig(role Role, getenv Getenv) (Config, error) {
 	c := Config{
@@ -202,6 +218,9 @@ func LoadConfig(role Role, getenv Getenv) (Config, error) {
 			return Config{}, err
 		}
 		c.ValkeyPassword = pw
+	}
+	if role == RoleAPI {
+		c.SpoolDir = getenv("CTRLZ_SPOOL_DIR")
 	}
 	if f := getenv("CTRLZ_NOOP_SMS_FILE"); f != "" {
 		if c.Env == EnvProduction {

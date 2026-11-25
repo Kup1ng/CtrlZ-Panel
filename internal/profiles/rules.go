@@ -474,7 +474,7 @@ func (e *Env) CreateFolder(tx store.Tx, profile uuid.UUID, in FolderIn) (store.F
 	if err := w.mark(); err != nil {
 		return store.FolderRow{}, err
 	}
-	f, _, err := tx.Folder(profile, id)
+	f, _, err := tx.FolderCounted(profile, id)
 	return f, err
 }
 
@@ -556,37 +556,43 @@ func (e *Env) UpdateFolder(tx store.Tx, profile, id uuid.UUID, in FolderPatch) (
 	if err := w.mark(); err != nil {
 		return store.FolderRow{}, err
 	}
-	f, _, err := tx.Folder(profile, id)
+	f, _, err := tx.FolderCounted(profile, id)
 	return f, err
 }
 
 // inheritingIranian says whether a rule that inherits the folder's action is Iranian.
+//
+// It walks the keys of the folder's inheriting rules one page of lookupChunk at a time and stops at the first
+// Iranian one. It never reads the profile: PATCH of a folder is an ordinary route with no place and no weight
+// (6.5 (d)), so what it holds must not grow with the profile. Memory is one page of keys and their patterns.
 func (w *wtx) inheritingIranian(folder uuid.UUID) (bool, error) {
-	all, err := w.tx.RulesAll(w.pw.ID())
-	if err != nil {
-		return false, err
-	}
-	var ps []rules.Pattern
-	for _, r := range all {
-		if r.FolderID != folder || r.Action != "inherit" {
-			continue
+	after := ""
+	for {
+		keys, err := w.tx.FolderInheritingKeys(w.pw.ID(), folder, after, lookupChunk)
+		if err != nil {
+			return false, err
 		}
-		p, perr := parse(r.Key)
-		if perr != nil {
-			continue
+		ps := make([]rules.Pattern, 0, len(keys))
+		for _, k := range keys {
+			// A key the parser no longer takes (a grandfathered row) cannot be looked up, so it cannot be judged.
+			if p, perr := parse(k); perr == nil {
+				ps = append(ps, p.p)
+			}
 		}
-		ps = append(ps, p.p)
-	}
-	ir, err := w.iranian(ps)
-	if err != nil {
-		return false, err
-	}
-	for _, b := range ir {
-		if b {
-			return true, nil
+		ir, err := w.iranian(ps)
+		if err != nil {
+			return false, err
 		}
+		for _, b := range ir {
+			if b {
+				return true, nil
+			}
+		}
+		if len(keys) < lookupChunk {
+			return false, nil
+		}
+		after = keys[len(keys)-1]
 	}
-	return false, nil
 }
 
 // DeleteFolder removes a folder and its rules (the confirm dialog says so).

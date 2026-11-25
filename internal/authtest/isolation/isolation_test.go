@@ -215,3 +215,32 @@ func TestACrossAtCallIsJudgedLikeCross(t *testing.T) {
 		t.Fatalf("the harness said %q for a second place that writes A", p)
 	}
 }
+
+// A place that is refused differently (a cursor is 400, a location outside the set is 422) names its status, and the
+// harness holds the call to that status and no other (P2, B8).
+func TestCrossAtStatusIsHeldPerPlace(t *testing.T) {
+	ok := func(w *world, fx *Fixture, at int) {
+		fx.CrossStatus = 404
+		fx.Cross = func() Result { return Result{Status: 404} }
+		fx.CrossAt = map[string]func() Result{"query:cursor": func() Result { return Result{Status: at} }}
+		fx.CrossAtStatus = map[string]int{"query:cursor": 400}
+	}
+	if p := problems(t, func(w *world, fx *Fixture) { ok(w, fx, 400) }); p != "" {
+		t.Fatalf("a place that answers its own status was refused: %s", p)
+	}
+	if p := problems(t, func(w *world, fx *Fixture) { ok(w, fx, 404) }); !strings.Contains(p, "answered 404") || !strings.Contains(p, "want 400") {
+		t.Fatalf("the harness said %q for a place that answered the default status, want 400", p)
+	}
+	ops := []Op{{ID: "a", Method: http.MethodGet, Takes: "two", Locations: []string{"path:id", "query:cursor"}}}
+	fx := good(&world{})
+	fx.Cross, fx.CrossStatus = func() Result { return Result{Status: 404} }, 404
+	fx.CrossAt = map[string]func() Result{"query:cursor": func() Result { return Result{Status: 400} }}
+	fx.CrossAtStatus = map[string]int{"query:other": 400}
+	if p := strings.Join(Complete(ops, map[string]Fixture{"a": fx}), "\n"); !strings.Contains(p, "CrossAtStatus for query:other") {
+		t.Fatalf("Complete said %q for a status with no call", p)
+	}
+	fx.CrossAtStatus = map[string]int{"query:cursor": 200}
+	if p := strings.Join(Complete(ops, map[string]Fixture{"a": fx}), "\n"); !strings.Contains(p, "CrossAtStatus for query:cursor") {
+		t.Fatalf("Complete said %q for a success status", p)
+	}
+}

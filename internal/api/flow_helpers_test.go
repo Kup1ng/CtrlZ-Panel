@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Kup1ng/CtrlZ-Panel/internal/admission"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/afterwork"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/otp"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/password"
@@ -397,4 +398,17 @@ func (c *client) cookieValues() []string {
 		out = append(out, ck.Value)
 	}
 	return out
+}
+
+// withAdmission gives the frig an admission point the test can reach (to take a tenant's place) and rebuilds the handler
+// over it.
+func (f *frig) withAdmission() *admission.Admission {
+	f.t.Helper()
+	adm, err := admission.New(admission.Config{Dir: f.t.TempDir()})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	f.deps.Admission = adm
+	f.setLimiter(f.deps.Limiter)
+	return adm
 }

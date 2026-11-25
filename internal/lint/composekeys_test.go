@@ -101,6 +101,7 @@ func realComposeTables() composeTables {
 		// Every volume entry of every service, exactly. A bind mount is read-only; a named volume is one of the
 		// top-level volumes.
 		Volumes: map[string][]string{
+			"api":        {"api_spool:/spool"},
 			"caddy-init": {"caddy_data:/data", "caddy_config:/config"},
 			"caddy":      {"./caddy/Caddyfile:/etc/caddy/Caddyfile:ro", "caddy_data:/data", "caddy_config:/config"},
 			"web-panel":  {"./web-placeholder:/www:ro"},
@@ -478,8 +479,8 @@ func TestComposeKeysLintCanFail(t *testing.T) {
 		want   string // words of the clause the plant is aimed at
 	}{
 		// Volumes: the table AND the clauses that hold whatever the table says.
-		{"a bind of the secrets directory into the api", plant("api", "    volumes:\n      - ../../secrets:/keys:ro\n"), "never a volume"},
-		{"a bind of kek_root into the api", plant("api", "    volumes:\n      - ../../secrets/kek_root:/kek_root:ro\n"), "never a volume"},
+		{"a bind of the secrets directory into the api", replace("      - api_spool:/spool\n", "      - api_spool:/spool\n      - ../../secrets:/keys:ro\n"), "never a volume"},
+		{"a bind of kek_root into the api", replace("      - api_spool:/spool\n", "      - api_spool:/spool\n      - ../../secrets/kek_root:/kek_root:ro\n"), "never a volume"},
 		{"the Docker socket in the worker", plant("worker", "    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n"), "never a volume"},
 		{"a writable bind in a valkey zone", replace("./valkey/valkey.conf:/etc/valkey/valkey.conf:ro\n      - ./valkey/start.sh:/etc/valkey/start.sh:ro\n      - ./valkey/maintain.sh:/etc/valkey/maintain.sh:ro\n      - ./valkey/sweep.lua:/etc/valkey/sweep.lua:ro\n      - ../../internal/ratelimit/lua:/etc/valkey/lua:ro\n    networks: [vk_api]",
 			"./valkey/valkey.conf:/etc/valkey/valkey.conf\n      - ./valkey/start.sh:/etc/valkey/start.sh:ro\n      - ./valkey/maintain.sh:/etc/valkey/maintain.sh:ro\n      - ./valkey/sweep.lua:/etc/valkey/sweep.lua:ro\n      - ../../internal/ratelimit/lua:/etc/valkey/lua:ro\n    networks: [vk_api]"), "writable"},

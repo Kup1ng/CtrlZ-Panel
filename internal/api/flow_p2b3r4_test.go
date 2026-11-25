@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-
-	"github.com/Kup1ng/CtrlZ-Panel/internal/bulkgate"
 )
 
 // Review round 4 of package B3 (routes and jobs), one test per finding that changed behaviour.
@@ -107,14 +105,12 @@ func TestADocumentExpiryBeforeYear1IsInvalidNot500(t *testing.T) {
 	}
 }
 
-// TestExportsHoldTheBulkGateAndRefuseWhenItIsFull: an export builds its whole document in memory and keeps it until the
-// client has read it, so it takes its weight in the bulk gate: a tenant with its share taken gets 503 server_busy on both
-// export routes, another tenant is unaffected, and the weight is back after the answer (p2-B3-r4-4).
-func TestExportsHoldTheBulkGateAndRefuseWhenItIsFull(t *testing.T) {
+// TestATenantWithItsPlaceTakenIsRefusedOnEveryHeavyRoute: a tenant holds one place for its heavy operations (spec 6.5
+// property 1). While it is taken, both exports, Duplicate and Import of that tenant are 503 server_busy and spend nothing
+// of the day, another tenant is unaffected, and the place is back after the answer.
+func TestATenantWithItsPlaceTakenIsRefusedOnEveryHeavyRoute(t *testing.T) {
 	f := newFrig(t, frigOpts{})
-	gate := bulkgate.New(8<<20, 1<<20)
-	f.deps.BulkGate = gate
-	f.setLimiter(f.deps.Limiter)
+	adm := f.withAdmission()
 	A, B := f.env.A, f.env.B
 	a := f.makeSession(A.Tenant, A.User)
 	b := f.makeSession(B.Tenant, B.User)
@@ -128,21 +124,21 @@ func TestExportsHoldTheBulkGateAndRefuseWhenItIsFull(t *testing.T) {
 	a.post(baseA+"/rules", map[string]any{"patterns": []string{"x.example"}, "action": "block"}).want(201, "")
 	b.post(baseB+"/rules", map[string]any{"patterns": []string{"x.example"}, "action": "block"}).want(201, "")
 
-	hold, ok := gate.Acquire(A.Tenant.String(), 1<<20)
-	if !ok {
-		t.Fatal("the test could not take A's share")
+	hold, err := adm.Place(A.Tenant.String())
+	if err != nil {
+		t.Fatal(err)
 	}
 	a.get(baseA+"/export").want(503, "server_busy")
 	a.get(baseA+"/folders/"+fold.ID.String()+"/export").want(503, "server_busy")
+	a.do("POST", baseA+":duplicate", map[string]any{"name": "Copy"}, idem("dup-busy")).want(503, "server_busy")
+	a.do("POST", "/profiles:import", validBulkDoc(), idem("import-while-place-taken")).want(503, "server_busy")
 	b.get(baseB+"/export").want(200, "")
-	if _, mine := gate.Held(A.Tenant.String()); mine != 1<<20 {
-		t.Fatalf("a refused export changed what A holds: %d", mine)
-	}
 	hold()
 	a.get(baseA+"/export").want(200, "")
 	a.get(baseA+"/folders/"+fold.ID.String()+"/export").want(200, "")
+	a.do("POST", baseA+":duplicate", map[string]any{"name": "Copy"}, idem("dup-ok")).want(201, "")
 	a.get("/profiles/"+uuid.NewString()+"/export").want(404, "not_found")
-	if all, _ := gate.Held(A.Tenant.String()); all != 0 {
-		t.Fatalf("%d bytes are still held after the exports answered", all)
+	if places, pool := adm.Held(); places != 0 || pool != 0 {
+		t.Fatalf("%d places and %d bytes are still held after the answers", places, pool)
 	}
 }

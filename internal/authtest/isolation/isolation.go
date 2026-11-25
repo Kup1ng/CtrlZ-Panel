@@ -106,6 +106,10 @@ type Fixture struct {
 	// puts A's id in one of them, because a handler that drops the tenant predicate for the other passes it
 	// (round 16, tenant-r16-13). Each call is judged like Cross, with the same CrossStatus.
 	CrossAt map[string]func() Result
+	// CrossAtStatus is the refusal of a CrossAt call whose place is refused differently from the first one: a cursor of A
+	// is 400 where an id of A is 404, and a location id outside the set is 422 (P2, B8). A place with no entry gets
+	// CrossStatus. A key must be a CrossAt key, so an entry cannot outlive its call.
+	CrossAtStatus map[string]int
 	// CrossStatus is the refusal Cross must get: a 4xx, 404 for an id that is not B's.
 	CrossStatus int
 	// CrossMay names the tables of A that the refused call may still change, with CrossReason.
@@ -205,6 +209,8 @@ func Complete(ops []Op, fixtures map[string]Fixture) []string {
 			out = append(out, fmt.Sprintf("%s: CrossMay and CrossBMay need a CrossReason", id))
 		case fx.Cross != nil && (fx.CrossStatus < 400 || fx.CrossStatus > 499):
 			out = append(out, fmt.Sprintf("%s: the Cross call expects %d, which is not a refusal of the client", id, fx.CrossStatus))
+		case badCrossAtStatus(fx) != "":
+			out = append(out, fmt.Sprintf("%s: CrossAtStatus for %s is not a refusal of the client or names no CrossAt call", id, badCrossAtStatus(fx)))
 		}
 	}
 	return out
@@ -215,6 +221,16 @@ func missingCrossAt(op Op, fx Fixture) string {
 	for _, loc := range op.Locations[1:] {
 		if fx.CrossAt[loc] == nil {
 			return loc
+		}
+	}
+	return ""
+}
+
+// badCrossAtStatus names the first CrossAtStatus entry that is not a 4xx or whose place has no CrossAt call.
+func badCrossAtStatus(fx Fixture) string {
+	for k, st := range fx.CrossAtStatus {
+		if fx.CrossAt[k] == nil || st < 400 || st > 499 {
+			return k
 		}
 	}
 	return ""
@@ -269,22 +285,30 @@ func judge(id string, fx Fixture, h Hooks) []string {
 		return []string{fmt.Sprintf("A is not in the same state as B before the call, so the case proves nothing:\nA: %s\nB: %s", a, b)}
 	}
 	a0, b0 := h.Digest(A), h.Digest(B)
-	crosses := []func() Result{}
+	type crossCall struct {
+		fn     func() Result
+		status int
+	}
+	crosses := []crossCall{}
 	if fx.Cross != nil {
-		crosses = append(crosses, fx.Cross)
+		crosses = append(crosses, crossCall{fx.Cross, fx.CrossStatus})
 		keys := make([]string, 0, len(fx.CrossAt))
 		for k := range fx.CrossAt {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			crosses = append(crosses, fx.CrossAt[k])
+			st := fx.CrossStatus
+			if s, ok := fx.CrossAtStatus[k]; ok {
+				st = s
+			}
+			crosses = append(crosses, crossCall{fx.CrossAt[k], st})
 		}
 	}
 	for _, cross := range crosses {
-		rc := cross()
-		if rc.Status != fx.CrossStatus {
-			return []string{fmt.Sprintf("B's call on A's id answered %d %q, want %d", rc.Status, truncate(rc.Body), fx.CrossStatus)}
+		rc := cross.fn()
+		if rc.Status != cross.status {
+			return []string{fmt.Sprintf("B's call on A's id answered %d %q, want %d", rc.Status, truncate(rc.Body), cross.status)}
 		}
 		if tbl := diffExcept(a0, h.Digest(A), fx.CrossMay); tbl != "" {
 			out = append(out, fmt.Sprintf("A's rows in %s changed by B's call on A's id", tbl))

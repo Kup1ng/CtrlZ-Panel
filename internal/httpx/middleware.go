@@ -29,6 +29,7 @@ const (
 	keyDeferred
 	keyHeld
 	keyLinkDead
+	keyAnswer
 )
 
 // DefaultBodyLimit is the request body limit of spec 2.3 step 4. Only the
@@ -160,6 +161,24 @@ func BodyLimit(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// bodyLimitOf is the limit BodyLimit (or SetBodyLimit) put on a body. A body
+// that has none (a test's) reports false.
+func bodyLimitOf(rc io.ReadCloser) (int64, bool) {
+	switch b := rc.(type) {
+	case *limitedBody:
+		return b.limit, true
+	}
+	return 0, false
+}
+
+// declaredTooLarge says whether the client declared a body above the limit. Such a request is refused at once with 413:
+// the limit only cuts the bytes as they are read, and a buffer sized from a declared length that nobody checked is a
+// memory the client chooses, before it has sent a byte (p2-B3-r6-1, r6-3).
+func declaredTooLarge(r *http.Request) bool {
+	lim, ok := bodyLimitOf(r.Body)
+	return ok && r.ContentLength > lim
 }
 
 // SetBodyLimit changes the limit BodyLimit set. Call it before the body is read.

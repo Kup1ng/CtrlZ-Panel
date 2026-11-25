@@ -22,8 +22,18 @@ import (
 
 var cluster *testpg.Cluster
 
+// spoolDir is the spool directory every api the tests start uses: CTRLZ_SPOOL_DIR is required outside the test environment
+// and a test that runs the api as production needs one.
+var spoolDir string
+
 func TestMain(m *testing.M) {
-	os.Exit(testpg.RunMain(m, func(c *testpg.Cluster) { cluster = c }))
+	var err error
+	if spoolDir, err = os.MkdirTemp("", "ctrlz-app-spool-"); err != nil {
+		panic(err)
+	}
+	code := testpg.RunMain(m, func(c *testpg.Cluster) { cluster = c })
+	_ = os.RemoveAll(spoolDir)
+	os.Exit(code)
 }
 
 // env serves a variable map as the process environment. CTRLZ_ENV defaults to
@@ -34,8 +44,11 @@ func env(m map[string]string) app.Getenv {
 		if v, ok := m[k]; ok {
 			return v
 		}
-		if k == "CTRLZ_ENV" {
+		switch k {
+		case "CTRLZ_ENV":
 			return "test"
+		case "CTRLZ_SPOOL_DIR":
+			return spoolDir
 		}
 		return ""
 	}

@@ -313,10 +313,11 @@ var netCutAllowed = map[string]string{
 	"internal/netkey/netkey.go#Net":  "the definition of the network of an address",
 	"internal/netkey/netkey.go#Wide": "the definition of the IPv6 /48 of an address",
 
-	"internal/httpx/middleware.go#ClientIP":            "derives the client address once per request, and compares it with the trusted-proxy prefixes",
-	"internal/httpx/middleware.go#ParseTrustedProxies": "reads the trusted-proxy prefixes of the configuration; they are prefixes of proxies, not keys",
-	"internal/httpx/middleware.go#Subject":             "the pipeline derives the network and the /48 once per request, for the rate classes of the registry",
-	"internal/httpx/pipeline.go#(API).perOp":           "charges the rate classes of the registry with the network keys httpx.Subject hands it; it makes no key of its own and keeps no bucket",
+	"internal/httpx/middleware.go#ClientIP":             "derives the client address once per request, and compares it with the trusted-proxy prefixes",
+	"internal/httpx/middleware.go#ParseTrustedProxies":  "reads the trusted-proxy prefixes of the configuration; they are prefixes of proxies, not keys",
+	"internal/httpx/middleware.go#Subject":              "the pipeline derives the network and the /48 once per request, for the rate classes of the registry",
+	"internal/httpx/pipeline.go#(API).perOp":            "charges the rate classes of the registry with the network keys httpx.Subject hands it; it makes no key of its own and keeps no bucket",
+	"internal/httpx/validate.go#(Validator).CheckHeavy": "reads the Content-Type header of a request body, which is a media type and not a client address",
 
 	// Part 6, the readers of the peer and of header text (round 17, tenant-r17-7 and -10). Each reads one header by a
 	// name that is not the client address, or the peer of a connection to judge it and keep nothing.

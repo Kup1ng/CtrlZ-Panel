@@ -32,13 +32,16 @@ COPY . .
 # directory keeps a symbolic link as a link, which the image smoke check
 # (scripts/image-smoke.sh) confirms.
 RUN CGO_ENABLED=0 GOFLAGS=-trimpath go build -ldflags="-s -w" -o /out/ctrlz ./cmd/ctrlz \
- && mkdir -p /out/bin \
+ && mkdir -p /out/bin /out/spool \
  && mv /out/ctrlz /out/bin/ctrlz \
  && ln -s ctrlz /out/bin/ctrlz-admin
 
 FROM scratch
 COPY --from=build /out/bin/ /usr/local/bin/
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+# An empty /spool owned by the service user: the api mounts its spool volume there (docker-compose.yml), and a new named volume
+# takes the owner of the image's directory, so the api can write to it without root. Only the api uses it.
+COPY --from=build --chown=65532:65532 /out/spool /spool
 # Numeric ids: scratch has no /etc/passwd.
 USER 65532:65532
 # The runtime prints the arguments of every frame when the process dies of an unrecovered panic or a

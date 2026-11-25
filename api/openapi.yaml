@@ -1246,7 +1246,7 @@ paths:
       summary: The profile as a document, in canonical form
       description: 'Errors: `server_busy` when the process has no room to build the document now; the tenant may retry.'
       x-ctrlz-auth: session
-      x-ctrlz-rate: user-read
+      x-ctrlz-rate: bulk-write
       x-ctrlz-token: read
       x-ctrlz-lock: none
       x-ctrlz-outbox: none
@@ -1491,7 +1491,7 @@ paths:
       summary: Set or remove several services at once
       description: |
         `op: set` upserts each slug with the given state (Choose Service Add, the group actions), `op: delete` removes
-        them. At most 2,000 slugs, so it always runs inline. Errors: `profile_locked`, `validation_failed`.
+        them. At most 2,000 slugs, so it always runs inline. Errors: `profile_locked`, `validation_failed`, `server_busy`.
       x-ctrlz-auth: session
       x-ctrlz-rate: bulk-write
       x-ctrlz-token: write
@@ -1517,6 +1517,7 @@ paths:
       tags: [profiles]
       operationId: listFolders
       summary: The rule folders of the profile
+      description: 'Errors: `server_busy` when the answer is large and the tenant already holds its share of answers that clients have not read yet; retry.'
       x-ctrlz-auth: session
       x-ctrlz-rate: user-read
       x-ctrlz-token: read
@@ -1604,7 +1605,7 @@ paths:
       summary: Export Rules of a folder as a rules document
       description: 'Errors: `server_busy` when the process has no room to build the document now; the tenant may retry.'
       x-ctrlz-auth: session
-      x-ctrlz-rate: user-read
+      x-ctrlz-rate: bulk-write
       x-ctrlz-token: read
       x-ctrlz-lock: none
       x-ctrlz-outbox: none
@@ -1661,6 +1662,7 @@ paths:
       description: |
         `folder` is a folder id or `root`; `q` is lowered, split on dots and matched as a substring of the rule key, a
         label with a non-ASCII letter by its A-label; `sort` is `pattern`, `created` or `updated`.
+        Errors: `server_busy` when the page is large and the tenant already holds its share of answers that clients have not read yet; retry.
       x-ctrlz-auth: session
       x-ctrlz-rate: user-read
       x-ctrlz-token: read
@@ -1702,7 +1704,7 @@ paths:
       operationId: createRules
       summary: Create rules, one per pattern
       description: |
-        All or none. At most 1,000 patterns, so it always runs inline. Errors: `profile_locked`, `validation_failed`.
+        All or none. At most 1,000 patterns, so it always runs inline. Errors: `profile_locked`, `validation_failed`, `server_busy`.
       x-ctrlz-auth: session
       x-ctrlz-rate: user-write
       x-ctrlz-token: write
@@ -1890,6 +1892,7 @@ paths:
       tags: [profiles]
       operationId: getJob
       summary: One job
+      description: 'Errors: `server_busy` when the answer of a finished job is large and the tenant already holds its share of answers that clients have not read yet; retry.'
       x-ctrlz-auth: session
       x-ctrlz-rate: user-read
       x-ctrlz-token: read

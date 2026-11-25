@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/caps"
 )
@@ -296,6 +297,27 @@ func (t Tx) RulesAll(profile uuid.UUID) ([]RuleRow, error) {
 	return out, sanitize(rows.Err())
 }
 
+const qRulesInFolder = `SELECT ` + ruleColumns + ` FROM ctrlz.rules WHERE tenant_id = $1 AND profile_id = $2 AND folder_id = $3 ORDER BY rule_key, id`
+
+// RulesInFolder reads the rules of one folder in key order, on rules_folder_idx: Export Rules reads through it, where
+// RulesAll read the whole profile (10,000 rows) to keep a few (p2-B3-r13-9).
+func (t Tx) RulesInFolder(profile, folder uuid.UUID) ([]RuleRow, error) {
+	rows, err := t.tx.Query(t.ctx, qRulesInFolder, t.tenant, profile, folder)
+	if err != nil {
+		return nil, sanitize(err)
+	}
+	defer rows.Close()
+	var out []RuleRow
+	for rows.Next() {
+		r, err := scanRule(rows)
+		if err != nil {
+			return nil, sanitize(err)
+		}
+		out = append(out, r)
+	}
+	return out, sanitize(rows.Err())
+}
+
 // RuleSelector is the filter of a selection ("select all" of the rules list).
 type RuleSelector struct {
 	Folder    string // "" any, "root", or "folder"
@@ -400,8 +422,19 @@ type FolderRow struct {
 	RuleCount           int
 }
 
-const folderColumns = `f.id, f.name, f.kind, f.action, f.target_kind, f.target_location_id, host(f.target_ipv4), host(f.target_ipv6), f.target_host,
-  f.location_unavailable, (SELECT count(*) FROM ctrlz.rules r WHERE r.tenant_id = f.tenant_id AND r.folder_id = f.id)`
+// folderBare is the folder's own columns; the rule count is added after it, or a constant 0 stands in for it.
+const folderBare = `f.id, f.name, f.kind, f.action, f.target_kind, f.target_location_id, host(f.target_ipv4), host(f.target_ipv6), f.target_host,
+  f.location_unavailable`
+
+// folderColumns adds the rule count. The count names the profile as well as the folder and rides on the index
+// rules_folder_idx (0090), so each folder visits only its own rules and a whole list visits the rules of the
+// profile once. Without the profile and the index each folder walked every rule of the tenant: 500 folders over
+// 200,000 rules was 100 million row visits for one page of rules (p2-B3-r12-2).
+const folderColumns = folderBare + `,
+  (SELECT count(*) FROM ctrlz.rules r WHERE r.tenant_id = f.tenant_id AND r.profile_id = f.profile_id AND r.folder_id = f.id)`
+
+// folderNoCount is folderBare with the placeholder that scanFolder expects (RuleCount is then not a count).
+const folderNoCount = folderBare + `, 0`
 
 func scanFolder(r interface{ Scan(...any) error }) (FolderRow, error) {
 	var f FolderRow
@@ -420,9 +453,24 @@ func scanFolder(r interface{ Scan(...any) error }) (FolderRow, error) {
 
 const qFoldersList = `SELECT ` + folderColumns + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 ORDER BY f.name, f.id`
 
-// Folders lists the folders of the profile, by name then id.
+const qFoldersBare = `SELECT ` + folderNoCount + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 ORDER BY f.name, f.id`
+
+// Folders lists the folders of the profile, by name then id, each with its rule count.
 func (t Tx) Folders(profile uuid.UUID) ([]FolderRow, error) {
 	rows, err := t.tx.Query(t.ctx, qFoldersList, t.tenant, profile)
+	return scanFolders(rows, err)
+}
+
+// FoldersBare lists the folders without counting their rules (RuleCount is 0). A caller that reads only the
+// Folder Rule of each folder (the rules page, Export, Duplicate) uses it, so it does not pay for a count it drops.
+func (t Tx) FoldersBare(profile uuid.UUID) ([]FolderRow, error) {
+	rows, err := t.tx.Query(t.ctx, qFoldersBare, t.tenant, profile)
+	return scanFolders(rows, err)
+}
+
+// scanFolders reads the rows of a folder statement. The statement itself stays a constant at each Query call, which
+// the no-dynamic-SQL lint requires.
+func scanFolders(rows pgx.Rows, err error) ([]FolderRow, error) {
 	if err != nil {
 		return nil, sanitize(err)
 	}
@@ -438,11 +486,22 @@ func (t Tx) Folders(profile uuid.UUID) ([]FolderRow, error) {
 	return out, sanitize(rows.Err())
 }
 
-const qFolderGet = `SELECT ` + folderColumns + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 AND f.id = $3`
+const qFolderGet = `SELECT ` + folderNoCount + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 AND f.id = $3`
 
-// Folder reads one folder of the profile; an id of another profile is not found.
+const qFolderCounted = `SELECT ` + folderColumns + ` FROM ctrlz.rule_folders f WHERE f.tenant_id = $1 AND f.profile_id = $2 AND f.id = $3`
+
+// Folder reads one folder of the profile without its rule count (RuleCount is 0): the callers that check that a
+// folder exists, or read its Folder Rule, inside a write do not count the rules under the profile's lock. An id of
+// another profile is not found.
 func (t Tx) Folder(profile, id uuid.UUID) (FolderRow, bool, error) {
 	f, err := scanFolder(t.tx.QueryRow(t.ctx, qFolderGet, t.tenant, profile, id))
+	ok, err := notFound(err)
+	return f, ok, err
+}
+
+// FolderCounted is Folder with the rule count, for the two answers that show it.
+func (t Tx) FolderCounted(profile, id uuid.UUID) (FolderRow, bool, error) {
+	f, err := scanFolder(t.tx.QueryRow(t.ctx, qFolderCounted, t.tenant, profile, id))
 	ok, err := notFound(err)
 	return f, ok, err
 }
@@ -502,6 +561,32 @@ func (t Tx) FolderInheriting(profile, folder uuid.UUID) (int, error) {
 	var n int
 	err := t.tx.QueryRow(t.ctx, qFolderInheriting, t.tenant, profile, folder).Scan(&n)
 	return n, sanitize(err)
+}
+
+// qFolderInheritingKeys is one page of the keys of a folder's inheriting rules in key order. The unique index
+// (tenant_id, profile_id, rule_key) gives the order, and the filter on the folder is applied to its rows, so no
+// page costs memory beyond its own keys however large the profile is.
+const qFolderInheritingKeys = `SELECT rule_key FROM ctrlz.rules WHERE tenant_id = $1 AND profile_id = $2 AND folder_id = $3
+  AND action = 'inherit' AND rule_key > $4 ORDER BY rule_key LIMIT $5`
+
+// FolderInheritingKeys returns at most limit keys of the rules that inherit the folder's action, in key order,
+// starting after the key `after` ("" for the first page). The D42 check of a Folder Rule walks them page by page
+// instead of reading the profile: an ordinary route must never hold more than a page of rules (6.5 (d)).
+func (t Tx) FolderInheritingKeys(profile, folder uuid.UUID, after string, limit int) ([]string, error) {
+	rows, err := t.tx.Query(t.ctx, qFolderInheritingKeys, t.tenant, profile, folder, after, int32(limit))
+	if err != nil {
+		return nil, sanitize(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, sanitize(err)
+		}
+		out = append(out, k)
+	}
+	return out, sanitize(rows.Err())
 }
 
 // ---------------------------------------------------------------------------
@@ -639,22 +724,32 @@ type OptionsRow struct {
 	RestrictedYouTube          *bool
 }
 
-const qOptionsGet = `SELECT default_action, default_target_kind, default_target_location_id, host(default_target_ipv4), host(default_target_ipv6),
+const optionsColumns = `default_action, default_target_kind, default_target_location_id, host(default_target_ipv4), host(default_target_ipv6),
   default_target_host, default_location_unavailable, block_exfiltration, rebind_protection, disable_dnssec, block_ttl, redirect_ttl, bypass_ttl,
-  block_response, host(block_custom_v4), host(block_custom_v6), ecs_mode, ecs_v4::text, ecs_v6::text, dns64, cname_flattening, safe_search, restricted_youtube
+  block_response, host(block_custom_v4), host(block_custom_v6), ecs_mode, ecs_v4::text, ecs_v6::text, dns64, cname_flattening, safe_search, restricted_youtube`
+
+const qOptionsGet = `SELECT ` + optionsColumns + `
 FROM ctrlz.profile_options WHERE tenant_id = $1 AND profile_id = $2`
 
-// Options reads the options row of the profile; a profile with none has the zero value, found false.
-func (t Tx) Options(profile uuid.UUID) (OptionsRow, bool, error) {
+// qOptionsAll is the options row of every profile of the tenant, for the profile list, which shows each profile's Default Rule:
+// one statement over the tenant's primary key prefix instead of one read for each profile (p2-B3-r13-2).
+const qOptionsAll = `SELECT profile_id, ` + optionsColumns + `
+FROM ctrlz.profile_options WHERE tenant_id = $1`
+
+// scanOptions reads one row of the two statements above into the zero-value convention of OptionsRow; profile is the
+// extra first column of qOptionsAll, nil for qOptionsGet.
+func scanOptions(row interface{ Scan(dest ...any) error }, profile *uuid.UUID) (OptionsRow, error) {
 	var o OptionsRow
 	var action, kind, v4, v6, host, resp, b4, b6, ecs, e4, e6 *string
 	var loc *uuid.UUID
-	err := t.tx.QueryRow(t.ctx, qOptionsGet, t.tenant, profile).Scan(&action, &kind, &loc, &v4, &v6, &host, &o.DefaultLocationUnavailable,
+	dest := []any{&action, &kind, &loc, &v4, &v6, &host, &o.DefaultLocationUnavailable,
 		&o.BlockExfiltration, &o.RebindProtection, &o.DisableDNSSEC, &o.BlockTTL, &o.RedirectTTL, &o.BypassTTL, &resp, &b4, &b6, &ecs, &e4, &e6,
-		&o.DNS64, &o.CNAMEFlattening, &o.SafeSearch, &o.RestrictedYouTube)
-	ok, err := notFound(err)
-	if err != nil || !ok {
-		return OptionsRow{}, ok, err
+		&o.DNS64, &o.CNAMEFlattening, &o.SafeSearch, &o.RestrictedYouTube}
+	if profile != nil {
+		dest = append([]any{profile}, dest...)
+	}
+	if err := row.Scan(dest...); err != nil {
+		return OptionsRow{}, err
 	}
 	str := func(p *string) string {
 		if p == nil {
@@ -665,7 +760,36 @@ func (t Tx) Options(profile uuid.UUID) (OptionsRow, bool, error) {
 	o.DefaultAction = str(action)
 	o.DefaultTarget = scanTarget(kind, loc, v4, v6, host)
 	o.BlockResponse, o.BlockV4, o.BlockV6, o.ECSMode, o.ECSV4, o.ECSV6 = str(resp), str(b4), str(b6), str(ecs), str(e4), str(e6)
+	return o, nil
+}
+
+// Options reads the options row of the profile; a profile with none has the zero value, found false.
+func (t Tx) Options(profile uuid.UUID) (OptionsRow, bool, error) {
+	o, err := scanOptions(t.tx.QueryRow(t.ctx, qOptionsGet, t.tenant, profile), nil)
+	ok, err := notFound(err)
+	if err != nil || !ok {
+		return OptionsRow{}, ok, err
+	}
 	return o, true, nil
+}
+
+// OptionsAll reads the options row of every profile of the tenant that has one, by profile id.
+func (t Tx) OptionsAll() (map[uuid.UUID]OptionsRow, error) {
+	rows, err := t.tx.Query(t.ctx, qOptionsAll, t.tenant)
+	if err != nil {
+		return nil, sanitize(err)
+	}
+	defer rows.Close()
+	out := map[uuid.UUID]OptionsRow{}
+	for rows.Next() {
+		var id uuid.UUID
+		o, err := scanOptions(rows, &id)
+		if err != nil {
+			return nil, sanitize(err)
+		}
+		out[id] = o
+	}
+	return out, sanitize(rows.Err())
 }
 
 const qOptionsSet = `INSERT INTO ctrlz.profile_options (tenant_id, profile_id, default_action, default_target_kind, default_target_location_id,

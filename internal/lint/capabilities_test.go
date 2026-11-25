@@ -257,6 +257,8 @@ var stdCapabilities = map[string]map[string]string{
 // too, and anyDirMembers lists what they may be used for.
 var osMembers = map[string][]string{
 	"internal/sms/noop":    {"OpenFile", "O_APPEND", "O_CREATE", "O_WRONLY"}, // the development driver appends to one configured file
+	"internal/admission":   {"CreateTemp", "MkdirTemp", "ReadDir", "Remove"}, // the spool directory of the heavy operations: emptied at start, probed for writing, or made private for a test
+	"internal/httpx":       {"CreateTemp", "File", "Remove"},                 // the spool file of one heavy request (spec 6.5): created in the spool directory and removed as soon as it is open
 	"internal/secret":      {"ReadFile", "PathError"},                        // a secret read from a file, an error type
 	"internal/keyring":     {"ErrNotExist"},                                  // a missing key file is not an error of the ring
 	"internal/sms/smshttp": {"ReadFile"},                                     // the bundle of trusted roots, read from one absolute path (sms-r17-12)

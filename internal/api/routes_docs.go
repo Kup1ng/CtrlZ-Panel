@@ -5,9 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -26,21 +26,23 @@ import (
 type jsonResponse struct {
 	status int
 	body   []byte
-	// release gives back the bulk-gate weight the body holds; the write calls it once the body has been written (or has
-	// failed), because that is when the memory is free again.
-	release func()
+	// stream, when set, writes the body instead of body: an export is encoded straight into the answer through a small
+	// buffer, so no encoded copy of the document is in memory (spec 6.5 property 8). The writer is the spool file of the
+	// request, not the client.
+	stream func(io.Writer) error
 }
 
 func (r jsonResponse) write(w http.ResponseWriter) error {
-	if r.release != nil {
-		defer r.release()
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(r.status)
+	if r.stream != nil {
+		return r.stream(w)
+	}
 	_, err := w.Write(r.body)
 	return err
 }
 
+func (r jsonResponse) VisitGetJobResponse(w http.ResponseWriter) error            { return r.write(w) }
 func (r jsonResponse) VisitExportProfileResponse(w http.ResponseWriter) error     { return r.write(w) }
 func (r jsonResponse) VisitExportFolderRulesResponse(w http.ResponseWriter) error { return r.write(w) }
 func (r jsonResponse) VisitImportProfileResponse(w http.ResponseWriter) error     { return r.write(w) }
@@ -49,6 +51,7 @@ func (r jsonResponse) VisitUploadFolderRulesResponse(w http.ResponseWriter) erro
 func (r jsonResponse) VisitBatchRulesResponse(w http.ResponseWriter) error        { return r.write(w) }
 
 var (
+	_ gen.GetJobResponseObject            = jsonResponse{}
 	_ gen.ExportProfileResponseObject     = jsonResponse{}
 	_ gen.ExportFolderRulesResponseObject = jsonResponse{}
 	_ gen.ImportProfileResponseObject     = jsonResponse{}
@@ -63,38 +66,6 @@ func (s *Server) snapshotTx(ctx context.Context, tenant uuid.UUID, fn func(store
 	return profileError(s.d.Store.WithTenant(ctx, tenant, store.TxOpts{Isolation: store.RepeatableRead, ReadOnly: true}, fn))
 }
 
-// The weight an export holds in the bulk gate: its document is built in memory (the rows, the Document and the encoded
-// bytes, which stay until the client has read them or the write timeout passes), so one tenant with a few slow readers
-// could otherwise hold hundreds of MiB (p2-B3-r4-4). Measured at about 300 bytes encoded per rule, with the rows and
-// the Document alongside and the encoder's buffer doubling; 2 KiB a rule is a margin over that.
-const (
-	exportWeightPerRule = 2 << 10
-	exportWeightBase    = 64 << 10
-)
-
-// exportRead reads a document of a profile in one snapshot after reserving its weight in the bulk gate, taken from the
-// profile's rule count in the same snapshot. A full gate is 503 server_busy, never a wait. The returned release gives the
-// reservation back and is nil on an error (it is already given back); the caller hands it to the response, which calls it
-// once the body is written.
-func (s *Server) exportRead(ctx context.Context, tenant, profile uuid.UUID, read func(store.Tx) error) (release func(), err error) {
-	rsv := s.gate.Reserve(tenant.String())
-	err = s.snapshotTx(ctx, tenant, func(tx store.Tx) error {
-		counts, err := tx.ProfileCounts()
-		if err != nil {
-			return err
-		}
-		if !rsv.To(exportWeightBase + int64(counts[profile].Rules)*exportWeightPerRule) {
-			return httpx.New(http.StatusServiceUnavailable, httpx.CodeServerBusy).WithRetry(5 * time.Second)
-		}
-		return read(tx)
-	})
-	if err != nil {
-		rsv.Release()
-		return nil, err
-	}
-	return rsv.Release, nil
-}
-
 // ExportProfile is GET /profiles/{id}/export.
 func (s *Server) ExportProfile(ctx context.Context, req gen.ExportProfileRequestObject) (gen.ExportProfileResponseObject, error) {
 	pr, err := principal(ctx)
@@ -102,14 +73,13 @@ func (s *Server) ExportProfile(ctx context.Context, req gen.ExportProfileRequest
 		return nil, err
 	}
 	var doc profiles.Document
-	release, err := s.exportRead(ctx, pr.TenantID, uuid.UUID(req.Id), func(tx store.Tx) (e error) {
+	if err := s.snapshotTx(ctx, pr.TenantID, func(tx store.Tx) (e error) {
 		doc, e = s.prof.ReadDocument(tx, uuid.UUID(req.Id))
 		return
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
-	return jsonResponse{status: http.StatusOK, body: doc.Encode(), release: release}, nil
+	return jsonResponse{status: http.StatusOK, stream: doc.EncodeTo}, nil
 }
 
 // ExportFolderRules is GET /profiles/{id}/folders/{folder_id}/export.
@@ -119,28 +89,31 @@ func (s *Server) ExportFolderRules(ctx context.Context, req gen.ExportFolderRule
 		return nil, err
 	}
 	var doc profiles.RulesDocument
-	// The read loads every rule of the profile, so the weight is the profile's, not the folder's.
-	release, err := s.exportRead(ctx, pr.TenantID, uuid.UUID(req.Id), func(tx store.Tx) (e error) {
+	if err := s.snapshotTx(ctx, pr.TenantID, func(tx store.Tx) (e error) {
 		doc, e = s.prof.ReadRulesDocument(tx, uuid.UUID(req.Id), uuid.UUID(req.FolderId))
 		return
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
-	return jsonResponse{status: http.StatusOK, body: doc.Encode(), release: release}, nil
+	return jsonResponse{status: http.StatusOK, stream: doc.EncodeTo}, nil
 }
 
 // docCheck is the schema check of a document: CheckComponent of the one validator, with its problems as fields.
-func (s *Server) docCheck(component string, raw []byte) []profiles.Field {
-	probs, err := s.docs.CheckDocument(component, raw)
-	if err != nil {
-		return []profiles.Field{{Name: "", Code: profiles.CodeInvalid}}
+func (s *Server) docCheck(ctx context.Context) profiles.Schema {
+	return func(component string, raw []byte) ([]profiles.Field, error) {
+		probs, err := s.docs.CheckDocument(ctx, component, raw)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, err // the deadline of the work: 503 service_unavailable, not a finding about the file
+			}
+			return []profiles.Field{{Name: "", Code: profiles.CodeInvalid}}, nil
+		}
+		out := make([]profiles.Field, 0, len(probs))
+		for _, p := range probs {
+			out = append(out, profiles.Field{Name: p.Pointer, Code: p.Code})
+		}
+		return out, nil
 	}
-	out := make([]profiles.Field, 0, len(probs))
-	for _, p := range probs {
-		out = append(out, profiles.Field{Name: p.Pointer, Code: p.Code})
-	}
-	return out
 }
 
 // decodeFile reads the base64 of a document body. A string that is not base64 is a validation failure with the pointer
@@ -224,7 +197,7 @@ func (s *Server) ImportProfile(ctx context.Context, req gen.ImportProfileRequest
 	if err != nil {
 		return nil, err
 	}
-	doc, err := profiles.DecodeDocument(raw, s.docCheck)
+	doc, err := profiles.DecodeDocument(raw, s.docCheck(ctx))
 	if err != nil {
 		return nil, profileError(err)
 	}
@@ -263,6 +236,7 @@ func (s *Server) DuplicateProfile(ctx context.Context, req gen.DuplicateProfileR
 	body, _ := json.Marshal(req.Body)
 	r := profiles.Request{Key: req.Params.IdempotencyKey, Method: http.MethodPost, Path: "/profiles/" + src.String() + ":duplicate", Body: body}
 	var doc profiles.Document
+	// The source is read whole inside the slot of the request, whose weight covers it (spec 6.5 property 8).
 	if err := s.snapshotTx(ctx, pr.TenantID, func(tx store.Tx) (e error) { doc, e = s.prof.ReadDocument(tx, src); return }); err != nil {
 		var he *httpx.Error
 		if !errors.As(err, &he) || he.Status != http.StatusNotFound {
@@ -308,7 +282,7 @@ func (s *Server) UploadFolderRules(ctx context.Context, req gen.UploadFolderRule
 	if err != nil {
 		return nil, err
 	}
-	doc, err := profiles.DecodeRulesDocument(raw, s.docCheck)
+	doc, err := profiles.DecodeRulesDocument(raw, s.docCheck(ctx))
 	if err != nil {
 		return nil, profileError(err)
 	}
@@ -351,7 +325,10 @@ func (s *Server) BatchRules(ctx context.Context, req gen.BatchRulesRequestObject
 		return nil, err
 	}
 	profile := uuid.UUID(req.Id)
-	in := batchIn(req.Body)
+	in, err := batchIn(req.Body)
+	if err != nil {
+		return nil, err
+	}
 	body, _ := json.Marshal(req.Body)
 	r := profiles.Request{Key: req.Params.IdempotencyKey, Method: http.MethodPost, Path: "/profiles/" + profile.String() + "/rules:batch", Body: body}
 	return s.idempotent(ctx, pr.TenantID, r, func(tx store.Tx) (int, []byte, error) {
@@ -466,23 +443,76 @@ func (s *Server) GetActiveJob(ctx context.Context, _ gen.GetActiveJobRequestObje
 	return gen.GetActiveJob200JSONResponse(out), err
 }
 
-// GetJob is GET /jobs/{id}.
+// heldJobFloor is the answer size under which GetJob reserves nothing: an answer of at most the spill size goes straight to the
+// connection and is never held.
+const heldJobFloor = 64 << 10
+
+// GetJob is GET /jobs/{id}. The stored result of a job (at most 10,000 items, about 830 KiB) is already the wire form, so it
+// is copied into the answer as it is: it is not decoded into 10,000 structs and encoded again, which held about 5 MiB and
+// 60 ms of one core for each poll, and the transaction is closed before the answer is put together. The room of a big answer
+// is reserved before the result is read, as a rule create does, so a refusal costs one number and not the work
+// (p2-B3-r13-3).
 func (s *Server) GetJob(ctx context.Context, req gen.GetJobRequestObject) (gen.GetJobResponseObject, error) {
 	pr, err := principal(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var out gen.Job
-	err = s.readTenant(ctx, pr.TenantID, func(tx store.Tx) error {
-		row, ok, err := tx.Job(uuid.UUID(req.Id))
+	var row store.JobRow
+	err = s.snapshotTx(ctx, pr.TenantID, func(tx store.Tx) error {
+		size, ok, err := tx.JobResultSize(uuid.UUID(req.Id))
 		if err != nil {
 			return err
 		}
 		if !ok {
 			return httpx.NotFound()
 		}
-		out, err = jobOut(row)
-		return err
+		if size > heldJobFloor {
+			if e := httpx.HoldAnswer(tx.Context(), size+heldJobHead); e != nil {
+				return e
+			}
+		}
+		row, ok, err = tx.Job(uuid.UUID(req.Id))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return httpx.NotFound()
+		}
+		return nil
 	})
-	return gen.GetJob200JSONResponse(out), err
+	if err != nil {
+		return nil, err
+	}
+	result := row.Result
+	row.Result = nil
+	head, err := jobOut(row)
+	if err != nil {
+		return nil, err
+	}
+	body, err := jobBody(head, result)
+	if err != nil {
+		return nil, err
+	}
+	return jsonResponse{status: http.StatusOK, body: body}, nil
 }
+
+// jobBody is the answer of a job: its head as the generated type encodes it, and the stored result put in as it is. One
+// buffer and one write: the pipeline spills an answer by the size of its first write, so a small head written first would send
+// the rest to the connection.
+func jobBody(head gen.Job, result []byte) ([]byte, error) {
+	b, err := json.Marshal(head)
+	if err != nil {
+		return nil, err
+	}
+	const key = `,"result":`
+	body := make([]byte, 0, len(b)+len(result)+len(key)+2)
+	body = append(body, b[:len(b)-1]...)
+	if len(result) > 0 {
+		body = append(body, key...)
+		body = append(body, result...)
+	}
+	return append(body, '}', '\n'), nil
+}
+
+// heldJobHead is what the head of a job answer (its id, kind, state and counters) adds to the stored result.
+const heldJobHead = 1 << 10

@@ -6,16 +6,19 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Kup1ng/CtrlZ-Panel/internal/admission"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/budget"
-	"github.com/Kup1ng/CtrlZ-Panel/internal/bulkgate"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/logattr"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/ratelimit"
 )
@@ -37,8 +40,8 @@ type Resolved struct {
 	// session class that a client cannot reset by asking for a new cookie (tenant-r6-5). Empty
 	// for a cookie that is not a live session.
 	SessionID string
-	// Tenant is the tenant id of a live session, for the budgets that count a whole tenant (bulk-write-tenant, the bulk
-	// gate). Empty for a cookie that is not a live session.
+	// Tenant is the tenant id of a live session, for the budgets that count a whole tenant (bulk-write-tenant) and for the
+	// place of a heavy request (spec 6.5). Empty for a cookie that is not a live session.
 	Tenant string
 }
 
@@ -111,17 +114,27 @@ type Pipeline struct {
 	// so that the test of what a holder of more dead cookies than that can cost does not need sixty-five
 	// thousand requests to fill the set.
 	DeadCapacity int
-	// BulkGate bounds the memory of the operations whose body limit is above BulkThreshold (spec 6.2). Build refuses a
-	// document that has such an operation when it is nil, so a route cannot go live without the gate.
-	BulkGate *bulkgate.Gate
+	// Admission is the admission point of the heavy operations (spec 6.5): one place for each tenant, a spool file and one
+	// first-in-first-out work pool. The api makes one and gives it here. Build refuses a document that has a heavy
+	// operation when it is nil, so a route cannot go live without it.
+	Admission *admission.Admission
 }
 
-// BulkThreshold is the body limit above which an operation takes the bulk gate: it reserves its limit in bytes after its
-// session resolved and before its body is read, and its schema check moves behind the reservation (spec 6.2, AUTH 2.3).
+// BulkThreshold is the body limit above which an operation can be heavy: the import, upload and batch routes and the rule
+// create have a limit above it (spec 6.5).
 const BulkThreshold = 64 << 10
 
-func (a *API) bulk(op apispec.Operation) bool {
-	return op.MaxBody > BulkThreshold && a.p.BulkGate != nil
+// ruleCreateID is the one operation that is heavy only by the size of its body: a rule create of at most DefaultBodyLimit
+// bytes is an ordinary operation and keeps the default limit of AUTH 2.3 step 4.
+const ruleCreateID = "createRules"
+
+// heavy says whether the request takes the path of 6.5: every operation of the bulk-write class, and a rule create whose
+// declared length is above the default limit or not declared.
+func heavy(op apispec.Operation, r *http.Request) bool {
+	if op.Rate == ratelimit.BulkWrite {
+		return true
+	}
+	return op.MaxBody > BulkThreshold && (r.ContentLength < 0 || r.ContentLength > DefaultBodyLimit)
 }
 
 // API is a built pipeline.
@@ -164,8 +177,16 @@ func (p *Pipeline) Build() (*API, error) {
 		if c.Key == ratelimit.ByNetwork && op.Auth.NeedsSession() {
 			return nil, errors.New("httpx: network-keyed rate class on a route with a session: " + op.ID)
 		}
-		if op.MaxBody > BulkThreshold && p.BulkGate == nil {
-			return nil, errors.New("httpx: an operation with a large body has no bulk gate: " + op.ID)
+		if op.MaxBody > BulkThreshold && op.Rate != ratelimit.BulkWrite && op.ID != ruleCreateID {
+			return nil, errors.New("httpx: an operation with a body limit above 64 KiB is neither of the bulk-write class nor a rule create: " + op.ID)
+		}
+		if op.Rate == ratelimit.BulkWrite || op.MaxBody > BulkThreshold {
+			if p.Admission == nil {
+				return nil, errors.New("httpx: a heavy operation has no admission point: " + op.ID)
+			}
+			if !op.Auth.NeedsSession() {
+				return nil, errors.New("httpx: a heavy operation without a session has no tenant for its place: " + op.ID)
+			}
 		}
 	}
 	a := &API{p: p, ops: idx, dead: newDeadSet(p.DeadCapacity), refusals: budget.NewRefusals()}
@@ -212,8 +233,14 @@ func (a *API) perOp(next http.Handler) http.Handler {
 			Write(w, r, Internal())
 			return
 		}
-		if op.MaxBody > 0 {
+		// A rule create that is not heavy keeps the default limit (spec 6.5); every other operation takes its own.
+		isHeavy := heavy(op, r)
+		if op.MaxBody > 0 && (isHeavy || op.MaxBody <= BulkThreshold) {
 			SetBodyLimit(r, op.MaxBody)
+		}
+		if declaredTooLarge(r) {
+			Write(w, r, New(http.StatusRequestEntityTooLarge, CodeTooLarge))
+			return
 		}
 		class, _ := ratelimit.Lookup(a.p.Service, op.Rate)
 		ctx := r.Context()
@@ -395,9 +422,9 @@ func (a *API) perOp(next http.Handler) http.Handler {
 			}
 		}
 
-		// Step 8a: the request against its schema (rule boundary-input). An operation that takes the bulk gate is
-		// checked behind its reservation instead (below), so no body of that size is read before the gate holds its memory.
-		if a.check != nil && !a.bulk(op) {
+		// Step 8a: the request against its schema (rule boundary-input). A heavy operation is checked in its slot instead
+		// (serveHeavy), so no body of that size is read into memory before the work has its weight.
+		if a.check != nil && !isHeavy {
 			if e := a.check.Check(r, op.Key()); e != nil {
 				a.refuse(w, r, e)
 				return
@@ -461,17 +488,9 @@ func (a *API) perOp(next http.Handler) http.Handler {
 					return
 				}
 			}
+			base := ctx
 			ctx = res.Ctx
 			r = r.WithContext(ctx)
-
-			// The tenant's day budget (spec 8.1) is charged for every operation of the bulk-write class, not only for those
-			// above the gate threshold: Duplicate has the default body limit and still reads and writes a whole profile.
-			if op.Rate == ratelimit.BulkWrite {
-				if e := a.chargeBulkTenant(ctx, res); e != nil {
-					a.refuse(w, r, e)
-					return
-				}
-			}
 			// A second class of the operation, charged on the tenant of the live session (x-ctrlz-rate-also).
 			if op.Also != "" {
 				if e := a.chargeTenantClass(ctx, res, op.Also); e != nil {
@@ -487,30 +506,37 @@ func (a *API) perOp(next http.Handler) http.Handler {
 					return
 				}
 			}
-			// The bulk gate (spec 6.2): after the session resolved and its class was charged, before the body is read.
-			if a.bulk(op) {
-				rsv, gb, e := a.openBulk(res, r)
-				if e != nil {
-					a.refuse(w, r, e)
-					return
-				}
-				defer rsv.Release()
-				if r.Body != nil && r.Body != http.NoBody {
-					r.Body = gb
-				}
-				if a.check != nil {
-					e := a.check.Check(r, op.Key())
-					if gb.busy {
-						e = a.busyBulk(ctx, res, op.Rate == ratelimit.BulkWrite)
-					}
-					if e == nil && !rsv.To(gb.read*bulkgate.BodyWeight) {
-						e = a.busyBulk(ctx, res, op.Rate == ratelimit.BulkWrite)
-					}
-					if e != nil {
-						a.refuse(w, r, e)
+			if isHeavy {
+				a.serveHeavy(w, r, next, op, res, heavyIn{cookie: cookie, lookupKey: lookupKey, base: base})
+				return
+			}
+			if a.p.Admission != nil && res.Tenant != "" {
+				// An ordinary operation of a tenant answers through answerWriter: a big answer is spilled to a file and
+				// sent from here, so a client that does not read holds disk, counted per tenant, and no memory (answer.go).
+				hold := &answerHold{adm: a.p.Admission, tenant: res.Tenant}
+				defer hold.releaseAll()
+				aw := &answerWriter{w: w, hold: hold, dir: a.p.Admission.Dir()}
+				defer aw.close()
+				r = r.WithContext(context.WithValue(ctx, keyAnswer, hold))
+				_, setWrite := deadlinesOf(w)
+				// A turn of the tenant's ordinary requests (p2-B3-r13-1): the rate classes count for each session, so
+				// without it one account's sessions fill the 16 connections. The line holds no connection, the turn
+				// ends with the handler, and the file of a spilled answer is sent after it, so a slow reader holds neither.
+				turn, err := a.p.Admission.Ordinary(ctx, res.Tenant)
+				if err != nil {
+					if ctx.Err() != nil {
+						a.refuse(w, r, &Error{Status: StatusClientClosedRequest, Code: "client_closed_request"})
 						return
 					}
+					a.refuse(w, r, busy())
+					return
 				}
+				func() {
+					defer turn()
+					next.ServeHTTP(aw, r)
+				}()
+				aw.finish(a, r, setWrite)
+				return
 			}
 		}
 
@@ -636,8 +662,8 @@ func writeFault(w http.ResponseWriter, r *http.Request, err error) *Error {
 	return e
 }
 
-// chargeBulkTenant charges the tenant's day budget of the bulk-write class. It comes before the gate, so a slow body from
-// one of many sessions has paid it before it holds any memory. A refusal is the answer: 429 rate_limited.
+// chargeBulkTenant charges the tenant's day budget of the bulk-write class (spec 8.1). A refusal is the answer: 429
+// rate_limited.
 func (a *API) chargeBulkTenant(ctx context.Context, res Resolved) *Error {
 	return a.chargeTenantDay(ctx, res, ratelimit.BulkWriteTenant)
 }
@@ -667,59 +693,241 @@ func (a *API) chargeTenantClass(ctx context.Context, res Resolved, name string) 
 	return a.charge(ctx, c, ratelimit.Subject{Tenant: res.Tenant})
 }
 
-// openBulk opens the reservation of the request and wraps its body so that the reservation follows the bytes read. A
-// request without a body holds nothing.
-func (a *API) openBulk(res Resolved, r *http.Request) (*bulkgate.Reservation, *gatedBody, *Error) {
-	if res.Tenant == "" {
-		return nil, nil, Internal()
-	}
-	rsv := a.p.BulkGate.Reserve(res.Tenant)
-	return rsv, &gatedBody{rc: r.Body, rsv: rsv}, nil
-}
-
-// busyBulk is the refusal of a request the gate has no room for: 503 server_busy. When the request paid the tenant's day
-// budget, it gives it back, so a victim whose client retries these refusals does not spend its day on them (spec 6.2).
-// paid is false for an operation that is gated by its body size but is not of the bulk-write class (a rule create): it
-// never charged the budget, and a refund would mint a token and let a tenant refill its day budget at will (p2-B3-r3-3).
-func (a *API) busyBulk(ctx context.Context, res Resolved, paid bool) *Error {
-	if c, ok := ratelimit.Lookup(a.p.Service, ratelimit.BulkWriteTenant); ok && paid {
-		a.p.Limiter.Refund(context.WithoutCancel(ctx), c, ratelimit.Subject{Tenant: res.Tenant})
-	}
+// busy is the refusal of a heavy request that has no room: 503 server_busy (spec 6.5, Refusals and tokens).
+func busy() *Error {
 	return New(http.StatusServiceUnavailable, CodeServerBusy).WithRetry(5 * time.Second)
 }
 
-// gatedBody is a request body whose reservation grows with the bytes read. A sender that trickles its body holds what it
-// has sent and no more, so a slow body cannot hold the gate; a read the gate has no room for ends with errBusy, and the
-// pipeline answers 503 server_busy.
-type gatedBody struct {
-	rc   io.ReadCloser
-	rsv  *bulkgate.Reservation
-	read int64
-	busy bool
+// heavyIn is what serveHeavy needs from the steps before it.
+type heavyIn struct {
+	cookie, lookupKey string
+	// base is the context of the request before the principal of the first resolve was put on it: the work resolves again
+	// from it, so the principal it ends with is the fresh one and no stale one is under it.
+	base context.Context
 }
 
-var errBusy = errors.New("httpx: the bulk gate is full")
-
-func (g *gatedBody) Read(p []byte) (int, error) {
-	if g.rc == nil {
-		return 0, io.EOF
+// weightOf is the weight of the work of a heavy operation, the most live memory its worst legal and its worst hostile
+// request may hold in the work step (6.5 property 8). size is the size of the spooled body. A test holds each shape of the
+// table under its weight.
+func weightOf(op apispec.Operation, size int64) int64 {
+	switch op.ID {
+	case "importProfile":
+		if size > 1<<20 {
+			return admission.WeightLarge
+		}
+	case "uploadFolderRules":
+		if size > 1<<20 {
+			return admission.WeightLarge
+		}
+		// A one-rule file still merges into the whole profile: UploadRules reads every rule of it (up to 10,000), keeps a
+		// copy of each in a map and builds two more maps of them, 22 MiB live at the longest legal values whatever the
+		// size of the file (p2-B3-r9-6). So the body does not size it below the export's weight.
+		return admission.WeightExport
+	case "exportProfile", "exportFolderRules", "duplicateProfile":
+		return admission.WeightExport
 	}
-	n, err := g.rc.Read(p)
-	if n > 0 {
-		g.read += int64(n)
-		if !g.rsv.To(g.read * bulkgate.ReadWeight) {
-			g.busy = true
-			return 0, errBusy
+	return admission.WeightSmall
+}
+
+// serveHeavy is the path of a heavy request, in the order of 6.5: the place, the day token, the body spooled to a file, the
+// queue, the work inside the slot, the slot given back, the answer sent from the file, the place given back. The session
+// and the classes were settled before it is called, so a request that is refused for them has held nothing.
+func (a *API) serveHeavy(w http.ResponseWriter, r *http.Request, next http.Handler, op apispec.Operation, res Resolved, in heavyIn) {
+	adm := a.p.Admission
+	ctx := r.Context()
+	setRead, setWrite := deadlinesOf(w)
+	// Every answer of this function goes through refuse: the server's own WriteTimeout runs from the headers and a body, a
+	// queue wait or a slow answer outlives it, so the write deadline is moved to a fresh one first (6.5 property 3). Without
+	// it a 503 after the 120 s queue wait, or a 400 after a slow body, is written past the deadline and the client sees a
+	// closed connection and no status (p2-B3-r9-1, r9-5). The answer written from the file sets its own, earned one.
+	refuse := func(e *Error) {
+		setWrite(earnedDeadline(connNow(), writeBase, 0))
+		a.refuse(w, r, e)
+	}
+	if res.Tenant == "" {
+		refuse(Internal())
+		return
+	}
+	// 2. The place: one for the tenant, so what a tenant can hold is one file, one queue entry and one slot whatever its
+	// sessions, members and connections. It is given back when this function returns, which is when the answer is sent.
+	releasePlace, err := adm.Place(res.Tenant)
+	if err != nil {
+		refuse(busy())
+		return
+	}
+	defer releasePlace()
+	// 3. The day token, once, after the place. It is given back only for a refusal that is the server's own (the queue wait
+	// and a disk that cannot be written): a slow or cut body keeps it spent.
+	paid := op.Rate == ratelimit.BulkWrite
+	if paid {
+		if e := a.chargeBulkTenant(ctx, res); e != nil {
+			refuse(e)
+			return
 		}
 	}
-	return n, err
+	giveBack := func() {
+		if c, ok := ratelimit.Lookup(a.p.Service, ratelimit.BulkWriteTenant); ok && paid {
+			a.p.Limiter.Refund(context.WithoutCancel(ctx), c, ratelimit.Subject{Tenant: res.Tenant})
+		}
+	}
+	refuseBusy := func() {
+		giveBack()
+		refuse(busy())
+	}
+	sp, err := newSpool(adm.Dir())
+	if err != nil {
+		refuseBusy()
+		return
+	}
+	defer sp.close()
+
+	// 4. Spool in: the body goes to the file in chunks of 32 KiB, with a deadline the bytes themselves earn.
+	var size int64
+	if r.Body != nil && r.Body != http.NoBody {
+		start := time.Now()
+		base := adm.ReadBase()
+		if base <= 0 {
+			base = readBase
+		}
+		n, err := copyIn(sp, r.Body, start, base, setRead)
+		if err != nil {
+			var mbe *http.MaxBytesError
+			var ne net.Error
+			switch {
+			case errors.Is(err, errSpoolWrite):
+				refuseBusy()
+			case errors.As(err, &mbe):
+				refuse(New(http.StatusRequestEntityTooLarge, CodeTooLarge))
+			case errors.As(err, &ne) && ne.Timeout():
+				// A body cut by its own read deadline is 400 (6.5 property 3). It comes before the context check: net/http
+				// cancels the request context when a read of the connection fails, so a stalled client would else be a
+				// 499 that nobody reads (p2-B3-r9-1).
+				refuse(BadRequest())
+			case ctx.Err() != nil:
+				refuse(clientGone())
+			default:
+				refuse(BadRequest())
+			}
+			return
+		}
+		size = n
+	}
+
+	// 5. The queue: first in first out for the weight of the work. It ends at 120 s, and a client that leaves leaves it.
+	slot, err := adm.Acquire(ctx, weightOf(op, size))
+	switch {
+	case err == nil:
+	case ctx.Err() != nil:
+		refuse(clientGone())
+		return
+	case errors.Is(err, admission.ErrQueueWait):
+		refuseBusy()
+		return
+	default:
+		refuse(Internal())
+		return
+	}
+	defer slot()
+
+	// 6. The work, inside the slot, with its answer in the file.
+	sw, failed := a.work(w, r, next, op, sp, size, in)
+	// 7. Give the slot back: from here on only the connection and the file are held while the client reads.
+	slot()
+	switch {
+	case failed == nil:
+	case errors.Is(failed, errSpoolWrite):
+		refuseBusy()
+		return
+	default:
+		refuse(Internal())
+		return
+	}
+
+	// 8. Spool out: status, length and the file, with a deadline the bytes sent earn. A cut answer closes the connection:
+	// the length it declared is not met, which net/http answers by closing.
+	if sw.status == 0 {
+		sw.status = http.StatusOK
+	}
+	w.Header().Set("Content-Length", strconv.FormatInt(sw.size, 10))
+	start := time.Now()
+	setWrite(earnedDeadline(start, writeBase, 0))
+	w.WriteHeader(sw.status)
+	_ = copyOut(w, sp, sw.size, start, setWrite)
 }
 
-func (g *gatedBody) Close() error {
-	if g.rc == nil {
-		return nil
+// work is step 6: under a deadline, resolve the session again, read the file into one buffer of its known size, scan its
+// shape, check it, and run the handler with the answer going to the file. The error it returns is the file's or the size
+// of the answer; every other refusal is an answer like any, written to the file.
+func (a *API) work(w http.ResponseWriter, r *http.Request, next http.Handler, op apispec.Operation, sp *spoolFile, size int64, in heavyIn) (*spoolWriter, error) {
+	wctx, cancel := context.WithTimeout(in.base, a.p.Admission.WorkLimit())
+	defer cancel()
+	var raw []byte
+	if size > 0 {
+		var err error
+		if raw, err = sp.readAll(size); err != nil {
+			return nil, err
+		}
 	}
-	return g.rc.Close()
+	sw, err := newSpoolWriter(w, sp)
+	if err != nil {
+		return nil, err
+	}
+	finish := func() (*spoolWriter, error) { return sw, sw.err }
+	r = r.WithContext(wctx)
+
+	// 10. Authority is fresh: a body may take minutes to arrive, so the session is resolved again before anything is read or
+	// written with it. No lookup token is charged for it, and a refusal is not refunded.
+	res, err := a.p.Resolver.Resolve(wctx, in.cookie, op)
+	if res.Dead {
+		a.dead.add(in.lookupKey)
+	}
+	if err != nil {
+		a.fail(sw, r, err)
+		return finish()
+	}
+	r = r.WithContext(res.Ctx)
+
+	if a.check != nil {
+		if e := a.checkHeavy(r, op, raw); e != nil {
+			a.refuse(sw, r, e)
+			return finish()
+		}
+	}
+	if raw != nil {
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		r.ContentLength = size
+	}
+	next.ServeHTTP(sw, r)
+	if wctx.Err() != nil && sw.status == 0 {
+		// A handler that gave up at the deadline and wrote nothing.
+		a.refuse(sw, r, Unavailable())
+	}
+	return finish()
+}
+
+// deadlineSetter is the part of the server's ResponseWriter that moves the deadlines of its connection. No writer is wrapped
+// between the server and the pipeline, so the server's own is the one that is asked; a writer that has none (a test
+// recorder) gives functions that do nothing, and the request is then read with the server's own deadlines.
+type deadlineSetter interface {
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
+}
+
+func deadlinesOf(w http.ResponseWriter) (setRead, setWrite func(time.Time)) {
+	d, ok := w.(deadlineSetter)
+	if !ok {
+		return func(time.Time) {}, func(time.Time) {}
+	}
+	return func(t time.Time) { _ = d.SetReadDeadline(t) }, func(t time.Time) { _ = d.SetWriteDeadline(t) }
+}
+
+// checkHeavy is the schema check of a heavy request, on the bytes of the spooled body: UTF-8, the shape of the raw text,
+// then the compiled schema of the operation (Validator.CheckHeavy). A body that fails any of them is 400.
+func (a *API) checkHeavy(r *http.Request, op apispec.Operation, raw []byte) *Error {
+	if raw != nil && !utf8.Valid(raw) {
+		return BadRequest()
+	}
+	return a.check.CheckHeavy(r, op.Key(), raw)
 }
 
 // proofOf is the proof a ProofAlt class charges instead of the network: the bearer value of the operation when its tag

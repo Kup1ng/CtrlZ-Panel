@@ -139,7 +139,7 @@ func TestACopyFromALockedSourceIsAJobToo(t *testing.T) {
 	a.post("/profiles/"+locked.ID.String()+"/lock", map[string]any{"password": "p4ssw0rd!"}).want(204, "")
 
 	copyTo := func(dest uuid.UUID, key string) *resp {
-		return a.do("POST", sb+"/rules:batch", map[string]any{"op": "copy", "selector": map[string]any{}, "dest_profile_id": dest.String()}, idem(key))
+		return a.do("POST", sb+"/rules:batch", map[string]any{"op": "copy", "selector": map[string]any{}, "dest_profile_id": dest.String(), "dest_root": true}, idem(key))
 	}
 	copyTo(dst.ID, "cp-1").want(202, "")
 	// The destination that is locked is the one that refuses.

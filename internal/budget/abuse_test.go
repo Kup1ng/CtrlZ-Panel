@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Kup1ng/CtrlZ-Panel/internal/admission"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/password"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/throttle"
@@ -396,8 +397,12 @@ func newHarnessCap(t *testing.T, svc ratelimit.Service, deadCap int) *harness {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	lim := ratelimit.New(ratelimit.Config{Service: svc, LocalOnly: true, Now: func() time.Time { return now }})
 	res := &stubResolver{}
+	adm, err := admission.New(admission.Config{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
 	pl := &httpx.Pipeline{
-		Log: slog.New(slog.DiscardHandler), Limiter: lim, Service: svc, Ops: ops, SkipRequestCheck: true, Resolver: res, BaseURL: "/api/v1", DeadCapacity: deadCap,
+		Log: slog.New(slog.DiscardHandler), Limiter: lim, Service: svc, Ops: ops, SkipRequestCheck: true, Resolver: res, BaseURL: "/api/v1", DeadCapacity: deadCap, Admission: adm,
 		Host: httpx.StaticHost("panel.test"),
 		// A link value (P3 7.1) stands for itself: the header names the row it screens as, and no header is a value that fails.
 		Bearer: func(r *http.Request, _ apispec.Operation) (string, bool) {
@@ -800,8 +805,14 @@ func TestAbuseALiveCookieCannotQueueLookups(t *testing.T) {
 						ok++
 					}
 				}
-				if got := int(h.res.lookups.Load()); got > max {
-					t.Fatalf("one live cookie caused %d lookups in a minute, want at most its class limit %d", got, max)
+				// A heavy request resolves its session again in its slot, after its body (spec 6.5 property 10), so each one that is
+				// admitted costs two lookups; the class still bounds how many are admitted.
+				bound := max
+				if c.Name == ratelimit.BulkWrite {
+					bound = 2 * max
+				}
+				if got := int(h.res.lookups.Load()); got > bound {
+					t.Fatalf("one live cookie caused %d lookups in a minute, want at most %d", got, bound)
 				}
 				if ok != max {
 					t.Fatalf("answered %d, want %d", ok, max)

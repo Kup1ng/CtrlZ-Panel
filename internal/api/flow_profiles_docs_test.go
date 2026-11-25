@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Kup1ng/CtrlZ-Panel/internal/bulkgate"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/profiles"
 )
 
@@ -245,55 +244,27 @@ func TestABigRequestIsAJobAndASecondOneWaits(t *testing.T) {
 	}
 }
 
-// TestTheBulkGateRefusesWithServerBusyAndReleases: an Import whose body does not fit in what the gate has left is 503
-// server_busy, a refused request holds and charges nothing, and the memory is back after the answer (spec 6.2).
-func TestTheBulkGateRefusesWithServerBusyAndReleases(t *testing.T) {
+// TestTheTenantsPlaceRefusesWithServerBusyAndReleases: an Import of a tenant whose place is taken is 503 server_busy, a
+// refused request holds and charges nothing, and the place is back after the answer (spec 6.5).
+func TestTheTenantsPlaceRefusesWithServerBusyAndReleases(t *testing.T) {
 	f := newFrig(t, frigOpts{})
-	gate := bulkgate.New(7<<20, 7<<20)
-	f.deps.BulkGate = gate
-	f.setLimiter(f.deps.Limiter)
+	adm := f.withAdmission()
 	A := f.env.A
 	a := f.makeSession(A.Tenant, A.User)
-	hold, ok := gate.Acquire(A.Tenant.String(), 7<<20)
-	if !ok {
-		t.Fatal("the test could not take its own share")
+	hold, err := adm.Place(A.Tenant.String())
+	if err != nil {
+		t.Fatal(err)
 	}
-	a.do("POST", "/profiles:import", map[string]any{"document": b64(`{"format":"ctrlz-profile","version":1,"kind":"custom","name":"x"}`)}, idem("busy-1")).want(503, "server_busy")
-	if _, mine := gate.Held(A.Tenant.String()); mine != 7<<20 {
-		t.Fatalf("a refused request changed what is held: %d", mine)
-	}
-	hold()
-	a.do("POST", "/profiles:import", map[string]any{"document": b64(`{"format":"ctrlz-profile","version":1,"kind":"custom","name":"x"}`)}, idem("busy-2")).want(201, "")
-	if all, _ := gate.Held(A.Tenant.String()); all != 0 {
-		t.Fatalf("%d bytes are still held after the answer", all)
-	}
-}
-
-// TestABusyRefusalGivesTheDayBudgetBack: a bulk request the gate had no room for spends none of the tenant's 200 a day, so
-// a victim whose client retries 503s is not locked out for the rest of the day (spec 8.1, finding p2-B3-r2-7).
-func TestABusyRefusalGivesTheDayBudgetBack(t *testing.T) {
-	f := newFrig(t, frigOpts{})
-	gate := bulkgate.New(7<<20, 7<<20)
-	f.deps.BulkGate = gate
-	f.setLimiter(f.deps.Limiter)
-	A := f.env.A
-	var sessions []*client
-	for i := 0; i < 21; i++ {
-		sessions = append(sessions, f.makeSession(A.Tenant, A.User))
-	}
-	hold, ok := gate.Acquire(A.Tenant.String(), 7<<20)
-	if !ok {
-		t.Fatal("the test could not take its own share")
-	}
-	bad := map[string]any{"document": b64(`{}`)}
-	for i := 0; i < 5; i++ {
-		sessions[20].do("POST", "/profiles:import", bad, idem(fmt.Sprintf("refund-busy-%d", i))).want(503, "server_busy")
+	a.do("POST", "/profiles:import", validBulkDoc(), idem("busy-1")).want(503, "server_busy")
+	if places, pool := adm.Held(); places != 1 || pool != 0 {
+		t.Fatalf("a refused request changed what is held: %d places, %d bytes", places, pool)
 	}
 	hold()
-	for i := 0; i < 200; i++ {
-		sessions[i%20].do("POST", "/profiles:import", bad, idem(fmt.Sprintf("refund-%d", i))).want(422, "validation_failed")
+	// The retry of the refused request, with its key, is the request that works: nothing was stored for the refusal.
+	a.do("POST", "/profiles:import", validBulkDoc(), idem("busy-1")).want(201, "")
+	if places, pool := adm.Held(); places != 0 || pool != 0 {
+		t.Fatalf("%d places and %d bytes are still held after the answer", places, pool)
 	}
-	sessions[20].do("POST", "/profiles:import", bad, idem("refund-200")).want(429, "rate_limited")
 }
 
 // TestADocumentOfTooManyRulesIsExceeded: the maxItems of the schema is the code exceeded, and the codes the cases of these

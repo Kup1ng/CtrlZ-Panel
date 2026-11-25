@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Kup1ng/CtrlZ-Panel/api"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/admission"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/afterwork"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/api/gen"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
@@ -28,7 +29,6 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/throttle"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/ticket"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/budget"
-	"github.com/Kup1ng/CtrlZ-Panel/internal/bulkgate"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/cachex"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/endpoints"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
@@ -82,15 +82,17 @@ type Deps struct {
 	// Locations is where the write path learns which locations exist and which a profile may use (spec 4.1); nil builds
 	// the production one, which reads the tables the tenant role may read.
 	Locations locations.LocationCatalog
-	// BulkGate bounds the memory of the bulk routes (spec 6.2); nil builds one of the default size.
-	BulkGate *bulkgate.Gate
+	// Admission is the admission point of the heavy operations (spec 6.5); nil makes one from SpoolDir.
+	Admission *admission.Admission
+	// SpoolDir is the directory of the spool files of the heavy operations (CTRLZ_SPOOL_DIR). It is emptied at start and
+	// must be writable, or the service does not start. Empty makes a private directory under the system's temporary one,
+	// which only a test may rely on: the app refuses an empty one outside the test environment.
+	SpoolDir string
 }
 
 // Server implements the generated strict interface.
 type Server struct {
-	d Deps
-	// gate is the pipeline's bulk gate: the exports hold their document in it until it is written (p2-B3-r4-4).
-	gate *bulkgate.Gate
+	d    Deps
 	cfg  *cachex.Loader[store.PublicConfig]
 	auth store.AuthLookups
 	now  func() time.Time
@@ -113,6 +115,7 @@ type Server struct {
 	bearer       *bearer.Signer   // the share and download link values (P3 spec 6.2, 7)
 	cat          locations.LocationCatalog
 	docs         *httpx.Validator // the schema check of a document (spec 6.2)
+	ruleCounts   ruleCountCache   // rules of a profile at a version, for GET /profiles (p2-B3-r14-1)
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)
@@ -173,9 +176,11 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	if cat == nil {
 		cat = locations.Store{}
 	}
-	gate := d.BulkGate
-	if gate == nil {
-		gate = bulkgate.New(bulkgate.DefaultTotal, bulkgate.DefaultPerTenant)
+	adm := d.Admission
+	if adm == nil {
+		if adm, err = admission.New(admission.Config{Dir: d.SpoolDir}); err != nil {
+			return nil, nil, err
+		}
 	}
 	docs, err := httpx.NewValidator(api.Tenant())
 	if err != nil {
@@ -186,8 +191,8 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 		return nil, nil, err
 	}
 	s := &Server{
-		after: after, gate: gate,
-		prof: &profiles.Env{Catalog: cat, Clock: d.Now}, ep: &endpoints.Env{Clock: d.Now, Keys: d.Keys, Catalog: cat, Bearer: br}, bearer: br, cat: cat, docs: docs,
+		after: after,
+		prof:  &profiles.Env{Catalog: cat, Clock: d.Now}, ep: &endpoints.Env{Clock: d.Now, Keys: d.Keys, Catalog: cat, Bearer: br}, bearer: br, cat: cat, docs: docs,
 		inviteReads: netpool.New(inviteRead, d.Now),
 		d:           d, cfg: cfg, auth: auth, now: d.Now, keys: d.Keys, hasher: d.Hasher, strength: strength, strengthAnon: strengthAnon,
 		throttle: throttle.NewUser(auth, d.Keys).WithCeilingHook(throttle.CeilingLog(d.Log)).WithRefusalHook(throttle.RefusalLog(d.Log, refusals)), tickets: tickets, otp: otpSvc, markers: markers,
@@ -203,8 +208,8 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 		Doc:      api.Tenant(),
 		Resolver: resolver{m: d.Sessions}, BaseURL: "/api/v1",
 		Proof: markers.RequestProof(marker.User), TokenProof: s.tokenProof, Bearer: s.linkKey,
-		Host:     panelHost(s.cfg, d.PanelHost),
-		BulkGate: gate,
+		Host:      panelHost(s.cfg, d.PanelHost),
+		Admission: adm,
 	}
 	built, err := pl.Build()
 	if err != nil {

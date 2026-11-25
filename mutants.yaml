@@ -8017,9 +8017,9 @@ mutants:
     edits:
       - file: internal/authtest/isolation/isolation.go
         old: |-
-          crosses = append(crosses, fx.CrossAt[k])
+          crosses = append(crosses, crossCall{fx.CrossAt[k], st})
         new: |-
-          _ = k
+          _, _ = k, st
     must_fail:
       - pkg: ./internal/authtest/isolation
         tests: [TestACrossAtCallIsJudgedLikeCross]
