@@ -93,16 +93,24 @@ func TestBothGatewaysDown(t *testing.T) {
 	})
 
 	t.Run("the code request of a known and an unknown phone look alike", func(t *testing.T) {
-		kr := req(f.client(), A.Phone).want(202, "")
-		ur := req(f.client(), oracleUnknown).want(202, "")
+		ck, cu := f.client(), f.client()
+		kr := req(ck, A.Phone).want(202, "")
+		ur := req(cu, oracleUnknown).want(202, "")
 		var k, u map[string]any
 		kr.json(&k)
 		ur.json(&u)
 		if len(k) != len(u) || k["expires_in_s"] != u["expires_in_s"] || k["resend_after_s"] != u["resend_after_s"] {
 			t.Fatalf("bodies differ: %v vs %v", k, u)
 		}
-		// The same limits too: a second request inside the cooldown is refused for both.
-		req(f.client(), A.Phone).want(429, "otp_limited")
-		req(f.client(), oracleUnknown).want(429, "otp_limited")
+		// The same limits too. The resend cooldown reads the challenge of the first request, so the second goes out
+		// with no clearing between them, once for each phone.
+		again := func(c *client, phone string) *resp {
+			r := c.post("/auth/otp/request", map[string]any{"phone": phone, "purpose": "login", "locale": "fa"})
+			w.work.Release()
+			return r
+		}
+		again(cu, oracleUnknown).want(429, "otp_limited")
+		req(ck, A.Phone).want(202, "")
+		again(ck, A.Phone).want(429, "otp_limited")
 	})
 }
