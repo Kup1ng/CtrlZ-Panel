@@ -1,0 +1,27 @@
+-- P1 auth review round 4 (sms-r4-7): ctrlz_admin may insert only the columns the
+-- admin code writes into sms_outbox.
+--
+-- 0011 gave ctrlz_admin table-level INSERT on sms_outbox. The worker applies the
+-- daily outbox cap (sms_outbox_cap_daily, D31) when it claims a message for the
+-- first time, which it recognises by attempts = 1 after the claim. A row inserted
+-- with attempts already above 0 therefore looks "counted" and is sent without ever
+-- touching the cap. Code running as ctrlz_admin (an injection in the admin
+-- container, or a leaked pg_admin_password used from inside the backend network)
+-- could queue thousands of such rows: SMS bombing of arbitrary numbers and an
+-- unbounded provider bill, with the money cap still NULL on a default install.
+--
+-- The admin code names id, kind, gateway_id, phone_e164, template_key, locale,
+-- params_ct and created_by (store.qSMSOutboxInsert). attempts, state,
+-- claimed_until, last_error, created_at and sent_at now take their defaults, so
+-- every admin-queued message starts at attempts = 0 and meets the cap.
+--
+-- A new file and not an edit of 0011 (README, Rules).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+-- As the owner. A table-level REVOKE removes the column-level grants too.
+REVOKE INSERT ON ctrlz.sms_outbox FROM ctrlz_admin;
+GRANT INSERT (id, kind, gateway_id, phone_e164, template_key, locale, params_ct, created_by) ON ctrlz.sms_outbox TO ctrlz_admin;
+

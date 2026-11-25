@@ -1,0 +1,86 @@
+// Shared enums and small messages. Numeric values of Protocol, Action, Stage
+// and TargetKind are the same numbers the evaluator uses in memory
+// (contract 5.1), so converting between them is a cast and cannot drift.
+syntax = "proto3";
+
+package ctrlz.common.v1;
+
+option go_package = "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/common/v1;commonv1";
+
+enum Protocol {
+  PROTOCOL_UNSPECIFIED = 0;
+  PROTOCOL_UDP = 1;
+  PROTOCOL_TCP = 2;
+  PROTOCOL_DOH = 3;
+  PROTOCOL_DOT = 4;
+  PROTOCOL_DOQ = 5;
+}
+
+enum Action {
+  ACTION_UNSPECIFIED = 0;
+  ACTION_BLOCK = 1;
+  ACTION_BYPASS = 2;
+  ACTION_REDIRECT = 3;
+}
+
+enum Stage {
+  STAGE_UNSPECIFIED = 0;
+  STAGE_RULE = 1;
+  STAGE_GEO = 2;
+  STAGE_SERVICE = 3;
+  STAGE_FILTER = 4;
+  STAGE_DEFAULT = 5;
+  STAGE_SYSTEM = 6;
+  STAGE_SOFT_DISABLED = 7;
+}
+
+enum AdminState {
+  ADMIN_STATE_UNSPECIFIED = 0;
+  ADMIN_STATE_ENABLED = 1;
+  ADMIN_STATE_SOFT_DISABLED = 2;
+  ADMIN_STATE_HARD_DISABLED = 3;
+}
+
+enum AnalyticsLevel {
+  ANALYTICS_LEVEL_UNSPECIFIED = 0;
+  ANALYTICS_LEVEL_NONE = 1;
+  ANALYTICS_LEVEL_SOME = 2;
+  ANALYTICS_LEVEL_FULL = 3;
+}
+
+enum EntryClass {
+  ENTRY_CLASS_UNSPECIFIED = 0;
+  ENTRY_CLASS_POLICY = 1;
+  ENTRY_CLASS_CATALOG = 2;
+}
+
+enum ResolveMode {
+  RESOLVE_MODE_UNSPECIFIED = 0;
+  RESOLVE_MODE_RECURSIVE = 1;
+  RESOLVE_MODE_UPSTREAM = 2;
+  RESOLVE_MODE_HYBRID = 3;
+}
+
+enum UpstreamKind {
+  UPSTREAM_KIND_UNSPECIFIED = 0;
+  UPSTREAM_KIND_UDP = 1;
+  UPSTREAM_KIND_DOH = 2;
+  UPSTREAM_KIND_DOT = 3;
+  UPSTREAM_KIND_DOQ = 4;
+}
+
+enum TargetKind {
+  TARGET_KIND_UNSPECIFIED = 0;
+  TARGET_KIND_LOCATION = 1;
+  TARGET_KIND_AUTO = 2;
+  TARGET_KIND_RANDOM = 3;
+  TARGET_KIND_IP = 4;
+  TARGET_KIND_HOST = 5;
+}
+
+// Prefix is a network prefix. addr is 4 bytes for IPv4 and 16 for IPv6; the
+// receiver validates the pair (addr length, bits) with wire.ValidatePrefix.
+message Prefix {
+  bytes addr = 1;
+  uint32 bits = 2;
+}

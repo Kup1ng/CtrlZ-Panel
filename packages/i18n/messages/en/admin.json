@@ -1,0 +1,558 @@
+{
+  "nav": {
+    "users": "Users",
+    "invites": "Invites",
+    "sms": "SMS",
+    "settings": "Settings",
+    "audit": "Audit"
+  },
+  "userMenu": {
+    "label": "Account menu for {name}",
+    "menuLabel": "Account",
+    "account": "Account",
+    "logout": "Log out",
+    "freshUntil": "Code verified until {time}"
+  },
+  "pages": {
+    "users": {
+      "title": "Users",
+      "subtitle": "People who have an account, newest first"
+    },
+    "invites": {
+      "title": "Invites",
+      "subtitle": "Invite links and who they were made for"
+    },
+    "sms": {
+      "title": "SMS",
+      "subtitle": "Gateways, routing, message texts and limits"
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "Who may register, and how Passkey is set up"
+    },
+    "audit": {
+      "title": "Audit",
+      "subtitle": "What the admins have done, newest first"
+    }
+  },
+  "copyFailed": "The text could not be copied. Select it and copy it by hand.",
+  "copyNote": "Closing this window or leaving this step empties the clipboard, whatever it holds by then, so something you copied from another app after this value is lost too. If the browser refuses at that moment, the clipboard is emptied when you come back to this tab. The clipboard history that Windows and some other systems keep is out of our reach: clear it yourself.",
+  "grid": {
+    "loadMore": "Load more"
+  },
+  "result": {
+    "warning": "This is shown only once. Copy it now: it cannot be shown again.",
+    "saved": "I have saved it",
+    "confirmTitle": "Close without saving?",
+    "confirmText": "This value will not be shown again. If you have not copied it, you will have to make a new one.",
+    "keep": "Keep it open",
+    "closeAnyway": "Close anyway"
+  },
+  "login": {
+    "title": "Admin sign-in",
+    "subtitle": "Sign in with your username, password and authenticator code.",
+    "username": "Username",
+    "usernameRequired": "Enter your username.",
+    "usernameInvisible": "The username has a character that cannot be seen. Retype it.",
+    "totpHint": "Leave this empty the very first time you sign in.",
+    "submit": "Sign in",
+    "ended": "Your session ended. Sign in again to continue.",
+    "stalled": "The sign-in did not hold. Your browser may be blocking cookies for this site. Try again."
+  },
+  "setup": {
+    "title": "Set up your account",
+    "stepsLabel": "Setup steps",
+    "logout": "Log out",
+    "steps": {
+      "password": "Password",
+      "totp": "Authenticator",
+      "done": "Done"
+    },
+    "password": {
+      "title": "Choose your password",
+      "subtitle": "The password you were given works once. Replace it with one only you know.",
+      "current": "One-time password",
+      "currentHint": "The one you were given.",
+      "currentWrong": "The one-time password is not correct, or it has expired.",
+      "expiry": "A one-time password lasts 24 hours. If it has expired, ask the person who runs the server to issue a new one with <cmd>{command}</cmd>.",
+      "submit": "Set password"
+    },
+    "totp": {
+      "title": "Connect an authenticator",
+      "subtitle": "Every sign-in and every sensitive change will ask for a code from it.",
+      "scan": "Scan the code with an authenticator app, or type the key into it by hand.",
+      "show": "Show a new QR code",
+      "showNote": "Already scanned a key on this device? Type its code below. Showing a new code makes a new key, and the entry you scanned stops working.",
+      "qrTitle": "QR code for the authenticator app",
+      "secretLabel": "Key",
+      "copySecret": "Copy the key",
+      "verify": "Then type the six-digit code the app shows.",
+      "noRecovery": "An admin has no recovery codes. If you lose the authenticator, the person who runs the server can reset it with <cmd>{command}</cmd>.",
+      "submit": "Turn on",
+      "restarted": "The key you were shown is no longer valid, so a new one was made. Scan it again."
+    },
+    "done": {
+      "title": "You are all set",
+      "subtitle": "Your password and authenticator are in place.",
+      "go": "Go to Users"
+    }
+  },
+  "password": {
+    "short": "Use at least 14 characters."
+  },
+  "fresh": {
+    "title": "Confirm with your authenticator",
+    "text": "This change needs a fresh code. Enter the six digits your app shows now. If you just used that code, wait for the next one.",
+    "submit": "Confirm"
+  },
+  "account": {
+    "title": "Change password",
+    "text": "Choose a new password. You will stay signed in here, and every other session will end.",
+    "current": "Current password",
+    "totpHint": "The code your authenticator app shows now.",
+    "sessionsNote": "Other sessions of this account end when the password changes.",
+    "submit": "Change password",
+    "done": "Password changed."
+  },
+  "notices": {
+    "password_reset": {
+      "title": "The console reset your password",
+      "text": "This happened on {time}. If you did not ask for it, tell the person who runs the server."
+    },
+    "totp_reset": {
+      "title": "The console reset your authenticator",
+      "text": "This happened on {time}. If you did not ask for it, tell the person who runs the server."
+    },
+    "sms_gateway_changed": {
+      "title": "An SMS gateway was changed",
+      "text": "This happened on {time}. Check the SMS page and the audit log to see what changed."
+    },
+    "generic": {
+      "title": "A notice about your account",
+      "text": "This was recorded on {time}. Check the audit log."
+    }
+  },
+  "alerts": {
+    "generic": {
+      "title": "An alert needs attention",
+      "text": "Open the SMS page or the audit log for details."
+    },
+    "sms_gateway": {
+      "title": "SMS gateway {provider} has a problem",
+      "transient": "Messages through it are failing for now. The fallback takes over while it does.",
+      "auth": "It refused the key or login. Enter the credentials again on the SMS page.",
+      "credit": "The account is out of credit. Add credit with the provider.",
+      "config": "A template, parameter or sender is set up wrongly. Check the template mappings.",
+      "recipient": "It refused a number. No other gateway was tried.",
+      "blacklisted": "A number is on the telecom blacklist. The fallback was tried.",
+      "other": "It reported a problem. Check the gateway on the SMS page."
+    },
+    "sms_down": {
+      "title": "Text messages cannot be sent",
+      "text": "No gateway can send right now. Sign-in by SMS code and registration by SMS code are down."
+    },
+    "sms_outbox_cap": {
+      "title": "The daily SMS outbox cap was reached",
+      "text": "Messages are held until the cap resets, or until you raise it under Limits."
+    },
+    "sms_payload": {
+      "title": "A message could not be built",
+      "text": "A queued message had an unusable payload and ended unsent."
+    }
+  },
+  "users": {
+    "gridLabel": "Users",
+    "never": "Never",
+    "oneTime": "One-time password",
+    "columns": {
+      "phone": "Phone",
+      "status": "Status",
+      "created": "Created",
+      "lastLogin": "Last sign-in"
+    },
+    "status": {
+      "active": "Active",
+      "suspended": "Suspended",
+      "deleting": "Being deleted"
+    },
+    "empty": {
+      "title": "No users yet",
+      "text": "Create one with the plus button.",
+      "searchTitle": "No user matches",
+      "searchText": "No number starts with what you typed.",
+      "notNumberText": "This is not the start of a mobile number. Type digits, for example 0912."
+    },
+    "create": {
+      "open": "Create user",
+      "title": "Create a user",
+      "text": "The user gets a one-time password to sign in with. It works without an SMS gateway and must be changed at the first sign-in.",
+      "locale": "Language",
+      "submit": "Create",
+      "lost": "No answer came, so the user may now exist with a one-time password you did not see. It cannot be shown again. Check the list before you try again."
+    },
+    "result": {
+      "title": "User created",
+      "intro": "Give the user this one-time password. They must change it when they sign in.",
+      "password": "One-time password",
+      "copy": "Copy the one-time password"
+    }
+  },
+  "invites": {
+    "gridLabel": "Invites",
+    "empty": {
+      "title": "No invites yet",
+      "text": "Create one with the plus button."
+    },
+    "columns": {
+      "phone": "Phone",
+      "state": "State",
+      "locale": "Language",
+      "expires": "Expires",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "state": {
+      "pending": "Waiting",
+      "used": "Used",
+      "revoked": "Revoked",
+      "expired": "Expired"
+    },
+    "create": {
+      "open": "Create invite",
+      "title": "Create an invite",
+      "text": "An invite is one link for one phone number. You see it once, after you create it. Nothing is sent by SMS.",
+      "phoneHint": "The invite works only for this number.",
+      "locale": "Language",
+      "ttl": "Valid for (hours)",
+      "ttlHint": "At most {max, number} hours.",
+      "ttlRange": "Enter a whole number of hours from 1 to {max, number}.",
+      "submit": "Create",
+      "lost": "No answer came, so the invite may now exist with a link you did not see. It cannot be shown again. Check the list, and revoke it before you make another."
+    },
+    "result": {
+      "title": "Invite created",
+      "intro": "Nothing is sent by SMS. Copy the link and give it to the person yourself. If you lose it, revoke the invite and make a new one.",
+      "link": "Invite link",
+      "copyLink": "Copy the invite link"
+    },
+    "revoke": {
+      "action": "Revoke",
+      "row": "Revoke the invite for {phone}",
+      "title": "Revoke this invite?",
+      "text": "The invite for {phone} will stop working. This cannot be undone.",
+      "confirm": "Revoke"
+    }
+  },
+  "refreshFailed": "Refreshing failed. What you see and what you typed are kept, but the values may be out of date.",
+  "conflict": {
+    "text": "Another admin changed this while you were editing. The server now holds:",
+    "empty": "no value",
+    "on": "on",
+    "off": "off",
+    "keep": "Keep my value",
+    "useServer": "Use the server's value",
+    "refreshed": "Another admin changed these values while you were editing. The form now shows the server's values. Check them and press Save again."
+  },
+  "fieldErrors": {
+    "body": {
+      "invalid": "The text was refused. Check the number of placeholders, and remove any link.",
+      "too_long": "The text needs more than one billed part. A login-code text or a security notice must fit one part."
+    },
+    "rp_id": {
+      "invalid": "This is not a valid RP ID. Use the host name only: no spaces, no https:// and no port."
+    },
+    "empty": "It is empty.",
+    "out_of_range": "It is outside the allowed range.",
+    "not_available": "It cannot be turned on yet.",
+    "same_as_primary": "It must be a different gateway from the primary one.",
+    "count": "The number of names does not match.",
+    "not_allowed": "It is not allowed here.",
+    "not_configured": "It has no credentials yet.",
+    "unknown": "It is not a known value.",
+    "same_as_current": "It must differ from the current one.",
+    "not_panel_host": "It must be this panel's own domain, or a parent domain of it.",
+    "public_suffix": "It is a public suffix such as .ir, not a domain of yours.",
+    "price_required": "Every gateway the route can use needs a price first, while a daily money cap is set.",
+    "pending_confirmation": "Its new credentials wait for the owner's confirmation at the server console.",
+    "pending_exists": "A pair of credentials already waits at the server console, so this save was refused. Only the session that saved it holds the fingerprint that confirms it. If you did not just save it yourself, someone else may have: discard it at the console (ctrlz-admin sms discard), check the admin sessions, and then save yours again."
+  },
+  "sms": {
+    "alerts": {
+      "region": "SMS alerts",
+      "ack": "Acknowledge"
+    },
+    "tabs": {
+      "label": "SMS sections",
+      "gateways": "Gateways",
+      "routing": "Routing",
+      "templates": "Templates",
+      "limits": "Limits",
+      "stats": "Stats"
+    },
+    "role": {
+      "primary": "Primary",
+      "fallback": "Fallback",
+      "disabled": "Not used"
+    },
+    "gateways": {
+      "empty": "No gateway is listed.",
+      "configured": "Credentials set",
+      "notConfigured": "No credentials",
+      "hint": "Key",
+      "cost": "Price",
+      "costValue": "{amount} Rial per message",
+      "lastOk": "Last success",
+      "lastError": "Last error",
+      "breaker": "The gateway is paused until {time} after repeated failures.",
+      "edit": "Edit credentials",
+      "test": "Test send",
+      "pending": "Awaiting confirmation",
+      "pendingText": "New credentials are saved but not active yet. The owner confirms them at the server console, and the confirm command needs the fingerprint that was shown once when they were saved. See what waits with <cmd>{command}</cmd>. If the fingerprint was lost, discard them at the console and save them again.",
+      "staged": {
+        "title": "Confirm the credentials at the console",
+        "intro": "Run this line at the server console to activate the credentials of {provider}. Replace {placeholder} with the hint that {pending} shows for them. The fingerprint is part of the line and is shown only here, once.",
+        "command": "Console command",
+        "copy": "Copy the console command"
+      }
+    },
+    "edit": {
+      "title": "Credentials of {provider}",
+      "text": "Leave a field empty to keep what is saved. Credentials are sealed when you save and are never shown again.",
+      "fields": {
+        "api_key": "API key",
+        "username": "Username",
+        "password": "Password"
+      },
+      "melipayamakPasswordHint": "Paste the API key from the web service settings of the provider's panel. It is not the password you sign in with.",
+      "ipNote": "The panel server's outgoing address must be on each gateway's list of allowed addresses.",
+      "cost": "Price per message (Rial)",
+      "costInvalid": "Enter a number, with up to four decimals, or leave it empty.",
+      "nothing": "Type a credential or a price to change.",
+      "saved": "Gateway saved.",
+      "submit": "Save",
+      "savedPending": "Credentials saved. They stay inactive until the owner confirms them at the server console.",
+      "noFingerprint": "Credentials saved, but the answer carried no usable fingerprint, so they cannot be confirmed. Discard them at the server console and save them again.",
+      "lost": "No answer came, so the credentials may be waiting at the server console without the fingerprint that confirms them, and it cannot be shown again. See what waits with {pending}. If this gateway is listed, discard it with {discard} and save the credentials again."
+    },
+    "test": {
+      "title": "Test send through {provider}",
+      "text": "A real message goes through this gateway only. It does not fall back to another one.",
+      "template": "Template",
+      "templatePlaceholder": "Choose a template",
+      "noTemplate": "There is no template to send.",
+      "locale": "Language",
+      "submit": "Send",
+      "close": "Close",
+      "waiting": "Waiting for the gateway…",
+      "sent": "The message was accepted by {provider}.",
+      "failed": "The message could not be sent."
+    },
+    "routing": {
+      "title": "Routing",
+      "text": "The primary gateway sends first. The fallback takes over when the primary fails.",
+      "primary": "Primary gateway",
+      "fallback": "Fallback gateway",
+      "fallbackHint": "It must be a different gateway from the primary one.",
+      "choose": "Choose a gateway",
+      "primaryRequired": "Choose the primary gateway.",
+      "same": "The fallback must differ from the primary.",
+      "noneConfigured": "No gateway has credentials yet. Set them on the Gateways tab first.",
+      "saved": "Routing saved.",
+      "submit": "Save routing"
+    },
+    "templates": {
+      "empty": "No template is listed.",
+      "locale": {
+        "fa": "Persian",
+        "en": "English"
+      },
+      "body": "Text",
+      "bodyHint": "One line, with no link. '{code}' stands for the code.",
+      "bodyRequired": "The text cannot be empty.",
+      "bodyInvalid": "The text was refused. Check the number of placeholders, and remove any link.",
+      "count": "{characters} characters, {parts, plural, =0 {no parts} one {# billed part} other {# billed parts}} ({encoding}: {single} for one part, then {multi} each).",
+      "encoding": {
+        "gsm7": "GSM-7",
+        "ucs2": "Unicode"
+      },
+      "otpTooLongFa": "A login-code text must fit one billed part: at most {limit} characters in Persian, with the code filled in. Shorten it.",
+      "otpTooLongEn": "A login-code text must fit one billed part: at most {limit} characters in English, with the code filled in. Shorten it.",
+      "noticeHint": "One line, with no link and no placeholder. A security notice carries no value, so a test send takes none.",
+      "noticeTooLongFa": "A security notice must fit one billed part: at most {limit} characters in Persian. Shorten it.",
+      "noticeTooLongEn": "A security notice must fit one billed part: at most {limit} characters in English. Shorten it.",
+      "noticeNotGsm": "An English security notice may use only GSM characters. One other letter (an accent outside the GSM set, a Persian letter, an emoji) makes it a Unicode message of 70 characters per part.",
+      "noticeNoCode": "A security notice carries no value. Remove the placeholder.",
+      "otpNotGsm": "An English login-code text may use only GSM characters. One other letter (an accent outside the GSM set, a Persian letter, an emoji) makes it a Unicode message of 70 characters per part.",
+      "save": "Save text",
+      "saved": "Text saved.",
+      "mappings": "Provider templates",
+      "mappingsHint": "{count, plural, =0 {The text has no placeholders, so give no parameter names.} one {The text has # placeholder, so give one parameter name.} other {The text has # placeholders, so give one parameter name for each.}}",
+      "providerId": "Template ID at the provider",
+      "paramNames": "Parameter names",
+      "paramNamesHint": "Separate the names with commas, in the order of the placeholders.",
+      "idInvalid": "Enter the template ID: digits only, up to 18, above zero.",
+      "idInvalidSmsir": "This gateway takes a template ID from 1 to 2147483647: digits only.",
+      "namesInvalid": "Use up to {max, number} names made of letters, digits, dots, dashes and underscores.",
+      "saveMapping": "Save mapping",
+      "mappingSaved": "Mapping saved."
+    },
+    "limits": {
+      "title": "Limits",
+      "text": "Caps on the codes that can be sent and on what the SMS service may spend each day.",
+      "groups": {
+        "otp": "Codes",
+        "sms": "Spending"
+      },
+      "range": "Enter a whole number from {min, number} to {max, number}.",
+      "rangeMin": "Enter a whole number, {min, number} or more.",
+      "saved": "Limits saved.",
+      "submit": "Save limits",
+      "fields": {
+        "otp_cap_phone": {
+          "label": "Per number",
+          "hint": "Codes to one number in an hour."
+        },
+        "otp_cap_phone_net": {
+          "label": "Per number and network",
+          "hint": "Codes to one number from one network."
+        },
+        "otp_cap_ip": {
+          "label": "Per address",
+          "hint": "Codes asked for from one address."
+        },
+        "otp_cap_net24": {
+          "label": "Per network (/24)",
+          "hint": "Codes asked for from one small network."
+        },
+        "otp_cap_phone_trusted": {
+          "label": "Per known number",
+          "hint": "A higher cap for a number that has signed in before."
+        },
+        "otp_cap_net48": {
+          "label": "Per large network (/48)",
+          "hint": "Codes asked for from one large network."
+        },
+        "otp_cap_global": {
+          "label": "In total",
+          "hint": "Codes sent for everyone in an hour."
+        },
+        "otp_cooldown_s": {
+          "label": "Wait between codes (seconds)",
+          "hint": "From 10 seconds to an hour."
+        },
+        "otp_soft_pct": {
+          "label": "Warning threshold (percent)",
+          "hint": "Raise an alert at this share of a cap."
+        },
+        "sms_outbox_cap_daily": {
+          "label": "Outbox per day",
+          "hint": "Messages other than codes. 0 stops them."
+        },
+        "sms_cost_cap_daily": {
+          "label": "Spending per day (Rial)",
+          "hint": "Leave empty for no money cap."
+        }
+      }
+    },
+    "stats": {
+      "empty": "No messages yet",
+      "emptyText": "Nothing was sent in the last {days, number} days.",
+      "range": "The last {days, number} days.",
+      "perDay": "Per day",
+      "perGateway": "Per gateway",
+      "kpi": {
+        "otp": "Codes sent",
+        "outbox": "Other messages",
+        "cost": "Cost (Rial)",
+        "accepted": "Accepted",
+        "failed": "Failed"
+      },
+      "columns": {
+        "day": "Day",
+        "otp": "Codes",
+        "outbox": "Other",
+        "cost": "Cost (Rial)",
+        "provider": "Gateway",
+        "accepted": "Accepted",
+        "failed": "Failed"
+      }
+    }
+  },
+  "settings": {
+    "cancel": "Cancel",
+    "retryIn": "Try again in {seconds, number} s",
+    "impactLoading": "Counting…",
+    "impactFailed": "The effect could not be counted. Try again before you confirm.",
+    "registration": {
+      "title": "Registration",
+      "text": "Who may create an account.",
+      "mode": {
+        "label": "Mode",
+        "closed": "Closed",
+        "invite": "By invite",
+        "open": "Open"
+      },
+      "modeText": {
+        "closed": "Nobody can register. Only an admin can create a user.",
+        "invite": "A person needs an invite link to register.",
+        "open": "Anyone with a phone number can register."
+      },
+      "grace": "Grace period (days)",
+      "graceHint": "Accounts claimed but never proven get this long to prove their number. From {min, number} to {max, number}.",
+      "graceRange": "Enter a whole number of days from {min, number} to {max, number}.",
+      "impact": {
+        "title": "Moving to {mode}",
+        "graced": "{count, plural, one {# unproven account gets a grace period.} other {# unproven accounts get a grace period.}}",
+        "suspended": "{count, plural, one {# account is suspended at once.} other {# accounts are suspended at once.}}"
+      },
+      "confirm": "Move to {mode}",
+      "saved": "Registration mode saved."
+    },
+    "webauthn": {
+      "title": "Passkey",
+      "text": "The site address passkeys are tied to, and whether people can use them.",
+      "rpId": "RP ID",
+      "rpIdHint": "The panel's host name, or a suffix of it.",
+      "rpRequired": "Enter the RP ID.",
+      "rpInvalid": "The RP ID has a character that cannot be seen. Retype it.",
+      "rpMalformed": "This is not a valid RP ID. Use the host name only: no spaces, no https:// and no port.",
+      "enabled": "Passkey sign-in",
+      "enabledHint": "Turn it on when the real domain is in place.",
+      "origins": "Allowed origins",
+      "originsNone": "None yet.",
+      "originsHint": "The server writes these from the panel's address. They cannot be edited here.",
+      "impact": {
+        "title": "Changing the RP ID",
+        "rejected": "Nothing can be counted until the RP ID is valid.",
+        "credentials": "{count, plural, one {# passkey becomes out of date.} other {# passkeys become out of date.}}",
+        "users": "{count, plural, one {# user is affected.} other {# users are affected.}}",
+        "enforced": "{count, plural, one {# of them signs in only with a passkey.} other {# of them sign in only with a passkey.}}"
+      },
+      "refused": "The server refused these values. In production it will not turn Passkey on until the real domain has been accepted.",
+      "submit": "Save",
+      "saved": "Passkey settings saved."
+    }
+  },
+  "audit": {
+    "gridLabel": "Audit log",
+    "filter": {
+      "label": "Action",
+      "hint": "An exact action name. Leave empty to see everything.",
+      "invalid": "An action name uses lowercase letters, digits, dots, dashes and underscores."
+    },
+    "columns": {
+      "at": "When",
+      "admin": "Admin",
+      "action": "Action",
+      "target": "Target",
+      "params": "Details",
+      "ip": "Address"
+    },
+    "empty": {
+      "title": "Nothing recorded yet",
+      "text": "Admin actions will appear here.",
+      "filterTitle": "No entry for this action",
+      "filterText": "Try another action name, or clear the filter."
+    }
+  }
+}

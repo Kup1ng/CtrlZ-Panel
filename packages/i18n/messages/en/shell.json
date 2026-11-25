@@ -1,0 +1,221 @@
+{
+  "nav": {
+    "main": "Main navigation",
+    "profiles": "Profiles",
+    "endpoints": "Endpoints",
+    "analytics": "Analytics",
+    "statistics": "Statistics",
+    "activityLog": "Activity log",
+    "domainTest": "Domain test",
+    "preferences": "Preferences",
+    "account": "Account",
+    "api": "API",
+    "logout": "Log out"
+  },
+  "sidebar": {
+    "toggle": "Collapse or expand the sidebar",
+    "openMenu": "Open menu"
+  },
+  "logoMenu": {
+    "label": "Ctrl Z menu",
+    "version": "Version <v>{version}</v>"
+  },
+  "header": {
+    "search": "Search",
+    "searchPlaceholder": "Search…",
+    "more": "More options",
+    "create": "Create",
+    "help": "Help for this section"
+  },
+  "pages": {
+    "profiles": {
+      "subtitle": "Filter and rule sets for each endpoint"
+    },
+    "endpoints": {
+      "subtitle": "Your DNS connection points"
+    },
+    "statistics": {
+      "subtitle": "Traffic and blocked requests at a glance"
+    },
+    "activityLog": {
+      "subtitle": "Recent requests and what the filter decided"
+    },
+    "domainTest": {
+      "subtitle": "See how your profile treats a domain"
+    },
+    "api": {
+      "subtitle": "Tokens for programmatic access to your account"
+    }
+  },
+  "stub": {
+    "title": "Not available yet",
+    "text": "This section arrives in a later release."
+  },
+  "notFound": {
+    "title": "Page not found",
+    "text": "The address you opened does not exist or has moved.",
+    "home": "Go to the home page"
+  },
+  "banners": {
+    "region": "Site-wide notices",
+    "dismiss": "Dismiss notice",
+    "more": "{count, plural, one {# more notice} other {# more notices}}",
+    "offline": {
+      "title": "You are offline",
+      "text": "Changes are not saved until the connection comes back."
+    }
+  },
+  "bell": {
+    "label": "Notifications",
+    "title": "Notifications",
+    "unread": "{count, plural, one {# unread notification} other {# unread notifications}}",
+    "unreadMark": "Unread",
+    "open": "Open",
+    "showOlder": "Show older notifications",
+    "empty": {
+      "title": "No notifications",
+      "text": "Anything you need to know will show up here."
+    },
+    "severity": {
+      "critical": "Important warning",
+      "warning": "Warning"
+    },
+    "security": {
+      "title": "Security notices",
+      "markRead": "Mark as read",
+      "markReadAria": "Mark as read: {title}",
+      "notMarkable": "You can clear this notice after you sign in again.",
+      "changePassword": "Change password",
+      "reviewSessions": "Review sessions",
+      "reviewPasskeys": "Review passkeys",
+      "makeNewCodes": "Make new codes",
+      "several": "{count, number} notices of this kind, the first on {first}.",
+      "markFailed": "Some notices could not be cleared yet. Wait a minute and press again.",
+      "markPartial": "{done, number} notices cleared, {left, number} left. Press again to clear them."
+    },
+    "announcement": "Announcement",
+    "generic": "New notification",
+    "kinds": {
+      "password_reset": {
+        "title": "Your password was reset",
+        "text": "If this was not you, change your password now from Account."
+      },
+      "enforce_lift_pending": {
+        "title": "Passkey-only sign-in will be lifted soon",
+        "text": "Because the password was reset without a passkey, this requirement ends after 72 hours. Your current passkey keeps working until then."
+      },
+      "phone_changed": {
+        "title": "Your account phone number changed",
+        "text": "If this was not you, change your password at once and sign out unknown devices."
+      },
+      "passkey_review": {
+        "title": "Review your account passkeys",
+        "text": "Passkey sign-in and verification stay closed until you review the list."
+      },
+      "passkey_stale": {
+        "title": "Your passkey no longer works",
+        "text": "The site address changed, so the old passkey is out of date. Add a new one."
+      },
+      "passkey_added": {
+        "title": "A passkey was added to your account",
+        "text": "A passkey was added to your account on {when}. If this was not you, remove it under Passkeys, then change your password and end the other sessions. If you cannot tell which passkey is yours, use Forgot password on the sign-in page: it ends every session and puts every passkey up for review."
+      },
+      "recovery_codes_regenerated": {
+        "title": "New recovery codes were made",
+        "text": "Your recovery codes were replaced on {when}, and the old codes no longer work. If this was not you, make new codes, review your passkeys, then change your password and end the other sessions. New codes are what make the ones a stranger holds useless. A passkey added by someone else signs in on its own, so check that list too."
+      },
+      "totp_lost": {
+        "title": "Your authenticator was cleared",
+        "text": "The service cleared your authenticator because its key was lost. Set up two-step verification again under Account."
+      },
+      "passkey_enforce_cleared": {
+        "title": "Passkey-only sign-in was lifted",
+        "text": "{users, plural, one {# user was} other {# users were}} left with no working passkey, so the passkey-only requirement was lifted for them. They can sign in with a password again and should add a new passkey."
+      }
+    },
+    "moreUnread": "More unread notices are further back than the panel has loaded. Open the notifications and press Show older notifications."
+  },
+  "help": {
+    "close": "Got it",
+    "account": {
+      "title": "Account",
+      "body": "Sign-in details, passkeys, active sessions, and appearance and language options are set here. Sensitive changes ask for your password or a code again."
+    },
+    "profiles": {
+      "title": "Profiles",
+      "body": "A profile is a set of filters, services and rules. Attach it to one or more endpoints to apply it to their traffic."
+    },
+    "endpoints": {
+      "title": "Endpoints",
+      "body": "An endpoint is the DNS address you enter on a device or router. Each endpoint is attached to one profile."
+    },
+    "statistics": {
+      "title": "Statistics",
+      "body": "See request counts, blocked requests and traffic categories over a range you pick."
+    },
+    "activityLog": {
+      "title": "Activity log",
+      "body": "A list of recent requests with the filter's decision for each. You can create a rule for a domain from here."
+    },
+    "domainTest": {
+      "title": "Domain test",
+      "body": "Enter a domain to see whether your profile blocks it, allows it or redirects it."
+    },
+    "apiTokens": {
+      "title": "API tokens",
+      "body": "A token lets an app or script reach your account without signing in to the panel. Treat it like a password."
+    }
+  },
+  "theme": {
+    "saveFailed": "Your theme could not be saved, so the saved one is back."
+  },
+  "logout": {
+    "title": "Log out of your account?",
+    "text": "You will need your password or an SMS code to sign in again.",
+    "confirm": "Log out"
+  },
+  "onboarding": {
+    "title": "Getting started",
+    "progress": "{done} of {total} steps done",
+    "dismiss": "Hide",
+    "done": "Done",
+    "start": "Start",
+    "steps": {
+      "createProfile": {
+        "title": "Create a profile",
+        "text": "Make a profile to hold your filters."
+      },
+      "enableFilter": {
+        "title": "Turn on a filter",
+        "text": "Enable at least one filter in your profile."
+      },
+      "addEndpoint": {
+        "title": "Add an endpoint",
+        "text": "Create an endpoint and attach the profile to it."
+      },
+      "configureEndpoint": {
+        "title": "Set up the endpoint",
+        "text": "Enter the DNS address on your device."
+      },
+      "tutorial": {
+        "title": "See the guide",
+        "text": "Read the setup steps for each operating system."
+      }
+    },
+    "confirm": {
+      "title": "Hide this guide for good?",
+      "text": "After you confirm, it will not appear again.",
+      "action": "Hide it"
+    }
+  },
+  "palette": {
+    "label": "Jump to a page",
+    "placeholder": "Go to…",
+    "pages": "Pages"
+  },
+  "profileSwitcher": {
+    "label": "Profile",
+    "none": "Choose a profile",
+    "search": "Search profiles…"
+  }
+}
