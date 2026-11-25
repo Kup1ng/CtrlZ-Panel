@@ -114,9 +114,10 @@ func (h *commitHook) Commit(ctx context.Context, c *Commit) error {
 	return h.memBackend.Commit(ctx, c)
 }
 
-// W4-r2-2: the blob files are written before the transaction and its log lock, and written again inside it when the
-// collector took one away between the two.
-func TestBlobFilesAreWrittenBeforeTheTransactionAndAgainInsideIt(t *testing.T) {
+// W4-r2-2, W4-r3-1: the blob files are put before the transaction and its log lock, and looked at again inside it. A file the
+// collector took away between the two refuses the entry (the bytes are not kept to put it again); the next pass compiles the
+// tenant again, puts the file and writes the entry.
+func TestBlobFilesAreWrittenBeforeTheTransactionAndCheckedInsideIt(t *testing.T) {
 	e := newEnv(t, nil)
 	a := uid(1, 1)
 	in := newTenantInput()
@@ -125,7 +126,7 @@ func TestBlobFilesAreWrittenBeforeTheTransactionAndAgainInsideIt(t *testing.T) {
 	e.m.tenants[a] = in
 	e.m.mark(a, uuid.New())
 
-	entered, missing := 0, 0
+	entered, missing, taken := 0, 0, false
 	e.c = e.compiler(func(c *Config) {
 		c.Backend = &commitHook{memBackend: e.m, before: func(cm *Commit) {
 			for _, row := range cm.Put {
@@ -133,21 +134,30 @@ func TestBlobFilesAreWrittenBeforeTheTransactionAndAgainInsideIt(t *testing.T) {
 				if e.a.Size(row.Hash) < 0 {
 					missing++
 				}
-				// The collector deletes a file under the log lock, between the put before it and the put inside.
-				if err := e.a.Delete(row.Hash); err != nil {
-					t.Error(err)
+				// The collector deletes a file under the log lock, between the put before it and the check inside, once.
+				if !taken {
+					if err := e.a.Delete(row.Hash); err != nil {
+						t.Error(err)
+					}
 				}
 			}
+			taken = true
 		}}
 	})
-	e.tick(0)
-	if entered == 0 {
-		t.Fatal("the entry named no blob")
+	e.clk.add(time.Second)
+	if err := e.c.Tick(e.ctx); !errors.Is(err, ErrBlobGone) {
+		t.Fatalf("an entry whose file the collector took was written, or failed otherwise: %v", err)
+	}
+	if e.m.seqs() != 0 || len(e.m.marks) != 1 {
+		t.Fatalf("%d entries and %d marks after a refused entry", e.m.seqs(), len(e.m.marks))
+	}
+	e.settle()
+	if entered < 2 {
+		t.Fatal("the entry was not tried again")
 	}
 	if missing != 0 {
 		t.Fatalf("%d blob files were not in the store when the transaction began", missing)
 	}
-	// The node fetches every blob the log names: the file the collector took away was written again under the lock.
 	if st := e.node(); len(st.Endpoints) != 1 || len(st.Profiles) != 1 {
 		t.Fatalf("the node holds %d endpoints and %d blobs", len(st.Endpoints), len(st.Profiles))
 	}
@@ -225,8 +235,13 @@ func TestTheTailOfTheLogIsReadInBatchesAndCounted(t *testing.T) {
 	for _, r := range e.m.log {
 		bytesWritten += uint64(len(r.Payload))
 	}
-	if e.c.sinceSnap != bytesWritten {
-		t.Fatalf("the bytes since the snapshot are %d, the log holds %d", e.c.sinceSnap, bytesWritten)
+	// The new blob files count too: churn of blobs with small entries fills the volume as surely as large entries (W4-r3-8).
+	withBlobs := bytesWritten
+	for _, a := range e.m.arts {
+		withBlobs += uint64(a.Size)
+	}
+	if e.c.sinceSnap != withBlobs {
+		t.Fatalf("the bytes since the snapshot are %d, the log and the new blobs hold %d", e.c.sinceSnap, withBlobs)
 	}
 
 	e.c = e.compiler(func(c *Config) { c.SnapshotEvery = 1 << 30; c.SnapshotAge = 1000 * time.Hour })
@@ -307,6 +322,7 @@ func TestRulesAreReadOneProfileAtATimeAndOnlyForBoundProfiles(t *testing.T) {
 		t.Fatalf("a tenant whose rules could not be read: %d records, alert %v", len(e.c.View().Endpoints), e.alertFor(ReasonProfile, a))
 	}
 	// A lost connection is the database's: the pass stops and the mark stays.
+	e.m.checkErr = store.ErrConnection
 	e.m.rulesErr = map[uuid.UUID]error{a: store.ErrConnection}
 	e.clk.add(time.Minute)
 	var err error

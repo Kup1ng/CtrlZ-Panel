@@ -35,11 +35,14 @@ const (
 // names and, at worst, the blobs it frees (del_blobs are known only when the entry is built, so each delete and each
 // replaced record counts the blobs its old record bound); bytes is an estimate of the encoded size.
 type chunk struct {
-	putE  []*policyv1.EndpointRecord
-	delE  [][]byte
-	putC  []*policyv1.ClaimRecord
-	delC  [][]byte
-	blobs map[string]*Profile // every blob the put records bind that was compiled, by hash
+	putE []*policyv1.EndpointRecord
+	delE [][]byte
+	putC []*policyv1.ClaimRecord
+	delC [][]byte
+	// blobs is the size of every blob the put records bind that was compiled, by hash. The bytes are not kept: a pass
+	// compiles every owed tenant before it writes, and the bytes of the whole fleet's blobs at once would not fit in the
+	// worker (W4-r3-1). The files are put in the store as each tenant compiles, and the entry only names them.
+	blobs map[string]int
 
 	v        *View
 	n, bytes int
@@ -53,7 +56,7 @@ type chunk struct {
 	class   commonv1.EntryClass
 }
 
-func newChunk(v *View) *chunk { return &chunk{blobs: map[string]*Profile{}, v: v} }
+func newChunk(v *View) *chunk { return &chunk{blobs: map[string]int{}, v: v} }
 
 func (c *chunk) records() int { return c.n }
 
@@ -73,11 +76,14 @@ func (c *chunk) freed(id []byte) int {
 }
 
 // costPutE is what a put of rec adds to the chunk: its blobs that are not in the chunk yet count with it.
-func (c *chunk) costPutE(rec *policyv1.EndpointRecord, blobs map[string]*Profile) (n, size int) {
+func (c *chunk) costPutE(rec *policyv1.EndpointRecord, blobs map[string]int) (n, size int) {
 	f := c.freed(rec.EndpointId)
 	n, size = 1+f, proto.Size(rec)+entryFrame+f*delBlobBytes
 	for _, h := range bindings(rec) {
-		if p := blobs[string(h)]; p != nil && c.blobs[string(h)] == nil {
+		if _, ok := blobs[string(h)]; !ok {
+			continue
+		}
+		if _, in := c.blobs[string(h)]; !in {
 			n++
 			size += blobRefBytes
 		}
@@ -85,15 +91,26 @@ func (c *chunk) costPutE(rec *policyv1.EndpointRecord, blobs map[string]*Profile
 	return n, size
 }
 
-func (c *chunk) addPutE(rec *policyv1.EndpointRecord, blobs map[string]*Profile) {
+func (c *chunk) addPutE(rec *policyv1.EndpointRecord, blobs map[string]int) {
 	n, size := c.costPutE(rec, blobs)
 	c.n, c.bytes = c.n+n, c.bytes+size
 	c.putE = append(c.putE, rec)
 	for _, h := range bindings(rec) {
-		if p := blobs[string(h)]; p != nil {
-			c.blobs[string(h)] = p
+		if sz, ok := blobs[string(h)]; ok {
+			c.blobs[string(h)] = sz
 		}
 	}
+}
+
+// blobSizes is what a diff keeps of the compiled blobs of a tenant: the size, never the bytes.
+func blobSizes(blobs map[string]*Profile) map[string]int {
+	out := make(map[string]int, len(blobs))
+	for h, p := range blobs {
+		if p != nil {
+			out[h] = len(p.Bytes)
+		}
+	}
+	return out
 }
 
 func (c *chunk) costDelE(id []byte) (n, size int) {
@@ -153,6 +170,7 @@ func claimIndex(v *View) map[string][]string {
 func diffTenant(v *View, tenant uuid.UUID, out *Output, owned []string, claimsOf map[string][]string) *diff {
 	d := &diff{tenants: []uuid.UUID{tenant}}
 	d.chunk = *newChunk(v)
+	sizes := blobSizes(out.Blobs)
 	for _, k := range sortedKeys(out.Endpoints) {
 		rec := out.Endpoints[k]
 		v.owner[k] = tenant
@@ -165,7 +183,7 @@ func diffTenant(v *View, tenant uuid.UUID, out *Output, owned []string, claimsOf
 			out.Problems = append(out.Problems, ReasonRecordInvalid)
 			continue
 		}
-		d.addPutE(rec, out.Blobs)
+		d.addPutE(rec, sizes)
 	}
 	for k := range out.Kept {
 		v.owner[k] = tenant
@@ -368,8 +386,9 @@ type built struct {
 	entry   *policyv1.ConfigEntry
 	payload []byte
 	hash    []byte
-	// files are the blobs whose bytes the store must hold before the entry is committed.
-	files map[string]*Profile
+	// files are the blobs this entry names in put_blobs, by hash with their size: the store must hold each before the entry is
+	// committed. Their bytes were put as the tenant compiled.
+	files map[string]int
 	put   []artifactRow
 	gc    [][]byte
 }
@@ -393,7 +412,7 @@ func build(v *View, c *chunk, now time.Time, major uint32) (*built, error) {
 	if e.Class == commonv1.EntryClass_ENTRY_CLASS_UNSPECIFIED {
 		e.Class = commonv1.EntryClass_ENTRY_CLASS_POLICY
 	}
-	b := &built{entry: e, files: map[string]*Profile{}}
+	b := &built{entry: e, files: map[string]int{}}
 
 	delta := map[string]int{}
 	for _, id := range c.delE {
@@ -416,16 +435,16 @@ func build(v *View, c *chunk, now time.Time, major uint32) (*built, error) {
 	for _, h := range sortedKeys(delta) {
 		bound := v.refs[h] + delta[h]
 		bi := v.blobs[h]
-		p := c.blobs[h]
+		size, compiled := c.blobs[h]
 		switch {
-		case bound > 0 && delta[h] > 0 && p != nil && (bi == nil || bi.gcAfter != 0):
-			e.PutBlobs = append(e.PutBlobs, &policyv1.BlobRef{Hash: []byte(h), Size: uint64(len(p.Bytes)), Kind: policyv1.BlobKind_BLOB_KIND_PROFILE})
-			b.files[h] = p
+		case bound > 0 && delta[h] > 0 && compiled && (bi == nil || bi.gcAfter != 0):
+			e.PutBlobs = append(e.PutBlobs, &policyv1.BlobRef{Hash: []byte(h), Size: uint64(size), Kind: policyv1.BlobKind_BLOB_KIND_PROFILE})
+			b.files[h] = size
 			first := v.Seq + 1
 			if bi != nil {
 				first = bi.firstSeq
 			}
-			b.put = append(b.put, artifactRow{Hash: []byte(h), Kind: kindProfile, Size: int64(len(p.Bytes)), StoreRef: hexOf([]byte(h)), FirstSeq: first})
+			b.put = append(b.put, artifactRow{Hash: []byte(h), Kind: kindProfile, Size: int64(size), StoreRef: hexOf([]byte(h)), FirstSeq: first})
 		case bound == 0 && bi != nil && bi.gcAfter == 0:
 			e.DelBlobs = append(e.DelBlobs, []byte(h))
 			b.gc = append(b.gc, []byte(h))

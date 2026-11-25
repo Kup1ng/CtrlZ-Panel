@@ -161,3 +161,25 @@ func TestASilentCanaryIsNotReleasedEarly(t *testing.T) {
 		t.Fatalf("a canary with no stream ended the soak: release %d", q.Release())
 	}
 }
+
+// W4-r3-11: an ack above what was written, or above what the node may read, is ignored and reported: one node cannot take the
+// stagger away from the nodes behind it.
+func TestAnAckAboveWhatWasServedIsIgnored(t *testing.T) {
+	c := &clock{t: time.Unix(1000, 0)}
+	q := newQ(c, "fallback", "primary", "third")
+	q.Written(1, Policy)
+	if q.Ack("fallback", 1<<63, true) {
+		t.Fatal("an ack of seq 2^63 was believed")
+	}
+	if q.Cursor("primary") != 0 {
+		t.Fatalf("the node behind the liar moved to %d", q.Cursor("primary"))
+	}
+	// Above its own cursor but not above what is written: also not served to it yet.
+	q.Written(2, Policy)
+	if q.Ack("primary", 2, true) {
+		t.Fatal("an ack of an entry the node was never allowed to read was believed")
+	}
+	if !q.Ack("fallback", 2, true) || q.Cursor("primary") != 2 {
+		t.Fatal("a true ack was refused")
+	}
+}

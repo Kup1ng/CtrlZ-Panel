@@ -157,11 +157,17 @@ func (q *Queue) Written(seq uint64, class Class) {
 	q.recompute()
 }
 
-// Ack records an ApplyResult: the node has applied seq, ok says without a refusal of the entry itself.
-func (q *Queue) Ack(id string, seq uint64, ok bool) {
+// Ack records an ApplyResult: the node has applied seq, ok says without a refusal of the entry itself. A seq above what was
+// written, or above what the node was allowed to read, cannot be true: it is ignored and false is returned, so the hub can
+// count a protocol fault. Believing it would let one node send 2^64-1 and take the stagger away from every later entry
+// (W4-r3-11).
+func (q *Queue) Ack(id string, seq uint64, ok bool) bool {
 	n := q.nodes[id]
 	if n == nil {
-		return
+		return false
+	}
+	if seq > q.latest || seq > q.Cursor(id) {
+		return false
 	}
 	if seq > n.acked {
 		n.acked = seq
@@ -176,6 +182,7 @@ func (q *Queue) Ack(id string, seq uint64, ok bool) {
 		}
 	}
 	q.recompute()
+	return true
 }
 
 // Heartbeat records what a heartbeat said. A new quarantine or an unhealthy resolve path of the canary after it applied a

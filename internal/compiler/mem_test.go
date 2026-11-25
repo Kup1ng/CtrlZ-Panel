@@ -49,6 +49,10 @@ type memBackend struct {
 	leaseUntil time.Time
 	// rulesErr makes the read of one tenant's rules fail after its profiles are known.
 	rulesErr map[uuid.UUID]error
+	// checkErr makes Check fail: the database does not answer a cheap question either.
+	checkErr error
+	// logAfterErr makes LogAfter fail for the read of one seq (the entry a snapshot was cut at).
+	logAfterErr map[uint64]error
 	// logCalls counts the calls of LogAfter.
 	logCalls int
 }
@@ -99,6 +103,9 @@ func (m *memBackend) fenced(holder string, seq uint64, head []byte) error {
 func (m *memBackend) Check(_ context.Context, f Fence) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.checkErr != nil {
+		return m.checkErr
+	}
 	return m.fenced(f.Holder, f.Seq, f.Head)
 }
 
@@ -194,6 +201,10 @@ func (m *memBackend) Snapshots(_ context.Context, limit int) ([]store.SnapshotRo
 func (m *memBackend) LogAfter(_ context.Context, seq uint64, limit int, each func(store.LogRow) error) error {
 	m.mu.Lock()
 	m.logCalls++
+	if err := m.logAfterErr[seq]; err != nil {
+		m.mu.Unlock()
+		return err
+	}
 	var out []store.LogRow
 	for _, r := range m.log {
 		if r.Seq > seq && len(out) < limit {

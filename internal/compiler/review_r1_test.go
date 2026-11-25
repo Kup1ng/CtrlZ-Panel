@@ -262,6 +262,7 @@ func TestADatabaseErrorStopsThePassAndKeepsTheMarks(t *testing.T) {
 	in.endpoint(uid(3, 1), uid(2, 1))
 	e.m.tenants[a] = in
 	e.m.tenantErr = map[uuid.UUID]error{a: store.ErrConnection}
+	e.m.checkErr = store.ErrConnection // the database does not answer the probe either
 	e.m.mark(a, uuid.New())
 	e.clk.add(time.Second)
 	if err := e.c.Tick(e.ctx); err == nil {

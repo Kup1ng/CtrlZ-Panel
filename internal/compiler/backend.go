@@ -24,6 +24,10 @@ var ErrHeadMoved = errors.New("compiler: the log head moved")
 // while a long pass was working. Like ErrHeadMoved it makes the compiler drop its view and load again.
 var ErrLeaseLost = errors.New("compiler: the lease is not held")
 
+// ErrBlobGone is what the commit of an entry returns when a blob file the entry names is no longer in the store: the
+// collector took it between the put and the lock. The pass ends, the marks stay, and the next one puts the file again.
+var ErrBlobGone = errors.New("compiler: a blob file is gone")
+
 // Fence says who writes and what the writer believes the log to be, for a write that is not an entry (the delete of marks
 // no entry stands for, the row of a snapshot): the database takes the log lock and refuses it when the lease is not the
 // holder's, or when the head is not Seq and Head.
@@ -49,7 +53,8 @@ type Commit struct {
 	Outbox []uuid.UUID
 	// Holder is the lease holder that writes; the commit is refused with ErrLeaseLost when the lease is not its.
 	Holder string
-	// Files puts the files the entry names in the store. It runs with the log lock held, after the head is checked and
+	// Files looks, with the log lock held, at the files the entry names (they were put as the tenant compiled) and returns
+	// ErrBlobGone for one that is not there. It runs after the head is checked and
 	// before the entry is appended, so a collection of blobs (which deletes under the same lock) never interleaves with it.
 	Files func() error
 }
