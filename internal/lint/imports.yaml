@@ -148,5 +148,7 @@ third_party:
     why: status errors of those servers
   - path: google.golang.org/protobuf/encoding/protojson
     why: reading root.json and the bundle manifests, which are protojson (internal/hub/hubinstall)
+  - path: google.golang.org/protobuf/proto
+    why: the wire size of a message a handler took out of a NodeHub stream, to give its bytes back to the unread budget of the body (internal/hub/hubnet)
   - path: gopkg.in/yaml.v3
     why: the OpenAPI, mutant and registry files that the checkers read

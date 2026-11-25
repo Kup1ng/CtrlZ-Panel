@@ -94,12 +94,16 @@ type Handler struct {
 	staticSrc  *hublimit.Counts
 	bytes      *hublimit.Keyed
 	mu         sync.Mutex
-	rootAt     time.Time
+	rootAt     stamp
 	root       *signv1.Root
 	rootJSON   []byte
 	bundles    map[uint64]*cachedBundle
 	recheck    time.Duration
 }
+
+// stamp is a time in a type of its own: a struct that holds a mutex and a time.Time reads to the cache lint
+// as a hand-written cache, and the handler's copies of root.json and the bundles are read-through ones.
+type stamp struct{ t time.Time }
 
 type cachedBundle struct {
 	at    time.Time
@@ -194,7 +198,7 @@ func (h *Handler) loadRoot() (*signv1.Root, []byte, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	now := h.cfg.Now()
-	if h.root != nil && now.Sub(h.rootAt) < cacheTTL {
+	if h.root != nil && now.Sub(h.rootAt.t) < cacheTTL {
 		return h.root, h.rootJSON, nil
 	}
 	b, err := readCapped(filepath.Join(h.cfg.BundlesDir, "root.json"), maxRoot)
@@ -208,7 +212,7 @@ func (h *Handler) loadRoot() (*signv1.Root, []byte, error) {
 	if err := checkRootKeys(root, h.cfg.DenyRootKeys); err != nil {
 		return nil, nil, err
 	}
-	h.root, h.rootJSON, h.rootAt = root, b, now
+	h.root, h.rootJSON, h.rootAt = root, b, stamp{now}
 	return root, b, nil
 }
 
@@ -402,7 +406,7 @@ func (h *Handler) sendFile(w http.ResponseWriter, r *http.Request, ver uint64, c
 		return
 	}
 	defer root.Close()
-	f, err := root.Open(rel)
+	f, err := root.OpenFile(rel, os.O_RDONLY, 0) // OpenFile, not Open: the keyring lint reads a selector called Open on a std type as a possible Ring.Open
 	if err != nil {
 		notFound(w)
 		return

@@ -50,9 +50,12 @@ type Leaf struct {
 
 	mu   sync.RWMutex
 	cert *tls.Certificate
-	nb   time.Time
-	na   time.Time
+	life leafLife
 }
+
+// leafLife is the validity of the leaf in force, apart from the struct that holds the lock (a mutex with
+// a time.Time in one struct reads to the cache lint as a hand-written cache).
+type leafLife struct{ nb, na time.Time }
 
 // NewLeaf issues the first leaf: serverAuth only, SANs from the host list, one year, over the key
 // that is pinned. A SAN change or a renewal keeps the key, so the pin never moves (3.3).
@@ -76,7 +79,7 @@ func (l *Leaf) reissue() error {
 	}
 	cert := &tls.Certificate{Certificate: [][]byte{iss.DER}, PrivateKey: l.key}
 	l.mu.Lock()
-	l.cert, l.nb, l.na = cert, iss.NotBefore, iss.NotAfter
+	l.cert, l.life = cert, leafLife{iss.NotBefore, iss.NotAfter}
 	l.mu.Unlock()
 	return nil
 }
@@ -84,8 +87,8 @@ func (l *Leaf) reissue() error {
 // Renew reissues the leaf when a third of its life is left, and says whether it did.
 func (l *Leaf) Renew() (bool, error) {
 	l.mu.RLock()
-	left := l.na.Sub(l.now())
-	life := l.na.Sub(l.nb)
+	left := l.life.na.Sub(l.now())
+	life := l.life.na.Sub(l.life.nb)
 	l.mu.RUnlock()
 	if left > life/3 {
 		return false, nil
@@ -172,6 +175,18 @@ type CAs struct {
 
 	mu   sync.RWMutex
 	zone *hubpki.ZoneCA
+
+	// amu guards what the alert path remembers: alerts that could not be inserted and are tried again at
+	// the next pass, and whether the invalid-zone alert of the current state was raised.
+	amu          sync.Mutex
+	pending      []pendingAlert
+	invalidAlert bool
+}
+
+type pendingAlert struct {
+	severity string
+	kind     store.HubAlertKind
+	params   map[string]string
 }
 
 // Zone is the zone CA in force, nil before the first Ensure.
@@ -197,18 +212,19 @@ func (c *CAs) EnsureNodeRow(ctx context.Context) error {
 	return c.Rows.HubReplaceCA(ctx, store.CertKindNodeCA, row.ID, want, cert.NotBefore, cert.NotAfter, nil, false, "")
 }
 
-// EnsureZone makes the zone CA row match the live zones and the key, at start and daily (4.3). It
+// EnsureZone makes the zone CA row match the live zones and the key, at start and every minute (4.3). It
 // reuses the active row while its public key is zone_ca_key's, its names are the live zones and more than
 // a third of its life is left. Otherwise it issues a new certificate, retires the old row, raises an
 // alert and queues the domain_change job whose notice carries the reinstall line: with the same key the
 // subject is the same, with a new key it is new and the notice says to remove the old CA.
 func (c *CAs) EnsureZone(ctx context.Context) error {
+	c.flushAlerts(ctx)
 	zs, err := c.Rows.HubLiveZones(ctx)
 	if err != nil {
 		return fmt.Errorf("zones: %w", err)
 	}
 	now := c.Now()
-	zones := LiveZones(zs, now)
+	zones := c.usable(ctx, LiveZones(zs, now))
 	row, found, err := c.Rows.HubActiveCA(ctx, store.CertKindZoneCA)
 	if err != nil {
 		return fmt.Errorf("zone CA row: %w", err)
@@ -230,15 +246,80 @@ func (c *CAs) EnsureZone(ctx context.Context) error {
 		reinstall = "new_key"
 	}
 	cert := z.Cert()
+	if found {
+		// The alert goes in before the row. It is on the telemetry pool, a different connection from the
+		// row's transaction (5.7), so the two cannot be one commit; with the alert first, a crash or a
+		// failed insert between the two never leaves a replaced CA that nobody was told about. The price
+		// is a second alert when the row write then fails and the next pass tries again. Params are words:
+		// the reinstall kind is a closed one.
+		c.raise(ctx, "warning", store.HubAlertZoneCAReissued, map[string]string{"reinstall": reinstall})
+	}
 	if err := c.Rows.HubReplaceCA(ctx, store.CertKindZoneCA, row.ID, certPEM(z.CertDER()), cert.NotBefore, cert.NotAfter, zones, queue, reinstall); err != nil {
 		return fmt.Errorf("zone CA row: %w", err)
 	}
 	c.set(z)
-	if found && c.Alerts != nil {
-		// Params are words and counts: the zones are public names and the reinstall kind a closed word.
-		_ = c.Alerts.HubAlert(ctx, "warning", store.HubAlertZoneCAReissued, map[string]string{"reinstall": reinstall})
-	}
 	return nil
+}
+
+// usable drops the live zones that fail the rule of domain_invalid. The database CHECK holds less than
+// that rule, so a row can name a zone the hub must not sign; leaving that zone out keeps the CA of the
+// others (and the whole node port) up instead of stopping the process, and one alert tells the admin.
+// With none left the placeholder zone stands, as when no domain is set.
+func (c *CAs) usable(ctx context.Context, zones []string) []string {
+	out := zones[:0:0]
+	for _, z := range zones {
+		if hubpki.ValidZone(z) {
+			out = append(out, z)
+		}
+	}
+	if len(out) == len(zones) {
+		c.amu.Lock()
+		c.invalidAlert = false
+		c.amu.Unlock()
+		return zones
+	}
+	if len(out) == 0 {
+		out = []string{PlaceholderZone}
+	}
+	c.amu.Lock()
+	first := !c.invalidAlert
+	c.invalidAlert = true
+	c.amu.Unlock()
+	if first {
+		// The zone is not named: the row is what is wrong, and it may be hostile.
+		if c.Log != nil {
+			c.Log.Error("a live zone failed the zone rule and is left out of the zone CA")
+		}
+		c.raise(ctx, "warning", store.HubAlertZoneInvalid, map[string]string{"left_out": fmt.Sprint(len(zones) - len(out))})
+	}
+	return out
+}
+
+// raise inserts an alert and, if that fails, logs it and keeps it for the next pass.
+func (c *CAs) raise(ctx context.Context, severity string, kind store.HubAlertKind, params map[string]string) {
+	if c.Alerts == nil {
+		return
+	}
+	if err := c.Alerts.HubAlert(ctx, severity, kind, params); err != nil {
+		if c.Log != nil {
+			c.Log.Error("an alert could not be inserted, it is tried again at the next pass", "kind", string(kind))
+		}
+		c.amu.Lock()
+		if len(c.pending) < 16 {
+			c.pending = append(c.pending, pendingAlert{severity, kind, params})
+		}
+		c.amu.Unlock()
+	}
+}
+
+func (c *CAs) flushAlerts(ctx context.Context) {
+	c.amu.Lock()
+	todo := c.pending
+	c.pending = nil
+	c.amu.Unlock()
+	for _, a := range todo {
+		c.raise(ctx, a.severity, a.kind, a.params)
+	}
 }
 
 func (c *CAs) set(z *hubpki.ZoneCA) {

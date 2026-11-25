@@ -44,6 +44,9 @@ var healthStdlib = []string{"net", "net/http", "crypto/tls"}
 // for a container and serve nothing.
 var healthListenerFiles = map[string]string{
 	"internal/app/app.go":               "the one listener of a role: the API pipeline, or the health mux alone, always behind Health.Handler",
+	"internal/app/hub.go":               "the hub role's node port (9443), the listener the rule above expects P4 to add: it serves no health path, only the two gRPC services and /install/*, and the role's health mux is still the one app.go serves behind Health.Handler",
+	"internal/hub/hub.go":               "Hub.Serve builds the http.Server of the node port and serves the listener it was given; every request goes through hubnet.Root, which routes nothing to a health or admin path",
+	"internal/hub/hubnet/root.go":       "hubnet.NewServer is the http.Server of the node port: its limits, deadlines and HTTP/2 windows (5.1)",
 	"internal/testpg/testpg.go":         "finds a free port for the test Postgres",
 	"internal/testtls/testtls.go":       "serves nothing: starts an httptest TLS server for an instant to read the one throw-away certificate every such server presents, so driver tests can trust it (sms-r15-3)",
 	"internal/testvalkey/testvalkey.go": "finds a free port for the test Valkey",

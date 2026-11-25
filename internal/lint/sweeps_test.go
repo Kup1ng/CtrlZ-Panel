@@ -104,6 +104,7 @@ var sweepNotASweep = map[string]string{
 	"qAuthorizedDelete":                 sweepEndpointRows,
 	"qShareLinksRevoke":                 sweepEndpointRows,
 	"qDownloadLinksDelete":              sweepEndpointRows,
+	"qHubEnroll":                        "keyed by token_hash, a unique column (ctrlz.node_enrollments, migration 0002): the one enrolment the token names, written once by the call that presents the token; nothing drives it by a timer",
 	"qIdempotencyFinish":                "keyed by its whole primary key (tenant, key): the one row the request inserted, named by the statement's own parameters",
 }
 

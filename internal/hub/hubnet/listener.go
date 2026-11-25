@@ -125,6 +125,23 @@ type rawConn struct {
 	proposed uuid.UUID // the node id the certificate named, not yet counted: see Listener.handshake
 	releases []func()
 	closed   bool
+	requests int // requests in progress that are not an admitted node's NodeHub calls
+}
+
+func (c *rawConn) enterRequest() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.requests >= MaxRequestsPerConn {
+		return false
+	}
+	c.requests++
+	return true
+}
+
+func (c *rawConn) leaveRequest() {
+	c.mu.Lock()
+	c.requests--
+	c.mu.Unlock()
 }
 
 func (c *rawConn) addRelease(f func()) {
@@ -238,12 +255,15 @@ func (l *Listener) acceptLoop() {
 func (l *Listener) acceptOne(conn net.Conn) {
 	defer safego.Keep(l.cfg.Log, unitAccept)
 	src := remoteAddr(conn)
-	relConn, ok := l.cfg.Conns.Admit(src)
+	// Asked first: the node address set decides which sources the full-table rule of the connection
+	// limiter spares, and the reserved handshake slots below (5.1, W3-r2-1).
+	node := l.cfg.NodeAddr(src.Unmap())
+	relConn, ok := l.cfg.Conns.AdmitFor(src, node)
 	if !ok {
 		_ = conn.Close()
 		return
 	}
-	relHS, ok := l.cfg.Handshakes.Begin(src, l.cfg.NodeAddr(src.Unmap()))
+	relHS, ok := l.cfg.Handshakes.Begin(src, node)
 	if !ok {
 		relConn()
 		_ = conn.Close()

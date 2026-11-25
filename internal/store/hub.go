@@ -367,6 +367,9 @@ type HubAlertKind string
 const (
 	HubAlertZoneCAReissued HubAlertKind = "zone_ca_reissued"
 	HubAlertNodeCAChanged  HubAlertKind = "node_ca_changed"
+	// HubAlertZoneInvalid says a live zone in domain_settings failed the hub's own zone rule and was left
+	// out of the zone CA.
+	HubAlertZoneInvalid HubAlertKind = "zone_invalid"
 )
 
 // HubAlert inserts an alert. params carry names and counts only, never a key or a token.

@@ -157,8 +157,8 @@ func Build(ctx context.Context, d Deps) (*Hub, error) {
 		h.nodeAddr.replace(addrs)
 	}
 
-	h.checker = &hubnodes.Checker{Open: d.Stores.L3, Clear: d.Stores.Control, Log: d.Log, Seen: h.nodeAddr.add}
-	h.recheck = &hubnodes.Rechecker{Reg: h.Streams, Nodes: d.Stores.Control, Log: d.Log}
+	h.checker = &hubnodes.Checker{Open: d.Stores.L3, Clear: d.Stores.Control, Log: d.Log, Seen: h.nodeAddr.add, Reg: h.Streams}
+	h.recheck = &hubnodes.Rechecker{Reg: h.Streams, Nodes: d.Stores.Control, Log: d.Log, Now: d.Now}
 
 	enrollSrv := grpc.NewServer(grpc.MaxRecvMsgSize(hubnet.EnrollBodyBytes), grpc.UnaryInterceptor(hubnodes.EnrollmentGuard()))
 	enrollv1.RegisterEnrollmentServer(enrollSrv, &hubenroll.Service{Store: d.Stores.Enrollment, CA: ca, Now: d.Now})
@@ -189,7 +189,7 @@ func (h *Hub) Handler() http.Handler { return h.root }
 func (h *Hub) Recheck(ctx context.Context) int { return h.recheck.Pass(ctx) }
 
 // Serve listens on ln (already bound, plain TCP) and serves until ctx ends. The maintenance loops run
-// beside it: the 60-second recheck of open streams, the daily reissue checks of the CAs and the leaf, and
+// beside it: the 60-second recheck of open streams, the minute check of the zone CA and the leaf, and
 // the refresh of the node address set.
 func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	conns, hs, noCert, nodeConns := hubnet.NewLimits(h.deps.Now)
@@ -239,33 +239,40 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	return serr
 }
 
-// maintainTrust reissues the hub leaf when a third of its life is left and re-checks the CA rows daily.
+// TrustEvery is how often the hub looks at its leaf and the zone CA. The check of the zone CA reads two
+// rows and writes only when the zones, the key or the age call for a new certificate, so it runs every
+// minute: a domain change must give the zone CA its new zone at once, since a zone the CA does not list
+// cannot be given a certificate (4.3, 9.4), and waiting for a daily pass would leave private-CA users
+// without one for up to a day.
+const TrustEvery = time.Minute
+
+// maintainTrust reissues the hub leaf when a third of its life is left and keeps the zone CA matched to
+// the live zones.
 func (h *Hub) maintainTrust(ctx context.Context) {
-	t := time.NewTicker(time.Hour)
+	t := time.NewTicker(TrustEvery)
 	defer t.Stop()
-	last := h.deps.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			h.trustPass(ctx, &last)
+			h.trustPass(ctx)
 		}
 	}
 }
 
-func (h *Hub) trustPass(ctx context.Context, last *time.Time) {
+func (h *Hub) trustPass(ctx context.Context) {
 	defer safego.Keep(h.deps.Log, unitTrust)
 	if _, err := h.Leaf.Renew(); err != nil && h.deps.Log != nil {
 		h.deps.Log.Error("hub leaf renewal failed")
 	}
-	if now := h.deps.Now(); now.Sub(*last) >= 24*time.Hour {
-		*last = now
-		if err := h.CAs.EnsureZone(ctx); err != nil && h.deps.Log != nil {
-			h.deps.Log.Error("zone CA check failed")
-		}
+	if err := h.CAs.EnsureZone(ctx); err != nil && h.deps.Log != nil {
+		h.deps.Log.Error("zone CA check failed")
 	}
 }
+
+// TrustPass runs one pass of that loop; tests call it instead of waiting for the ticker.
+func (h *Hub) TrustPass(ctx context.Context) { h.trustPass(ctx) }
 
 func (h *Hub) refreshAddrs(ctx context.Context) {
 	t := time.NewTicker(hubnodes.RecheckEvery)

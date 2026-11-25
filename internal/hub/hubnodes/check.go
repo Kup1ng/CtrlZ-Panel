@@ -66,6 +66,10 @@ type Checker struct {
 	// set of node addresses that may use the reserved handshake slots follows the nodes that really
 	// connect, one last address per node (5.1).
 	Seen func(uuid.UUID, netip.Addr)
+	// Reg, if set, is the registry the stream interceptor registers in. The check at open takes its
+	// kill mark before it reads the row, so a stream registered after a Kill that the row did not yet
+	// show is ended on arrival (G2, W3-r2-2).
+	Reg *Registry
 }
 
 func errDenied() error { return status.Error(codes.Unauthenticated, "certificate not accepted") }
@@ -90,6 +94,9 @@ func (c *Checker) CheckOpen(ctx context.Context, method string) (hubnet.Identity
 	}
 	if id.Checked {
 		return id, nil
+	}
+	if c.Reg != nil {
+		id.KillGen = c.Reg.Gen()
 	}
 	if id.Expired && method != RenewMethod {
 		return id, errDenied()
@@ -129,9 +136,11 @@ func (c *Checker) Unary() grpc.UnaryServerInterceptor {
 	}
 }
 
-// Stream is the interceptor of streaming NodeHub methods. A stream is registered under its node before
-// the check at open runs, so a Kill that lands between the check and the registration still finds it
-// (G2), and a later failed check or a revocation cancels its context.
+// Stream is the interceptor of streaming NodeHub methods. On the served path the root has already run the
+// check at open, before it read the body, and left the kill mark it took before reading the row in the
+// identity: Registry.Add ends a stream at once when its node was killed after that mark, so a Kill that
+// lands between the root's check and the registration is not missed (G2, W3-r2-2). Called without the
+// root, the stream is registered before the check runs, which closes the same gap the other way.
 func (c *Checker) Stream(reg *Registry) grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, h grpc.StreamHandler) error {
 		ctx := ss.Context()
@@ -141,7 +150,18 @@ func (c *Checker) Stream(reg *Registry) grpc.StreamServerInterceptor {
 		}
 		sctx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		remove := reg.Add(pre.NodeID, info.FullMethod, hubpki.CertSPKISHA256(pre.Cert), hubpki.SerialText(pre.Cert), cancel)
+		gen := reg.Gen()
+		if pre.Checked && c.Reg == reg {
+			gen = pre.KillGen
+		}
+		// What the registry calls ends the context and the HTTP stream under it: a handler blocked in a
+		// write to a peer that gives no window does not see a context, and only an ended stream frees it
+		// and the body it holds (W3-r2-7).
+		end := func() {
+			cancel()
+			hubnet.AbortFrom(ctx)()
+		}
+		remove := reg.Add(pre.NodeID, info.FullMethod, hubpki.CertSPKISHA256(pre.Cert), hubpki.SerialText(pre.Cert), pre.Cert.NotAfter, gen, end)
 		defer remove()
 		if _, err := c.CheckOpen(ctx, info.FullMethod); err != nil {
 			return err
@@ -167,7 +187,13 @@ type ctxStream struct {
 func (s *ctxStream) Context() context.Context { return s.ctx }
 
 func (s *ctxStream) RecvMsg(m any) error {
-	return s.guarded(func() error { return s.ServerStream.RecvMsg(m) })
+	err := s.guarded(func() error { return s.ServerStream.RecvMsg(m) })
+	if err == nil {
+		// The message is out of the transport's queue: its bytes no longer count against the stream's
+		// unread budget (W3-r2-6).
+		hubnet.Consumed(s.ctx, m)
+	}
+	return err
 }
 
 func (s *ctxStream) SendMsg(m any) error {

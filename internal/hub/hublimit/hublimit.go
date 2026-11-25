@@ -7,11 +7,14 @@
 // the P4 load test measures them.
 //
 // Every table here is bounded: a key that is idle and back at rest is dropped on the next sweep, and
-// a table that is full refuses a new key rather than growing, so a flood from many addresses cannot
-// turn a limiter into the memory it was written to protect.
+// a table that is full makes room by dropping its least recently used key, so a flood from many
+// addresses cannot turn a limiter into the memory it was written to protect and cannot lock a source
+// outside the flood out of the table either (a full table that refused new keys would refuse a node
+// that restarts, W3-r2-1).
 package hublimit
 
 import (
+	"container/list"
 	"net/netip"
 	"sync"
 	"time"
@@ -25,12 +28,32 @@ type Clock func() time.Time
 // is never the working set of a healthy hub.
 const maxKeys = 200_000
 
+// evictScan is how many of the least recently used connection entries Conns looks through for one that
+// holds no open connection. Entries with open connections are never dropped, and there are no more of
+// them than connections the process holds, so the scan ends at the first entry in practice.
+const evictScan = 256
+
+// sweepClock remembers when a table is next swept. It is a type of its own because a struct that holds
+// a mutex and a time.Time reads to the cache lint as a hand-written cache, which a limiter is not: it
+// keeps no copy of outside state.
+type sweepClock struct{ next time.Time }
+
+// due says whether a sweep is due at now, and if it is, schedules the next one a second on.
+func (s *sweepClock) due(now time.Time) bool {
+	if now.Before(s.next) {
+		return false
+	}
+	s.next = now.Add(time.Second)
+	return true
+}
+
 // ---------------------------------------------------------------------------------------------------
 // Keyed token buckets.
 
 type bucket struct {
 	tokens float64
 	last   time.Time
+	el     *list.Element // position in the recency list; the element's value is the key
 }
 
 // Keyed is a set of token buckets with one rate and burst, one bucket per key.
@@ -40,12 +63,14 @@ type Keyed struct {
 	burst   float64
 	now     Clock
 	m       map[string]*bucket
-	sweepAt time.Time
+	lru     *list.List // keys, most recently used first
+	max     int
+	sweepAt sweepClock
 }
 
 // NewKeyed makes a limiter that refills rate tokens a second up to burst.
 func NewKeyed(rate, burst float64, now Clock) *Keyed {
-	return &Keyed{rate: rate, burst: burst, now: now, m: make(map[string]*bucket)}
+	return &Keyed{rate: rate, burst: burst, now: now, m: make(map[string]*bucket), lru: list.New(), max: maxKeys}
 }
 
 // Allow takes one token from key's bucket, and says whether there was one.
@@ -59,11 +84,16 @@ func (k *Keyed) AllowN(key string, n float64) bool {
 	now := k.now()
 	k.sweep(now)
 	b, ok := k.m[key]
-	if !ok {
-		if len(k.m) >= maxKeys {
-			return false
+	if ok {
+		k.lru.MoveToFront(b.el)
+	} else {
+		if len(k.m) >= k.max {
+			// Full: the key unseen for the longest goes. Refusing the new key instead would let a flood
+			// that fills the table keep every other network out for as long as the flood lasts.
+			k.dropOldest()
 		}
 		b = &bucket{tokens: k.burst, last: now}
+		b.el = k.lru.PushFront(key)
 		k.m[key] = b
 	}
 	if d := now.Sub(b.last).Seconds(); d > 0 {
@@ -95,14 +125,21 @@ func (k *Keyed) Wait(key string, n float64) time.Duration {
 // sweep drops buckets that have refilled completely: a key at rest holds nothing a new bucket would
 // not give it. It runs at most once a second.
 func (k *Keyed) sweep(now time.Time) {
-	if now.Before(k.sweepAt) {
+	if !k.sweepAt.due(now) {
 		return
 	}
-	k.sweepAt = now.Add(time.Second)
 	for key, b := range k.m {
 		if k.rate > 0 && b.tokens+now.Sub(b.last).Seconds()*k.rate >= k.burst {
+			k.lru.Remove(b.el)
 			delete(k.m, key)
 		}
+	}
+}
+
+func (k *Keyed) dropOldest() {
+	if el := k.lru.Back(); el != nil {
+		k.lru.Remove(el)
+		delete(k.m, el.Value.(string))
 	}
 }
 
@@ -195,6 +232,7 @@ type connEntry struct {
 	open   int
 	tokens float64
 	last   time.Time
+	el     *list.Element // position in the recency list; the element's value is the key
 }
 
 // Conns caps open connections and new connections a second per source, before TLS starts (5.1: 16
@@ -205,17 +243,26 @@ type Conns struct {
 	rate    float64
 	now     Clock
 	m       map[string]*connEntry
-	sweepAt time.Time
+	lru     *list.List // keys, most recently used first
+	max     int
+	sweepAt sweepClock
 }
 
 // NewConns makes the limiter; maxOpen and rate are the base level.
 func NewConns(maxOpen int, rate float64, now Clock) *Conns {
-	return &Conns{maxOpen: maxOpen, rate: rate, now: now, m: make(map[string]*connEntry)}
+	return &Conns{maxOpen: maxOpen, rate: rate, now: now, m: make(map[string]*connEntry), lru: list.New(), max: maxKeys}
 }
 
 // Admit counts a new connection from a under every level, all or nothing. The release function ends
 // the count when the connection closes.
-func (c *Conns) Admit(a netip.Addr) (release func(), ok bool) {
+func (c *Conns) Admit(a netip.Addr) (release func(), ok bool) { return c.AdmitFor(a, false) }
+
+// AdmitFor is Admit for a source the caller knows to be a node (its address is in the node address set).
+// A node source is counted like any other while the table has room or can make it, and is admitted
+// uncounted when it cannot: every entry held by an open connection and none to drop. A flood that fills
+// the table must not keep a node from reconnecting (5.1, W3-r2-1); the node's own limits, its per-node
+// count and the handshake slots reserved for it, come after.
+func (c *Conns) AdmitFor(a netip.Addr, node bool) (release func(), ok bool) {
 	levels := ConnLevels(a)
 	if len(levels) == 0 {
 		return nil, false
@@ -227,11 +274,17 @@ func (c *Conns) Admit(a netip.Addr) (release func(), ok bool) {
 	ents := make([]*connEntry, len(levels))
 	for i, l := range levels {
 		e, found := c.m[l.Key]
-		if !found {
-			if len(c.m) >= maxKeys {
+		if found {
+			c.lru.MoveToFront(e.el)
+		} else {
+			if len(c.m) >= c.max && !c.dropOldest() {
+				if node {
+					return func() {}, true
+				}
 				return nil, false
 			}
 			e = &connEntry{tokens: c.rate * float64(l.Mult), last: now}
+			e.el = c.lru.PushFront(l.Key)
 			c.m[l.Key] = e
 		}
 		burst := c.rate * float64(l.Mult)
@@ -261,15 +314,31 @@ func (c *Conns) Admit(a netip.Addr) (release func(), ok bool) {
 }
 
 func (c *Conns) sweep(now time.Time) {
-	if now.Before(c.sweepAt) {
+	if !c.sweepAt.due(now) {
 		return
 	}
-	c.sweepAt = now.Add(time.Second)
 	for k, e := range c.m {
 		if e.open == 0 && now.Sub(e.last) > 2*time.Second {
+			c.lru.Remove(e.el)
 			delete(c.m, k)
 		}
 	}
+}
+
+// dropOldest drops the least recently used entry that holds no open connection, and says whether it
+// found one. An entry with open connections stays: dropping it would forget the connections it counts.
+func (c *Conns) dropOldest() bool {
+	el := c.lru.Back()
+	for i := 0; el != nil && i < evictScan; i++ {
+		key := el.Value.(string)
+		if c.m[key].open == 0 {
+			c.lru.Remove(el)
+			delete(c.m, key)
+			return true
+		}
+		el = el.Prev()
+	}
+	return false
 }
 
 // Len is the number of live keys.

@@ -363,7 +363,11 @@ var netCutAllowed = map[string]string{
 	"internal/hub/hubinstall/hubinstall.go#(Handler).ServeHTTP":   "charges the install limits with hublimit.NetKey, the hub's one network key; it makes no key of its own",
 	"internal/hub/hublimit/hublimit.go#NetKey":                    "the /24 or /56 of a source for the Enrollment and install limits of p4-nodes 5.1 and 5.7",
 	"internal/hub/hublimit/hublimit.go#handshakeKeys":             "the /24, or the /48 and /32, a handshake in progress is counted under (p4-nodes 5.1)",
-	"internal/hub/hubnet/root.go#(Root).serveGRPC":                "charges the Enrollment per-source limit with hublimit.NetKey; it makes no key of its own",
+	"internal/hub/hubnet/root.go#(Root).serveEnrollment":          "charges the Enrollment per-source limit with hublimit.NetKey; it makes no key of its own",
+	"internal/hub/addrs.go#(addrSet).forget":                      "drops the entry of one node from the set of source addresses its connections came from (infrastructure of ours); it keys no bucket and keeps nothing",
+	"internal/hub/hubnodes/check.go#(ctxStream).RecvMsg":          "a wrapper of a gRPC server stream (a type of shared/'s dependency, which the checker does not resolve) that stops a read when the stream is ended; it handles no client address",
+	"internal/hub/hubnodes/check.go#(ctxStream).SendMsg":          "a wrapper of a gRPC server stream that stops a write when the stream is ended; it handles no client address",
+	"internal/hub/hubnodes/check.go#(ctxStream).guarded":          "runs one stream call beside the context of the stream and returns when either ends; it handles no client address",
 
 	"internal/auth/throttle/throttle.go#(Who).part":                  "the one choke point of the throttle scopes: it builds the network and /48 key parts the registry names",
 	"internal/auth/throttle/throttle.go#(Service).AdminLoginHits":    "the admin login throttle reads the network part through the registry's scope (Who.part)",

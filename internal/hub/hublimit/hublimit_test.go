@@ -296,3 +296,88 @@ func TestHandshakesReservedFallsBackToGeneral(t *testing.T) {
 		t.Fatalf("slots leaked: %d in progress, %d sources", h.InProgress(), len(h.resBySrc))
 	}
 }
+
+// A full table makes room instead of refusing (W3-r2-1): a flood from many networks fills it, and a new
+// source, a node's included, is still counted. The flood's own oldest keys are what go.
+func TestKeyedFullTableDropsTheOldestKey(t *testing.T) {
+	c := newClock()
+	k := NewKeyed(0.5, 30, c.Now)
+	k.max = 100
+	for i := 0; i < 1000; i++ {
+		if !k.Allow(fmt.Sprintf("flood-%d", i)) {
+			t.Fatalf("a new key was refused at the table's bound (key %d)", i)
+		}
+		c.Advance(time.Microsecond)
+	}
+	if k.Len() > 100 {
+		t.Fatalf("table holds %d keys, bound 100", k.Len())
+	}
+	if !k.Allow("a-real-network") {
+		t.Fatal("a source outside the flood was refused by a full table")
+	}
+	// A key that is used stays: recency decides, not age.
+	for i := 0; i < 500; i++ {
+		k.Allow("kept")
+		k.Allow(fmt.Sprintf("more-%d", i))
+	}
+	if _, ok := k.m["kept"]; !ok {
+		t.Fatal("a key in use was dropped")
+	}
+}
+
+func TestConnsFullTableAdmitsANode(t *testing.T) {
+	c := newClock()
+	cs := NewConns(16, 10, c.Now)
+	cs.max = 30
+	// Every entry is held by an open connection: nothing can be dropped.
+	var rel []func()
+	for i := 0; i < 30; i++ {
+		r, ok := cs.Admit(netip.MustParseAddr(fmt.Sprintf("10.0.%d.1", i)))
+		if !ok {
+			t.Fatalf("connection %d refused below the bound", i)
+		}
+		rel = append(rel, r)
+	}
+	stranger := netip.MustParseAddr("198.51.100.9")
+	if _, ok := cs.Admit(stranger); ok {
+		t.Fatal("a stranger was admitted into a table full of open connections")
+	}
+	r, ok := cs.AdmitFor(netip.MustParseAddr("203.0.113.7"), true)
+	if !ok {
+		t.Fatal("a node address was refused by a full table")
+	}
+	r() // an uncounted admission releases nothing and does not panic
+	if cs.Len() != 30 {
+		t.Fatalf("table grew to %d", cs.Len())
+	}
+	// Closed connections free their entries once they are idle: the table makes room for strangers.
+	for _, r := range rel {
+		r()
+	}
+	c.Advance(3 * time.Second)
+	if _, ok := cs.Admit(stranger); !ok {
+		t.Fatal("a stranger was refused after the entries went idle")
+	}
+}
+
+// A flood of closed connections from many IPv6 /64s fills the table with entries that hold nothing; a
+// new source takes the place of the oldest of them at once, without waiting for the sweep (W3-r2-1).
+func TestConnsFullTableWithIdleEntriesDropsTheOldest(t *testing.T) {
+	c := newClock()
+	cs := NewConns(16, 10, c.Now)
+	cs.max = 60
+	for i := 0; i < 500; i++ {
+		a := netip.MustParseAddr(fmt.Sprintf("2001:db8:%x::1", i+1))
+		r, ok := cs.Admit(a)
+		if !ok {
+			t.Fatalf("connection %d refused although every entry is idle", i)
+		}
+		r()
+	}
+	if cs.Len() > 60 {
+		t.Fatalf("table holds %d keys, bound 60", cs.Len())
+	}
+	if _, ok := cs.Admit(netip.MustParseAddr("192.0.2.1")); !ok {
+		t.Fatal("a new source was refused by a table full of idle entries")
+	}
+}

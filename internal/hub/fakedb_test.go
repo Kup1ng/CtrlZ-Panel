@@ -25,10 +25,12 @@ type fakeDB struct {
 	cas   map[string][]*fCA
 	zones store.HubZones
 
-	jobs    []string // reinstall kind of each queued domain_change
-	alerts  int
-	loads   int
-	downErr error // when set, node reads fail (a database outage)
+	jobs     []string // reinstall kind of each queued domain_change
+	alerts   int
+	kinds    []store.HubAlertKind
+	alertErr error // when set, an alert insert fails
+	loads    int
+	downErr  error // when set, node reads fail (a database outage)
 }
 
 type fEnr struct {
@@ -246,9 +248,13 @@ func (d *fakeDB) HubLiveZones(context.Context) (store.HubZones, error) {
 	return d.zones, nil
 }
 
-func (d *fakeDB) HubAlert(context.Context, string, store.HubAlertKind, map[string]string) error {
+func (d *fakeDB) HubAlert(_ context.Context, _ string, kind store.HubAlertKind, _ map[string]string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.alertErr != nil {
+		return d.alertErr
+	}
 	d.alerts++
+	d.kinds = append(d.kinds, kind)
 	return nil
 }

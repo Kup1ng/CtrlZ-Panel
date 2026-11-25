@@ -38,10 +38,32 @@ type Identity struct {
 	// Checked says the root handler already ran the row check of 4.4 for this very RPC before it read a
 	// byte of the body, so the interceptors do not pay for it a second time. Only the root sets it.
 	Checked bool
+	// KillGen is the registry mark taken before the row was read (Checker.CheckOpen), for Registry.Add.
+	KillGen uint64
 }
 
 type identityKey struct{}
 type connKey struct{}
+type abortKey struct{}
+type bodyKey struct{}
+
+// aborter holds the function that ends a request's HTTP stream, in a type of its own so that the context
+// carries a value and not a function that something might run in a goroutine.
+type aborter struct{ end func() }
+
+// WithAbort and AbortFrom carry the function that ends the HTTP stream of a NodeHub call: the root
+// handler sets it, the stream interceptor hands it to the registry. AbortFrom never returns nil.
+func WithAbort(ctx context.Context, f func()) context.Context {
+	return context.WithValue(ctx, abortKey{}, &aborter{end: f})
+}
+
+// AbortFrom returns the abort function of the request, or one that does nothing.
+func AbortFrom(ctx context.Context) func() {
+	if a, ok := ctx.Value(abortKey{}).(*aborter); ok && a.end != nil {
+		return a.end
+	}
+	return func() {}
+}
 
 // WithIdentity and IdentityFrom carry the identity in a context.
 func WithIdentity(ctx context.Context, id Identity) context.Context {
@@ -102,6 +124,15 @@ const (
 	// ResponseWriteTimeout bounds how long an answer to an enrolment or a unary call may take to be
 	// written: a peer that gives no window must not hold a goroutine for as long as it likes.
 	ResponseWriteTimeout = 10 * time.Second
+	// AnonymousTimeout is how long a request that is not a node's NodeHub call may take to be read and
+	// answered, before a handler that wants longer (a bundle download) sets its own deadlines. Without it
+	// a client that sends a window of zero holds the handler, its headers and any unread body for as
+	// long as it answers pings (W3-r2-5).
+	AnonymousTimeout = 10 * time.Second
+	// MaxRequestsPerConn is how many requests of that kind one connection has in progress. One
+	// connection may open 100 streams; a client of ours has one, and the rest would each pin the
+	// request, its headers and its writer.
+	MaxRequestsPerConn = 8
 )
 
 // RootLimits are the root handler's limiters; NewRootLimits builds them with the numbers above.
@@ -137,6 +168,8 @@ type Root struct {
 	NodeCheck func(ctx context.Context, method string) (Identity, error)
 	Limits    RootLimits
 	Log       *slog.Logger
+	// AnonTimeout overrides AnonymousTimeout, for tests.
+	AnonTimeout time.Duration
 }
 
 // isTransfer says whether a NodeHub method is one of the four transfer RPCs, at most 8 of which a node holds
@@ -146,6 +179,21 @@ func isUnary(method string) bool {
 	for _, m := range hubv1.NodeHub_ServiceDesc.Methods {
 		if m.MethodName == method {
 			return true
+		}
+	}
+	return false
+}
+
+// oneRequest says whether a NodeHub method takes one request message and nothing more: the unary
+// methods and the server-streaming ones (the four transfers). Its body is read whole before gRPC sees it,
+// so no live body is left to grow (W3-r2-6).
+func oneRequest(method string) bool {
+	if isUnary(method) {
+		return true
+	}
+	for _, s := range hubv1.NodeHub_ServiceDesc.Streams {
+		if s.StreamName == method {
+			return !s.ClientStreams
 		}
 	}
 	return false
@@ -172,6 +220,16 @@ func (h *Root) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := identityOf(r, now)
 	r = r.WithContext(WithIdentity(r.Context(), id))
 
+	// Everything but an admitted node's NodeHub call is bounded in time and in number per connection
+	// before any branch: even a plain 404 is an answer that a peer with no window can leave unwritten.
+	if !(id.Node && strings.HasPrefix(r.URL.Path, "/"+hubv1.NodeHub_ServiceDesc.ServiceName+"/")) {
+		rel, ok := h.bound(w, r)
+		if !ok {
+			return
+		}
+		defer rel()
+	}
+
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 		h.serveGRPC(w, r, id)
 		return
@@ -181,6 +239,53 @@ func (h *Root) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.NotFound(w, r)
+}
+
+// bound takes one of the connection's places for a request and arms its deadlines. When the connection
+// holds too many it ends the stream, with no answer to be written: a write would be the very thing a
+// peer with no window leaves hanging.
+func (h *Root) bound(w http.ResponseWriter, r *http.Request) (release func(), ok bool) {
+	release = func() {}
+	rc, _ := r.Context().Value(connKey{}).(*rawConn)
+	if rc != nil {
+		if !rc.enterRequest() {
+			endStream(w)
+			return nil, false
+		}
+	}
+	// The place is given back after the answer is flushed and not when the handler returns: HTTP/2 writes
+	// the buffered answer after the handler's return, and a peer with no window leaves that write
+	// hanging, which is exactly the goroutine this place is counting.
+	rcw := http.NewResponseController(w)
+	h2 := r.ProtoMajor >= 2 // HTTP/1 writes the answer on the handler's goroutine anyway, and a flush would only make it chunked
+	release = func() {
+		if h2 {
+			_ = rcw.Flush()
+		}
+		if rc != nil {
+			rc.leaveRequest()
+		}
+	}
+	within := h.AnonTimeout
+	if within <= 0 {
+		within = AnonymousTimeout
+	}
+	deadline := appclock.Now().Add(within)
+	_ = rcw.SetWriteDeadline(deadline)
+	if r.Body != nil && r.Body != http.NoBody {
+		_ = rcw.SetReadDeadline(deadline)
+	}
+	return release, true
+}
+
+// endStream ends the HTTP stream under w at once: a deadline in the past resets an HTTP/2 stream and
+// fails the next write of an HTTP/1 connection. It is safe from another goroutine while the handler runs,
+// and must not be called after the handler has returned.
+func endStream(w http.ResponseWriter) {
+	rcw := http.NewResponseController(w)
+	past := time.Unix(1, 0)
+	_ = rcw.SetReadDeadline(past)
+	_ = rcw.SetWriteDeadline(past)
 }
 
 func (h *Root) serveGRPC(w http.ResponseWriter, r *http.Request, id Identity) {
@@ -211,6 +316,10 @@ func (h *Root) serveEnrollment(w http.ResponseWriter, r *http.Request, id Identi
 		grpcRefuse(w, codes.InvalidArgument, "bad request")
 		return
 	}
+	// The work that follows waits on one database connection and has no peer to wait for: the answer
+	// sets its own deadline when it starts, and the one armed at the top must not end the stream under
+	// the work.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 	rel, ok := h.Limits.EnrollSlots.Try()
 	if !ok {
 		grpcRefuse(w, codes.ResourceExhausted, "busy")
@@ -264,18 +373,39 @@ func (h *Root) serveNodeHub(w http.ResponseWriter, r *http.Request, id Identity)
 		}
 		defer relT()
 	}
-	r.Body = &rateBody{rc: r.Body, k: h.Limits.NodeBytes, key: key, ctx: r.Context()}
-	if isUnary(method) {
-		// A unary request is one small message (RenewCert about 8 KiB): bounded and read whole like an
-		// enrolment, so it never holds gRPC's per-read buffers either.
+	rb := &rateBody{rc: r.Body, k: h.Limits.NodeBytes, key: key, ctx: r.Context()}
+	r.Body = rb
+	// What ends the stream on a revocation: the registry calls it, so a handler blocked in a write to a
+	// peer with no window, and the reader of the body, are released and not left until the node hangs up
+	// (G2, W3-r2-7). It is armed only while this function runs, because the writer is not valid after.
+	var amu sync.Mutex
+	over := false
+	abort := func() {
+		amu.Lock()
+		defer amu.Unlock()
+		if !over {
+			endStream(w)
+		}
+	}
+	defer func() { amu.Lock(); over = true; amu.Unlock() }()
+	r = r.WithContext(WithAbort(r.Context(), abort))
+	if oneRequest(method) {
+		// One small request message (RenewCert about 8 KiB, a transfer's request less): bounded and read
+		// whole like an enrolment, so it never holds gRPC's per-read buffers either.
 		if err := preread(w, r, UnaryBodyBytes, UnaryReadTimeout); err != nil {
 			grpcRefuse(w, codes.InvalidArgument, "bad request")
 			return
 		}
-		h.NodeHub.ServeHTTP(newStartWriter(w, func() { setWriteDeadline(w) }), r)
+		if isUnary(method) {
+			h.NodeHub.ServeHTTP(newStartWriter(w, func() { setWriteDeadline(w) }), r)
+			return
+		}
+		h.NodeHub.ServeHTTP(w, r)
 		return
 	}
-	h.NodeHub.ServeHTTP(w, r)
+	// A live body (Control and the uploads): what it has read and the handler has not taken is bounded.
+	rb.g = newGauge()
+	h.NodeHub.ServeHTTP(w, r.WithContext(withGauge(r.Context(), rb.g)))
 }
 
 // preread replaces r.Body by the whole body, read through a cap and a read deadline from the real clock
@@ -325,6 +455,7 @@ type rateBody struct {
 	k   *hublimit.Keyed
 	key string
 	ctx context.Context
+	g   *gauge // the unread budget of a live body; nil for a body read whole
 }
 
 func (b *rateBody) Close() error { return b.rc.Close() }
@@ -332,6 +463,11 @@ func (b *rateBody) Close() error { return b.rc.Close() }
 func (b *rateBody) Read(p []byte) (int, error) {
 	if len(p) > 64<<10 {
 		p = p[:64<<10]
+	}
+	if b.g != nil {
+		if err := b.g.wait(b.ctx); err != nil {
+			return 0, err
+		}
 	}
 	n := float64(len(p))
 	for !b.k.AllowN(b.key, n) {
@@ -347,7 +483,11 @@ func (b *rateBody) Read(p []byte) (int, error) {
 		case <-t.C:
 		}
 	}
-	return b.rc.Read(p)
+	got, err := b.rc.Read(p)
+	if b.g != nil {
+		b.g.read(got)
+	}
+	return got, err
 }
 
 // NewServer builds the http.Server of the port (5.1). Keepalive is the server's, since gRPC's own
@@ -367,6 +507,11 @@ func NewServer(root http.Handler, base *http.Server, log *slog.Logger) *http.Ser
 		MaxConcurrentStreams: 100,
 		SendPingTimeout:      10 * time.Second,
 		PingTimeout:          10 * time.Second,
+		// The default windows are 1 MiB a stream and a connection. What a peer has sent and no handler
+		// has read sits in memory up to the window, so the windows are what an anonymous connection can
+		// make the hub hold; 256 KiB still fills a 20 Mbit/s link at 100 ms (W3-r2-5).
+		MaxReceiveBufferPerConnection: 256 << 10,
+		MaxReceiveBufferPerStream:     256 << 10,
 	}
 	// The server's own error log would print request lines and peer addresses; this one keeps the class.
 	srv.ErrorLog = httpx.ErrorLog(log)

@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,6 +42,8 @@ import (
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubtoken"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 type clock struct {
@@ -87,6 +90,7 @@ type ctrlStub struct {
 	// never looks at the context, which is what Registry.Kill has to be able to end (G2).
 	logsOpen  chan struct{}
 	logsEnded chan error
+	logsRecv  atomic.Int64
 }
 
 func (s *ctrlStub) UploadLogs(stream grpc.BidiStreamingServer[telv1.LogBatch, telv1.Ack]) error {
@@ -96,6 +100,7 @@ func (s *ctrlStub) UploadLogs(stream grpc.BidiStreamingServer[telv1.LogBatch, te
 			s.logsEnded <- err
 			return err
 		}
+		s.logsRecv.Add(1)
 	}
 }
 
@@ -184,7 +189,10 @@ func writeBundle(t *testing.T, dir string, now time.Time) {
 	}
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t *testing.T) *harness { return newHarnessWith(t, nil) }
+
+// newHarnessWith builds the hub after pre has set up the database, for a state that must exist at start.
+func newHarnessWith(t *testing.T, pre func(*fakeDB)) *harness {
 	t.Helper()
 	clk := &clock{t: time.Now().UTC().Truncate(time.Second)}
 	caKey := newKey(t)
@@ -205,6 +213,9 @@ func newHarness(t *testing.T) *harness {
 	writeBundle(t, dir, clk.Now())
 	pub := t.TempDir()
 	db := newFakeDB()
+	if pre != nil {
+		pre(db)
+	}
 	stub := &ctrlStub{opened: make(chan struct{}, 8), logsOpen: make(chan struct{}, 8), logsEnded: make(chan error, 8)}
 	h, err := hub.Build(context.Background(), hub.Deps{
 		Stores: hub.Stores{L3: db, Control: db, Telemetry: db, Enrollment: db},
@@ -1020,4 +1031,98 @@ func TestRevokedNodeEndsAStreamBlockedInRecv(t *testing.T) {
 	if h.hub.Streams.Count(other.nodeID) != 1 || len(h.stub.logsEnded) != 0 {
 		t.Fatalf("another node's stream was ended: %d registered, %d ended", h.hub.Streams.Count(other.nodeID), len(h.stub.logsEnded))
 	}
+}
+
+// The zone CA follows a domain change on the next minute pass, not the next daily one (W3-r2-3): a zone
+// the CA does not list cannot be given a certificate.
+func TestZoneCAFollowsTheDomainAtOnce(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.db.zones.DNSZone = "dns.example.ir"
+	h.hub.TrustPass(ctx)
+	if got := h.hub.CAs.Zone().Zones(); len(got) != 1 || got[0] != "dns.example.ir" {
+		t.Fatalf("the CA after one pass: %v", got)
+	}
+	if _, err := h.hub.CAs.Zone().IssueLeaf("dns.example.ir", h.clk.Now()); err != nil {
+		t.Fatalf("a leaf for the new zone: %v", err)
+	}
+}
+
+// A live zone that fails the hub's own rule is left out and the hub still starts (W3-r2-3): a row that
+// the database CHECK accepts must not stop the node port.
+func TestInvalidLiveZoneDoesNotStopTheHub(t *testing.T) {
+	h := newHarnessWith(t, func(db *fakeDB) {
+		db.zones = store.HubZones{DNSZone: "dns.example.ir", PrevDNSZone: "dns.co.ir", TransitionUntil: time.Now().Add(48 * time.Hour)}
+	})
+	if got := h.hub.CAs.Zone().Zones(); len(got) != 1 || got[0] != "dns.example.ir" {
+		t.Fatalf("the zone CA kept an invalid zone or lost the valid one: %v", got)
+	}
+	if len(h.db.kinds) != 1 || h.db.kinds[0] != store.HubAlertZoneInvalid {
+		t.Fatalf("alerts: %v", h.db.kinds)
+	}
+	// The next passes say nothing more while the state is the same.
+	h.hub.TrustPass(context.Background())
+	if len(h.db.kinds) != 1 {
+		t.Fatalf("a repeated alert: %v", h.db.kinds)
+	}
+	// Only invalid zones: the placeholder stands.
+	h.db.zones = store.HubZones{DNSZone: "dns.com"}
+	h.hub.TrustPass(context.Background())
+	if got := h.hub.CAs.Zone().Zones(); len(got) != 1 || got[0] != "dns.ctrlz.invalid" {
+		t.Fatalf("no valid zone: %v", got)
+	}
+}
+
+// A reissue whose alert cannot be inserted is not lost (W3-r2-10): the CA is replaced, and the alert is
+// raised at the next pass.
+func TestZoneCAReissueAlertIsNotLost(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.db.alertErr = context.DeadlineExceeded
+	h.db.zones.DNSZone = "dns.example.ir"
+	if err := h.hub.CAs.EnsureZone(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.db.cas["zone_ca"]) != 2 || h.db.alerts != 0 {
+		t.Fatalf("rows %d, alerts %d", len(h.db.cas["zone_ca"]), h.db.alerts)
+	}
+	h.db.alertErr = nil
+	h.hub.TrustPass(ctx)
+	if h.db.alerts != 1 || h.db.kinds[0] != store.HubAlertZoneCAReissued {
+		t.Fatalf("the alert after the database came back: %d %v", h.db.alerts, h.db.kinds)
+	}
+	h.hub.TrustPass(ctx)
+	if h.db.alerts != 1 {
+		t.Fatalf("the alert was raised twice: %d", h.db.alerts)
+	}
+}
+
+// A live upload body is held to an unread budget (W3-r2-6) that the handler's own reads give back: a long
+// run of messages of every size, from empty to a megabyte, goes through without the stream stalling, so
+// the accounting of what was taken out of the queue matches what the transport read.
+func TestUploadStreamOfManyMessagesIsNotStalledByTheUnreadBudget(t *testing.T) {
+	h := newHarness(t)
+	e := h.enrol()
+	st, err := h.dial(e.cert).NewStream(context.Background(), &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/ctrlz.hub.v1.NodeHub/UploadLogs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const messages = 400
+	for i := 0; i < messages; i++ {
+		m := &telv1.LogBatch{BatchId: uint64(i)}
+		switch i % 4 {
+		case 1:
+			m.Sealed = make([]byte, 100)
+		case 2:
+			m.Sealed = make([]byte, 20_000)
+		case 3:
+			if i%200 == 3 {
+				m.Sealed = make([]byte, 1<<20)
+			}
+		}
+		if err := st.SendMsg(m); err != nil {
+			t.Fatalf("message %d: %v", i, err)
+		}
+	}
+	testwait.Until(t, 20*time.Second, "every message to reach the handler", func() bool { return h.stub.logsRecv.Load() == messages })
 }

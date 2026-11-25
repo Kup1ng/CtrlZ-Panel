@@ -23,10 +23,13 @@ type addrSet struct {
 	mu   sync.RWMutex
 	db   map[netip.Addr]struct{}
 	seen map[uuid.UUID]netip.Addr
+	// byAddr counts the nodes seen at each address, so has is one lookup: it runs for every connection
+	// the port accepts, before any limit, and a scan of seen would be paid per packet of a flood.
+	byAddr map[netip.Addr]int
 }
 
 func newAddrSet() *addrSet {
-	return &addrSet{db: map[netip.Addr]struct{}{}, seen: map[uuid.UUID]netip.Addr{}}
+	return &addrSet{db: map[netip.Addr]struct{}{}, seen: map[uuid.UUID]netip.Addr{}, byAddr: map[netip.Addr]int{}}
 }
 
 func (s *addrSet) replace(l store.HubAddrs) {
@@ -42,7 +45,7 @@ func (s *addrSet) replace(l store.HubAddrs) {
 	s.db = m
 	for n := range s.seen {
 		if _, ok := live[n]; !ok {
-			delete(s.seen, n)
+			s.forget(n)
 		}
 	}
 	s.mu.Unlock()
@@ -54,10 +57,27 @@ func (s *addrSet) add(node uuid.UUID, a netip.Addr) {
 		return
 	}
 	s.mu.Lock()
-	if _, known := s.seen[node]; known || len(s.seen) < maxSeen {
+	if old, known := s.seen[node]; known || len(s.seen) < maxSeen {
+		if known {
+			s.drop(old)
+		}
 		s.seen[node] = a
+		s.byAddr[a]++
 	}
 	s.mu.Unlock()
+}
+
+func (s *addrSet) drop(a netip.Addr) {
+	if s.byAddr[a]--; s.byAddr[a] <= 0 {
+		delete(s.byAddr, a)
+	}
+}
+
+func (s *addrSet) forget(n uuid.UUID) {
+	if a, ok := s.seen[n]; ok {
+		s.drop(a)
+		delete(s.seen, n)
+	}
 }
 
 func (s *addrSet) has(a netip.Addr) bool {
@@ -67,12 +87,7 @@ func (s *addrSet) has(a netip.Addr) bool {
 	if _, ok := s.db[a]; ok {
 		return true
 	}
-	for _, v := range s.seen {
-		if v == a {
-			return true
-		}
-	}
-	return false
+	return s.byAddr[a] > 0
 }
 
 // hubTLS is the TLS template of the listener: the hub leaf. The listener adds the rest.
