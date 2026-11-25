@@ -695,12 +695,24 @@ func TestIsolation(t *testing.T) {
 			if r := call(c); r.Code != 401 || r.code() != "session_expired" {
 				t.Errorf("%s without a cookie: %d %s", op.ID, r.Code, r.Body)
 			}
-			// An admin cookie and an API token are no session on this host.
+			// An admin cookie is no session on this host.
 			adm := f.client()
 			adm.jar[session.CookieAdmin] = &http.Cookie{Name: session.CookieAdmin, Value: "x"}
-			adm.hdr["Authorization"] = "Bearer czt_junk"
 			if r := call(adm); r.Code != 401 || r.code() != "session_expired" {
-				t.Errorf("%s with an admin cookie and a token: %d %s", op.ID, r.Code, r.Body)
+				t.Errorf("%s with an admin cookie: %d %s", op.ID, r.Code, r.Body)
+			}
+			// A bearer is read before any cookie (P3 6.3 steps 1 and 3): an operation that takes no token
+			// refuses it 403 token_not_allowed, and one that takes a token reads the junk value as a token that
+			// was never issued, 401 token_invalid. Neither is a session, and the admin cookie changes nothing.
+			tok := f.client()
+			tok.jar[session.CookieAdmin] = &http.Cookie{Name: session.CookieAdmin, Value: "x"}
+			tok.hdr["Authorization"] = "Bearer czt_junk"
+			wantStatus, wantCode := 403, "token_not_allowed"
+			if op.Token == "read" || op.Token == "write" {
+				wantStatus, wantCode = 401, "token_invalid"
+			}
+			if r := call(tok); r.Code != wantStatus || r.code() != wantCode {
+				t.Errorf("%s with an admin cookie and a token: %d %s, want %d %s", op.ID, r.Code, r.Body, wantStatus, wantCode)
 			}
 			if op.Auth == apispec.Reauth {
 				if r := call(plain); r.Code != 403 || r.code() != "reauth_required" {

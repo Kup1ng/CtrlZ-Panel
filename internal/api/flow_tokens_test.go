@@ -121,7 +121,7 @@ func TestAPITokenManagement(t *testing.T) {
 	r.bearer(value, "").get("/account/limits").want(401, "token_invalid")
 	r.a.do("DELETE", "/api-tokens/"+made.Token.ID, nil).want(404, "not_found")
 	r.reauth(A.Tenant, A.User)
-	_, bs := r.make(r.b, map[string]any{"name": "b's"})
+	_, bs := r.make(r.b, map[string]any{"name": "b's", "kind": "read"})
 	r.a.do("DELETE", "/api-tokens/"+bs.Token.ID, nil).want(404, "not_found")
 	r.a.do("PATCH", "/api-tokens/"+bs.Token.ID, map[string]any{"name": "mine now"}).want(404, "not_found")
 	if n := f.count(`SELECT count(*) FROM ctrlz.api_tokens WHERE id = $1 AND name = 'b''s'`, bs.Token.ID); n != 1 {
