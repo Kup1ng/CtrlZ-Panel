@@ -1,0 +1,54 @@
+-- Views. Spec section 9. All are security_invoker, so the caller's own RLS and
+-- column grants apply. There are no materialized views in ctrlz, because they
+-- ignore RLS. A new view needs a row in migrations/catalog/views.yaml.
+
+-- +goose Up
+
+SET LOCAL search_path = ctrlz, pg_catalog;
+
+-- The hub finds an endpoint's tenant here, before it knows the tenant (R5).
+CREATE VIEW hub_endpoint_index WITH (security_invoker = true) AS
+SELECT id, tenant_id, pair_override_node_a, pair_override_node_b, pair_version
+FROM endpoints;
+
+-- Pending means no query has arrived yet. configured is a hint for the setup
+-- checklist: the endpoint has either been queried or has a way to identify
+-- its owner's traffic.
+CREATE VIEW tenant_endpoint_status WITH (security_invoker = true) AS
+SELECT e.tenant_id, e.id, e.name, e.type, e.group_id, e.comment, e.resolver_id,
+       e.doh_token_ct, e.profile_id, e.profile2_id, e.analytics_level, e.admin_state,
+       e.admin_hold, e.legacy_dns, e.authorize_secure_dns, e.authorize_ddns,
+       e.expose_ip, e.prevent_deactivation, e.require_authorized_ips,
+       e.schedule_timezone, e.first_query_at, e.last_query_at, e.created_at,
+       CASE WHEN e.first_query_at IS NULL THEN 'pending' ELSE 'active' END AS status,
+       (e.first_query_at IS NOT NULL
+         OR EXISTS (SELECT 1 FROM authorized_ips a WHERE a.tenant_id = e.tenant_id AND a.endpoint_id = e.id)
+         OR EXISTS (SELECT 1 FROM clients c WHERE c.tenant_id = e.tenant_id AND c.endpoint_id = e.id)) AS configured
+FROM endpoints e;
+
+CREATE VIEW tenant_profile_counts WITH (security_invoker = true) AS
+SELECT p.tenant_id, p.id AS profile_id,
+       (SELECT count(*) FROM endpoints e
+         WHERE e.tenant_id = p.tenant_id AND (e.profile_id = p.id OR e.profile2_id = p.id)) AS endpoint_count,
+       (SELECT count(*) FROM profile_filters f
+         WHERE f.tenant_id = p.tenant_id AND f.profile_id = p.id AND f.enabled) AS filter_count,
+       (SELECT count(*) FROM profile_services s
+         WHERE s.tenant_id = p.tenant_id AND s.profile_id = p.id AND s.enabled) AS service_count,
+       (SELECT count(*) FROM rules r
+         WHERE r.tenant_id = p.tenant_id AND r.profile_id = p.id) AS rule_count,
+       -- Options that are set, that is not NULL, ignoring the key and timestamps.
+       (SELECT count(*) FROM profile_options o, jsonb_each(to_jsonb(o)) AS kv
+         WHERE o.tenant_id = p.tenant_id AND o.profile_id = p.id
+           AND kv.value <> 'null'::jsonb
+           AND kv.key NOT IN ('tenant_id', 'profile_id', 'created_at', 'updated_at')) AS option_count
+FROM profiles p;
+
+-- The Users page: counts and the owner's phone, never log data.
+CREATE VIEW admin_tenant_summary WITH (security_invoker = true) AS
+SELECT t.id AS tenant_id, t.status, t.admin_hold, t.created_at,
+       (SELECT u.phone_e164 FROM users u WHERE u.tenant_id = t.id AND u.role = 'owner') AS owner_phone,
+       (SELECT u.last_login_at FROM users u WHERE u.tenant_id = t.id AND u.role = 'owner') AS last_login_at,
+       (SELECT count(*) FROM profiles p WHERE p.tenant_id = t.id) AS profile_count,
+       (SELECT count(*) FROM endpoints e WHERE e.tenant_id = t.id) AS endpoint_count,
+       (SELECT count(*) FROM ip_claims c WHERE c.tenant_id = t.id AND c.state IN ('active', 'grace')) AS claim_count
+FROM tenants t;

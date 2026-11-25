@@ -1,0 +1,170 @@
+<clickhouse>
+  <!-- The five users of P5 3.4, their grants, profiles and constraints. The passwords are not here: the start
+       wrapper of the clickhouse service writes users.d/ctrlz-passwords.xml from five Docker secrets, and the
+       two files merge. Every number that differs between the small and the standard profile is a from_env
+       attribute, whose value is in profiles/*.env; the sizes test of internal/lint adds them up.
+
+       A new table of the `ctrlz` database is granted here in the same change as its migration, and the
+       lint TestClickHouseGrantsMatchTheMigrations compares the two. Nobody is granted SELECT on a view. -->
+  <users>
+    <ctrlz_migrator>
+      <profile>default</profile>
+      <networks><ip>::/0</ip></networks>
+      <grants>
+        <query>GRANT ALL ON ctrlz.*</query>
+        <query>GRANT ALL ON ctrlz_meta.*</query>
+        <!-- Only these six rights, never <access_management> (ClickHouse refuses that element together with
+             <grants>, and the server then does not start). OR REPLACE needs the three of each kind. -->
+        <query>GRANT CREATE ROW POLICY, ALTER ROW POLICY, DROP ROW POLICY ON *.*</query>
+        <query>GRANT CREATE QUOTA, ALTER QUOTA, DROP QUOTA ON *.*</query>
+      </grants>
+    </ctrlz_migrator>
+
+    <ctrlz_ingest>
+      <profile>ctrlz_ingest</profile>
+      <networks><ip>::/0</ip></networks>
+      <grants>
+        <query>GRANT INSERT ON ctrlz.dns_raw</query>
+        <query>GRANT INSERT ON ctrlz.counts_5m</query>
+        <query>GRANT INSERT ON ctrlz.agg_category</query>
+        <query>GRANT SELECT ON system.disks</query>
+      </grants>
+    </ctrlz_ingest>
+
+    <ctrlz_api>
+      <profile>ctrlz_api</profile>
+      <networks><ip>::/0</ip></networks>
+      <grants>
+        <query>GRANT SELECT ON ctrlz.dns_raw</query>
+        <query>GRANT SELECT ON ctrlz.counts_5m</query>
+        <query>GRANT SELECT ON ctrlz.agg_category</query>
+        <query>GRANT SELECT ON ctrlz.agg_counts</query>
+        <query>GRANT SELECT ON ctrlz.agg_reason</query>
+        <query>GRANT SELECT ON ctrlz.agg_geo</query>
+        <query>GRANT SELECT ON ctrlz.agg_domain</query>
+      </grants>
+    </ctrlz_api>
+
+    <ctrlz_preview>
+      <profile>ctrlz_preview</profile>
+      <networks><ip>::/0</ip></networks>
+      <grants>
+        <query>GRANT SELECT ON ctrlz.dns_raw</query>
+        <query>GRANT SELECT ON ctrlz.agg_counts</query>
+        <query>GRANT SELECT ON ctrlz.agg_reason</query>
+      </grants>
+    </ctrlz_preview>
+
+    <ctrlz_janitor>
+      <profile>ctrlz_janitor</profile>
+      <networks><ip>::/0</ip></networks>
+      <grants>
+        <query>GRANT ALTER DELETE ON ctrlz.dns_raw</query>
+        <query>GRANT ALTER DELETE ON ctrlz.counts_5m</query>
+        <query>GRANT ALTER DELETE ON ctrlz.agg_category</query>
+        <query>GRANT ALTER DELETE ON ctrlz.agg_counts</query>
+        <query>GRANT ALTER DELETE ON ctrlz.agg_reason</query>
+        <query>GRANT ALTER DELETE ON ctrlz.agg_geo</query>
+        <query>GRANT ALTER DELETE ON ctrlz.agg_domain</query>
+        <query>GRANT SELECT(tenant_id, endpoint_id, ts, _row_exists) ON ctrlz.dns_raw</query>
+        <query>GRANT SELECT(tenant_id, endpoint_id, ts, _row_exists) ON ctrlz.counts_5m</query>
+        <query>GRANT SELECT(tenant_id, endpoint_id, bucket, _row_exists) ON ctrlz.agg_category</query>
+        <query>GRANT SELECT(tenant_id, endpoint_id, bucket, _row_exists) ON ctrlz.agg_counts</query>
+        <query>GRANT SELECT(tenant_id, endpoint_id, bucket, _row_exists) ON ctrlz.agg_reason</query>
+        <query>GRANT SELECT(tenant_id, endpoint_id, bucket, _row_exists) ON ctrlz.agg_geo</query>
+        <query>GRANT SELECT(tenant_id, endpoint_id, bucket, _row_exists) ON ctrlz.agg_domain</query>
+        <query>GRANT SELECT ON system.parts</query>
+        <query>GRANT SELECT ON system.mutations</query>
+        <query>GRANT SELECT ON system.disks</query>
+      </grants>
+    </ctrlz_janitor>
+  </users>
+
+  <profiles>
+    <ctrlz_ingest>
+      <!-- The hub inserts its own blocks with a deduplication token (5.4); an async insert would merge
+           blocks the hub keeps apart. -->
+      <async_insert>0</async_insert>
+      <max_memory_usage from_env="CH_INGEST_MAX_MEMORY"/>
+      <max_memory_usage_for_user from_env="CH_INGEST_USER_MAX_MEMORY"/>
+    </ctrlz_ingest>
+
+    <ctrlz_janitor>
+      <lightweight_deletes_sync>0</lightweight_deletes_sync>
+    </ctrlz_janitor>
+
+    <!-- The reader. readonly 1 forbids every change of a setting except the two the constraints name. A
+         limit of 6.3 is const, so a reader that sends its own max_rows_to_read is refused. -->
+    <ctrlz_api>
+      <readonly>1</readonly>
+      <max_execution_time>10</max_execution_time>
+      <max_threads from_env="CH_API_MAX_THREADS"/>
+      <max_memory_usage from_env="CH_QUERY_MAX_MEMORY"/>
+      <max_memory_usage_for_user from_env="CH_API_USER_MAX_MEMORY"/>
+      <max_bytes_before_external_group_by from_env="CH_QUERY_SPILL_BYTES"/>
+      <max_bytes_before_external_sort from_env="CH_QUERY_SPILL_BYTES"/>
+      <!-- Spilling writes temporary files to the disk that every tenant, the hub's inserts and (on a one-disk host)
+           Postgres share, and both limits default to unlimited. A query that spills may write 512 MiB (small
+           profile), all of the reader's queries together 2 GiB; past it the query fails like any other limit. -->
+      <max_temporary_data_on_disk_size_for_query from_env="CH_QUERY_TMP_DISK"/>
+      <max_temporary_data_on_disk_size_for_user from_env="CH_USER_TMP_DISK"/>
+      <max_result_rows>60000</max_result_rows>
+      <max_result_bytes>33554432</max_result_bytes>
+      <max_rows_to_read>500000000</max_rows_to_read>
+      <max_concurrent_queries_for_user>24</max_concurrent_queries_for_user>
+      <constraints>
+        <!-- The tenant of a query: the row policy of access.sql reads it. -->
+        <SQL_tenant_id><changeable_in_readonly/></SQL_tenant_id>
+        <!-- clickhouse-go sends the context's seconds plus 5 as max_execution_time, so the maximum is the
+             10 s deadline of 6.3 plus 5. The minimum is there because 0 means "no limit" and a constraint
+             with only a maximum lets 0 through. -->
+        <max_execution_time><min>1</min><max>15</max><changeable_in_readonly/></max_execution_time>
+        <readonly><const/></readonly>
+        <max_threads><const/></max_threads>
+        <max_memory_usage><const/></max_memory_usage>
+        <max_memory_usage_for_user><const/></max_memory_usage_for_user>
+        <max_bytes_before_external_group_by><const/></max_bytes_before_external_group_by>
+        <max_bytes_before_external_sort><const/></max_bytes_before_external_sort>
+        <max_temporary_data_on_disk_size_for_query><const/></max_temporary_data_on_disk_size_for_query>
+        <max_temporary_data_on_disk_size_for_user><const/></max_temporary_data_on_disk_size_for_user>
+        <max_result_rows><const/></max_result_rows>
+        <max_result_bytes><const/></max_result_bytes>
+        <max_rows_to_read><const/></max_rows_to_read>
+        <max_concurrent_queries_for_user><const/></max_concurrent_queries_for_user>
+      </constraints>
+    </ctrlz_api>
+
+    <!-- The preview job: the same limits, its own memory and a minute for a query (9.2). -->
+    <ctrlz_preview>
+      <readonly>1</readonly>
+      <max_execution_time>60</max_execution_time>
+      <max_threads from_env="CH_API_MAX_THREADS"/>
+      <max_memory_usage from_env="CH_QUERY_MAX_MEMORY"/>
+      <max_memory_usage_for_user from_env="CH_QUERY_MAX_MEMORY"/>
+      <max_bytes_before_external_group_by from_env="CH_QUERY_SPILL_BYTES"/>
+      <max_bytes_before_external_sort from_env="CH_QUERY_SPILL_BYTES"/>
+      <max_temporary_data_on_disk_size_for_query from_env="CH_QUERY_TMP_DISK"/>
+      <max_temporary_data_on_disk_size_for_user from_env="CH_USER_TMP_DISK"/>
+      <max_result_rows>60000</max_result_rows>
+      <max_result_bytes>33554432</max_result_bytes>
+      <max_rows_to_read>500000000</max_rows_to_read>
+      <max_concurrent_queries_for_user>24</max_concurrent_queries_for_user>
+      <constraints>
+        <SQL_tenant_id><changeable_in_readonly/></SQL_tenant_id>
+        <max_execution_time><min>1</min><max>70</max><changeable_in_readonly/></max_execution_time>
+        <readonly><const/></readonly>
+        <max_threads><const/></max_threads>
+        <max_memory_usage><const/></max_memory_usage>
+        <max_memory_usage_for_user><const/></max_memory_usage_for_user>
+        <max_bytes_before_external_group_by><const/></max_bytes_before_external_group_by>
+        <max_bytes_before_external_sort><const/></max_bytes_before_external_sort>
+        <max_temporary_data_on_disk_size_for_query><const/></max_temporary_data_on_disk_size_for_query>
+        <max_temporary_data_on_disk_size_for_user><const/></max_temporary_data_on_disk_size_for_user>
+        <max_result_rows><const/></max_result_rows>
+        <max_result_bytes><const/></max_result_bytes>
+        <max_rows_to_read><const/></max_rows_to_read>
+        <max_concurrent_queries_for_user><const/></max_concurrent_queries_for_user>
+      </constraints>
+    </ctrlz_preview>
+  </profiles>
+</clickhouse>

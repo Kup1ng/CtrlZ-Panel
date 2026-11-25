@@ -1,0 +1,106 @@
+<clickhouse>
+  <!-- The ceiling and every size below come from the Compose profile (profiles/*.env), so the sum of the
+       memory limits in users.xml is judged against them by one test (internal/lint, the sizes test). -->
+  <max_server_memory_usage from_env="CH_MAX_SERVER_MEMORY_USAGE"/>
+  <!-- The mark, index mark and primary index caches hold 192 MiB together in the small profile and 512 in
+       the standard one (P5 3.4), because the memory sum of 6.3 has to fit under the ceiling. -->
+  <mark_cache_size from_env="CH_MARK_CACHE_SIZE"/>
+  <index_mark_cache_size from_env="CH_INDEX_MARK_CACHE_SIZE"/>
+  <primary_index_cache_size from_env="CH_PRIMARY_INDEX_CACHE_SIZE"/>
+  <!-- Past this a merge waits instead of taking memory a reader or the hub's insert needs. -->
+  <merges_mutations_memory_usage_soft_limit from_env="CH_MERGES_SOFT_LIMIT"/>
+  <listen_host>0.0.0.0</listen_host>
+  <!-- The server log holds no query text. In 26.8 a failed query (a quota, a row limit, a timeout, a memory
+       error, which are the ordinary refusals of 6.2 and 6.3) is logged at Error with its whole text, the
+       searched domain and the tenant id included, and a bound parameter is already substituted into it. So the
+       four loggers that write it are off, and the file logs of the image (clickhouse-server.log and .err.log,
+       up to 10 GB in the container's layer, outside Docker's rotation, Clear Analytics and Delete Account) are
+       removed, leaving the console, which Docker rotates. BaseDaemon is the fifth writer: the handler of a fatal
+       signal (a crash) logs the running query's text and the changed settings, SQL_tenant_id among them. The
+       exit code and the restart still show the crash. -->
+  <logger>
+    <level>warning</level>
+    <console>1</console>
+    <log remove="remove"/>
+    <errorlog remove="remove"/>
+    <levels>
+      <logger><name>executeQuery</name><level>none</level></logger>
+      <logger><name>TCPHandler</name><level>none</level></logger>
+      <logger><name>HTTPHandler</name><level>none</level></logger>
+      <logger><name>DynamicQueryHandler</name><level>none</level></logger>
+      <logger><name>BaseDaemon</name><level>none</level></logger>
+    </levels>
+  </logger>
+  <!-- Nothing leaves the server: no crash reports, no telemetry (rule 9). -->
+  <send_crash_reports>
+    <enabled>false</enabled>
+  </send_crash_reports>
+
+  <!-- With a policy for other users on a table, a user with none reads no row of it. This does NOT make a table
+       that no policy names empty: such a table is read without a filter. What closes that is the order of
+       migrate-analytics: it makes the policies of access.sql (on ctrlz.*, which needs no table) before the
+       first table, and again on every run.
+       The two requires_grant switches close the system tables. Without them every user may SELECT from most
+       of system.* (system.processes shows the text of the queries that run now, system.errors the last error
+       message of a failed one), and no row policy covers those rows: a reader could see another tenant's
+       searched domain there. With them a user reads what it is granted (the hub system.disks, the janitor
+       system.parts, system.mutations and system.disks) and a fixed list that the server grants to everyone
+       (ContextAccess.cpp: one, contributors, functions, privileges, databases, tables, columns, settings,
+       current_roles, enabled_roles, quota_usage and a few more), none of which holds query text; system.tables
+       shows a user only the tables it may see. The values are written out and not left to the server's
+       default, so that a release that changes the default cannot reopen them.
+       settings_constraints_replace_previous is written out for the same reason: changeable_in_readonly (the
+       two constraints that let a reader send SQL_tenant_id and max_execution_time under readonly 1) is
+       supported only while it is true, and a default that flipped would fail every analytics query. -->
+  <access_control_improvements>
+    <users_without_row_policies_can_read_rows>false</users_without_row_policies_can_read_rows>
+    <select_from_system_db_requires_grant>true</select_from_system_db_requires_grant>
+    <select_from_information_schema_requires_grant>true</select_from_information_schema_requires_grant>
+    <settings_constraints_replace_previous>true</settings_constraints_replace_previous>
+  </access_control_improvements>
+
+  <!-- SQL_tenant_id is the custom setting the row policy reads. The prefix is set here and not left to the
+       server's default, so that a change of the default cannot turn the policy into an unknown setting. -->
+  <custom_settings_prefixes>SQL_</custom_settings_prefixes>
+
+  <!-- An empty list would allow every host, so one name that never resolves says "none". The reader users
+       have no URL grant either. -->
+  <remote_url_allow_hosts>
+    <host>ctrlz-none.invalid</host>
+  </remote_url_allow_hosts>
+
+  <!-- A search term or a domain in a query is user data, so the tables that would keep query text are
+       removed (P5 3.4), crash_log too (it has a query column). The server log is the other place query text
+       would be, and is closed above. -->
+  <query_log remove="remove"/>
+  <query_thread_log remove="remove"/>
+  <query_views_log remove="remove"/>
+  <text_log remove="remove"/>
+  <trace_log remove="remove"/>
+  <processors_profile_log remove="remove"/>
+  <asynchronous_insert_log remove="remove"/>
+  <opentelemetry_span_log remove="remove"/>
+  <error_log remove="remove"/>
+  <crash_log remove="remove"/>
+
+  <!-- The system logs that hold no query text are removed too, because none of them has a TTL in the image's
+       config and nothing of P5 trims them: metric_log and asynchronous_metric_log get rows every second for
+       months, on the disk that Postgres and every tenant share, and min_free_disk_ratio_to_perform_insert
+       (a setting of the ctrlz tables) does not stop them. A full ClickHouse disk must never stop a login or a
+       revocation (3.4), so they do not exist. The janitor reads system.parts, which is not part_log. The
+       names after background_schedule_pool_log are logs of other releases or of features Ctrl Z does not
+       use; removing an element the server does not know is harmless. -->
+  <metric_log remove="remove"/>
+  <asynchronous_metric_log remove="remove"/>
+  <part_log remove="remove"/>
+  <query_metric_log remove="remove"/>
+  <background_schedule_pool_log remove="remove"/>
+  <session_log remove="remove"/>
+  <backup_log remove="remove"/>
+  <blob_storage_log remove="remove"/>
+  <s3queue_log remove="remove"/>
+  <latency_log remove="remove"/>
+  <filesystem_cache_log remove="remove"/>
+  <zookeeper_log remove="remove"/>
+  <transactions_info_log remove="remove"/>
+</clickhouse>
