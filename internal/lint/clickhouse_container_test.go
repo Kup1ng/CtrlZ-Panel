@@ -506,7 +506,9 @@ func TestClickHouseTwoTenants(t *testing.T) {
 			t.Fatalf("create the read_rows quota: %v", err)
 		}
 		t.Cleanup(func() { _ = mig.Exec(context.Background(), "DROP QUOTA IF EXISTS ctrlz_test_rows") })
-		wantServerCode(t, "a read of more rows than the read_rows limit", run("ra", quotaProbe), chQuotaExceeded)
+		// A count() is answered from the primary key without reading rows (the first CI run of this subtest saw it
+		// pass under a limit of one), so the probe sums a column, which has to read them.
+		wantServerCode(t, "a read of more rows than the read_rows limit", run("ra", "SELECT sum(row_id) FROM ctrlz.dns_raw"), chQuotaExceeded)
 	})
 
 	t.Run("the hub's user", func(t *testing.T) {
