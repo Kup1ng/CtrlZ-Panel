@@ -129,6 +129,9 @@ const (
 	// a client that sends a window of zero holds the handler, its headers and any unread body for as
 	// long as it answers pings (W3-r2-5).
 	AnonymousTimeout = 10 * time.Second
+	// WriteByteTimeout is how long the HTTP/2 connection may fail to write a single byte before the
+	// server closes it (W3-r3-3).
+	WriteByteTimeout = 10 * time.Second
 	// MaxRequestsPerConn is how many requests of that kind one connection has in progress. One
 	// connection may open 100 streams; a client of ours has one, and the rest would each pin the
 	// request, its headers and its writer.
@@ -220,9 +223,13 @@ func (h *Root) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := identityOf(r, now)
 	r = r.WithContext(WithIdentity(r.Context(), id))
 
-	// Everything but an admitted node's NodeHub call is bounded in time and in number per connection
-	// before any branch: even a plain 404 is an answer that a peer with no window can leave unwritten.
-	if !(id.Node && strings.HasPrefix(r.URL.Path, "/"+hubv1.NodeHub_ServiceDesc.ServiceName+"/")) {
+	// Everything but a gRPC call of an admitted node to NodeHub is bounded in time and in number per
+	// connection before any branch: even a plain 404 is an answer that a peer with no window can leave
+	// unwritten. The exemption is for what serveNodeHub will handle (it counts and checks the call), so a
+	// request on a node connection with the NodeHub path and another content type is bounded like any
+	// other (W3-r3-1, W3-r3-4).
+	if !(id.Node && strings.HasPrefix(r.URL.Path, "/"+hubv1.NodeHub_ServiceDesc.ServiceName+"/") &&
+		strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc")) {
 		rel, ok := h.bound(w, r)
 		if !ok {
 			return
@@ -507,6 +514,12 @@ func NewServer(root http.Handler, base *http.Server, log *slog.Logger) *http.Ser
 		MaxConcurrentStreams: 100,
 		SendPingTimeout:      10 * time.Second,
 		PingTimeout:          10 * time.Second,
+		// A stream's write deadline only queues a RST_STREAM, and the stream (and its handler) ends when
+		// that frame has been written. A peer that stops reading the TCP socket blocks the write in
+		// front of it, and a PING or WINDOW_UPDATE every few seconds keeps the keepalive satisfied, so
+		// without this every deadline of the port is void against it. It fires only when no byte could
+		// be written for the whole period, so a slow download that moves is not touched (W3-r3-3).
+		WriteByteTimeout: WriteByteTimeout,
 		// The default windows are 1 MiB a stream and a connection. What a peer has sent and no handler
 		// has read sits in memory up to the window, so the windows are what an anonymous connection can
 		// make the hub hold; 256 KiB still fills a 20 Mbit/s link at 100 ms (W3-r2-5).
