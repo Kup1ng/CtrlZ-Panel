@@ -7,7 +7,7 @@
 //   node scripts/ctrlz-version.mjs
 //
 // Order: CTRLZ_VERSION from the environment (a release job names the tag), else `git describe --tags --always --dirty` of the tree
-// the image is built from (a tag when one exists, else the short commit, with `-dirty` for uncommitted changes), else `dev`.
+// the image is built from (a tag when one exists, else the short commit, with `-dirty` for uncommitted changes, except when CI is set), else `dev`.
 // `dev` is also what a developer's plain `next build` shows, since nothing sets the variable there. The value is checked,
 // because it ends up in a page: anything but letters, digits and `._+-` (up to 64) is refused and falls through to the next source.
 //
@@ -24,14 +24,17 @@ export function cleanVersion(value) {
   return SAFE.test(trimmed) ? trimmed : undefined;
 }
 
-function gitDescribe(cwd) {
-  const run = spawnSync("git", ["describe", "--tags", "--always", "--dirty"], {cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"]});
+// `-dirty` is left out when CI is set: by the time ci-web.sh asks, its earlier steps (generators, installs) may have touched tracked
+// files, and an image of a clean commit would then carry a suffix that no developer's change put there (pg2-1-3).
+function gitDescribe(cwd, env = process.env) {
+  const args = ["describe", "--tags", "--always", ...(env.CI ? [] : ["--dirty"])];
+  const run = spawnSync("git", args, {cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"]});
   return run.status === 0 ? run.stdout : undefined;
 }
 
 /** The version to build with. `env` and `describe` are parameters for the test. */
 export function ctrlzVersion({env = process.env, describe = gitDescribe, cwd = fileURLToPath(new URL("..", import.meta.url))} = {}) {
-  return cleanVersion(env.CTRLZ_VERSION) ?? cleanVersion(describe(cwd)) ?? FALLBACK;
+  return cleanVersion(env.CTRLZ_VERSION) ?? cleanVersion(describe(cwd, env)) ?? FALLBACK;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -71,8 +71,10 @@ export function createThemeWriter({
       if (!running) void drain();
     },
     adopt(serverMode) {
-      if (running || waiting !== undefined) return;
+      // What the server holds is recorded even while our own write is in flight: the page keeps our choice, but a failed write
+      // must go back to the newest theme the server reported, not to an older one (pg2-1-6).
       known = serverMode;
+      if (running || waiting !== undefined) return;
       adoptServerMode(serverMode);
     },
     get busy() {

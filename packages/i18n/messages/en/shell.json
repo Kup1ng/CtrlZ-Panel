@@ -167,7 +167,8 @@
     }
   },
   "theme": {
-    "saveFailed": "Your theme could not be saved, so the saved one is back."
+    "saveFailed": "Your theme could not be saved, so the saved one is back.",
+    "saveFailedKept": "Your theme could not be saved."
   },
   "logout": {
     "title": "Log out of your account?",

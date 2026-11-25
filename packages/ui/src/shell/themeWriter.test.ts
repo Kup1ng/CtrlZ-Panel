@@ -171,4 +171,33 @@ describe("a theme write that fails (T-308)", () => {
     expect(t.reported).toEqual([]);
     expect(t.page()).toBe("dark");
   });
+
+  // pg2-1-6: a /me that brings a newer server theme during our write is not applied (our choice wins), but it is what a failed write goes back to.
+  it("goes back to the newest theme /me reported during the write, not to an older one", async () => {
+    const t = failing("light");
+    t.outcomes.push(new Error("503"));
+    t.choose("system");
+    t.writer.adopt("dark");
+    expect(t.page()).toBe("system");
+    await settle();
+    expect(t.page()).toBe("dark");
+    expect(t.reported.map((r) => r.restored)).toEqual(["dark"]);
+  });
+
+  // pg2-1-2: with no theme known there is nothing to go back to, and the writer says so (restored is undefined) instead of claiming a restore.
+  it("reports restored as undefined when no server theme was ever known, and touches nothing", async () => {
+    const reported: Array<ThemeMode | undefined> = [];
+    let adopted = 0;
+    const writer = createThemeWriter({
+      adoptServerMode: () => {
+        adopted++;
+      },
+      write: () => Promise.reject(new Error("503")),
+      onWriteFailed: (_error, restored) => reported.push(restored),
+    });
+    writer.request("dark");
+    await settle();
+    expect(reported).toEqual([undefined]);
+    expect(adopted).toBe(0);
+  });
 });

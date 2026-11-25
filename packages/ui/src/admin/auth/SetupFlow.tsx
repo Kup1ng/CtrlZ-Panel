@@ -23,7 +23,7 @@ import {FormError, OfflineNotice} from "../../forms/FormError.tsx";
 import {hasInvisiblePassword} from "../../forms/invisible.ts";
 import {LoadingBlock} from "../../forms/LoadingBlock.tsx";
 import {OTP_LENGTH, OtpField} from "../../forms/OtpField.tsx";
-import {useReportAuthHolding} from "../../forms/useAuthBusy.ts";
+import {useAuthBusy, useReportAuthBusy, useReportAuthHolding} from "../../forms/useAuthBusy.ts";
 import {PasswordField} from "../../forms/PasswordField.tsx";
 import {useAdminForm} from "../shared/useAdminForm.ts";
 import {LogoutDialog} from "../../shell/LogoutDialog.tsx";
@@ -106,6 +106,9 @@ function Steps({initial, ready}: {initial: {password: boolean; totp: boolean}; r
   // Log out asks first (T-109); the shell's dialog ends the session and says why when it cannot.
   const [logoutOpen, setLogoutOpen] = useState(false);
   const step = steps[index] ?? "done";
+  // Both calls of the steps rotate the admin session's token. A logout sent with the old token after the rotation commits answers 401,
+  // which an admin page reads as "already gone" while the browser holds the new, full session (pg2-1-4). So Log out waits for them.
+  const callRunning = useAuthBusy();
 
   // An admin who needs nothing here (the page was typed in by hand, or another tab finished the setup) goes on. The steps
   // are fixed when the page is first drawn, so a setup that ends here is never mistaken for one that was never needed:
@@ -138,7 +141,7 @@ function Steps({initial, ready}: {initial: {password: boolean; totp: boolean}; r
         </Link>
       ) : null}
       <div className="flex flex-col items-center gap-2">
-        <Button size="sm" variant="ghost" onPress={() => setLogoutOpen(true)}>
+        <Button size="sm" variant="ghost" isDisabled={callRunning} onPress={() => setLogoutOpen(true)}>
           {t("setup.logout")}
         </Button>
       </div>
@@ -156,6 +159,7 @@ function PasswordStep({onDone}: {onDone: () => void}) {
   const [next, setNext] = useState("");
   const [pending, setPending] = useState(false);
   const busy = useRef(false);
+  useReportAuthBusy(pending);
 
   async function submit() {
     if (busy.current || form.blocked) return;
@@ -239,6 +243,7 @@ function TotpStep({onDone, autoStart}: {onDone: () => void; autoStart: boolean})
   const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
   const busy = useRef(false);
+  useReportAuthBusy(pending);
   // A shown secret is held by the server as the one pending secret: a language switch is a full load that would ask for another and
   // replace it, and the entry the admin already scanned would stop verifying. The corner menu keeps the other language off (gate-r31-6).
   // This step has no way back (password, authenticator, done), so the hint says "finish", not "go back" (gate-r32-5).

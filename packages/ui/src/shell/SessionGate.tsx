@@ -2,6 +2,7 @@
 
 import {Skeleton, toast} from "@heroui/react";
 import {useQueryClient} from "@tanstack/react-query";
+import type {ThemeMode} from "../theme/config.ts";
 import {adoptServerThemeMode, onThemeModeChange} from "../theme/useTheme.ts";
 import {leaveUnauthorizedAdminSession, useAdminIdentityGuard, useAdminSession} from "@ctrlz/api-client/admin/session.ts";
 import {errorMessageArgs, errorMessageKey} from "@ctrlz/api-client/errors.ts";
@@ -65,16 +66,17 @@ function PanelGate({children}: {children: ReactNode}) {
   const themeWriter = useRef<ThemeWriter>(undefined);
   // A choice the server did not take is not left to flip back at the next load without a word (T-308): the server's theme wins, the
   // page goes back to it now, and the toast says so. The writer outlives renders, so the translators are read through a ref.
-  const say = useRef<(error: unknown) => void>(undefined);
+  const say = useRef<(error: unknown, restored: ThemeMode | undefined) => void>(undefined);
   const s = useTranslations("shell");
   const e = useTranslations("errors");
   useEffect(() => {
-    say.current = (error) => toast.danger(s("theme.saveFailed"), {description: e(errorMessageKey(error), errorMessageArgs(error))});
+    // "The saved one is back" is only true when the writer had a saved theme to go back to (pg2-1-2).
+    say.current = (error, restored) => toast.danger(s(restored === undefined ? "theme.saveFailedKept" : "theme.saveFailed"), {description: e(errorMessageKey(error), errorMessageArgs(error))});
   }, [s, e]);
   themeWriter.current ??= createThemeWriter({
     write: (mode) => updatePreferences(queryClient, {theme: mode}),
     adoptServerMode: adoptServerThemeMode,
-    onWriteFailed: (error) => say.current?.(error),
+    onWriteFailed: (error, restored) => say.current?.(error, restored),
   });
 
   const ready = status === "ready";

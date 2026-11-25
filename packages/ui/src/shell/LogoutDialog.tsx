@@ -29,13 +29,17 @@ export function LogoutDialog({isOpen, onOpenChange}: {isOpen: boolean; onOpenCha
   return (
     <ConfirmFrame
       isOpen={isOpen}
-      onOpenChange={onOpenChange}
+      // The call is already running: closing the dialog now would show an untouched page that the logout then takes away (pg2-1-5).
+      onOpenChange={(open) => {
+        if (!open && pending) return;
+        onOpenChange(open);
+      }}
       status="warning"
       icon={<Icon name="logout" className="size-5" />}
       title={t("logout.title")}
       footer={
         <>
-          <Button slot="close" variant="tertiary">
+          <Button slot="close" variant="tertiary" isDisabled={pending}>
             {c("cancel")}
           </Button>
           <Button
