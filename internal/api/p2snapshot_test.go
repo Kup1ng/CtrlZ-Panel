@@ -12,15 +12,20 @@ import (
 
 // TestExportReadsOneSnapshotWhileARuleMovesIntoANewFolder: the racing case of spec 10.3 through GET /profiles/{id}/export. The
 // export reads the folders of the profile and then its rules. The test holds the rules table locked so the export stops at
-// the second read, and while it waits, a move of the rules into a new folder commits. A read of two statements in two
-// snapshots takes the old folder list with the new rules, a document that names a folder it lacks and that no import
-// accepts; one RepeatableRead snapshot gives the state before the move, a document that is whole (p2-B8-r2-5).
+// the second read, and while it waits, a move of the rules from their folder into a new one commits. A read of two statements in
+// two snapshots takes the old folder list with the new rules, and the writer of the document, which puts a rule whose folder
+// it does not hold at the top level, shows both rules outside their folder; one RepeatableRead snapshot gives the state before
+// the move (p2-B8-r2-5).
 func TestExportReadsOneSnapshotWhileARuleMovesIntoANewFolder(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	A := f.env.A
 	p := f.fresh(A.Tenant, A.User).mustProfile("Racing export", "custom")
 	base := "/profiles/" + p.ID.String()
-	f.fresh(A.Tenant, A.User).post(base+"/rules", map[string]any{"patterns": []string{"r1.example", "r2.example"}, "action": "block"}).want(201, "")
+	var before struct {
+		ID uuid.UUID `json:"id"`
+	}
+	f.fresh(A.Tenant, A.User).post(base+"/folders", map[string]any{"name": "Before", "kind": "standard"}).want(201, "").json(&before)
+	f.fresh(A.Tenant, A.User).post(base+"/rules", map[string]any{"patterns": []string{"r1.example", "r2.example"}, "action": "block", "folder_id": before.ID}).want(201, "")
 
 	super, err := f.env.DB.Super(f.env.Ctx)
 	if err != nil {
@@ -61,7 +66,8 @@ func TestExportReadsOneSnapshotWhileARuleMovesIntoANewFolder(t *testing.T) {
 	r.want(200, "")
 	var doc struct {
 		Folders []struct {
-			Ref string `json:"ref"`
+			Ref  string `json:"ref"`
+			Name string `json:"name"`
 		} `json:"folders"`
 		Rules []struct {
 			Pattern string `json:"pattern"`
@@ -71,16 +77,18 @@ func TestExportReadsOneSnapshotWhileARuleMovesIntoANewFolder(t *testing.T) {
 	if err := json.Unmarshal(r.Body, &doc); err != nil {
 		t.Fatal(err)
 	}
-	refs := map[string]bool{}
+	names := map[string]string{}
 	for _, fo := range doc.Folders {
-		refs[fo.Ref] = true
+		names[fo.Ref] = fo.Name
 	}
 	if len(doc.Rules) != 2 {
 		t.Fatalf("the export holds %d rules, want 2", len(doc.Rules))
 	}
+	// The document writer turns a reference to a folder it lacks into a rule at the top level, so a torn read does not show as
+	// a dangling name: it shows as a rule that left its folder. In one snapshot both rules are still in "Before".
 	for _, ru := range doc.Rules {
-		if ru.Folder != "" && !refs[ru.Folder] {
-			t.Fatalf("the rule %q names the folder %q, which the document lacks: the export read two snapshots", ru.Pattern, ru.Folder)
+		if names[ru.Folder] != "Before" {
+			t.Fatalf("the rule %q is in folder %q (%q), want \"Before\": the export read two snapshots", ru.Pattern, ru.Folder, names[ru.Folder])
 		}
 	}
 }

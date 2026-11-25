@@ -3,6 +3,7 @@ package api
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -149,6 +150,9 @@ func TestNoRedirectVectorsThroughEveryEditMoveCopyAndFolderRoute(t *testing.T) {
 			f.env.Exec(t, `INSERT INTO ctrlz.catalog_no_redirect_domain (pattern, scope) VALUES ($1, $2) ON CONFLICT (pattern) DO UPDATE SET scope = EXCLUDED.scope`, name, scope)
 		}
 		for _, s := range scenarios {
+			// The tenant's bulk-write buckets: 36 cases of eleven writes each would meet them, so each scenario starts a quiet
+			// ten minutes later.
+			f.ck.add(10 * time.Minute)
 			// Rules go before their folders.
 			f.env.Exec(t, `DELETE FROM ctrlz.rules WHERE tenant_id = $1`, A.Tenant)
 			f.env.Exec(t, `DELETE FROM ctrlz.rule_folders WHERE tenant_id = $1`, A.Tenant)
