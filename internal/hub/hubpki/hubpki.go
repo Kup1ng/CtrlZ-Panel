@@ -13,6 +13,7 @@
 package hubpki
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -128,13 +129,14 @@ func ParseNodeID(cn string) (uuid.UUID, bool) {
 }
 
 func randSerial(r io.Reader) (*big.Int, error) {
-	// 128 random bits, never zero, and below 2^127 so the DER integer is positive without padding.
+	// 128 random bits and never zero. A set top bit costs one leading zero byte in the DER integer, which
+	// x509.CreateCertificate adds itself (it accepts a positive serial up to 160 bits), so no bit is spent
+	// on the sign (W3-r4-1).
 	for {
 		b := make([]byte, 16)
 		if _, err := io.ReadFull(r, b); err != nil {
 			return nil, err
 		}
-		b[0] &= 0x7f
 		n := new(big.Int).SetBytes(b)
 		if n.Sign() > 0 {
 			return n, nil
@@ -327,7 +329,13 @@ func ClientVerifyTime(c *x509.Certificate, now time.Time, grace bool) (time.Time
 // VerifyClient checks a presented certificate the way every node door does (5.1, 4.4): it chains to
 // the node CA, carries EKU clientAuth (and so is no hub or NTS leaf), is no CA, and its CN is a node
 // id. It returns the node id. grace allows the 60-day renewal window past not_after.
-func (c *NodeCA) VerifyClient(leaf *x509.Certificate, inter []*x509.Certificate, now time.Time, grace bool) (uuid.UUID, error) {
+//
+// Why there is no intermediates argument. The node CA signs node leaves directly, so no honest client
+// has an intermediate to show. Letting the peer name one would let an anonymous source choose the
+// certificates Verify tries (up to 100 signature checks, each over a key it picked, before it has
+// proved any key of its own, W3-r4-4). Here the leaf must name the CA as its issuer and carry an ECDSA
+// signature, and the chain is the leaf and the CA alone: at most one P-256 verification.
+func (c *NodeCA) VerifyClient(leaf *x509.Certificate, now time.Time, grace bool) (uuid.UUID, error) {
 	at, ok := ClientVerifyTime(leaf, now, grace)
 	if !ok {
 		return uuid.Nil, errors.New("hubpki: the certificate is not valid now")
@@ -335,11 +343,15 @@ func (c *NodeCA) VerifyClient(leaf *x509.Certificate, inter []*x509.Certificate,
 	if leaf.IsCA {
 		return uuid.Nil, errors.New("hubpki: a CA certificate is no node certificate")
 	}
-	ip := x509.NewCertPool()
-	for _, i := range inter {
-		ip.AddCert(i)
+	if !bytes.Equal(leaf.RawIssuer, c.cert.RawSubject) {
+		return uuid.Nil, errors.New("hubpki: the certificate is not issued by the node CA")
 	}
-	if _, err := leaf.Verify(x509.VerifyOptions{Roots: c.pool, Intermediates: ip, CurrentTime: at, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil {
+	switch leaf.SignatureAlgorithm {
+	case x509.ECDSAWithSHA256, x509.ECDSAWithSHA384, x509.ECDSAWithSHA512:
+	default:
+		return uuid.Nil, errors.New("hubpki: the certificate is not signed with ECDSA")
+	}
+	if _, err := leaf.Verify(x509.VerifyOptions{Roots: c.pool, CurrentTime: at, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil {
 		return uuid.Nil, errors.New("hubpki: the certificate does not chain to the node CA for client use")
 	}
 	id, ok := ParseNodeID(leaf.Subject.CommonName)

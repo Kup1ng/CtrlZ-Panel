@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -181,6 +182,10 @@ type CAs struct {
 	amu          sync.Mutex
 	pending      []pendingAlert
 	invalidAlert bool
+	// reissueAlerted is the (reinstall, zones) a reissue alert was raised for and whose row write has not
+	// succeeded since. While a write keeps failing, the next passes find the same replacement due and
+	// must not raise the same alert again every minute (W3-r4-2); a written row clears it.
+	reissueAlerted string
 }
 
 type pendingAlert struct {
@@ -198,7 +203,8 @@ func (c *CAs) Zone() *hubpki.ZoneCA {
 
 // EnsureNodeRow stores the node CA's certificate as the active node_ca row when the stored one is not
 // it (the first start, or a new CA after a compromise, which the runbook announces). The private key is
-// never a row.
+// never a row. A row that is replaced raises a critical alert first: every node certificate stops
+// chaining to the new CA, so the admin must be told why the nodes dropped off (W3-r4-3).
 func (c *CAs) EnsureNodeRow(ctx context.Context) error {
 	row, found, err := c.Rows.HubActiveCA(ctx, store.CertKindNodeCA)
 	if err != nil {
@@ -209,6 +215,9 @@ func (c *CAs) EnsureNodeRow(ctx context.Context) error {
 		return nil
 	}
 	cert := c.Node.Cert()
+	if found {
+		c.raise(ctx, "critical", store.HubAlertNodeCAChanged, map[string]string{})
+	}
 	return c.Rows.HubReplaceCA(ctx, store.CertKindNodeCA, row.ID, want, cert.NotBefore, cert.NotAfter, nil, false, "")
 }
 
@@ -252,11 +261,23 @@ func (c *CAs) EnsureZone(ctx context.Context) error {
 		// failed insert between the two never leaves a replaced CA that nobody was told about. The price
 		// is a second alert when the row write then fails and the next pass tries again. Params are words:
 		// the reinstall kind is a closed one.
-		c.raise(ctx, "warning", store.HubAlertZoneCAReissued, map[string]string{"reinstall": reinstall})
+		// A row write that keeps failing finds the same replacement due at every pass; the alert is raised
+		// once for it (W3-r4-2).
+		key := reinstall + "|" + strings.Join(zones, ",")
+		c.amu.Lock()
+		again := c.reissueAlerted == key
+		c.reissueAlerted = key
+		c.amu.Unlock()
+		if !again {
+			c.raise(ctx, "warning", store.HubAlertZoneCAReissued, map[string]string{"reinstall": reinstall})
+		}
 	}
 	if err := c.Rows.HubReplaceCA(ctx, store.CertKindZoneCA, row.ID, certPEM(z.CertDER()), cert.NotBefore, cert.NotAfter, zones, queue, reinstall); err != nil {
 		return fmt.Errorf("zone CA row: %w", err)
 	}
+	c.amu.Lock()
+	c.reissueAlerted = ""
+	c.amu.Unlock()
 	c.set(z)
 	return nil
 }

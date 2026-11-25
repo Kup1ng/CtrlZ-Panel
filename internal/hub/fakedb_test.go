@@ -25,12 +25,13 @@ type fakeDB struct {
 	cas   map[string][]*fCA
 	zones store.HubZones
 
-	jobs     []string // reinstall kind of each queued domain_change
-	alerts   int
-	kinds    []store.HubAlertKind
-	alertErr error // when set, an alert insert fails
-	loads    int
-	downErr  error // when set, node reads fail (a database outage)
+	jobs       []string // reinstall kind of each queued domain_change
+	alerts     int
+	kinds      []store.HubAlertKind
+	alertErr   error // when set, an alert insert fails
+	replaceErr error // when set, a CA row write fails
+	loads      int
+	downErr    error // when set, node reads fail (a database outage)
 }
 
 type fEnr struct {
@@ -230,6 +231,9 @@ func (d *fakeDB) HubActiveCA(_ context.Context, kind string) (store.HubCertRow, 
 func (d *fakeDB) HubReplaceCA(_ context.Context, kind string, old uuid.UUID, chain string, nb, na time.Time, names []string, queue bool, reinstall string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.replaceErr != nil {
+		return d.replaceErr
+	}
 	for _, c := range d.cas[kind] {
 		if c.row.ID == old {
 			c.retired = true

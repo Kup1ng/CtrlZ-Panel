@@ -1097,6 +1097,54 @@ func TestZoneCAReissueAlertIsNotLost(t *testing.T) {
 	}
 }
 
+// A zone CA row that cannot be written finds the same replacement due at every pass, and the alert is
+// raised once for it, not once a minute (W3-r4-2); the row written clears the memory, so a later change
+// raises its own.
+func TestZoneCAReissueAlertIsNotRepeatedWhileTheRowWriteFails(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.db.replaceErr = context.DeadlineExceeded
+	h.db.zones.DNSZone = "dns.example.ir"
+	for i := 0; i < 5; i++ {
+		if err := h.hub.CAs.EnsureZone(ctx); err == nil {
+			t.Fatal("a failed row write was not reported")
+		}
+	}
+	if h.db.alerts != 1 {
+		t.Fatalf("%d alerts for one pending replacement", h.db.alerts)
+	}
+	h.db.replaceErr = nil
+	if err := h.hub.CAs.EnsureZone(ctx); err != nil || h.db.alerts != 1 {
+		t.Fatalf("the pass that wrote the row: %v, %d alerts", err, h.db.alerts)
+	}
+	h.db.zones.DNSZone = "dns.other.ir"
+	if err := h.hub.CAs.EnsureZone(ctx); err != nil || h.db.alerts != 2 {
+		t.Fatalf("a later change: %v, %d alerts", err, h.db.alerts)
+	}
+}
+
+// A node CA row that is replaced raises an alert (W3-r4-3): every node certificate stops chaining to the
+// new CA, and nothing else would tell the admin why. The first start, and a restart with the same CA,
+// raise none.
+func TestNodeCARowReplacementRaisesAnAlert(t *testing.T) {
+	h := newHarness(t)
+	if h.db.alerts != 0 {
+		t.Fatalf("a first start raised %d alerts", h.db.alerts)
+	}
+	if err := h.hub.CAs.EnsureNodeRow(context.Background()); err != nil || h.db.alerts != 0 {
+		t.Fatalf("the same CA again: %v, %d alerts", err, h.db.alerts)
+	}
+	h2 := newHarnessWith(t, func(db *fakeDB) {
+		db.cas["node_ca"] = []*fCA{{row: store.HubCertRow{ID: uuid.New(), ChainPEM: "an older CA"}}}
+	})
+	if len(h2.db.kinds) != 1 || h2.db.kinds[0] != store.HubAlertNodeCAChanged {
+		t.Fatalf("alerts after a replaced node CA: %v", h2.db.kinds)
+	}
+	if rows := h2.db.cas["node_ca"]; len(rows) != 2 || !rows[0].retired || rows[1].retired {
+		t.Fatalf("node_ca rows: %d", len(rows))
+	}
+}
+
 // A live upload body is held to an unread budget (W3-r2-6) that the handler's own reads give back: a long
 // run of messages of every size, from empty to a megabyte, goes through without the stream stalling, so
 // the accounting of what was taken out of the queue matches what the transport read.

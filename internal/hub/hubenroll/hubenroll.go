@@ -100,11 +100,13 @@ func csrKey(der []byte) (*ecdsa.PublicKey, error) {
 		return nil, errBad()
 	}
 	csr, err := x509.ParseCertificateRequest(der)
-	if err != nil || csr.CheckSignature() != nil {
+	if err != nil {
 		return nil, errBad()
 	}
+	// The key type is judged before the signature is checked: the caller is anonymous, and a CSR with a
+	// large RSA key must not be verified (W3-r4-4).
 	pub, ok := csr.PublicKey.(*ecdsa.PublicKey)
-	if !ok || pub.Curve != elliptic.P256() {
+	if !ok || pub.Curve != elliptic.P256() || csr.CheckSignature() != nil {
 		return nil, errBad()
 	}
 	return pub, nil

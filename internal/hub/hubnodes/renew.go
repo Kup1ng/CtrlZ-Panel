@@ -79,11 +79,12 @@ func (s *Service) RenewCert(ctx context.Context, req *hubv1.RenewCertRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "bad request")
 	}
 	csr, err := x509.ParseCertificateRequest(der)
-	if err != nil || csr.CheckSignature() != nil {
+	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "bad request")
 	}
+	// The key type is judged before the signature is checked, as in hubenroll.csrKey (W3-r4-4).
 	pub, ok := csr.PublicKey.(*ecdsa.PublicKey)
-	if !ok || pub.Curve != elliptic.P256() {
+	if !ok || pub.Curve != elliptic.P256() || csr.CheckSignature() != nil {
 		return nil, status.Error(codes.InvalidArgument, "bad request")
 	}
 	spki, err := hubpki.SPKISHA256(pub)

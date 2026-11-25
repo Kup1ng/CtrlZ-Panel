@@ -47,6 +47,14 @@ const (
 	MaxNoCertConns     = 512
 	MaxConnsPerNode    = 6
 	HandshakeTimeout   = 10 * time.Second
+	// MaxHandshakeBytes is what a peer may send before its handshake is done. Go reads a client
+	// Certificate message of up to 256 KiB and parses every certificate in it before VerifyConnection
+	// runs, so without this bound each of the 256 handshakes could hold about 2.5 MB of parsed junk for
+	// the whole timeout (W3-r4-5). A ClientHello with ML-KEM, one node certificate and its
+	// CertificateVerify is under 8 KiB.
+	MaxHandshakeBytes = 32 << 10
+	// maxPeerCerts is a node leaf, and room for the CA a client might add. Nothing else is read.
+	maxPeerCerts = 2
 )
 
 // ListenerConfig is everything the listener needs from its surroundings.
@@ -126,6 +134,32 @@ type rawConn struct {
 	releases []func()
 	closed   bool
 	requests int // requests in progress that are not an admitted node's NodeHub calls
+
+	// read counts the bytes taken off the socket until the handshake is done (see MaxHandshakeBytes). Only
+	// the goroutine that runs the handshake reads before then, and capLifted is set by that goroutine
+	// before it hands the connection on.
+	read      int64
+	capLifted bool
+}
+
+var errHandshakeBytes = errors.New("hubnet: too many bytes before the handshake finished")
+
+// Read is the bound of MaxHandshakeBytes. It never asks the socket for more than the budget left plus
+// one byte, so the one byte that overruns it is how the cap is noticed, and no read fills a larger buffer.
+func (c *rawConn) Read(p []byte) (int, error) {
+	if c.capLifted {
+		return c.Conn.Read(p)
+	}
+	if left := MaxHandshakeBytes - c.read + 1; int64(len(p)) > left {
+		p = p[:left]
+	}
+	n, err := c.Conn.Read(p)
+	c.read += int64(n)
+	if c.read > MaxHandshakeBytes {
+		_ = c.Conn.Close()
+		return 0, errHandshakeBytes
+	}
+	return n, err
 }
 
 func (c *rawConn) enterRequest() bool {
@@ -209,7 +243,12 @@ func (l *Listener) verify(rc *rawConn, cs tls.ConnectionState) error {
 	if len(cs.PeerCertificates) == 0 {
 		return nil
 	}
-	id, err := l.cfg.CA.VerifyClient(cs.PeerCertificates[0], cs.PeerCertificates[1:], l.cfg.Now(), true)
+	// The node CA signs leaves directly, so a longer list is nobody the hub issued for, and nothing past
+	// the leaf is used to build a chain (hubpki.VerifyClient).
+	if len(cs.PeerCertificates) > maxPeerCerts {
+		return errors.New("hubnet: client certificate refused")
+	}
+	id, err := l.cfg.CA.VerifyClient(cs.PeerCertificates[0], l.cfg.Now(), true)
 	if err != nil {
 		return errors.New("hubnet: client certificate refused")
 	}
@@ -286,6 +325,7 @@ func (l *Listener) handshake(rc *rawConn, relHS func()) {
 		_ = rc.Close()
 		return
 	}
+	rc.capLifted = true
 	// The key is proved: now the node's connection is counted, and a seventh is refused (5.1).
 	if !l.countNode(rc) {
 		_ = rc.Close()

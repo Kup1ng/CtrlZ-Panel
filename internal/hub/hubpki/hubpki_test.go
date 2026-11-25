@@ -1,12 +1,15 @@
 package hubpki
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"io"
 	"math/big"
 	"net"
 	"testing"
@@ -109,10 +112,10 @@ func TestIssueClientAndVerify(t *testing.T) {
 	if got := leaf.NotAfter.Sub(t0); got < ClientLife-time.Second || got > ClientLife {
 		t.Fatalf("life %v", got)
 	}
-	if SerialText(leaf) != iss.Serial || leaf.SerialNumber.BitLen() > 127 {
+	if SerialText(leaf) != iss.Serial || leaf.SerialNumber.BitLen() > 128 {
 		t.Fatalf("serial %s", iss.Serial)
 	}
-	if got, err := ca.VerifyClient(leaf, nil, t0.Add(time.Hour), false); err != nil || got != id {
+	if got, err := ca.VerifyClient(leaf, t0.Add(time.Hour), false); err != nil || got != id {
 		t.Fatalf("verify: %v %v", got, err)
 	}
 	// The 32-digit form of the CN reads as the same node.
@@ -122,16 +125,16 @@ func TestIssueClientAndVerify(t *testing.T) {
 
 	// Past not_after: refused, except inside the grace of a renewal.
 	past1 := leaf.NotAfter.Add(24 * time.Hour)
-	if _, err := ca.VerifyClient(leaf, nil, past1, false); err == nil {
+	if _, err := ca.VerifyClient(leaf, past1, false); err == nil {
 		t.Fatal("an expired certificate verified without the grace")
 	}
-	if got, err := ca.VerifyClient(leaf, nil, past1, true); err != nil || got != id {
+	if got, err := ca.VerifyClient(leaf, past1, true); err != nil || got != id {
 		t.Fatalf("one day past with the grace: %v", err)
 	}
-	if _, err := ca.VerifyClient(leaf, nil, leaf.NotAfter.Add(RenewalGrace+time.Hour), true); err == nil {
+	if _, err := ca.VerifyClient(leaf, leaf.NotAfter.Add(RenewalGrace+time.Hour), true); err == nil {
 		t.Fatal("61 days past verified")
 	}
-	if _, err := ca.VerifyClient(leaf, nil, t0.Add(-time.Hour), true); err == nil {
+	if _, err := ca.VerifyClient(leaf, t0.Add(-time.Hour), true); err == nil {
 		t.Fatal("not yet valid verified")
 	}
 }
@@ -173,7 +176,7 @@ func TestServerLeafIsNotAClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	leaf, _ := x509.ParseCertificate(iss.DER)
-	if _, err := ca.VerifyClient(leaf, nil, t0, false); err == nil {
+	if _, err := ca.VerifyClient(leaf, t0, false); err == nil {
 		t.Fatal("a server leaf verified as a client")
 	}
 	// Even with a CN that is a node id (which IssueServer refuses to write), EKU alone is enough.
@@ -380,5 +383,98 @@ func TestValidZoneIsTheDomainInvalidRule(t *testing.T) {
 	z := mustZone(t, newKey(t))
 	if _, err := z.IssueLeaf("dns.com", t0); err == nil {
 		t.Fatal("a leaf for a zone the CA does not permit")
+	}
+}
+
+// A serial is 128 random bits (W3-r4-1): a reader that gives only ones must give 2^128-1, a certificate
+// carrying it must be signed and parse back with the same value, and a reader of zeros is never a serial.
+func TestSerialCarriesAll128Bits(t *testing.T) {
+	ones := make([]byte, 16)
+	for i := range ones {
+		ones[i] = 0xff
+	}
+	sn, err := randSerial(bytes.NewReader(ones))
+	if err != nil || sn.BitLen() != 128 {
+		t.Fatalf("serial %v bits %d err %v", sn, sn.BitLen(), err)
+	}
+	// A zero draw is skipped, the next one used.
+	next := append(make([]byte, 16), ones...)
+	if sn, err := randSerial(bytes.NewReader(next)); err != nil || sn.BitLen() != 128 {
+		t.Fatalf("after a zero draw: %v %v", sn, err)
+	}
+	ca := newNodeCA(t)
+	ca.rand = io.MultiReader(bytes.NewReader(ones), rand.Reader)
+	iss, err := ca.IssueClient(&newKey(t).PublicKey, uuid.New(), t0)
+	if err != nil {
+		t.Fatalf("a 128-bit serial was refused: %v", err)
+	}
+	leaf, err := x509.ParseCertificate(iss.DER)
+	if err != nil || leaf.SerialNumber.BitLen() != 128 || SerialText(leaf) != iss.Serial {
+		t.Fatalf("the certificate holds serial %v: %v", leaf.SerialNumber, err)
+	}
+}
+
+// Nothing the peer sends beside its leaf builds the chain (W3-r4-4): a leaf under an intermediate that
+// the node CA signed is refused, as is a leaf whose issuer is not the CA or whose signature is not
+// ECDSA, and none of them costs more than the check of the CA's own signature.
+func TestVerifyClientBuildsNoChainFromPeerData(t *testing.T) {
+	ca := newNodeCA(t)
+	interKey := newKey(t)
+	inter := &x509.Certificate{SerialNumber: big.NewInt(9), Subject: pkix.Name{CommonName: "inter"},
+		NotBefore: t0.Add(-time.Hour), NotAfter: t0.Add(24 * time.Hour), IsCA: true, BasicConstraintsValid: true,
+		KeyUsage: x509.KeyUsageCertSign}
+	interDER, err := x509.CreateCertificate(rand.Reader, inter, ca.cert, &interKey.PublicKey, ca.key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interCert, _ := x509.ParseCertificate(interDER)
+	id := uuid.New()
+	mk := func(parent *x509.Certificate, signer *ecdsa.PrivateKey) *x509.Certificate {
+		tpl := &x509.Certificate{SerialNumber: big.NewInt(11), Subject: pkix.Name{CommonName: id.String()},
+			NotBefore: t0.Add(-time.Hour), NotAfter: t0.Add(24 * time.Hour), KeyUsage: x509.KeyUsageDigitalSignature,
+			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, BasicConstraintsValid: true}
+		der, err := x509.CreateCertificate(rand.Reader, tpl, parent, &newKey(t).PublicKey, signer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, _ := x509.ParseCertificate(der)
+		return c
+	}
+	// The control: signed by the CA itself it passes.
+	if got, err := ca.VerifyClient(mk(ca.cert, ca.key), t0, false); err != nil || got != id {
+		t.Fatalf("a leaf of the CA: %v", err)
+	}
+	if _, err := ca.VerifyClient(mk(interCert, interKey), t0, false); err == nil {
+		t.Fatal("a leaf under an intermediate verified")
+	}
+	foreign := newNodeCA(t)
+	if _, err := ca.VerifyClient(mk(foreign.cert, foreign.key), t0, false); err == nil {
+		t.Fatal("a leaf of another CA verified")
+	}
+	// A foreign leaf that copies the CA's subject still fails on the signature, once.
+	fake := &x509.Certificate{SerialNumber: big.NewInt(12), Subject: ca.cert.Subject, NotBefore: t0.Add(-time.Hour),
+		NotAfter: t0.Add(24 * time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	fk := newKey(t)
+	fder, _ := x509.CreateCertificate(rand.Reader, fake, fake, &fk.PublicKey, fk)
+	fcert, _ := x509.ParseCertificate(fder)
+	if _, err := ca.VerifyClient(mk(fcert, fk), t0, false); err == nil {
+		t.Fatal("a leaf of an impostor with the CA's subject verified")
+	}
+	// A leaf signed with RSA is refused before any chain is looked at.
+	rk, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rtpl := &x509.Certificate{SerialNumber: big.NewInt(13), Subject: pkix.Name{CommonName: id.String()}, NotBefore: t0.Add(-time.Hour),
+		NotAfter: t0.Add(24 * time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}
+	rparent := &x509.Certificate{SerialNumber: big.NewInt(14), Subject: ca.cert.Subject, NotBefore: t0.Add(-time.Hour),
+		NotAfter: t0.Add(24 * time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	rder, err := x509.CreateCertificate(rand.Reader, rtpl, rparent, &newKey(t).PublicKey, rk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rleaf, _ := x509.ParseCertificate(rder)
+	if _, err := ca.VerifyClient(rleaf, t0, false); err == nil {
+		t.Fatal("an RSA-signed leaf verified")
 	}
 }
