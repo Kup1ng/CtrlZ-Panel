@@ -278,6 +278,27 @@ func TestS1TheLockOfADestinationAndASource(t *testing.T) {
 			}
 		})
 	}
+	// The locked source with a missing destination answers 404 inline and as a job alike, whichever id is the lower: the
+	// two guards of an inline Move are taken in id order, so the destination is checked to exist before either (p2-B8-r2-3).
+	// A destination of all zeros sorts before every profile id, one of all f after.
+	for _, d := range []struct{ name, id string }{
+		{"a destination with a lower id", "00000000-0000-4000-8000-000000000001"},
+		{"a destination with a higher id", "ffffffff-ffff-4fff-8fff-ffffffffffff"},
+	} {
+		for _, n := range []int{2, 1001} {
+			t.Run(fmt.Sprintf("a move of %d rules from a locked source to a missing profile: %s", n, d.name), func(t *testing.T) {
+				s := newScn(w.f, w.f.env.A.Tenant, w.f.env.A.User, "A")
+				w.f.env.Exec(t, `DELETE FROM ctrlz.batch_jobs WHERE tenant_id = $1`, s.tenant)
+				w.lockRow(s.ids["profile"])
+				before := w.digest()
+				body := map[string]any{"op": "move", "ids": uuids(n), "dest_profile_id": d.id, "dest_root": true}
+				s.send(p2Spec{method: "POST", path: "/profiles/" + s.ids["profile"] + "/rules:batch", hdr: s.key(), body: body}).want(404, "not_found")
+				if c := changed(before, w.digest()); c != "" {
+					t.Errorf("a refused move changed %s", c)
+				}
+			})
+		}
+	}
 }
 
 // wantOutbox is what spec 3.2 says each operation marks, written here once and held against the document: a delete marks the

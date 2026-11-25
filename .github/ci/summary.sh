@@ -37,7 +37,7 @@ rm -f "$rows"
 # The mutants job is skipped, legitimately, when the tree has no mutant for GitHub to run
 # (the plan said so with a shard count of 0). Every other job must have succeeded.
 bad=""
-for pair in plan:"${PLAN_RESULT:-}" static:"${STATIC_RESULT:-}" tests:"${TESTS_RESULT:-}" mutants:"${MUTANTS_RESULT:-}" compose:"${COMPOSE_RESULT:-}" scan:"${SCAN_RESULT:-}"; do
+for pair in plan:"${PLAN_RESULT:-}" static:"${STATIC_RESULT:-}" tests:"${TESTS_RESULT:-}" tests-lab:"${TESTS_LAB_RESULT:-}" mutants:"${MUTANTS_RESULT:-}" compose:"${COMPOSE_RESULT:-}" scan:"${SCAN_RESULT:-}"; do
   job=${pair%%:*}
   result=${pair#*:}
   [ "$result" = success ] && continue

@@ -16751,3 +16751,87 @@ mutants:
     must_fail:
       - pkg: ./internal/worker/batchjobs
         tests: [TestAnOutboxRowNamingAnotherTenantsJobTouchesNothing]
+  - id: tests-that-cannot-fail-the-idempotency-sweep-purges-live-keys
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r2-6
+    docker: true
+    why: The sweep passes a cutoff a day ahead, so it deletes keys that are still live every minute and the retry of an Import whose answer was lost makes a second profile (spec 3.5).
+    edits:
+      - file: internal/worker/batchjobs/batchjobs.go
+        old: |-
+          if _, err := tx.IdempotencyPurge(now, sweepBatch); err != nil {
+        new: |-
+          if _, err := tx.IdempotencyPurge(now.Add(24*time.Hour), sweepBatch); err != nil {
+    must_fail:
+      - pkg: ./internal/worker/batchjobs
+        tests: [TestTheSweepDeletesExpiredIdempotencyKeysOnly]
+  - id: tests-that-cannot-fail-the-idempotency-sweep-purges-nothing
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r2-1
+    docker: true
+    why: The sweep passes a cutoff a year back, so no key ever expires and idempotency_keys grows with every keyed request (spec 3.5).
+    edits:
+      - file: internal/worker/batchjobs/batchjobs.go
+        old: |-
+          if _, err := tx.IdempotencyPurge(now, sweepBatch); err != nil {
+        new: |-
+          if _, err := tx.IdempotencyPurge(now.Add(-365*24*time.Hour), sweepBatch); err != nil {
+    must_fail:
+      - pkg: ./internal/worker/batchjobs
+        tests: [TestTheSweepDeletesExpiredIdempotencyKeysOnly]
+  - id: tests-that-cannot-fail-the-no-redirect-lookup-skips-its-second-chunk
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r2-2
+    docker: true
+    why: The lookup of the no-redirect list steps two chunks at a time, so every name past the first 500 of a request is judged by nothing and a Redirect on an Iranian name is accepted (spec 3.6).
+    edits:
+      - file: internal/profiles/check.go
+        old: |-
+          for from := 0; from < len(ps); from += lookupChunk {
+        new: |-
+          for from := 0; from < len(ps); from += 2 * lookupChunk {
+    must_fail:
+      - pkg: ./internal/api
+        tests: [TestD42LookupCrossesItsChunkBoundary]
+  - id: tests-that-cannot-fail-the-export-reads-two-snapshots
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r2-5
+    docker: true
+    why: Export and the profile reads leave the RepeatableRead of their one snapshot, so a move into a new folder that commits between the folder read and the rule read gives a document whose rule names a missing folder (spec 6.1).
+    edits:
+      - file: internal/api/routes_docs.go
+        old: |-
+          store.TxOpts{Isolation: store.RepeatableRead, ReadOnly: true}, fn))
+        new: |-
+          store.TxOpts{ReadOnly: true}, fn))
+    must_fail:
+      - pkg: ./internal/api
+        tests: [TestExportReadsOneSnapshotWhileARuleMovesIntoANewFolder]
+  - id: tests-that-cannot-fail-the-duplicate-reads-two-snapshots
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r2-5
+    docker: true
+    why: The read of a Duplicate job leaves RepeatableRead, so a move that commits between its folder read and its rule read makes a source document that no import accepts and the copy fails (spec 6.1).
+    edits:
+      - file: internal/profiles/jobrun.go
+        old: |-
+          err := r.Store.WithTenant(ctx, tenant, store.TxOpts{Isolation: store.RepeatableRead, ReadOnly: true}, func(tx store.Tx) error {
+        new: |-
+          err := r.Store.WithTenant(ctx, tenant, store.TxOpts{ReadOnly: true}, func(tx store.Tx) error {
+    must_fail:
+      - pkg: ./internal/worker/batchjobs
+        tests: [TestADuplicateJobReadsItsSourceInOneSnapshot]
+  - id: tests-that-cannot-fail-the-inline-move-judges-locks-before-existence
+    rule: tests-that-cannot-fail
+    finding: p2-B8-r2-3
+    docker: true
+    why: The inline Move to another profile takes its guards in id order without checking that both profiles exist, so a locked source with a missing destination answers 423 or 404 by the order of two ids, and not 404 as the job does (spec 3.5).
+    edits:
+      - file: internal/profiles/batch.go
+        old: |-
+          for _, id := range []uuid.UUID{profile, in.DestProfile} {
+        new: |-
+          for _, id := range []uuid.UUID{} {
+    must_fail:
+      - pkg: ./internal/api
+        tests: [TestS1TheLockOfADestinationAndASource]

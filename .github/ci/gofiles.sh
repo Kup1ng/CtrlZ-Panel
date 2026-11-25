@@ -13,12 +13,13 @@
 # (the root as the second argument).
 #
 # What counts as built. A test file is fine when go builds it under the default build, or under a
-# tag set that a job of the repository runs (the table of tag sets below). The Node has one such
-# set, ctrlz_lab, run by the job "tests (lab)" (.github/ci/lab.sh): the lab-tagged files and the
-# lab-only golden vectors run there, and no release job builds them. A file built under neither is
-# refused. The table is keyed by the module path of the repository root, so the Panel, which runs
-# this script on shared/ only and has no lab job, keeps the default build alone: a lab-tagged file
-# that reaches its shared/ is refused until a Panel job runs the tag. A job that builds with
+# tag set that a job of the repository runs (the table of tag sets below). Both repositories have
+# one such set, ctrlz_lab, run by the job "tests (lab)" (.github/ci/lab.sh of each overlay): the
+# lab-tagged files and the lab-only golden vectors run there, and no release job builds them. A file
+# built under neither is refused. The table is keyed by the module path of the repository root, so a
+# repository that has no such job keeps the default build alone. The Panel runs this script on
+# shared/ only (its planner proves the root module), so for the Panel the table judges the lab files
+# of shared/ (shared/netclass/lab_test.go), which came with P4. A job that builds with
 # GOFLAGS=-tags=<set> must name a set of the table, so a tag set that a job runs and this table
 # does not know is refused too.
 #
@@ -40,7 +41,7 @@ bad=0
 # new one is a reviewed change that adds the job (ci.yml), names it here, and is read against the
 # workflow by ci/github/gofiles.test.mjs.
 case "$(cd "$root" && go list -m)" in
-  github.com/Kup1ng/CtrlZ-Node) tagsets="ctrlz_lab" ;;
+  github.com/Kup1ng/CtrlZ-Node | github.com/Kup1ng/CtrlZ-Panel) tagsets="ctrlz_lab" ;;
   *) tagsets="" ;;
 esac
 

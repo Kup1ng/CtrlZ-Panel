@@ -11,8 +11,9 @@
 #   - actions are pinned to a full commit SHA, the version in the comment, and only
 #     actions/checkout and actions/setup-go are used. A release is pinned only when it is at
 #     least 14 days old (setup-go v7.1.0 was two days old and is not used yet);
-#   - at most 17 jobs at once: three fixed jobs, 8 test shards and 6 mutant shards. The
-#     Node run adds 3, which makes the 20 of the free account; more shards than that queue.
+#   - at most 18 jobs at once: four fixed jobs besides the shards (static, tests (lab), compose
+#     smoke, scan), 8 test shards and 6 mutant shards. The Node run adds 5, which is 23 against the
+#     20 of the free account, so the last jobs queue (a queued job waits, it does not fail).
 name: ci
 
 on:
@@ -76,6 +77,32 @@ jobs:
         run: sh .github/ci/install-tools.sh buf proto
       - name: Static checks
         run: sh .github/ci/static.sh
+
+  # The lab build (tag ctrlz_lab) of shared/ and the files of the root module that only it builds. No
+  # release job builds shared/netclass/lab_test.go or the lab cases of the golden vectors, so this job
+  # is what runs them; the cases that only a release build runs skip here, by design (shardrun,
+  # gofiles.sh). It does not run the container tests of the root module again: lab.sh says which
+  # packages it runs, and a tree with no lab file in the root module runs none.
+  tests-lab:
+    name: tests (lab)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            shared/go.sum
+      - name: Note the images of the runner
+        run: sh .github/ci/images.sh before
+      - name: go test with the lab tag
+        run: sh .github/ci/lab.sh
+      - name: Judge the images the lab tests ran against
+        run: sh .github/ci/images.sh after
 
   tests:
     name: test ${{ matrix.id }}
@@ -216,7 +243,7 @@ jobs:
   summary:
     name: summary
     if: ${{ !cancelled() }}
-    needs: [plan, static, tests, mutants, compose, scan]
+    needs: [plan, static, tests, tests-lab, mutants, compose, scan]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -235,6 +262,7 @@ jobs:
           PLAN_RESULT: ${{ needs.plan.result }}
           STATIC_RESULT: ${{ needs.static.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
+          TESTS_LAB_RESULT: ${{ needs.tests-lab.result }}
           MUTANTS_RESULT: ${{ needs.mutants.result }}
           COMPOSE_RESULT: ${{ needs.compose.result }}
           SCAN_RESULT: ${{ needs.scan.result }}

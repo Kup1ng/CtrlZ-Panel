@@ -133,6 +133,15 @@ func (e *Env) RulesBatch(tx store.Tx, profile uuid.UUID, in BatchIn) (BatchResul
 			return BatchResult{}, err
 		}
 	case cross: // move to another profile
+		// Both profiles must exist before either is judged by its lock, so the answer does not depend on which id is
+		// the lower: a locked source with a missing destination is 404 here and in QueueJob alike (p2-B8-r2-3).
+		for _, id := range []uuid.UUID{profile, in.DestProfile} {
+			if _, found, err := tx.ProfileLocked(id); err != nil {
+				return BatchResult{}, err
+			} else if !found {
+				return BatchResult{}, notFound()
+			}
+		}
 		a, b := profile, in.DestProfile
 		if !idOrder(a, b) {
 			a, b = b, a

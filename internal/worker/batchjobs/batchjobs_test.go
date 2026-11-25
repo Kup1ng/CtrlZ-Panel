@@ -286,6 +286,32 @@ func TestTheSweepEndsAJobRiverCannotEnd(t *testing.T) {
 	f.queueImport(t, f.A.Tenant, "Again", 2)
 }
 
+// TestTheSweepDeletesExpiredIdempotencyKeysOnly: keys live 24 hours and the sweep deletes the ones whose time has passed,
+// for every tenant, and keeps a key that has not expired, even one that expires a minute from now (spec 3.5). A sweep that
+// never purged would let the table grow with every keyed request; one that purged live keys would let the retry of an
+// Import whose 201 was lost make a second profile (p2-B8-r2-1, p2-B8-r2-6).
+func TestTheSweepDeletesExpiredIdempotencyKeysOnly(t *testing.T) {
+	f := newFx(t)
+	put := func(tenant uuid.UUID, key string, expires time.Time) {
+		f.exec(t, `INSERT INTO ctrlz.idempotency_keys (tenant_id, key, route, request_hash, expires_at) VALUES ($1, $2, '/sweep', '\x01', $3)`,
+			tenant, key, expires)
+	}
+	put(f.A.Tenant, "a-expired", f.now.Add(-time.Hour))
+	put(f.A.Tenant, "a-just-expired", f.now.Add(-time.Second))
+	put(f.A.Tenant, "a-live", f.now.Add(time.Hour))
+	put(f.A.Tenant, "a-almost-expired", f.now.Add(time.Minute))
+	put(f.B.Tenant, "b-expired", f.now.Add(-48*time.Hour))
+	put(f.B.Tenant, "b-live", f.now.Add(23*time.Hour))
+	if err := f.runner.Sweep(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	var left string
+	f.scan(t, `SELECT COALESCE(string_agg(key, ',' ORDER BY key), '') FROM ctrlz.idempotency_keys WHERE route = '/sweep'`, nil, &left)
+	if want := "a-almost-expired,a-live,b-live"; left != want {
+		t.Fatalf("keys left %q, want %q", left, want)
+	}
+}
+
 // TestTheSweepKeepsAJobPastTheFirstPageOfRiverJobs: the River job of a stale row is found by its own id, however many
 // other live jobs River holds. The sweep once listed the first 10,000 live jobs of all tenants and failed every row whose
 // job lay beyond them, while River still held that job and would run it (p2-B3-r12-1). Jobs of River are listed by id, so
