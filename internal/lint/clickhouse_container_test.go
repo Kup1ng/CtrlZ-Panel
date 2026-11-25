@@ -404,14 +404,14 @@ func TestClickHouseTwoTenants(t *testing.T) {
 	}
 
 	// The quota of 6.2: keyed by the key the client sends, and a query of a table with no key is refused
-	// (QUOTA_REQUIRES_CLIENT_KEY, which the pinned 26.8.46.6 raises when the query asks for its quota). The
+	// (QUOTA_REQUIRES_CLIENT_KEY, code 496, which the pinned 26.8.46.6 raises when the query asks for its quota). The
 	// probe is a read of a ctrlz table and never SELECT 1: that reads system.one, and the server exempts
 	// system.one, quotas, quota_limits, quota_usage and quotas_usage from quotas and from their limits
 	// (shouldIgnoreQuotaAndLimits in InterpreterSelectQuery.cpp), so a quota is neither charged nor asked for
 	// its key by it. The first run of this test used SELECT 1 and so saw nothing keyed at all.
 	// The real quota is 60 s of execution time a minute, which a test cannot spend, so the keying is proved
 	// on a quota of one query an hour with the same KEYED BY, made for ctrlz_preview and removed afterwards.
-	const quotaProbe = "SELECT count() FROM ctrlz.counts_5m"
+	const quotaProbe = "SELECT count() FROM ctrlz.dns_raw" // a table both readers may read
 	t.Run("quota keyed by the client key", func(t *testing.T) {
 		ctx, cancel := chTenantCtx(tenA, "", 0, nil)
 		wantServerRefusal(t, "ctrlz_api reading a table with no quota key", api.QueryRow(ctx, quotaProbe).Scan(new(uint64)))
