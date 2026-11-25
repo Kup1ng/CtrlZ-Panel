@@ -423,9 +423,9 @@ var allowedEnvironmentAssignments = map[string]map[string]string{
 		`docker compose -p "$project" $files --env-file "$work/env" down -v --remove-orphans >/dev/null 2>&1 || true`: "Compose's own --env-file: the substitution file of the e2e project (names, ports, a path)",
 		`docker compose -p "$project" -f deploy/compose/docker-compose.yml -f deploy/compose/e2e.yml -f deploy/compose/e2e-offline.yml --env-file "$work/env" "$@"`: "Compose's own " +
 			"--env-file: the substitution file of the e2e project",
-		`docker compose -p "$project" $files --env-file "$work/env" "$@"`:                                            "Compose's own --env-file: the substitution file of the e2e project",
-		`(cd apps/panel && E2E_BASE_URL=https://panel.localhost pnpm exec playwright test --project=w1280-fa-light)`: "the address the browser test opens",
-		`(cd "apps/$app" && E2E_BASE_URL="https://$app.localhost" pnpm exec playwright test $projects)`:              "the address the browser test opens",
+		`docker compose -p "$project" $files --env-file "$work/env" "$@"`:                                                                             "Compose's own --env-file: the substitution file of the e2e project",
+		`(cd apps/panel && E2E_CTRLZ_VERSION="$web_version" E2E_BASE_URL=https://panel.localhost pnpm exec playwright test --project=w1280-fa-light)`: "the version the image was built with, and the address the browser test opens",
+		`(cd "apps/$app" && E2E_CTRLZ_VERSION="$web_version" E2E_BASE_URL="https://$app.localhost" pnpm exec playwright test $projects)`:              "the version the image was built with, and the address the browser test opens",
 		`(cd "apps/$app" && E2E_STALLED_POST=1 E2E_BASE_URL="https://$app.localhost" pnpm exec playwright test headers.spec.ts --project=functional -g "never finished")`: "two switches " +
 			"of one spec, and the address",
 		`(cd "apps/$app" && E2E_UPSTREAM_STOPPED=1 E2E_BASE_URL="https://$app.localhost" pnpm exec playwright test headers.spec.ts --project=functional -g "own 502 or 504")`: "two switches " +
