@@ -73,6 +73,7 @@ func notKeyCommands() map[string]string {
 		"ctrlz-admin unlock":         "clears throttle rows",
 		"ctrlz-admin audit":          "walks the audit hash chain",
 		"ctrlz-admin sms":            "copies pending sealed SMS credentials over the active ones without opening them; a rekey re-seals both",
+		"ctrlz migrate-analytics":    "applies the ClickHouse migrations with the ClickHouse migrator's own password file; no sealed value, no key file of the key domains and nothing derived",
 	}
 }
 

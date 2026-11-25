@@ -26,12 +26,10 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 	_ "time/tzdata" // Asia/Tehran and friends, in an image with no zoneinfo
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/admincli"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/app"
-	"github.com/Kup1ng/CtrlZ-Panel/internal/migrate"
 )
 
 func main() {
@@ -91,16 +89,10 @@ func run(args []string) int {
 	return 0
 }
 
-// runMigrateAnalytics applies the ClickHouse migrations as ctrlz_migrator. The address, the user and the
-// path of the password file come from the environment; the password itself is only ever read from the file.
-// It waits up to 10 minutes for the server and then fails, so that Compose's restart policy tries again.
+// runMigrateAnalytics runs the ClickHouse migrations. app.MigrateAnalytics reads the environment: the lint
+// lets only internal/app and internal/admincli do that.
 func runMigrateAnalytics(ctx context.Context) int {
-	addr, user, file := os.Getenv("CTRLZ_CH_ADDR"), os.Getenv("CTRLZ_CH_USER"), os.Getenv("CTRLZ_CH_PASSWORD_FILE")
-	if addr == "" || user == "" || file == "" {
-		fmt.Fprintln(os.Stderr, "ctrlz migrate-analytics: CTRLZ_CH_ADDR, CTRLZ_CH_USER and CTRLZ_CH_PASSWORD_FILE must be set")
-		return 2
-	}
-	if err := migrate.RunAnalytics(ctx, addr, user, file, 10*time.Minute); err != nil {
+	if err := app.MigrateAnalytics(ctx, app.Options{}); err != nil {
 		fmt.Fprintf(os.Stderr, "ctrlz migrate-analytics: %v\n", err)
 		return 1
 	}

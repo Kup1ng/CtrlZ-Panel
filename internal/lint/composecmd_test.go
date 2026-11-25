@@ -46,7 +46,7 @@ var composeCommandTable = map[string]composeCommandRow{
 	"api.command":               {"69a641e9f97ee422dc24d935c9f43e8f8f0c7ea923f1f04b78af58aa4ab340e7", `the role name "api"`},
 	"api.healthcheck":           {"2d482f019e1994ec705b8d492432c19f19f5d97716c8e4a71c076f3906f063c4", "the Go binary asks its own listener"},
 	"caddy-init.command":        {"295ee0019722b64017322418212c298367b2a71af17c905e69ea2bd334f23bbf", "chown of the two caddy state directories and the hub spool"},
-	"clickhouse.entrypoint":     {"3409b6e7db74afb874f45d1d0484aa6b9d554906c7c1548fdae423c6bea28dc9", "the wrapper that writes the user file from the five secrets and starts the server"},
+	"clickhouse.entrypoint":     {"457e544ffa6ede53df00a4daa3e9d6c794c612f40e6add452da20351a8e35695", "the wrapper that checks the five secret files and the two config files, writes the user file from the secrets and starts the server"},
 	"clickhouse.healthcheck":    {"11c236931b15870fdea63f710bea773fdca339ddec68eda8b66485966aae3f5e", "a ping of the server"},
 	"hub.command":               {"c83a78b2c174a7e283eca6d6714be591ff779bb2bc0c56bcea8f666dd7e71a2f", `the role name "hub"`},
 	"hub.healthcheck":           {"e5ff5051a2dc7917567528ea3e6703ea82ce1c3705e25bd3ba22022564b589ed", "the Go binary asks its own listener"},

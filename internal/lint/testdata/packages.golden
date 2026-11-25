@@ -70,6 +70,7 @@ internal/worker/adminjobs
 internal/worker/smssend
 internal/worker/sweep
 migrations/catalog
+migrations/clickhouse
 migrations/postgres
 tools/genmig
 tools/mutants

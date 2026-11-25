@@ -108,7 +108,11 @@ func upAnalytics(ctx context.Context, db *sql.DB, to int64) (int, error) {
 // live in the server's access directory and the record lives in the database: after a restore of the data
 // alone the record says nothing is pending while the policies are gone.
 func EnsureAnalyticsAccess(ctx context.Context, db *sql.DB) error {
-	for i, stmt := range accessStatements(chmigrations.Access) {
+	text, err := chmigrations.Access()
+	if err != nil {
+		return err
+	}
+	for i, stmt := range accessStatements(text) {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("migrate: analytics access statement %d: %s", i+1, errClass(err))
 		}

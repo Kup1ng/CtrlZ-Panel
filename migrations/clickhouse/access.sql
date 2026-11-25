@@ -29,7 +29,7 @@ CREATE ROW POLICY OR REPLACE maintenance ON ctrlz.* FOR SELECT
   TO ctrlz_migrator, ctrlz_janitor, ctrlz_ingest;
 
 -- 60 seconds of execution time a minute for each tenant (6.2). The key is the one the reader sends as its
--- quota key, so more sessions, tokens or streams of one tenant buy nothing; a query with no key is refused.
+-- quota key, so more sessions, tokens or streams of one tenant buy nothing; a query of a table with no key is refused (a read of system.one is exempt from quotas altogether).
 CREATE QUOTA OR REPLACE reader KEYED BY client_key
   FOR INTERVAL 1 minute MAX execution_time = 60
   TO ctrlz_api;

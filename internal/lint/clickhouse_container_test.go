@@ -403,12 +403,23 @@ func TestClickHouseTwoTenants(t *testing.T) {
 		})
 	}
 
-	// The quota of 6.2: keyed by the key the client sends, and a query with no key is refused. The real
-	// quota is 60 s of execution time a minute, which a test cannot spend, so the keying is proved on a
-	// quota of one query an hour with the same KEYED BY, made for ctrlz_preview and removed afterwards.
+	// The quota of 6.2: keyed by the key the client sends, and a query of a table with no key is refused
+	// (QUOTA_REQUIRES_CLIENT_KEY, which the pinned 26.8.46.6 raises when the query asks for its quota). The
+	// probe is a read of a ctrlz table and never SELECT 1: that reads system.one, and the server exempts
+	// system.one, quotas, quota_limits, quota_usage and quotas_usage from quotas and from their limits
+	// (shouldIgnoreQuotaAndLimits in InterpreterSelectQuery.cpp), so a quota is neither charged nor asked for
+	// its key by it. The first run of this test used SELECT 1 and so saw nothing keyed at all.
+	// The real quota is 60 s of execution time a minute, which a test cannot spend, so the keying is proved
+	// on a quota of one query an hour with the same KEYED BY, made for ctrlz_preview and removed afterwards.
+	const quotaProbe = "SELECT count() FROM ctrlz.counts_5m"
 	t.Run("quota keyed by the client key", func(t *testing.T) {
 		ctx, cancel := chTenantCtx(tenA, "", 0, nil)
-		wantServerRefusal(t, "ctrlz_api with no quota key", api.QueryRow(ctx, "SELECT 1").Scan(new(uint8)))
+		wantServerRefusal(t, "ctrlz_api reading a table with no quota key", api.QueryRow(ctx, quotaProbe).Scan(new(uint64)))
+		cancel()
+		ctx, cancel = chTenantCtx(tenA, "k-quota", 0, nil)
+		if err := api.QueryRow(ctx, quotaProbe).Scan(new(uint64)); err != nil {
+			t.Errorf("ctrlz_api reading a table with a quota key was refused: %v", err)
+		}
 		cancel()
 		if err := mig.Exec(context.Background(), "CREATE QUOTA IF NOT EXISTS ctrlz_test_one KEYED BY client_key FOR INTERVAL 1 hour MAX queries = 1 TO ctrlz_preview"); err != nil {
 			t.Fatalf("create the test quota: %v", err)
@@ -418,7 +429,7 @@ func TestClickHouseTwoTenants(t *testing.T) {
 		run := func(key string) error {
 			c, cancel := chTenantCtx(tenA, key, 0, nil)
 			defer cancel()
-			return pconn.QueryRow(c, "SELECT 1").Scan(new(uint8))
+			return pconn.QueryRow(c, quotaProbe).Scan(new(uint64))
 		}
 		if err := run("qa"); err != nil {
 			t.Fatalf("the first query of key qa: %v", err)
@@ -427,6 +438,7 @@ func TestClickHouseTwoTenants(t *testing.T) {
 		if err := run("qb"); err != nil {
 			t.Errorf("the first query of key qb was refused although qa's quota is spent: %v", err)
 		}
+		wantServerRefusal(t, "a query with no key under the keyed quota", run(""))
 	})
 
 	t.Run("the hub's user", func(t *testing.T) {
