@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -467,9 +468,11 @@ func TestP4WorkerAndCompilerReads(t *testing.T) {
 // TestP4NodeTakenClaims: the claims taken on one node's observations, across tenants, for the admin alone.
 func TestP4NodeTakenClaims(t *testing.T) {
 	h := newHarness(t, testpg.Need(t, cluster))
+	// One instant for the claim and its challenge, as a take writes them (both now() of one transaction).
+	taken := time.Now().UTC().Add(-time.Minute)
 	for _, s := range []string{h.A.Tenant.String(), h.B.Tenant.String()} {
-		h.exec(`UPDATE ctrlz.ip_claims SET proven_at = now() WHERE tenant_id = $1`, s)
-		h.exec(`UPDATE ctrlz.ip_proof_challenges SET observed_by_node_id = $2, consumed_at = now() WHERE tenant_id = $1`, s, nodeC1)
+		h.exec(`UPDATE ctrlz.ip_claims SET proven_at = $2 WHERE tenant_id = $1`, s, taken)
+		h.exec(`UPDATE ctrlz.ip_proof_challenges SET observed_by_node_id = $2, consumed_at = $3 WHERE tenant_id = $1`, s, nodeC1, taken)
 	}
 	list := func(node string, since int64, role string) ([]string, string) {
 		return h.texts(role, nil, `SELECT tenant_id::text FROM ctrlz_fn.node_taken_claims($1::uuid, $2::bigint) ORDER BY tenant_id`, node, since)

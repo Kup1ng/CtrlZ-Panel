@@ -113,8 +113,9 @@ WHERE p.pronamespace = 'ctrlz_fn'::regnamespace AND has_function_privilege('ctrl
 	// auth_tickets_revoke is here for the re-issue of a one-time password
 	// (T-536): it acts on the tenant of the setting WithTenant made. audit_lock is
 	// here because the admin role no longer calls pg_advisory_xact_lock itself
-	// (db-r14-3); TestNoLoginRoleHoldsTheAuditChainOrWatchesOthers drives it.
-	want := []string{"admin_account_bootstrap", "admin_account_reset", "admin_account_set_password", "admin_account_totp_enable", "admin_create_user", "admin_one_time_state", "admin_reissue_one_time_password", "admin_revoke_user_sessions", "admin_sms_stats", "admin_throttle_hit", "admin_throttle_refund", "admin_throttle_reset", "admin_totp_replace", "audit_lock", "auth_tickets_revoke"}
+	// (db-r14-3); TestNoLoginRoleHoldsTheAuditChainOrWatchesOthers drives it. node_pairs_lock and node_upstreams_lock are the
+	// same for the two node constraint triggers, and node_taken_claims is the admin's review of a node's reports (P4 0100).
+	want := []string{"admin_account_bootstrap", "admin_account_reset", "admin_account_set_password", "admin_account_totp_enable", "admin_create_user", "admin_one_time_state", "admin_reissue_one_time_password", "admin_revoke_user_sessions", "admin_sms_stats", "admin_throttle_hit", "admin_throttle_refund", "admin_throttle_reset", "admin_totp_replace", "audit_lock", "auth_tickets_revoke", "node_pairs_lock", "node_taken_claims", "node_upstreams_lock"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("ctrlz_admin can execute %v, want %v", got, want)
 	}

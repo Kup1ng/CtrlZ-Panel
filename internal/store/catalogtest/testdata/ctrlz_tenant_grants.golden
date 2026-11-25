@@ -27,6 +27,7 @@ execute ctrlz_fn.auth_totp_seed(p_user_id uuid, p_tenant_id uuid)
 execute ctrlz_fn.auth_user_by_phone(p_phone text)
 execute ctrlz_fn.auth_user_flags(p_user_id uuid)
 execute ctrlz_fn.endpoint_pair_ips()
+execute ctrlz_fn.free_dns_public()
 execute ctrlz_fn.ip_claim_check(p_cidr cidr)
 execute ctrlz_fn.ip_claim_open_challenge(p_claim_id uuid)
 execute ctrlz_fn.ip_claim_release(p_claim_id uuid)
@@ -41,6 +42,7 @@ policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.curre
 policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy block_pages tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy certificates tenant_zone_ca SELECT PERMISSIVE using=(kind = 'zone_ca'::text) check=-
 policy clients tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy endpoint_ddns_hosts tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy endpoint_groups tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
@@ -105,6 +107,7 @@ table catalog_service SELECT
 table catalog_service_category SELECT
 table catalog_service_domain SELECT
 table catalog_versions SELECT (state, version)
+table certificates SELECT (kind, not_before, state)
 table clients DELETE
 table clients INSERT
 table clients SELECT

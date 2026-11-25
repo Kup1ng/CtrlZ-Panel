@@ -19,6 +19,7 @@ policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.curre
 policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy block_pages tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy certificates worker_all ALL PERMISSIVE using=true check=true
 policy clients tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy endpoint_ddns_hosts tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy endpoint_groups tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
@@ -117,22 +118,28 @@ table catalog_versions INSERT
 table catalog_versions SELECT
 table catalog_versions UPDATE
 table certificates INSERT
-table certificates SELECT (chain_pem, created_at, id, kind, not_after, not_before, state, updated_at)
+table certificates SELECT (chain_pem, created_at, id, kind, names, not_after, not_before, source, state, updated_at)
 table certificates UPDATE
 table clients DELETE
 table clients SELECT
 table config_log DELETE
+table config_log SELECT (seq)
+table config_snapshot SELECT (seq)
 table domain_settings SELECT
 table endpoint_ddns_hosts SELECT
 table endpoint_ddns_hosts UPDATE (last_error, last_ips, last_resolved_at)
 table endpoint_types INSERT
 table endpoint_types SELECT
 table endpoint_types UPDATE
-table endpoints SELECT (authorize_ddns, id, last_query_at, legacy_dns, pair_override_node_a, pair_override_node_b, profile2_id, profile_id, require_authorized_ips, tenant_id)
+table endpoints SELECT (authorize_ddns, id, last_query_at, legacy_dns, pair_override_node_a, pair_override_node_b, pair_version, profile2_id, profile_id, require_authorized_ips, tenant_id)
 table endpoints UPDATE (pair_version)
 table filter_preview_jobs DELETE
 table filter_preview_jobs SELECT
 table filter_preview_jobs UPDATE
+table free_dns_counter_batches DELETE
+table free_dns_counter_batches SELECT (received_at)
+table free_dns_counters DELETE
+table free_dns_counters SELECT (bucket_start)
 table geoip_versions INSERT
 table geoip_versions SELECT
 table geoip_versions UPDATE
@@ -152,6 +159,8 @@ table leases UPDATE
 table location_availability SELECT
 table locations SELECT
 table node_enrollments DELETE
+table node_enrollments SELECT (cert_der, enrolled_at, expires_at, id, node_id, state)
+table node_enrollments UPDATE (state)
 table node_location_configs SELECT
 table node_pairs SELECT
 table nodes SELECT
@@ -161,6 +170,7 @@ table otp_challenges UPDATE (delivery_attempts, delivery_claimed_until, delivery
 table phone_change_requests DELETE
 table phone_change_requests SELECT (completed_at, expires_at, id, tenant_id)
 table policy_artifacts DELETE
+table policy_artifacts SELECT (gc_after_seq, hash, store_ref)
 table policy_outbox INSERT
 table profile_download_tokens DELETE
 table profile_download_tokens SELECT (expires_at, id, tenant_id)

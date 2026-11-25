@@ -176,7 +176,7 @@ type LimitFunction struct {
 // expression (auth_otp_issue), or count rows under a lock and are raced by their own driver.
 func LimitFunctions() []LimitFunction {
 	return []LimitFunction{
-		{"ctrlz_fn.auth_public_config", "24b5f9a140c312fb", "reads the cooldown for the login page; compares nothing (since round 18 the public flag is configuration alone, 0057: it names no limit but the cooldown)"},
+		{"ctrlz_fn.auth_public_config", "c627e76e02ed27c7", "reads the cooldown for the login page; compares nothing (since round 18 the public flag is configuration alone, 0057: it names no limit but the cooldown)"},
 		{"ctrlz_fn.auth_otp_issue", "54f278a762b0926b", "gathers the limits of the request into one array (the address, the network, the phone and the global cap) and compares each element only through ctrlz.cap_reached, in one loop under the row locks (the global count is read as the sum of its shards without a lock, and compared through ctrlz.cap_reached too, db-r18-2); every otp.* limit has a race driver that spends it through this function. Reviewed in sms-r17-10: a limit named here outside the shared call is an element of that array and nothing else"},
 		{"ctrlz_fn.ip_claim_request", "03d2dec354bc9e9e", "compares the count of the tenant's claims with max_ip_claims (the tenant's override, else its plan's value) by hand, under the tenant's advisory lock; raced by the ip_claims.per_tenant driver. Since P3 D1 an overlap with the tenant's own active or grace claim answers own before the count, and one with another tenant's is a pending_proof row in every mode (wide_requires_approval for a /28 to /31); neither changes what is counted"},
 		// Round 18 (sms-r18-6): a function that names a limit TABLE is pinned too, because a body that returns the

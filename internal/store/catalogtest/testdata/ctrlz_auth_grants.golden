@@ -34,6 +34,7 @@ execute ctrlz_fn.auth_ticket_take(p_token_hash bytea, p_kind text)
 execute ctrlz_fn.auth_tickets_revoke(p_user_id uuid)
 execute ctrlz_fn.auth_token_by_hash(p_hash bytea)
 execute ctrlz_fn.auth_user_by_phone(p_phone text)
+execute ctrlz_fn.free_dns_public()
 execute ctrlz_fn.ip_claim_check(p_cidr cidr)
 execute ctrlz_fn.ip_claim_open_challenge(p_claim_id uuid)
 execute ctrlz_fn.ip_claim_release(p_claim_id uuid)
@@ -41,6 +42,9 @@ execute ctrlz_fn.ip_claim_request(p_endpoint_id uuid, p_cidr cidr, p_source text
 execute ctrlz_fn.ip_claim_take(p_claim_id uuid, p_code text, p_batch_id uuid)
 execute ctrlz_fn.keytool_audit_key_event(p_action text, p_key_number integer, p_rewritten integer, p_changed integer, p_failed integer)
 execute ctrlz_fn.keytool_totp_replace(p_user_id uuid, p_old bytea, p_new bytea)
+execute ctrlz_fn.node_pairs_lock()
+execute ctrlz_fn.node_taken_claims(p_node_id uuid, p_since_unix bigint)
+execute ctrlz_fn.node_upstreams_lock()
 execute ctrlz_fn.profile_tenant_lock()
 execute ctrlz_fn.worker_sweep_otp_challenges(p_limit integer)
 execute ctrlz_fn.worker_sweep_sms_counters(p_limit integer)
@@ -64,6 +68,7 @@ policy filter_preview_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ct
 policy idempotency_keys tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy ip_claims auth_claims ALL PERMISSIVE using=true check=-
 policy ip_claims tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy ip_proof_challenges auth_node_reports SELECT PERMISSIVE using=(observed_by_node_id IS NOT NULL) check=-
 policy ip_proof_challenges tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy job_outbox tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy notifications tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
@@ -120,8 +125,9 @@ table auth_tickets DELETE
 table auth_tickets INSERT
 table auth_tickets SELECT
 table auth_tickets UPDATE
-table domain_settings SELECT (panel_host)
+table domain_settings SELECT (applied_panel_host)
 table endpoints SELECT (admin_state, id, pair_override_node_a, pair_override_node_b, resolver_id, tenant_id)
+table free_dns_settings SELECT (enabled)
 table invites SELECT (expires_at, id, phone_e164, revoked_at, token_hash, used_at)
 table invites UPDATE (accepted_tenant_id, used_at)
 table ip_claims INSERT
@@ -131,7 +137,7 @@ table ip_proof_challenges INSERT (claim_id, expires_at, label, tenant_id)
 table ip_proof_challenges SELECT
 table ip_proof_challenges UPDATE (attempts, consumed_at)
 table node_pairs SELECT
-table nodes SELECT (dns_advertised_ip, id)
+table nodes SELECT (dns_advertised_ip, id, status)
 table notifications INSERT (kind, params, severity, tenant_id)
 table otp_challenges DELETE
 table otp_challenges INSERT

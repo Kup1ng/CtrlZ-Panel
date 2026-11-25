@@ -405,8 +405,8 @@ ALTER TABLE ctrlz.node_enrollments
   ADD COLUMN hostname            text CONSTRAINT node_enrollments_hostname_form CHECK (
     pg_catalog.octet_length(hostname) <= 253
     AND hostname ~ '^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$'),
-  ADD COLUMN os_release          text CONSTRAINT node_enrollments_os_release_form CHECK (os_release ~ '^[ -~]{1,256}$'),
-  ADD COLUMN node_version        text CONSTRAINT node_enrollments_node_version_form CHECK (node_version ~ '^[ -~]{1,256}$'),
+  ADD COLUMN os_release          text CONSTRAINT node_enrollments_os_release_form CHECK (os_release ~ '^[ -~]+$' AND pg_catalog.octet_length(os_release) <= 256),
+  ADD COLUMN node_version        text CONSTRAINT node_enrollments_node_version_form CHECK (node_version ~ '^[ -~]+$' AND pg_catalog.octet_length(node_version) <= 256),
   ADD COLUMN enrolled_at         timestamptz,
   ADD COLUMN enrolled_from       inet,
   ADD COLUMN rejected_at         timestamptz,

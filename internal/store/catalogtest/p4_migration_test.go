@@ -358,7 +358,7 @@ func TestP4UpstreamLoops(t *testing.T) {
 		"192.0.2.50:53": "192.0.2.50", "[2001:db8::7]:853": "2001:db8::7", "203.0.113.1:65535": "203.0.113.1",
 		"192.0.2.50": "", "192.0.2.50:0": "", "192.0.2.50:65536": "", "999.0.0.1:53": "", "[2001:db8::7]": "", "host.test:53": "", "192.0.2.50/24:53": "", "": "",
 	} {
-		got, code := h.texts("admin", nil, `SELECT coalesce(ctrlz.upstream_udp_ip($1)::text, 'NULL')`, addr)
+		got, code := h.texts("admin", nil, `SELECT coalesce(host(ctrlz.upstream_udp_ip($1)), 'NULL')`, addr)
 		if code != "" || len(got) != 1 {
 			t.Errorf("upstream_udp_ip(%q): %v %q", addr, got, code)
 			continue
@@ -510,7 +510,7 @@ func TestP4FreeDNS(t *testing.T) {
 		if _, err := tx.Exec(h.ctx, "SET LOCAL ROLE ctrlz_tenant"); err != nil {
 			t.Fatal(err)
 		}
-		if err := tx.QueryRow(h.ctx, `SELECT format('%s|%s|%s', enabled, coalesce(primary_dns_ip::text, '-'), coalesce(fallback_dns_ip::text, '-')) FROM ctrlz_fn.free_dns_public()`).Scan(&out); err != nil {
+		if err := tx.QueryRow(h.ctx, `SELECT format('%s|%s|%s', enabled::text, coalesce(host(primary_dns_ip), '-'), coalesce(host(fallback_dns_ip), '-')) FROM ctrlz_fn.free_dns_public()`).Scan(&out); err != nil {
 			t.Fatalf("free_dns_public: %v", err)
 		}
 		return out
