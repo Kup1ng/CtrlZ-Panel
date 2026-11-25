@@ -50,9 +50,11 @@ func restoreTables() []struct{ table, key string } {
 // contentTables are the tables of the profile routes (P2): a case adds profiles, rules, keys, jobs and outbox rows that the
 // next case must not find, and the seed also gives each tenant a row of every one of them (a locked profile, a queued job)
 // that the cases read. They are put back to what the seed made, row for row, the way restoreTables puts back a row in place.
+// feedback_items is here because POST /feedback (P3 9.2) adds a row for B only: without it B holds one row more than A for every
+// case after createFeedback, and the harness refuses the case as "not in the same state". The seed gives each tenant one row.
 func contentTables() []string {
 	return []string{"profiles", "profile_options", "profile_filters", "profile_services", "rule_folders", "rules", "block_pages",
-		"idempotency_keys", "batch_jobs", "policy_outbox", "job_outbox"}
+		"idempotency_keys", "batch_jobs", "policy_outbox", "job_outbox", "feedback_items"}
 }
 
 // resetTables are emptied for the tenant between two cases: everything a route creates.

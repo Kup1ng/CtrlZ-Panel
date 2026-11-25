@@ -198,7 +198,15 @@ func TestIdentityVectorsThroughTheRoutes(t *testing.T) {
 			continue
 		}
 		f.env.Exec(t, `DELETE FROM ctrlz.clients WHERE endpoint_id = $1`, r.ep.ID)
-		got := r.freshSession().post(ep+"/clients", map[string]any{"alias": c.Input})
+		// A name of the API does not start with a space (the pattern of the schema, RULES 9), so the route refuses what the slug alone
+		// would trim; that refusal is checked here, and the rest of the case is sent without the leading space.
+		input := strings.TrimLeft(c.Input, " ")
+		if input != c.Input {
+			if lead := r.freshSession().post(ep+"/clients", map[string]any{"alias": c.Input}); lead.Code != 400 {
+				t.Errorf("%s: an alias with a leading space answered %d, want the 400 of the schema", c.ID, lead.Code)
+			}
+		}
+		got := r.freshSession().post(ep+"/clients", map[string]any{"alias": input})
 		if c.Error {
 			if got.Code != 422 && got.Code != 400 {
 				t.Errorf("%s (%s): status %d for %q, want a refusal", c.ID, c.Why, got.Code, c.Input)

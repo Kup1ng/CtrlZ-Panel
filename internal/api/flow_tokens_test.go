@@ -106,7 +106,10 @@ func TestAPITokenManagement(t *testing.T) {
 		t.Errorf("after the edit: %+v", patched.Token)
 	}
 	r.a.do("PATCH", "/api-tokens/"+made.Token.ID, map[string]any{"kind": "write"}).want(400, "")
-	r.a.do("PATCH", "/api-tokens/"+made.Token.ID, map[string]any{"allowed_ips": []string{"not an address"}}).want(422, "validation_failed")
+	// Text that cannot be an address at all (a space, a letter past F) is refused by the pattern of the schema as a bad request; text that
+	// has the shape of one and is none (an octet of 999) reaches ParseAllowed and is named by its index.
+	r.a.do("PATCH", "/api-tokens/"+made.Token.ID, map[string]any{"allowed_ips": []string{"not an address"}}).want(400, "")
+	r.a.do("PATCH", "/api-tokens/"+made.Token.ID, map[string]any{"allowed_ips": []string{"999.1.1.1"}}).want(422, "validation_failed")
 	r.a.do("PATCH", "/api-tokens/"+made.Token.ID, map[string]any{"allowed_ips": []string{"203.0.113.9/24"}}).want(422, "validation_failed")
 	r.a.do("PATCH", "/api-tokens/"+made.Token.ID, map[string]any{}).want(400, "")
 	f.env.Exec(t, `UPDATE ctrlz.sessions SET reauth_at = NULL WHERE tenant_id = $1`, A.Tenant)
@@ -218,7 +221,7 @@ func TestAPITokenPath(t *testing.T) {
 	both.get("/account/sessions").want(403, "token_not_allowed")
 	r.bearer("ctz_"+strings.Repeat("A", 64), "").get("/profiles").want(401, "token_invalid")
 	r.bearer("junk", "").get("/profiles").want(401, "token_invalid")
-	r.bearer(write[:67]+"x", "").get("/profiles").want(401, "token_invalid")
+	r.bearer(badTag(write), "").get("/profiles").want(401, "token_invalid")
 
 	// Allowed IPs: outside the list is 403, inside is served, and the list can be changed.
 	r.reauth(A.Tenant, A.User)

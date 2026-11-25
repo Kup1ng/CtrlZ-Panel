@@ -123,7 +123,7 @@ func TestAPITokenValueNeverReachesALogOrASink(t *testing.T) {
 	A := f.env.A
 	value, row := r.make(r.a, map[string]any{"name": "canary", "kind": "read", "allowed_ips": []string{"203.0.113.0/24"}})
 	other, orow := r.make(r.a, map[string]any{"name": "canary two", "kind": "write"})
-	tampered := value[:67] + "x"
+	tampered := badTag(value)
 
 	r.a.get("/api-tokens").want(200, "")
 	r.bearer(value, "203.0.113.5").get("/profiles").want(200, "")
@@ -159,9 +159,11 @@ func TestCreateTokenResolvedBeforeACredentialChangeOfTheSameSessionMintsNothing(
 	before := f.count(`SELECT count(*) FROM ctrlz.api_tokens WHERE tenant_id = $1`, A.Tenant)
 
 	// What ChangePassword commits, in one transaction that holds the user's row: the credential moves, the acting session gets a
-	// new token (same id, revoked_at still NULL), and the user's API tokens are revoked.
+	// new token (same id, revoked_at still NULL), and the user's API tokens are revoked. Only the acting session (the newest one,
+	// the one r.a holds) is rotated: the seed gives the user a session of its own, and a hash is unique, so rotating every session
+	// of the user to one value is refused by sessions_token_hash_key.
 	release := f.holdUpdate(`WITH rot AS (UPDATE ctrlz.sessions SET token_hash = '\x0102030405'::bytea
-			WHERE tenant_id = $1::uuid AND user_id = $2::uuid RETURNING 1),
+			WHERE tenant_id = $1::uuid AND id = (SELECT id FROM ctrlz.sessions WHERE user_id = $2::uuid ORDER BY created_at DESC, id DESC LIMIT 1) RETURNING 1),
 		rev AS (UPDATE ctrlz.api_tokens SET revoked_at = now() WHERE tenant_id = $1::uuid AND user_id = $2::uuid AND revoked_at IS NULL RETURNING 1)
 		UPDATE ctrlz.users SET password_changed_at = now() WHERE tenant_id = $1::uuid AND id = $2::uuid`, A.Tenant, A.User)
 	done := make(chan *resp, 1)

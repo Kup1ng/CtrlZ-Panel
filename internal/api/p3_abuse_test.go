@@ -76,8 +76,16 @@ func TestP3InputBounds(t *testing.T) {
 		} `json:"types"`
 	}
 	r.a.get("/endpoint-types").want(200, "").json(&types)
-	if len(types.Types) != 30 {
-		t.Errorf("%d Endpoint types, want the 30 of T-219", len(types.Types))
+	// The catalogue seed of the tests adds one type of its own (doh_client, position 99, store/catalogtest/seed.go) for the rows it
+	// hangs on an Endpoint; the 30 of T-219 are the migration's.
+	seeded := 0
+	for _, ty := range types.Types {
+		if ty.Key != "doh_client" {
+			seeded++
+		}
+	}
+	if seeded != 30 {
+		t.Errorf("%d Endpoint types besides the test fixture's, want the 30 of T-219", seeded)
 	}
 	for i, ty := range types.Types {
 		r.freshSession().do("POST", "/endpoints", map[string]any{"type": ty.Key, "names": []string{"typed-" + ty.Key},
@@ -138,8 +146,10 @@ func TestP3TextWithControlsIsRefusedNotFailed(t *testing.T) {
 			refusedAsInput(t, fmt.Sprintf("%s holding %q", what, bad), send(bad))
 		}
 	}
-	if n := f.count(`SELECT count(*) FROM ctrlz.endpoints WHERE tenant_id = $1 AND name LIKE '%' || chr(0) || '%'`, A.Tenant); n != 0 {
-		t.Errorf("%d Endpoint names hold a NUL", n)
+	// Postgres refuses chr(0) and holds no NUL in a text column at all, so the read-back looks for the other four controls of the list
+	// (BEL, NEL, U+202E, U+200B); the NUL is shown refused by the answer above.
+	if n := f.count(`SELECT count(*) FROM ctrlz.endpoints WHERE tenant_id = $1 AND name ~ ('[' || chr(7) || chr(133) || chr(8238) || chr(8203) || ']')`, A.Tenant); n != 0 {
+		t.Errorf("%d Endpoint names hold a control character", n)
 	}
 }
 
@@ -368,7 +378,8 @@ func TestIPUnavailableIsTheSameWhoeverHoldsTheAddress(t *testing.T) {
 	}
 	c.do("POST", "/endpoints", map[string]any{"type": f.endpointType(), "names": []string{"holder-c"}, "profile_id": C.Profile.String()}, idem("holder-c")).want(201, "").json(&cCreated)
 	hold(c, cCreated.Endpoints[0].ID.String(), "203.0.113.22/32")
-	fromBViaC := ask(b, B.Tenant, bEp, "203.0.113.22/32", "bbbbbbbbbbbbbbbbbbbbbbbbbb").want(409, "ip_unavailable")
+	// A label is unique in the table (ip_proof_challenges_label_key), so B's second asker evidence has a label of its own.
+	fromBViaC := ask(b, B.Tenant, bEp, "203.0.113.22/32", "bcbcbcbcbcbcbcbcbcbcbcbcbc").want(409, "ip_unavailable")
 	if !bytes.Equal(withoutRequestID(fromBViaC.Body), withoutRequestID(fromB.Body)) {
 		t.Errorf("B's refusal differs between the holder A and the holder C: %q and %q", fromB.Body, fromBViaC.Body)
 	}

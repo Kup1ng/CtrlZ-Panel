@@ -117,7 +117,7 @@ func TestTokenWalk(t *testing.T) {
 		}
 		// A value that is not a token, and one whose tag fails.
 		must(name+" with junk", send(c, "junk", inside, nil), 401, "token_invalid")
-		must(name+" with a bad tag", send(c, write[:67]+"x", inside, nil), 401, "token_invalid")
+		must(name+" with a bad tag", send(c, badTag(write), inside, nil), 401, "token_invalid")
 		// A session cookie as well is one credential too many.
 		must(name+" with a cookie too", send(c, write, inside, map[string]string{"Cookie": cookie.Name + "=" + cookie.Value}), 400, "bad_request")
 		// From outside allowed_ips, each kind.
@@ -179,4 +179,15 @@ func TestTokenWalk(t *testing.T) {
 	// An expired token is refused at the screen, on every operation.
 	f.ck.add(366 * 24 * time.Hour)
 	walk("an expired token", alive, 401, "token_invalid")
+}
+
+// badTag changes the last character of a bearer value to another one. A value is 64 canonical base64url characters with no spare
+// bits, so any other last character is a different value that fails the tag. A fixed replacement ("x") equalled the real last
+// character of one value in 64, and the walk then sent the valid token back to itself and saw 200 for every operation.
+func badTag(value string) string {
+	last := "A"
+	if strings.HasSuffix(value, last) {
+		last = "B"
+	}
+	return value[:len(value)-1] + last
 }
