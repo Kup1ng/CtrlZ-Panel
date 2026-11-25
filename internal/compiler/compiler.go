@@ -58,6 +58,9 @@ type Config struct {
 	// entry (1000 and an hour, D31).
 	SnapshotEvery uint64
 	SnapshotAge   time.Duration
+	// SnapshotBytes is the encoded size of the entries since the last snapshot that also makes one due (64 MiB): a restart
+	// reads the tail after the latest snapshot, and a few large entries are as slow to read as many small ones.
+	SnapshotBytes uint64
 	// Reconcile is how often the tenants are listed to find the ones that vanished (60 s).
 	Reconcile time.Duration
 	// AlertEvery is the least time between two writes of the same alert.
@@ -99,6 +102,9 @@ func (c *Config) defaults() {
 	if c.SnapshotEvery == 0 {
 		c.SnapshotEvery = 1000
 	}
+	if c.SnapshotBytes == 0 {
+		c.SnapshotBytes = 64 << 20
+	}
 }
 
 // Compiler is the loop. Its fields are owned by one goroutine (Run or a test calling Tick).
@@ -120,7 +126,9 @@ type Compiler struct {
 	alerted       map[string]time.Time
 	lastSnapSeq   uint64
 	lastSnapAt    time.Time
-	retryAt       time.Time
+	// sinceSnap is the payload bytes of the entries after the latest snapshot.
+	sinceSnap uint64
+	retryAt   time.Time
 	// owed says the last reconcile found a tenant that vanished and no entry has taken its records out yet.
 	owed bool
 	// retry is the tenants whose compile failed or was skipped, compiled again at retryDue with no mark: a failure
@@ -131,6 +139,10 @@ type Compiler struct {
 	// sweepOwed says a full pass could not take out the records no tenant owns, because a tenant was skipped and its
 	// records would have been taken for orphans.
 	sweepOwed bool
+	// unmet is the tenants of this view that no pass has compiled yet: seeded with every tenant by the full pass and
+	// emptied as each compiles. Until it is empty the view does not know who owns what, so a record with no owner may be
+	// one of theirs and is not swept, however many passes that meet other tenants go by (W4-r2-1).
+	unmet map[uuid.UUID]bool
 	// snapRetry is when a failed snapshot may be tried again.
 	snapRetry time.Time
 	// compile is CompileTenantWith; a test replaces it.
@@ -231,7 +243,7 @@ func (c *Compiler) renew(ctx context.Context) error {
 
 // drop forgets everything learned from the log, as when the lease is lost.
 func (c *Compiler) drop() {
-	c.owed, c.sweepOwed = false, false
+	c.owed, c.sweepOwed, c.unmet = false, false, nil
 	c.retry, c.retryDue = map[uuid.UUID]bool{}, time.Time{}
 	c.view, c.loaded = nil, false
 	c.seen = map[uuid.UUID]time.Time{}
@@ -260,25 +272,29 @@ func (c *Compiler) load(ctx context.Context, now time.Time) error {
 		view = FromSnapshot(&sn, 1)
 		// A snapshot does not carry the format major; the entry it was cut at does, and the log keeps it (pruning stops below the
 		// older kept snapshot).
-		if rows, err := be.LogAfter(ctx, s.Seq-1, 1); err == nil && len(rows) == 1 && rows[0].Seq == s.Seq {
-			if e, err := wire.DecodeEntry(rows[0].Payload); err == nil && e.MinBlobMajor != 0 {
+		_ = be.LogAfter(ctx, s.Seq-1, 1, func(r store.LogRow) error {
+			if e, err := wire.DecodeEntry(r.Payload); err == nil && r.Seq == s.Seq && e.MinBlobMajor != 0 {
 				view.Major = e.MinBlobMajor
 			}
-		}
+			return nil
+		})
 		c.lastSnapSeq = s.Seq
 		break
 	}
+	// The tail is applied entry by entry as the rows arrive: an entry may be 15 MiB, and 200 of them in one slice would not fit
+	// in the worker (W4-r2-9). A batch is its own short transaction, so a long tail is not one transaction of minutes.
+	c.sinceSnap = 0
 	for {
-		rows, err := be.LogAfter(ctx, view.Seq, 200)
+		n := 0
+		err := be.LogAfter(ctx, view.Seq, loadBatch, func(r store.LogRow) error {
+			n++
+			c.sinceSnap += uint64(len(r.Payload))
+			return view.Chain(r.Seq, r.PrevHash, r.EntryHash, r.Payload)
+		})
 		if err != nil {
 			return err
 		}
-		for _, r := range rows {
-			if err := view.Chain(r.Seq, r.PrevHash, r.EntryHash, r.Payload); err != nil {
-				return err
-			}
-		}
-		if len(rows) < 200 {
+		if n < loadBatch {
 			break
 		}
 	}
@@ -291,6 +307,9 @@ func (c *Compiler) load(ctx context.Context, now time.Time) error {
 	c.lastSnapAt = now
 	return nil
 }
+
+// loadBatch is the entries one read of the tail holds.
+const loadBatch = 64
 
 // mustHex reads a store_ref, which is the hex of a 32-byte hash; anything else reads as a hash that has no file.
 func mustHex(s string) []byte {
@@ -523,13 +542,16 @@ func (c *Compiler) compileOne(ctx context.Context, id uuid.UUID, alive bool, now
 		found bool
 		rerr  error
 	)
+	// The compile runs inside the read snapshot, which reads the rules a profile at a time. A panic unwinds through the
+	// transaction, which rolls back.
 	panicked := safego.Run(c.cfg.Log, unitTenant, func() {
-		var in *TenantInput
-		if in, found, rerr = c.cfg.Backend.Tenant(ctx, id); rerr != nil || !found {
-			return
-		}
-		out = c.compile(in, now, func(k string) *policyv1.EndpointRecord { return v.Endpoints[k] })
+		out, found, rerr = c.cfg.Backend.Tenant(ctx, id, func(in *TenantInput) *Output {
+			return c.compile(in, now, func(k string) *policyv1.EndpointRecord { return v.Endpoints[k] })
+		})
 	})
+	if rerr == nil && out != nil {
+		rerr = out.readErr
+	}
 	switch {
 	case panicked:
 		return nil, nil
@@ -618,10 +640,15 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 		}
 	}
 
+	if full {
+		c.unmet = make(map[uuid.UUID]bool, len(ids))
+		for _, id := range ids {
+			c.unmet[id] = true
+		}
+	}
 	var diffs []*diff
 	var problems []Alert
 	failed := map[uuid.UUID]bool{}
-	skipped := 0
 	for _, id := range sortedIDs(tenants) {
 		if err := c.renew(ctx); err != nil {
 			return err
@@ -632,11 +659,11 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 		}
 		if out == nil {
 			// Its marks go with the pass, as every tenant's do, and the retry set brings it back.
-			skipped++
 			failed[id] = true
 			problems = append(problems, Alert{Reason: ReasonProfile, Tenant: id})
 			continue
 		}
+		delete(c.unmet, id)
 		if full {
 			// The row of a bound blob says the nodes may fetch it, not that the file is still there (a restored
 			// database, a volume that lost a directory entry). The full pass has every compiled blob in hand.
@@ -658,9 +685,18 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 			}
 		}
 	}
-	// A tenant that was skipped has no owner in a view that just started: its records would be taken for orphans. The
-	// sweep waits for the pass that compiles it.
-	if (full || c.sweepOwed) && skipped == 0 {
+	// A tenant that was skipped has no owner in a view that just started: its records would be taken for orphans. The sweep
+	// waits until every tenant of the view has been compiled once, whichever pass that is: a pass that meets only other tenants
+	// (a mark, a pair table, free DNS) must not run it while this one is still unowned (W4-r2-1, W4-r2-6).
+	unmet := false
+	for t := range c.unmet {
+		if alive[t] {
+			unmet = true
+		} else {
+			delete(c.unmet, t)
+		}
+	}
+	if (full || c.sweepOwed) && !unmet {
 		if o := orphans(v); o.records() != 0 {
 			diffs = append(diffs, o)
 			problems = append(problems, Alert{Reason: ReasonOrphanSweep})
@@ -719,6 +755,9 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 		}
 	}
 	if len(chunks) == 0 && len(outbox) != 0 {
+		if err := c.renew(ctx); err != nil {
+			return err
+		}
 		if err := be.DeleteMarks(ctx, outbox, c.fence()); err != nil {
 			return err
 		}
@@ -726,7 +765,7 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 	if full {
 		c.full = false
 	}
-	c.sweepOwed = (full || c.sweepOwed) && skipped != 0
+	c.sweepOwed = (full || c.sweepOwed) && unmet
 	c.owed = false
 	// The retry set keeps the tenants this pass did not meet and adds the ones that failed in it.
 	next := map[uuid.UUID]bool{}
@@ -788,13 +827,18 @@ func (c *Compiler) write(ctx context.Context, ch *chunk, now time.Time, outbox [
 			return err // what the entry carries besides records cannot be left out
 		}
 		if len(outbox) != 0 {
+			if err := c.renew(ctx); err != nil {
+				return err
+			}
 			return c.cfg.Backend.DeleteMarks(ctx, outbox, c.fence())
 		}
 		return nil
 	}
-	// Every blob a record binds is in the store before the entry that names it is visible. It is written inside the
-	// commit, after the log lock is held: the collector deletes a file under the same lock, and a file put before it
-	// could be deleted between the put and the row that binds it again.
+	// Every blob a record binds is in the store before the entry that names it is visible. The files are written first,
+	// outside the transaction: thousands of fsyncs under the log lock would outlast the idle and transaction timeouts of the
+	// role and hold up the pruning and the next pass (W4-r2-2). They are put again inside the commit, after the lock is
+	// held, which costs a stat of each file that is there and writes only one the collector deleted in between: it deletes
+	// under the same lock, so a file put before the lock could be gone by the time the row that binds it is written.
 	files := func() error {
 		for _, h := range sortedKeys(ch.blobs) {
 			if p := ch.blobs[h]; p != nil {
@@ -804,6 +848,22 @@ func (c *Compiler) write(ctx context.Context, ch *chunk, now time.Time, outbox [
 			}
 		}
 		return nil
+	}
+	// A compiler that is no longer the writer finds out before it writes a file, so a refused entry leaves none behind
+	// (W4-r1-17); the commit asks again under the lock.
+	if err := c.renew(ctx); err != nil {
+		return err
+	}
+	if err := c.cfg.Backend.Check(ctx, c.fence()); err != nil {
+		return err
+	}
+	if err := files(); err != nil {
+		return err
+	}
+	// The files and the compile before them can outlast the lease (10 s); the commit refuses a lease that has run out, and
+	// a lease nobody else took is simply taken again (W4-r2-8).
+	if err := c.renew(ctx); err != nil {
+		return err
 	}
 	err = c.cfg.Backend.Commit(ctx, &Commit{Seq: b.entry.Seq, Class: classOf(b.entry.Class), PrevHash: v.Head, EntryHash: b.hash,
 		Payload: b.payload, Put: b.put, GC: b.gc, Outbox: outbox, Holder: c.cfg.Holder, Files: files})
@@ -819,6 +879,7 @@ func (c *Compiler) write(ctx context.Context, ch *chunk, now time.Time, outbox [
 		return err
 	}
 	v.Apply(e, b.hash)
+	c.sinceSnap += uint64(len(b.payload))
 	for _, row := range b.put {
 		if bi := v.blobs[string(row.Hash)]; bi != nil {
 			bi.firstSeq = row.FirstSeq
@@ -835,7 +896,7 @@ func (c *Compiler) snapshotIfDue(ctx context.Context, now time.Time) error {
 	if v.Seq == c.lastSnapSeq || now.Before(c.snapRetry) {
 		return nil
 	}
-	if v.Seq-c.lastSnapSeq < c.cfg.SnapshotEvery && now.Sub(c.lastSnapAt) < c.cfg.SnapshotAge {
+	if v.Seq-c.lastSnapSeq < c.cfg.SnapshotEvery && now.Sub(c.lastSnapAt) < c.cfg.SnapshotAge && c.sinceSnap < c.cfg.SnapshotBytes {
 		return nil
 	}
 	if err := c.Snapshot(ctx, now); err != nil {
@@ -858,6 +919,9 @@ func (c *Compiler) Snapshot(ctx context.Context, now time.Time) error {
 	}
 	have, err := be.Snapshots(ctx, 100)
 	if err != nil {
+		return err
+	}
+	if err := c.renew(ctx); err != nil {
 		return err
 	}
 	// Keep this one and the newest other: two (D31).
@@ -883,7 +947,7 @@ func (c *Compiler) Snapshot(ctx context.Context, now time.Time) error {
 			_ = c.cfg.Artifacts.Delete(b) // a file that stays is only space; the row is gone
 		}
 	}
-	c.lastSnapSeq, c.lastSnapAt = v.Seq, now
+	c.lastSnapSeq, c.lastSnapAt, c.sinceSnap = v.Seq, now, 0
 	return nil
 }
 

@@ -61,13 +61,18 @@ type Backend interface {
 	Lease(ctx context.Context, holder string, secs int) (bool, error)
 	// Marks reads up to limit outbox rows, oldest first.
 	Marks(ctx context.Context, limit int) ([]store.OutboxMark, error)
+	// Check says whether a write under fence f would be allowed now, with no lock and no write: ErrLeaseLost or ErrHeadMoved. The
+	// compiler asks before it puts the files of an entry in the store, so a compiler that is no longer the writer leaves none.
+	Check(ctx context.Context, f Fence) error
 	// DeleteMarks deletes outbox rows that no entry is written for, fenced: ErrLeaseLost or ErrHeadMoved when the writer is
 	// not the one the lease names or the log is not where it thinks.
 	DeleteMarks(ctx context.Context, ids []uuid.UUID, f Fence) error
 	// Tenants lists every tenant id.
 	Tenants(ctx context.Context) ([]uuid.UUID, error)
-	// Tenant reads one tenant in one REPEATABLE READ READ ONLY snapshot; found is false for a tenant that is gone.
-	Tenant(ctx context.Context, id uuid.UUID) (in *TenantInput, found bool, err error)
+	// Tenant reads one tenant in one REPEATABLE READ READ ONLY snapshot and runs compile on it inside that snapshot;
+	// found is false for a tenant that is gone. The rules are not in the input: in.RulesOf reads one profile's while compile
+	// runs, so the rules of a tenant are never all in memory at once (a Free plan allows 200,000).
+	Tenant(ctx context.Context, id uuid.UUID, compile func(in *TenantInput) *Output) (out *Output, found bool, err error)
 	// Membership reads the nodes, the pairs and the global pair.
 	Membership(ctx context.Context) (*Membership, error)
 	// FreeDNS reads the free DNS switch, its budget and its version.
@@ -76,8 +81,9 @@ type Backend interface {
 	Catalog(ctx context.Context) (store.CatalogVersionRow, bool, error)
 	// Snapshots lists the newest snapshots, newest first.
 	Snapshots(ctx context.Context, limit int) ([]store.SnapshotRow, error)
-	// LogAfter reads entries after seq, in order.
-	LogAfter(ctx context.Context, seq uint64, limit int) ([]store.LogRow, error)
+	// LogAfter hands up to limit entries after seq, in order, to each one at a time: an entry may be 15 MiB, and a load
+	// that read a run of them into one slice would hold them all. An error of each ends the read and is returned.
+	LogAfter(ctx context.Context, seq uint64, limit int, each func(store.LogRow) error) error
 	// Artifacts reads every policy_artifacts row.
 	Artifacts(ctx context.Context) ([]artifactRow, error)
 	// Commit writes one entry. ErrHeadMoved when the head is not the entry before it.

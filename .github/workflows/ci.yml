@@ -12,7 +12,7 @@
 #     actions/checkout and actions/setup-go are used. A release is pinned only when it is at
 #     least 14 days old (setup-go v7.1.0 was two days old and is not used yet);
 #   - at most 18 jobs at once: four fixed jobs besides the shards (static, tests (lab), compose
-#     smoke, scan), 8 test shards and 6 mutant shards. The Node run adds 5, which is 23 against the
+#     smoke, scan), 8 test shards and 6 mutant shards (a lane branch has none, plan.sh). The Node run adds 5, which is 23 against the
 #     20 of the free account, so the last jobs queue (a queued job waits, it does not fail).
 name: ci
 
@@ -156,7 +156,8 @@ jobs:
     name: mutants ${{ matrix.id }}
     needs: plan
     # A tree with no mutant for GitHub to run (all are workspace ones) has one placeholder in
-    # the matrix, because an empty matrix is an error; the job is skipped by the count.
+    # the matrix, because an empty matrix is an error; the job is skipped by the count. A lane
+    # branch (ci/<label>) has the real matrix and a count of 0 (plan.sh): main and ci/full-* run it.
     if: ${{ needs.plan.outputs.mutant_shards != '0' }}
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ matrix.timeout }}

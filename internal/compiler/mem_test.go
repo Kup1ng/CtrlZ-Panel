@@ -43,20 +43,36 @@ type memBackend struct {
 	reads     int
 	// tenantErr makes the read of one tenant fail with an error of its own.
 	tenantErr map[uuid.UUID]error
+	// now, when set, makes the lease run out as the database's does: a write after leaseUntil is refused with ErrLeaseLost
+	// unless the holder took the lease again.
+	now        func() time.Time
+	leaseUntil time.Time
+	// rulesErr makes the read of one tenant's rules fail after its profiles are known.
+	rulesErr map[uuid.UUID]error
+	// logCalls counts the calls of LogAfter.
+	logCalls int
 }
 
 func newMem() *memBackend {
 	return &memBackend{tenants: map[uuid.UUID]*TenantInput{}, members: &Membership{}, freeVer: 1, freeOn: true, freeQPS: 1000, arts: map[string]artifactRow{}}
 }
 
-func (m *memBackend) Lease(_ context.Context, holder string, _ int) (bool, error) {
+func (m *memBackend) Lease(_ context.Context, holder string, secs int) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.holder != "" && m.holder != holder {
+	if m.holder != "" && m.holder != holder && (m.now == nil || m.now().Before(m.leaseUntil)) {
 		return false, nil
 	}
 	m.holder = holder
+	if m.now != nil {
+		m.leaseUntil = m.now().Add(time.Duration(secs) * time.Second)
+	}
 	return true, nil
+}
+
+// leaseHeld is the check of CompilerLeaseHeld: the holder's, and not run out.
+func (m *memBackend) leaseHeld(holder string) bool {
+	return m.holder == holder && (m.now == nil || m.now().Before(m.leaseUntil))
 }
 
 func (m *memBackend) Marks(_ context.Context, limit int) ([]store.OutboxMark, error) {
@@ -71,13 +87,19 @@ func (m *memBackend) Marks(_ context.Context, limit int) ([]store.OutboxMark, er
 
 // fenced is the check of DB.fence: the lease is the holder's and the log's head is where the writer thinks.
 func (m *memBackend) fenced(holder string, seq uint64, head []byte) error {
-	if m.holder != holder {
+	if !m.leaseHeld(holder) {
 		return ErrLeaseLost
 	}
 	if uint64(len(m.log)) != seq || (seq != 0 && string(m.log[seq-1].EntryHash) != string(head)) {
 		return ErrHeadMoved
 	}
 	return nil
+}
+
+func (m *memBackend) Check(_ context.Context, f Fence) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.fenced(f.Holder, f.Seq, f.Head)
 }
 
 func (m *memBackend) DeleteMarks(_ context.Context, ids []uuid.UUID, f Fence) error {
@@ -115,15 +137,26 @@ func (m *memBackend) Tenants(context.Context) ([]uuid.UUID, error) {
 	return out, nil
 }
 
-func (m *memBackend) Tenant(_ context.Context, id uuid.UUID) (*TenantInput, bool, error) {
+func (m *memBackend) Tenant(_ context.Context, id uuid.UUID, compile func(*TenantInput) *Output) (*Output, bool, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.reads++
 	if err := m.tenantErr[id]; err != nil {
+		m.mu.Unlock()
 		return nil, false, err
 	}
 	in, ok := m.tenants[id]
-	return in, ok, nil
+	rerr := m.rulesErr[id]
+	m.mu.Unlock()
+	if !ok {
+		return nil, false, nil
+	}
+	// The compile runs outside the lock, as it runs inside a transaction and not inside the database's own lock.
+	if rerr != nil {
+		cp := *in
+		cp.RulesOf = func(uuid.UUID) ([]store.RuleRow, error) { return nil, rerr }
+		in = &cp
+	}
+	return compile(in), true, nil
 }
 
 func (m *memBackend) Membership(context.Context) (*Membership, error) {
@@ -158,16 +191,22 @@ func (m *memBackend) Snapshots(_ context.Context, limit int) ([]store.SnapshotRo
 	return out, nil
 }
 
-func (m *memBackend) LogAfter(_ context.Context, seq uint64, limit int) ([]store.LogRow, error) {
+func (m *memBackend) LogAfter(_ context.Context, seq uint64, limit int, each func(store.LogRow) error) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.logCalls++
 	var out []store.LogRow
 	for _, r := range m.log {
 		if r.Seq > seq && len(out) < limit {
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	m.mu.Unlock()
+	for _, r := range out {
+		if err := each(r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *memBackend) Artifacts(context.Context) ([]artifactRow, error) {
@@ -188,7 +227,7 @@ func (m *memBackend) Commit(_ context.Context, c *Commit) error {
 		m.failCommit = nil
 		return err
 	}
-	if m.holder != c.Holder {
+	if !m.leaseHeld(c.Holder) {
 		return ErrLeaseLost
 	}
 	if uint64(len(m.log))+1 != c.Seq {

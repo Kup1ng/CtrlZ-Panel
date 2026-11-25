@@ -103,22 +103,35 @@ const qCompilerLogAfter = `SELECT seq, class, prev_hash, entry_hash, payload FRO
 
 // CompilerLogAfter reads up to limit entries after seq, in order.
 func (g GlobalTx) CompilerLogAfter(seq uint64, limit int) ([]LogRow, error) {
+	var out []LogRow
+	err := g.CompilerLogEach(seq, limit, func(r LogRow) error {
+		out = append(out, r)
+		return nil
+	})
+	return out, err
+}
+
+// CompilerLogEach hands up to limit entries after seq, in order, to each one at a time. An entry may be 15 MiB, so a
+// caller that applies them as they come holds one payload and not the whole run (the load of a compiler after a restart).
+// An error of each ends the read and is returned as it is.
+func (g GlobalTx) CompilerLogEach(seq uint64, limit int, each func(LogRow) error) error {
 	rows, err := g.tx.Query(g.ctx, qCompilerLogAfter, int64(seq), int32(limit))
 	if err != nil {
-		return nil, sanitize(err)
+		return sanitize(err)
 	}
 	defer rows.Close()
-	var out []LogRow
 	for rows.Next() {
 		var r LogRow
 		var s int64
 		if err := rows.Scan(&s, &r.Class, &r.PrevHash, &r.EntryHash, &r.Payload); err != nil {
-			return nil, sanitize(err)
+			return sanitize(err)
 		}
 		r.Seq = uint64(s)
-		out = append(out, r)
+		if err := each(r); err != nil {
+			return err
+		}
 	}
-	return out, sanitize(rows.Err())
+	return sanitize(rows.Err())
 }
 
 // LogAppend is what one entry writes in the transaction that holds the log lock.
@@ -598,38 +611,41 @@ func (t Tx) CompilerProfiles() ([]CompilerProfile, error) {
 	return out, sanitize(rows.Err())
 }
 
-// prefixed is a row scanner that reads a leading column into a place of its own and hands the rest to the scanner
-// the single-profile reads use, so the bulk reads below share scanRule and scanFolder with them.
-type prefixed struct {
-	r    interface{ Scan(...any) error }
-	lead any
-}
-
-func (p prefixed) Scan(dest ...any) error { return p.r.Scan(append([]any{p.lead}, dest...)...) }
-
-// ProfileRule is a rule with the profile it belongs to.
+// ProfileRule is a rule with the profile it belongs to: the shape a test hands the compiler when it has no database.
 type ProfileRule struct {
 	ProfileID uuid.UUID
 	RuleRow
 }
 
-const qCompilerRules = `SELECT profile_id, ` + ruleColumns + ` FROM ctrlz.rules WHERE tenant_id = $1 ORDER BY profile_id, rule_key, id`
+// The rules of one profile, with the columns a blob is built from and no more: the comment (up to 64 characters) and the two
+// timestamps are never compiled, and for a profile of 10,000 rules they are a third of the row. A tenant's rules are read one
+// profile at a time, and each profile's rows are dropped once its blob is built, so the worker holds one profile's rules
+// and not the 200,000 a Free plan allows.
+const qCompilerRulesOf = `SELECT id, folder_id, rule_key, match_kind, negated, action, target_kind, target_location_id,
+  host(target_ipv4), host(target_ipv6), target_host, enabled, expires_at, location_unavailable
+FROM ctrlz.rules WHERE tenant_id = $1 AND profile_id = $2 ORDER BY rule_key, id`
 
-// CompilerRules reads every rule of the tenant.
-func (t Tx) CompilerRules() ([]ProfileRule, error) {
-	rows, err := t.tx.Query(t.ctx, qCompilerRules, t.tenant)
+// CompilerRulesOf reads the rules of one profile of the transaction's tenant, in blob order.
+func (t Tx) CompilerRulesOf(profile uuid.UUID) ([]RuleRow, error) {
+	rows, err := t.tx.Query(t.ctx, qCompilerRulesOf, t.tenant, profile)
 	if err != nil {
 		return nil, sanitize(err)
 	}
 	defer rows.Close()
-	var out []ProfileRule
+	var out []RuleRow
 	for rows.Next() {
-		var pid uuid.UUID
-		r, err := scanRule(prefixed{rows, &pid})
-		if err != nil {
+		var x RuleRow
+		var folder, loc *uuid.UUID
+		var kind, v4, v6, host *string
+		if err := rows.Scan(&x.ID, &folder, &x.Key, &x.MatchKind, &x.Negated, &x.Action, &kind, &loc, &v4, &v6, &host, &x.Enabled,
+			&x.ExpiresAt, &x.LocationUnavailable); err != nil {
 			return nil, sanitize(err)
 		}
-		out = append(out, ProfileRule{ProfileID: pid, RuleRow: r})
+		if folder != nil {
+			x.FolderID = *folder
+		}
+		x.Target = scanTarget(kind, loc, v4, v6, host)
+		out = append(out, x)
 	}
 	return out, sanitize(rows.Err())
 }

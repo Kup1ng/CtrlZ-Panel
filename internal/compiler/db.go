@@ -48,6 +48,11 @@ func fence(g store.GlobalTx, holder string, seq uint64, head []byte) error {
 	if err := g.ConfigLogLock(); err != nil {
 		return err
 	}
+	return checkFence(g, holder, seq, head)
+}
+
+// checkFence is the lease and the head of fence, read without the log lock.
+func checkFence(g store.GlobalTx, holder string, seq uint64, head []byte) error {
 	held, err := g.CompilerLeaseHeld(leaseName, holder)
 	if err != nil {
 		return err
@@ -66,6 +71,13 @@ func fence(g store.GlobalTx, holder string, seq uint64, head []byte) error {
 		return ErrHeadMoved
 	}
 	return nil
+}
+
+// Check reads what fence reads, without the lock and in a read-only transaction.
+func (d *DB) Check(ctx context.Context, f Fence) error {
+	return d.st.WithGlobal(ctx, readOnly(), func(g store.GlobalTx) error {
+		return checkFence(g, f.Holder, f.Seq, f.Head)
+	})
 }
 
 // DeleteMarks deletes outbox rows with no entry to go with them.
@@ -88,9 +100,11 @@ func (d *DB) Tenants(ctx context.Context) (out []uuid.UUID, err error) {
 	return out, err
 }
 
-// Tenant reads one tenant in one snapshot: every table the compile map names, as of the same instant.
-func (d *DB) Tenant(ctx context.Context, id uuid.UUID) (*TenantInput, bool, error) {
+// Tenant reads one tenant in one snapshot: every table the compile map names, as of the same instant, and the rules one
+// profile at a time through in.RulesOf. compile runs inside the transaction, since the rules are read as it needs them.
+func (d *DB) Tenant(ctx context.Context, id uuid.UUID, compile func(in *TenantInput) *Output) (*Output, bool, error) {
 	in := &TenantInput{}
+	var out *Output
 	found := false
 	err := d.st.WithTenant(ctx, id, readOnly(), func(t store.Tx) (err error) {
 		if in.Row, found, err = t.CompilerTenant(); err != nil || !found {
@@ -114,9 +128,7 @@ func (d *DB) Tenant(ctx context.Context, id uuid.UUID) (*TenantInput, bool, erro
 		if in.Profiles, err = t.CompilerProfiles(); err != nil {
 			return err
 		}
-		if in.Rules, err = t.CompilerRules(); err != nil {
-			return err
-		}
+		in.RulesOf = t.CompilerRulesOf
 		if in.Folders, err = t.CompilerFolders(); err != nil {
 			return err
 		}
@@ -129,10 +141,17 @@ func (d *DB) Tenant(ctx context.Context, id uuid.UUID) (*TenantInput, bool, erro
 		if in.Options, err = t.CompilerOptions(); err != nil {
 			return err
 		}
-		in.Maps, err = t.CompilerMaps()
-		return err
+		if in.Maps, err = t.CompilerMaps(); err != nil {
+			return err
+		}
+		out = compile(in)
+		if out != nil {
+			// A read of rules that failed may have aborted the transaction; its error is the transaction's.
+			return out.readErr
+		}
+		return nil
 	})
-	return in, found, err
+	return out, found, err
 }
 
 // Membership reads the nodes, the pairs and the global pair in one snapshot.
@@ -178,13 +197,11 @@ func (d *DB) Snapshots(ctx context.Context, limit int) (out []store.SnapshotRow,
 	return out, err
 }
 
-// LogAfter reads entries after seq.
-func (d *DB) LogAfter(ctx context.Context, seq uint64, limit int) (out []store.LogRow, err error) {
-	err = d.st.WithGlobal(ctx, readOnly(), func(g store.GlobalTx) (err error) {
-		out, err = g.CompilerLogAfter(seq, limit)
-		return err
+// LogAfter hands entries after seq to each, one at a time.
+func (d *DB) LogAfter(ctx context.Context, seq uint64, limit int, each func(store.LogRow) error) error {
+	return d.st.WithGlobal(ctx, readOnly(), func(g store.GlobalTx) error {
+		return g.CompilerLogEach(seq, limit, each)
 	})
-	return out, err
 }
 
 // Artifacts reads the artifact rows.

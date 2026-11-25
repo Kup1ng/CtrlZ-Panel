@@ -34,12 +34,17 @@ type TenantInput struct {
 	Authorized []store.CompilerPrefix
 	Claims     []store.CompilerPrefix
 	Profiles   []store.CompilerProfile
-	Rules      []store.ProfileRule
-	Folders    []store.ProfileFolder
-	Services   []store.ProfileService
-	Filters    []store.ProfileFilter
-	Options    []store.ProfileOptions
-	Maps       store.CompilerMaps
+	// Rules is the rules of every profile, for a caller that has no database (a test). The compiler's own read leaves it
+	// empty and sets RulesOf instead.
+	Rules []store.ProfileRule
+	// RulesOf reads the rules of one profile in the snapshot of the tenant, when set. The compile asks for one profile at a
+	// time and drops its rows once the blob is built, so a tenant with 20 profiles of 10,000 rules holds one of them.
+	RulesOf  func(profile uuid.UUID) ([]store.RuleRow, error)
+	Folders  []store.ProfileFolder
+	Services []store.ProfileService
+	Filters  []store.ProfileFilter
+	Options  []store.ProfileOptions
+	Maps     store.CompilerMaps
 }
 
 // Output is what one tenant compiles to. Keys are the raw ids as strings, so no array travels by value.
@@ -54,6 +59,8 @@ type Output struct {
 	Kept map[string]bool
 	// Problems are what the pass found and an operator should hear of, each once per tenant and reason.
 	Problems []Reason
+	// readErr is the error of a RulesOf: the output is not to be used, and the caller treats it as the failed read of the tenant.
+	readErr error
 }
 
 // CompileTenant compiles one tenant's Endpoints, claims and the profiles they bind (P3 3.2, SC 9.2). It is a pure
@@ -87,51 +94,64 @@ func CompileTenantWith(in *TenantInput, now time.Time, prev func(key string) *po
 	}
 	delete(used, uuid.Nil)
 
-	data := map[uuid.UUID]*ProfileData{}
+	// The rules come from one place or the other, and are taken one profile at a time.
+	var held map[uuid.UUID][]store.RuleRow
+	rulesOf := in.RulesOf
+	if rulesOf == nil {
+		held = map[uuid.UUID][]store.RuleRow{}
+		for i := range in.Rules {
+			held[in.Rules[i].ProfileID] = append(held[in.Rules[i].ProfileID], in.Rules[i].RuleRow)
+		}
+		rulesOf = func(p uuid.UUID) ([]store.RuleRow, error) { return held[p], nil }
+	}
+	folders := map[uuid.UUID]map[uuid.UUID]store.FolderRow{}
+	for i := range in.Folders {
+		p := in.Folders[i].ProfileID
+		if folders[p] == nil {
+			folders[p] = map[uuid.UUID]store.FolderRow{}
+		}
+		folders[p][in.Folders[i].ID] = in.Folders[i].FolderRow
+	}
+	services := map[uuid.UUID][]store.ServiceRow{}
+	for i := range in.Services {
+		services[in.Services[i].ProfileID] = append(services[in.Services[i].ProfileID], in.Services[i].ServiceRow)
+	}
+	filters := map[uuid.UUID][]store.FilterRow{}
+	for i := range in.Filters {
+		filters[in.Filters[i].ProfileID] = append(filters[in.Filters[i].ProfileID], in.Filters[i].FilterRow)
+	}
+	options := map[uuid.UUID]*store.OptionsRow{}
+	for i := range in.Options {
+		options[in.Options[i].ProfileID] = &in.Options[i].OptionsRow
+	}
+	compiled := map[uuid.UUID]*Profile{}
 	for i := range in.Profiles {
 		p := &in.Profiles[i]
 		if !used[p.ID] {
 			continue
 		}
-		pd := &ProfileData{ID: p.ID, Folders: map[uuid.UUID]store.FolderRow{}}
+		pd := &ProfileData{ID: p.ID, Folders: folders[p.ID], Services: services[p.ID], Filters: filters[p.ID], Options: options[p.ID]}
+		if pd.Folders == nil {
+			pd.Folders = map[uuid.UUID]store.FolderRow{}
+		}
 		if p.DisabledUntil != nil {
 			pd.DisabledUntil = p.DisabledUntil.Unix()
 		}
-		data[p.ID] = pd
-	}
-	for i := range in.Rules {
-		if pd := data[in.Rules[i].ProfileID]; pd != nil {
-			pd.Rules = append(pd.Rules, in.Rules[i].RuleRow)
+		rules, err := rulesOf(p.ID)
+		if err != nil {
+			out.readErr = err
+			return out
 		}
-	}
-	for i := range in.Folders {
-		if pd := data[in.Folders[i].ProfileID]; pd != nil {
-			pd.Folders[in.Folders[i].ID] = in.Folders[i].FolderRow
-		}
-	}
-	for i := range in.Services {
-		if pd := data[in.Services[i].ProfileID]; pd != nil {
-			pd.Services = append(pd.Services, in.Services[i].ServiceRow)
-		}
-	}
-	for i := range in.Filters {
-		if pd := data[in.Filters[i].ProfileID]; pd != nil {
-			pd.Filters = append(pd.Filters, in.Filters[i].FilterRow)
-		}
-	}
-	for i := range in.Options {
-		if pd := data[in.Options[i].ProfileID]; pd != nil {
-			pd.Options = &in.Options[i].OptionsRow
-		}
-	}
-	compiled := map[uuid.UUID]*Profile{}
-	for id, pd := range data {
-		p, err := CompileProfile(pd, &in.Maps)
+		pd.Rules = rules
+		blob, err := CompileProfile(pd, &in.Maps)
+		// The rows of this profile go before the next one is read.
+		pd.Rules, rules = nil, nil
+		delete(held, p.ID) // a no-op for the database read
 		if err != nil {
 			problem(ReasonProfile)
 			continue
 		}
-		compiled[id] = p
+		compiled[p.ID] = blob
 	}
 
 	byHash := map[string]*Profile{}

@@ -270,6 +270,9 @@ services:
       CTRLZ_DB_MAX_CONNS: ${CTRLZ_WORKER_DB_MAX_CONNS:-4}
       # The compiler (P4 6): the blobs and snapshots it writes, read-only in the hub.
       CTRLZ_ARTIFACTS_DIR: /var/lib/ctrlz/artifacts
+      # The compiler compiles a tenant at a time and the same process sends the SMS codes: the collector returns memory before
+      # the cgroup kill takes both down.
+      GOMEMLIMIT: ${GOMEMLIMIT_WORKER:-200MiB}
     secrets: [pg_worker_password, pg_compiler_password, kek_sms_cred, kek_otp_delivery]
     volumes:
       - artifacts:/var/lib/ctrlz/artifacts
