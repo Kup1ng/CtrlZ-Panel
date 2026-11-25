@@ -1,0 +1,28 @@
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  except:
+    # The service and RPC names below come from the shared contract (section 12)
+    # and from the plan. Renaming them to the buf style would make the spec and
+    # the code disagree for no benefit.
+    - SERVICE_SUFFIX
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+breaking:
+  use:
+    # WIRE_JSON, not FILE: v1 is additive only (contract 9.6), and a rename
+    # that keeps field numbers is still a wire-compatible change.
+    - WIRE_JSON
+    # WIRE_JSON checks what is on the wire, so it lets a service, an RPC, a
+    # message, an enum or a whole file disappear. A node built against the old
+    # contract would then get UNIMPLEMENTED, so deleting any of them is a break.
+    # A field or an enum value may still go if its number is reserved.
+    - RPC_NO_DELETE
+    - SERVICE_NO_DELETE
+    - MESSAGE_NO_DELETE
+    - ENUM_NO_DELETE
+    - FILE_NO_DELETE
