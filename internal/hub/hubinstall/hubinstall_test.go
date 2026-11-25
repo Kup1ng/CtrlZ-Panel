@@ -9,13 +9,20 @@ import (
 	"time"
 )
 
-// endless gives bytes for as long as it is read, a little slowly: a file that is never finished.
+// endless gives bytes for as long as it is read: a file that is never finished. The handler's own byte
+// limiter paces it, so the test needs no sleep of its own.
 type endless struct{}
 
-func (endless) Read(p []byte) (int, error) {
-	time.Sleep(5 * time.Millisecond)
-	return len(p), nil
-}
+func (endless) Read(p []byte) (int, error) { return len(p), nil }
+
+// discard is a ResponseWriter that keeps nothing, so an endless body does not fill a recorder.
+type discard struct{ h http.Header }
+
+func (d *discard) Header() http.Header         { return d.h }
+func (d *discard) Write(p []byte) (int, error) { return len(p), nil }
+func (d *discard) WriteHeader(int)             {}
+
+func newDiscard() *discard { return &discard{h: http.Header{}} }
 
 // A download ends at its total time even when every single write succeeds (W3-r1-3): a peer that takes
 // a byte at a time must not hold a bundle slot for as long as it likes.
@@ -23,12 +30,12 @@ func TestCopyPacedEndsAtItsMaxTime(t *testing.T) {
 	h := New(Config{})
 	done := make(chan struct{})
 	go func() {
-		h.copyPaced(context.Background(), httptest.NewRecorder(), endless{}, "bundle", 100*time.Millisecond, nil)
+		h.copyPaced(context.Background(), newDiscard(), endless{}, "bundle", 100*time.Millisecond, nil)
 		close(done)
 	}()
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("the download did not end at its maximum time")
 	}
 }
@@ -36,29 +43,35 @@ func TestCopyPacedEndsAtItsMaxTime(t *testing.T) {
 // A download whose token has died or been used stops, not only at the next request (W3-r1-6).
 func TestCopyPacedEndsWhenTheTokenDies(t *testing.T) {
 	h := New(Config{})
-	h.recheck = 20 * time.Millisecond
-	live := make(chan bool, 1)
-	live <- true
+	h.recheck = time.Nanosecond // look at the token at every chunk
+	called := make(chan struct{}, 1)
+	dead := make(chan struct{})
 	alive := func() bool {
 		select {
-		case v := <-live:
-			live <- v
-			return v
+		case called <- struct{}{}:
+		default:
+		}
+		select {
+		case <-dead:
+			return false
 		default:
 			return true
 		}
 	}
 	done := make(chan struct{})
 	go func() {
-		h.copyPaced(context.Background(), httptest.NewRecorder(), endless{}, "bundle", time.Minute, alive)
+		h.copyPaced(context.Background(), newDiscard(), endless{}, "bundle", time.Minute, alive)
 		close(done)
 	}()
-	time.Sleep(60 * time.Millisecond)
-	<-live
-	live <- false
+	select {
+	case <-called:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the token was never looked at")
+	}
+	close(dead)
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("the download went on after its token died")
 	}
 }

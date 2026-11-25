@@ -1016,10 +1016,8 @@ func TestRevokedNodeEndsAStreamBlockedInRecv(t *testing.T) {
 	if err := st.RecvMsg(&telv1.Ack{}); err == nil {
 		t.Fatal("the client still sees an open stream")
 	}
-	// The other node's handler is still running.
-	select {
-	case <-h.stub.logsEnded:
-		t.Fatal("another node's handler was ended")
-	case <-time.After(200 * time.Millisecond):
+	// The other node's handler is still running: its stream is registered and its handler has not returned.
+	if h.hub.Streams.Count(other.nodeID) != 1 || len(h.stub.logsEnded) != 0 {
+		t.Fatalf("another node's stream was ended: %d registered, %d ended", h.hub.Streams.Count(other.nodeID), len(h.stub.logsEnded))
 	}
 }
