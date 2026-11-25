@@ -544,6 +544,108 @@ func TestClickHouseTwoTenants(t *testing.T) {
 		wantServerCode(t, "a good query of key rb after its read_bytes", run("rb", quotaProbe), chQuotaExceeded)
 	})
 
+	// access.sql and 6.2 say the errors unit covers what a throwIf proves above and also a refusal at analysis, a
+	// refusal by a grant and a client cancel: the abuse bound on loops that are not timeouts rests on it. Each
+	// case runs under its own key on a quota of one error an hour, so a charge shows as the key's refusal (201,
+	// the only unit that quota has). A cancel is charged by the server after it notices the closed connection, so
+	// that case is polled and not read once. A refused setting or constraint is deliberately not in the list:
+	// the server judges it while it reads the client's packet, before the query's quota is attached, and 6.2
+	// does not claim it.
+	t.Run("errors charged by refusals and cancels", func(t *testing.T) {
+		if err := mig.Exec(context.Background(), "CREATE QUOTA IF NOT EXISTS ctrlz_test_errors2 KEYED BY client_key FOR INTERVAL 1 hour MAX errors = 1 TO ctrlz_preview"); err != nil {
+			t.Fatalf("create the errors quota: %v", err)
+		}
+		t.Cleanup(func() { _ = mig.Exec(context.Background(), "DROP QUOTA IF EXISTS ctrlz_test_errors2") })
+		pconn := chConn(t, addr, "ctrlz_preview", pw["preview"])
+		probe := func(key string) error {
+			c, cancel := chTenantCtx(tenA, key, 0, nil)
+			defer cancel()
+			return pconn.QueryRow(c, quotaProbe).Scan(new(uint64))
+		}
+		serverQuery := func(key, query string) error {
+			c, cancel := chTenantCtx(tenA, key, 0, nil)
+			defer cancel()
+			return pconn.QueryRow(c, query).Scan(new(uint64))
+		}
+		// A query that runs for about 1.5 s (three rows of tenant A, half a second each in one block) and is
+		// cancelled by the client after 300 ms: the driver closes the connection, which is what a browser that
+		// goes away does to the reader.
+		cancelled := func(key string) error {
+			base, stop := context.WithCancel(context.Background())
+			defer stop()
+			time.AfterFunc(300*time.Millisecond, stop)
+			c := clickhouse.Context(base,
+				clickhouse.WithSettings(clickhouse.Settings{"SQL_tenant_id": clickhouse.CustomSetting{Value: tenA.String()}}),
+				clickhouse.WithQuotaKey(key))
+			return pconn.QueryRow(c, "SELECT sum(row_id + sleepEachRow(0.5)) FROM ctrlz.dns_raw").Scan(new(uint64))
+		}
+		cases := []struct {
+			name, key string
+			run       func(key string) error
+		}{
+			{"a refusal at analysis (unknown column)", "ra", func(k string) error {
+				return serverQuery(k, "SELECT no_such_column FROM ctrlz.dns_raw")
+			}},
+			{"a refusal by a grant (system.users)", "rg", func(k string) error {
+				return serverQuery(k, "SELECT count() FROM system.users")
+			}},
+			{"a client cancel", "rc", cancelled},
+		}
+		for _, c := range cases {
+			// One error is at the maximum and two are over it, so two failures are made; the server's choice of
+			// "over" or "at" does not matter then.
+			for i := 0; i < 2; i++ {
+				_ = c.run(c.key)
+			}
+			testwait.UntilEvery(t, 20*time.Second, 500*time.Millisecond, c.name+" to be charged to the errors unit", func() bool {
+				var ex *clickhouse.Exception
+				return errors.As(probe(c.key), &ex) && ex.Code == chQuotaExceeded
+			})
+		}
+		// The keys are separate, and an unrelated key is not refused.
+		if err := probe("rx"); err != nil {
+			t.Errorf("a good query of an unrelated key was refused: %v", err)
+		}
+	})
+
+	// The exemption of system.one (3.4), run on the pinned image: the builder rule of 6.1 (the outer FROM is a
+	// ctrlz table) rests on it. The shapes the builder may produce must all be refused for a missing key, which
+	// shows the quota is asked for them; the shapes it must not produce are only logged, because they say how
+	// wide the exemption is and no rule of ours depends on that.
+	t.Run("the system.one exemption and the builder's shapes", func(t *testing.T) {
+		ask := func(query string) error {
+			c, cancel := chTenantCtx(tenA, "", 0, nil)
+			defer cancel()
+			return api.QueryRow(c, query).Scan(new(uint64))
+		}
+		allowed := []struct{ name, query string }{
+			{"a ctrlz table", "SELECT count() FROM ctrlz.dns_raw"},
+			{"a ctrlz table with system.one in a subquery", "SELECT count() FROM ctrlz.dns_raw WHERE (SELECT count() FROM system.one) > 0"},
+			{"a ctrlz table joined with system.one", "SELECT count() FROM ctrlz.dns_raw CROSS JOIN system.one"},
+			{"a union of ctrlz tables", "SELECT count() FROM ctrlz.dns_raw UNION ALL SELECT count() FROM ctrlz.dns_raw"},
+		}
+		for _, a := range allowed {
+			wantServerCode(t, "no key, "+a.name, ask(a.query), chQuotaRequiresClientKey)
+		}
+		observed := []struct{ name, query string }{
+			{"system.one alone", "SELECT count() FROM system.one"},
+			{"system.one with a ctrlz table in a subquery", "SELECT count() FROM system.one WHERE (SELECT count() FROM ctrlz.dns_raw) > 0"},
+			{"a union with a system.one branch", "SELECT count() FROM ctrlz.dns_raw UNION ALL SELECT count() FROM system.one"},
+		}
+		for _, o := range observed {
+			err := ask(o.query)
+			var ex *clickhouse.Exception
+			switch {
+			case err == nil:
+				t.Logf("no key, %s: exempt (answered)", o.name)
+			case errors.As(err, &ex):
+				t.Logf("no key, %s: refused with code %d", o.name, ex.Code)
+			default:
+				t.Errorf("no key, %s: not a server answer: %v", o.name, err)
+			}
+		}
+	})
+
 	t.Run("the hub's user", func(t *testing.T) {
 		ctx := context.Background()
 		wantServerRefusal(t, "ctrlz_ingest reading dns_raw", ing.QueryRow(ctx, "SELECT count() FROM ctrlz.dns_raw").Scan(new(uint64)))

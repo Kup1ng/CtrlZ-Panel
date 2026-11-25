@@ -496,7 +496,7 @@ func TestClickHouseRowPolicies(t *testing.T) {
 		"CREATE ROW POLICY OR REPLACE maintenance ON ctrlz.* FOR SELECT USING 1 TO ctrlz_migrator, ctrlz_janitor, ctrlz_ingest;",
 		// Never execution_time: the pinned server charges it only on a final result chunk (access.sql), so it would
 		// look like a budget and limit nothing.
-		"CREATE QUOTA OR REPLACE reader KEYED BY client_key FOR INTERVAL 1 minute MAX queries = 1200, errors = 200, read_rows = 5000000000, read_bytes = 68719476736 TO ctrlz_api;",
+		"CREATE QUOTA OR REPLACE reader KEYED BY client_key FOR INTERVAL 1 minute MAX queries = 3000, errors = 200, read_rows = 5000000000, read_bytes = 68719476736 TO ctrlz_api;",
 	} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("access.sql lacks: %s", want)
