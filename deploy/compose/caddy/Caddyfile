@@ -1,0 +1,134 @@
+# Front door of the Panel. Caddy is the only service that publishes ports
+# (80 and 443). The database, ClickHouse and Valkey are on an internal network
+# with no published port at all.
+#
+# Until a domain is registered (P4), Caddy serves its own private CA ("tls
+# internal"), so nothing here needs the international internet to start: no
+# ACME, no OCSP, no external login. Hostnames come from the environment; the
+# defaults only work on the machine itself.
+
+{
+	# The admin endpoint would be a second door into the process.
+	admin off
+	# Never fetch a certificate from outside. P4 replaces this with the
+	# certificates the Panel manages itself.
+	local_certs
+
+	# The per-site filter below (quiet_log) covers the access logger only. When
+	# the upstream is down or resets a connection, Caddy writes a second kind
+	# of line, from the separate http.log.error logger, with the whole request
+	# URI and the client address, so an api restart would put every in-flight
+	# /s/<token> and /p/<token> link into the Docker log (R21). That logger goes
+	# to its own sink here, with the same fields removed, and is kept out of
+	# the default logger. The reverse proxy has a logger of its own too
+	# (http.handlers.reverse_proxy, for example "aborting with incomplete
+	# response" when an upstream closes in the middle of a body) that logs the same
+	# URI, so it takes the same route. Checked on caddy:2.10 with the upstream
+	# down and with an upstream that aborts mid-body: a canary token in the path
+	# and in the query appeared nowhere in the output.
+	#
+	# The access logger needs the same care for a request that matches neither
+	# site. The quiet_log filter hangs on the two site blocks, so a request with
+	# another Host (the server's IP address, a Host with a trailing dot, any
+	# name over a valid SNI) is logged by http.log.access through this default
+	# logger with the full URI. It is excluded here, so the only access lines are
+	# the filtered ones of the two sites.
+	log default {
+		output stdout
+		format json
+		exclude http.log.error http.handlers.reverse_proxy http.log.access
+	}
+	log errors {
+		output stdout
+		include http.log.error http.handlers.reverse_proxy
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+			}
+		}
+	}
+}
+
+# One log format for both sites. The URI and the headers are removed: a request
+# line can carry a token, and the cookie is a header (R21). What stays is the
+# status, the size and the time, enough to see an outage.
+(quiet_log) {
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+				resp_headers delete
+			}
+		}
+	}
+}
+
+(hardening) {
+	encode zstd gzip
+	header {
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}
+
+{$CTRLZ_PANEL_HOST:panel.localhost} {
+	tls internal
+	import quiet_log
+	import hardening
+	handle /api/* {
+		reverse_proxy api:8080 {
+			# The Go services take the rightmost X-Forwarded-For value as the
+			# client (spec 2.3 step 5). Caddy already overwrites an incoming value
+			# because no trusted proxy list is set; this line says so in the file, so
+			# a later proxy list cannot let a client-written value through.
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	# The Apple profile download link that the api hands out is https://<panel host>/p/<value> (P3 7.1): a person scans or taps
+	# it, so it must reach the download operation, not the Next.js app (which has no /p page and would answer 404). The prefix is
+	# stripped and the value becomes the path parameter; every shape of value, junk included, goes to the api so that the answer
+	# is its one 404 and not the web app's. quiet_log already keeps the URI of this path out of the access log.
+	handle_path /p/* {
+		rewrite * /api/v1/public/apple-profile{path}
+		reverse_proxy api:8080 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle {
+		reverse_proxy web-panel:3000
+	}
+}
+
+# The admin dashboard has its own hostname, its own cookie and its own container.
+{$CTRLZ_ADMIN_HOST:admin.localhost} {
+	tls internal
+	import quiet_log
+	import hardening
+	handle /api/* {
+		reverse_proxy admin:8081 {
+			# The Go services take the rightmost X-Forwarded-For value as the
+			# client (spec 2.3 step 5). Caddy already overwrites an incoming value
+			# because no trusted proxy list is set; this line says so in the file, so
+			# a later proxy list cannot let a client-written value through.
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle {
+		reverse_proxy web-admin:3000
+	}
+}
