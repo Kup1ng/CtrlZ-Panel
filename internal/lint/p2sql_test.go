@@ -75,13 +75,17 @@ var (
 	reString   = regexp.MustCompile(`'(?:[^']|'')*'`)
 	reSpaces   = regexp.MustCompile(`\s+`)
 	reCountAll = regexp.MustCompile(`count\(\s*\*\s*\)`)
-	reInsertC  = regexp.MustCompile(`\binsert into (?:ctrlz\.)?(\w+)\s*(?:as \w+\s*)?\(([^)]*)\)`)
-	reInsertT  = regexp.MustCompile(`\binsert into (?:ctrlz\.)?(\w+)\b`)
-	reUpdateT  = regexp.MustCompile(`(?:^|[\s(;])update (?:only )?(?:ctrlz\.)?(\w+)(?: (?:as )?(\w+))? set (.*)`)
-	reDeleteT  = regexp.MustCompile(`\bdelete from (?:only )?(?:ctrlz\.)?(\w+)`)
-	reDoUpdate = regexp.MustCompile(`\bon conflict\b.*?\bdo update set (.*)`)
-	reProfiles = regexp.MustCompile(`\b(?:from|join|update|into|using)\s+(?:only\s+)?(?:ctrlz\.)?profiles(?:\s+(?:as\s+)?(\w+))?\b`)
-	reSetEnd   = regexp.MustCompile(` (?:where|from|returning|on conflict)\b`)
+	// The one star a profile statement may carry that is not a profile row: the cap statements read the tenant's plan as
+	// `WITH lim AS (SELECT * FROM ctrlz_fn.tenant_plan())`, and the caps lint reads a limit only as lim.<column> inside
+	// ctrlz.cap_reached, so a column list there is refused. The function returns the plan's columns and never a profile.
+	reTenantPlanStar = regexp.MustCompile(`\bselect\s+\*\s+from\s+ctrlz_fn\.tenant_plan\(\s*\)`)
+	reInsertC        = regexp.MustCompile(`\binsert into (?:ctrlz\.)?(\w+)\s*(?:as \w+\s*)?\(([^)]*)\)`)
+	reInsertT        = regexp.MustCompile(`\binsert into (?:ctrlz\.)?(\w+)\b`)
+	reUpdateT        = regexp.MustCompile(`(?:^|[\s(;])update (?:only )?(?:ctrlz\.)?(\w+)(?: (?:as )?(\w+))? set (.*)`)
+	reDeleteT        = regexp.MustCompile(`\bdelete from (?:only )?(?:ctrlz\.)?(\w+)`)
+	reDoUpdate       = regexp.MustCompile(`\bon conflict\b.*?\bdo update set (.*)`)
+	reProfiles       = regexp.MustCompile(`\b(?:from|join|update|into|using)\s+(?:only\s+)?(?:ctrlz\.)?profiles(?:\s+(?:as\s+)?(\w+))?\b`)
+	reSetEnd         = regexp.MustCompile(` (?:where|from|returning|on conflict)\b`)
 )
 
 // p2Norm is a statement as the lints read it: comments and string contents gone, lower case, single spaces.
@@ -333,6 +337,7 @@ func wholeProfileRow(norm string) string {
 		}
 	}
 	s := reCountAll.ReplaceAllString(norm, "count(1)")
+	s = reTenantPlanStar.ReplaceAllString(s, "select 1")
 	if regexp.MustCompile(`\breturning\s+\*`).MatchString(s) {
 		return "RETURNING *"
 	}
@@ -415,6 +420,9 @@ func TestP2SQLLintsCanFail(t *testing.T) {
 		{"the row as JSON", `func Get() { db.Query(ctx, "SELECT to_jsonb(p) FROM ctrlz.profiles p WHERE p.tenant_id = $1") }`, 1},
 		{"the row by its alias", `func Get() { db.Query(ctx, "SELECT p FROM ctrlz.profiles p WHERE p.tenant_id = $1") }`, 1},
 		{"named columns", `func Get() { db.Query(ctx, "SELECT id, name, lock_state = 'locked' FROM ctrlz.profiles WHERE tenant_id = $1") }`, 0},
+		{"the star over the tenant plan beside a read of profiles", `func Room() { db.Query(ctx, "WITH lim AS (SELECT * FROM ctrlz_fn.tenant_plan()) SELECT p.id FROM ctrlz.profiles p WHERE p.tenant_id = $1 AND (SELECT lim.max_profiles FROM lim) > 0") }`, 0},
+		{"a star over another function is still a row", `func Get() { db.Query(ctx, "WITH x AS (SELECT * FROM ctrlz_fn.profile_rows()) SELECT id FROM ctrlz.profiles p WHERE p.tenant_id = $1") }`, 1},
+		{"the plan star next to a star over the profiles", `func Get() { db.Query(ctx, "WITH lim AS (SELECT * FROM ctrlz_fn.tenant_plan()) SELECT * FROM ctrlz.profiles WHERE tenant_id = $1") }`, 1},
 		{"a count is not a row", `func Count() { db.Query(ctx, "SELECT count(*) FROM ctrlz.profiles WHERE tenant_id = $1") }`, 0},
 		{"a star on another table in a join", `func Get() { db.Query(ctx, "SELECT r.* FROM ctrlz.rules r JOIN ctrlz.profiles p ON p.id = r.profile_id WHERE p.tenant_id = $1") }`, 0},
 		{"the list read by a route", `func List() { db.Query(ctx, "SELECT pattern FROM ctrlz.catalog_no_redirect_domain") }`, 1},

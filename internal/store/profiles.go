@@ -133,7 +133,7 @@ const qProfileTenantLock = `SELECT ctrlz_fn.profile_tenant_lock()`
 // qProfileCreate adds a profile unless the tenant already holds its limit. The count and the
 // compare are inside the INSERT, under the tenant lock that ProfileCreate takes first (a statement
 // of its own, since the snapshot of the INSERT is taken after the lock wait).
-const qProfileCreate = `WITH lim AS (SELECT max_profiles FROM ctrlz_fn.tenant_plan())
+const qProfileCreate = `WITH lim AS (SELECT * FROM ctrlz_fn.tenant_plan())
 INSERT INTO ctrlz.profiles (tenant_id, name, kind)
 SELECT $1::uuid, $2::text, $3::text
 WHERE NOT ctrlz.cap_reached((SELECT count(*) FROM ctrlz.profiles p WHERE p.tenant_id = $1),
