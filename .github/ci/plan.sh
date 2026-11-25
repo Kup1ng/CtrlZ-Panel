@@ -16,6 +16,17 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
 else
   go run ./.github/ci/plan prove -in "$out"
 fi
+# A lane branch (ci/<label>) runs every job but the mutants. They are two thirds of the runner time of a run (105 of
+# 155 minutes on 2026-11-25) and a lane asks many times, so they run where a branch is about to land: on main, and on
+# ci/full-<label>, which is asked once before that. The line is written after the proof, which reads the planner's own
+# output, and the value written last is the one the jobs see; the summary says that the mutants did not run.
+case "${GITHUB_REF_NAME:-}" in
+  ci/full-*) ;;
+  ci/*)
+    if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "mutant_shards=0" >> "$GITHUB_OUTPUT"; fi
+    echo "plan: $GITHUB_REF_NAME is a lane branch: the mutants do not run here (main and ci/full-* run them)"
+    ;;
+esac
 # The plan is printed so that a run can be read afterwards without a download.
 echo "::group::plan.json"
 cat "$out"

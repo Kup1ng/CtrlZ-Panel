@@ -568,12 +568,11 @@ func TestClickHouseTwoTenants(t *testing.T) {
 			return pconn.QueryRow(c, query).Scan(new(uint64))
 		}
 		// A query that runs for about 1.5 s (three rows of tenant A, half a second each in one block) and is
-		// cancelled by the client after 300 ms: the driver closes the connection, which is what a browser that
+		// abandoned by the client after 300 ms (a deadline of the context, which the driver also sends as a maximum of 5 s plus the seconds, far above 300 ms): the driver closes the connection, which is what a browser that
 		// goes away does to the reader.
 		cancelled := func(key string) error {
-			base, stop := context.WithCancel(context.Background())
+			base, stop := context.WithTimeout(context.Background(), 300*time.Millisecond)
 			defer stop()
-			time.AfterFunc(300*time.Millisecond, stop)
 			c := clickhouse.Context(base,
 				clickhouse.WithSettings(clickhouse.Settings{"SQL_tenant_id": clickhouse.CustomSetting{Value: tenA.String()}}),
 				clickhouse.WithQuotaKey(key))

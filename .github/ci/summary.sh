@@ -31,6 +31,10 @@ tab=$(printf '\t')
   echo "- gitleaks over the real history (GitHub holds snapshots only);"
   echo "- the nightly timing test of a known against an unknown phone (timing.yml runs from the clock on main only, so this run does not include it; node scripts/publish.mjs timing --repo panel --rev <local commit> reads the newest verdict of that commit, and local-only.sh runs that);"
   echo "- the IPv6 source-address check of the Compose smoke against a real IPv6 client: here it only proves that a host address is seen as itself (an address added to the loopback of the runner), because a GitHub runner has no IPv6 route to connect from. A local run on a Linux host with a global IPv6 address closes it; local-only.sh says when it could not."
+  case "${GITHUB_REF_NAME:-}" in
+    ci/full-*) ;;
+    ci/*) echo "- **the mutants**: $GITHUB_REF_NAME is a lane branch, which does not run them (plan.sh); ci/full-<label> and main do;" ;;
+  esac
 } >> "$out"
 rm -f "$rows"
 
