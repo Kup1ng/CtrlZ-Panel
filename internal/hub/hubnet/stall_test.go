@@ -111,16 +111,15 @@ func TestPeerThatStopsReadingTheSocketLosesItsHandler(t *testing.T) {
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
-		tick := time.NewTicker(2 * time.Second)
-		defer tick.Stop()
 		for {
 			select {
 			case <-stop:
 				return
-			case <-tick.C:
-				_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
-				_ = fr.WritePing(false, [8]byte{})
+			default:
 			}
+			time.Sleep(2 * time.Second) // the pause between two pings of a loop that tests stop
+			_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
+			_ = fr.WritePing(false, [8]byte{})
 		}
 	}()
 	testwait.Receive(t, released, 3*WriteByteTimeout, "the handler of a peer that reads nothing to be released")
