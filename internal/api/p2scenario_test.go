@@ -92,9 +92,11 @@ func newScn(f *frig, tenant, user uuid.UUID, who string) *scn {
 		f.t.Fatal("a page of one rule of three has no cursor")
 	}
 	s.ids["cursor"] = page.Next
-	// The seed queues one job for each tenant: the jobs routes read it.
+	// The seed queues one job for each tenant: the jobs routes read it. A walk that frees the tenant's job slot, to see whether a
+	// refused request would take it, deletes that job, so a scenario built after it holds no job id: an aggregate returns one
+	// row with or without a job, where a plain select fails the whole test with "no rows".
 	var job string
-	f.env.Scan(f.t, `SELECT id::text FROM ctrlz.batch_jobs WHERE tenant_id = $1 ORDER BY id LIMIT 1`, []any{tenant}, &job)
+	f.env.Scan(f.t, `SELECT coalesce(min(id::text), '') FROM ctrlz.batch_jobs WHERE tenant_id = $1`, []any{tenant}, &job)
 	s.ids["job"] = job
 	return s
 }
