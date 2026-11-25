@@ -405,6 +405,42 @@ var allowedEnvironmentAssignments = map[string]map[string]string{
 		`export CTRLZ_CI=1`:                                        "a switch for the tests of this run",
 		`CTRLZ_IMAGE="$image" sh "$here/scripts/compose-smoke.sh"`: "the name of the image under test",
 	},
+	// The web gate (P1 web merge): one script on the host or the CI runner that builds the web images, brings the e2e
+	// stack up and runs Playwright against it, a command at a time. Nothing here is a long-running process: a toolchain
+	// switch, a test flag, a path, or the name of the image. The one credential-like value is the login of the e2e user,
+	// which the seed made for a throw-away stack whose SMS driver is `noop` and whose database is removed at the end of
+	// the run (ci-web.sh traps it); it reaches the short-lived browser test and no container.
+	"scripts/ci-web.sh": {
+		`export MSYS_NO_PATHCONV=1`:                                        "a Git Bash path-conversion switch",
+		`export NEXT_TELEMETRY_DISABLED=1`:                                 "a switch that turns Next's telemetry off, which the run must not send",
+		`export NODE_OPTIONS`:                                              "the heap size of the build, exported under a name set a few lines above; a number",
+		`(cd "apps/$app" && E2E_START_SERVER=1 pnpm exec playwright test)`: "a flag for the test run: start `next start` on its own port",
+		`(cd "apps/$app" && CTRLZ_VERIFY_ORIGIN='https://*.verify.dns.example.test' E2E_START_SERVER=1 pnpm exec playwright test headers.spec.ts --project=functional)`: "a host pattern " +
+			"on a reserved name, for the header spec of the web proxy; no credential",
+		`CTRLZ_WEB_DEPS_IMAGE="$deps_image" sh scripts/web-deps-stamp.sh`: "the name of a local image",
+		`{ grep -hv '^#' deploy/compose/.env.example deploy/compose/profiles/small.env | grep -v '^$' \`: "the substitution file of the throw-away e2e project: the path " +
+			"of its secrets directory, which the line writes into a file and no container's environment",
+		`docker compose -p "$project" $files --env-file "$work/env" down -v --remove-orphans >/dev/null 2>&1 || true`: "Compose's own --env-file: the substitution file of the e2e project (names, ports, a path)",
+		`docker compose -p "$project" -f deploy/compose/docker-compose.yml -f deploy/compose/e2e.yml -f deploy/compose/e2e-offline.yml --env-file "$work/env" "$@"`: "Compose's own " +
+			"--env-file: the substitution file of the e2e project",
+		`docker compose -p "$project" $files --env-file "$work/env" "$@"`:                                            "Compose's own --env-file: the substitution file of the e2e project",
+		`(cd apps/panel && E2E_BASE_URL=https://panel.localhost pnpm exec playwright test --project=w1280-fa-light)`: "the address the browser test opens",
+		`(cd "apps/$app" && E2E_BASE_URL="https://$app.localhost" pnpm exec playwright test $projects)`:              "the address the browser test opens",
+		`(cd "apps/$app" && E2E_STALLED_POST=1 E2E_BASE_URL="https://$app.localhost" pnpm exec playwright test headers.spec.ts --project=functional -g "never finished")`: "two switches " +
+			"of one spec, and the address",
+		`(cd "apps/$app" && E2E_UPSTREAM_STOPPED=1 E2E_BASE_URL="https://$app.localhost" pnpm exec playwright test headers.spec.ts --project=functional -g "own 502 or 504")`: "two switches " +
+			"of one spec, and the address",
+		`CTRLZ_VERIFY_ORIGIN='https://not-a-verify-host.example' web_compose up -d --force-recreate --no-deps web-panel`: "a host name on a reserved domain, set to prove the web healthcheck goes unhealthy",
+		`node scripts/e2e-seed.mjs --env-file "$work/env" --out "$work/seed" > /dev/null`: "Compose's --env-file handed to the seed script: " +
+			"a file of names, ports and a path",
+		`E2E_PHONE=$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).user.phone)' "$E2E_SEED_FILE")`: "node's -e is its eval flag; this reads the " +
+			"phone number of the throw-away e2e user from the seed file",
+		`E2E_PASSWORD=$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).user.password)' "$E2E_SEED_FILE")`: "node's -e is its eval flag; this reads the " +
+			"login password of the throw-away e2e user from the seed file, a value that exists for the length of one run on a stack that is removed at its end",
+		`export E2E_SEED_FILE E2E_PHONE E2E_PASSWORD`:                  "hands the e2e user's login to the short-lived browser test (not a container), see the note above",
+		`(cd "apps/$app" && E2E_MODE=stack pnpm exec playwright test)`: "a switch for the test run",
+	},
+	"scripts/web-deps-stamp.sh": {`export MSYS_NO_PATHCONV=1`: "a Git Bash path-conversion switch"},
 	"scripts/compose-net-test.sh": {
 		`export MSYS_NO_PATHCONV=1`: "a Git Bash path-conversion switch",
 		`if [ -n "$envfile" ]; then docker compose -p "$project" -f "$file" --env-file "$envfile" "$@"`: "Compose's own --env-file: the " +
@@ -412,13 +448,18 @@ var allowedEnvironmentAssignments = map[string]map[string]string{
 		`dc exec -T "$1" node -e "const s=require('net').connect({host:'$2',port:$3,timeout:2000});s.on('connect',()=>process.exit(0));s.on('error',()=>process.exit(1));s.on('timeout',()=>process.exit(1))"`: "node's -e is its eval flag: " +
 			"the probe script runs in the web container and sets no environment (the command word is a function, which the lint cannot know)",
 	},
+	"deploy/docker/web.Dockerfile": {
+		`RUN NEXT_PUBLIC_CTRLZ_VERSION="$CTRLZ_VERSION" pnpm --filter "@ctrlz/$APP" build`: "the version string of the build, which a NEXT_PUBLIC name " +
+			"puts into the browser bundle on purpose, so it can never be a credential; the build stage is not the image that ships",
+	},
 	"deploy/docker/Dockerfile": {
 		`RUN CGO_ENABLED=0 GOFLAGS=-trimpath go build -ldflags="-s -w" -o /out/ctrlz ./cmd/ctrlz \`: "toolchain switches of the build " +
 			"stage, no credential, and the stage is not in the image that ships",
 	},
 	"scripts/compose-smoke.sh": {
-		`dc() { docker compose -p "$project" -f deploy/compose/docker-compose.yml --env-file "$(host_path "$envfile")" "$@"; }`: "Compose's own " +
-			"--env-file: the substitution file of the throw-away project, made by this script from image names, ports and a directory path",
+		`dc() { docker compose -p "$project" -f deploy/compose/docker-compose.yml -f deploy/compose/ci-placeholder.yml --env-file "$(host_path "$envfile")" "$@"; }`: "Compose's own " +
+			"--env-file: the substitution file of the throw-away project, made by this script from image names, ports and a directory path; " +
+			"ci-placeholder.yml is a static override of the two web services (no credential), which the file's own header explains",
 		`export MSYS_NO_PATHCONV=1`:                                             "a Git Bash path-conversion switch",
 		`export CTRLZ_CANARY_RUNTIME_DIR="$runtime"`:                            "a directory path read by secret-canary.sh, which holds the values it looks for",
 		`export CTRLZ_CANARY_CONSUMERS="$consumers"`:                            "the path of the list of logs the canary reads",
@@ -489,6 +530,12 @@ func TestNoPasswordIsAnEnvironmentOfALongRunningProcess(t *testing.T) {
 			}
 			if strings.HasSuffix(p, ".example") || strings.HasSuffix(p, ".conf") || strings.HasSuffix(p, ".lua") || strings.HasSuffix(p, ".env") || strings.HasSuffix(p, ".go") {
 				return nil // a template or a file of values is data, not a command
+			}
+			// A Node script is not shell: its `export` is the ES module keyword (the .d.mts files declare exports in
+			// nearly every line) and this lint reads a line as the shell would. What a Node script puts in a child's
+			// environment is not judged here.
+			if strings.HasSuffix(p, ".mjs") || strings.HasSuffix(p, ".mts") || strings.HasSuffix(p, ".js") || strings.HasSuffix(p, ".ts") {
+				return nil
 			}
 			b, rerr := os.ReadFile(p)
 			if rerr != nil {

@@ -55,6 +55,8 @@ type rig struct {
 	lim  *ratelimit.Limiter
 	h    http.Handler
 	logs *strings.Builder
+	// signer holds the invite_sign key whose public half the api of this rig holds: the admin service of a test.
+	signer *keyring.Ring
 }
 
 func newRig(t *testing.T, valkeyUp bool) *rig {
@@ -64,6 +66,7 @@ func newRig(t *testing.T, valkeyUp bool) *rig {
 	ck := &clock{t: time.Now().UTC()}
 	m := session.NewManager(st, session.DefaultPolicy(), ck.now)
 	keys := authtest.APIKeys(t)
+	signer, invites := authtest.InviteRings(t)
 	// Tagged like production, so a random cookie is refused before any charge.
 	if err := m.WithKeys(keys, keyring.DomainAuthMAC); err != nil {
 		t.Fatal(err)
@@ -78,11 +81,11 @@ func newRig(t *testing.T, valkeyUp bool) *rig {
 		}
 		http.NotFound(w, r)
 	})
-	h, err := New(Deps{Log: log, Store: st, Sessions: m, Limiter: lim, Keys: keys, Hasher: authtest.FastHasher(t), PanelHost: host, Strict: true, Now: ck.now}, httpx.NewHealth(health))
+	h, err := New(Deps{Log: log, Store: st, Sessions: m, Limiter: lim, Keys: keys, Invites: invites, Hasher: authtest.FastHasher(t), PanelHost: host, Strict: true, Now: ck.now}, httpx.NewHealth(health))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &rig{env: env, st: st, ck: ck, m: m, lim: lim, h: h, logs: logs}
+	return &rig{env: env, st: st, ck: ck, m: m, lim: lim, h: h, logs: logs, signer: signer}
 }
 
 func (r *rig) login(t *testing.T, tenant, user uuid.UUID, remember, restricted bool) session.Issued {

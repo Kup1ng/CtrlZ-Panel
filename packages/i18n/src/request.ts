@@ -16,8 +16,9 @@ import {routing} from "./routing.ts";
  * and cannot be imported from here, so each app passes its own in.
  *
  * `setRequestLocale` is the legacy route and is not used. An invalid locale
- * is a 404: the proxy already redirects unprefixed paths, so only a path such
- * as `/fa/x` with a bad first segment can reach this.
+ * is a 404: the proxy already redirects unprefixed paths, so a bad first segment
+ * reaches this only under `/_next/static/`, which the proxy lets through for asset loads (a browser navigation there gets the proxy's own 404,
+ * gate-r9-2). A `notFound()` here and in the root layout cannot be caught by [locale]/not-found.tsx, so Next's built-in 404 is what such a request gets.
  */
 export function createRequest(app: AppId, readLocale: () => Promise<string | undefined>) {
   return getRequestConfig(async () => {

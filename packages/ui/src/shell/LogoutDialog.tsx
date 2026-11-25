@@ -1,30 +1,26 @@
 "use client";
 
-import {AlertDialog, Button} from "@heroui/react";
+import {AlertDialog, Button, toast} from "@heroui/react";
+import {errorMessageArgs, errorMessageKey} from "@ctrlz/api-client/errors.ts";
+import {useAdminLogout} from "@ctrlz/api-client/admin/session.ts";
+import {useLogout} from "@ctrlz/api-client/hooks/me.ts";
 import {Icon} from "@ctrlz/icons/Icon.tsx";
 import {useLocale, useTranslations} from "next-intl";
-import {useCallback, useState} from "react";
+import {useState} from "react";
 
-// T-109. Confirm, then end the session.
+import {useShellApp} from "./shellContext.tsx";
 
-/**
- * STUB until WP4 lands. The real sequence is `POST /auth/logout`, then
- * `logoutLocal()` (clear the query cache, post `logout` on
- * BroadcastChannel("ctrlz-session"), full-load the login page; spec 14.4).
- * Until then this only leaves for the login page, which does NOT end the
- * session on the server.
- */
-function useLogout() {
-  const locale = useLocale();
-  return useCallback(async () => {
-    window.location.assign(`/${locale}/login`);
-  }, [locale]);
-}
+// T-109. Confirm, then end the session: POST /auth/logout, then logoutLocal() (spec 14.4).
 
 export function LogoutDialog({isOpen, onOpenChange}: {isOpen: boolean; onOpenChange: (open: boolean) => void}) {
   const t = useTranslations("shell");
   const c = useTranslations("common");
-  const logout = useLogout();
+  const e = useTranslations("errors");
+  const locale = useLocale();
+  // Both are cheap callbacks; only the one of this app's API is called. Admin's has no refresh and no channel.
+  const panelLogout = useLogout(locale);
+  const adminLogout = useAdminLogout(locale);
+  const logout = useShellApp() === "admin" ? adminLogout : panelLogout;
   const [pending, setPending] = useState(false);
 
   return (
@@ -50,7 +46,13 @@ export function LogoutDialog({isOpen, onOpenChange}: {isOpen: boolean; onOpenCha
               variant="danger"
               onPress={async () => {
                 setPending(true);
-                await logout();
+                try {
+                  await logout();
+                } catch (error) {
+                  // The server did not end the session, so the page stays and says why.
+                  setPending(false);
+                  toast.danger(e(errorMessageKey(error), errorMessageArgs(error)));
+                }
               }}
             >
               {t("logout.confirm")}

@@ -36,9 +36,12 @@ const PHYSICAL = [
 ];
 
 const REMOTE = [
-  [/https?:\/\//, "an http(s) URL"],
+  // A scheme is case-insensitive in a browser, so HTTPS://host loads as well.
+  [/https?:\/\//i, "an http(s) URL"],
   [/url\(\s*["']?\/\//, "a protocol-relative url(//)"],
-  [/@import\s+url\(/, "@import url()"],
+  [/@import\s+url\(/i, "@import url()"],
+  // The string form of an import has no url(), and //host keeps the page scheme: as remote as https.
+  [/@import\s+["']\/\//i, "a protocol-relative @import string"],
 ];
 
 /**

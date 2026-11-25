@@ -159,7 +159,6 @@ var moduleStdSafe = map[string]string{
 	"flag":            "command line flags",
 	"fmt":             "formatting",
 	"go/format":       "the generator of the layout tables",
-	"hash/maphash":    "a seeded hash for sharding",
 	"io":              "readers and writers",
 	"io/fs":           "file system types",
 	"iter":            "iterators of the shared name type",

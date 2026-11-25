@@ -179,14 +179,14 @@ func (e *admIso) fixtures() map[string]isolation.Fixture {
 
 		"listInvites": e.reads(login, "/invites", nil),
 		"createInvite": e.elsewhere(201, "makes an invite, which belongs to a phone and no tenant", `SELECT count(*) FROM ctrlz.invites`, login,
-			func() *aresp { return e.b.post("/invites", map[string]any{"phone": "09125559901", "send_sms": false}) }),
+			func() *aresp { return e.b.post("/invites", map[string]any{"phone": "09125559901"}) }),
 		"revokeInvite": e.elsewhere(204, "revokes an invite", `SELECT count(*) FROM ctrlz.invites WHERE revoked_at IS NOT NULL`,
 			func() {
 				e.login()
 				var inv struct {
 					ID string `json:"id"`
 				}
-				e.b.post("/invites", map[string]any{"phone": "09125559902", "send_sms": false}).want(201, "").json(&inv)
+				e.b.post("/invites", map[string]any{"phone": "09125559902"}).want(201, "").json(&inv)
 				e.id = inv.ID
 			},
 			func() *aresp { return e.b.call("DELETE", "/invites/"+e.id, nil) }),

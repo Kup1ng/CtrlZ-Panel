@@ -77,6 +77,7 @@ var smsStdAllowed = map[string]string{
 	"context":         "the deadline of a call",
 	"crypto/aes":      "the key ring seals with AES-GCM",
 	"crypto/cipher":   "the key ring seals with AES-GCM",
+	"crypto/ed25519":  "the key ring signs invite links and checks them (D67); no process, no memory, no connection",
 	"crypto/hkdf":     "per-label subkeys of the key ring",
 	"crypto/hmac":     "the MAC of the key ring subkeys",
 	"crypto/rand":     "nonces of the key ring",

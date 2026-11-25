@@ -196,7 +196,13 @@ func TestRequestProofIsTheMarkerIDOfTheRightCookie(t *testing.T) {
 	if _, _, ok := user(req()); ok {
 		t.Error("no cookie is a proof")
 	}
-	if _, _, ok := user(req(&http.Cookie{Name: c.Name, Value: c.Value[:len(c.Value)-2] + "AA"})); ok {
+	// The last two characters are replaced by two others, never by what they already are: a cookie that happens to end
+	// in "AA" (one in 4096) was "damaged" into itself and passed, a flake of this test and not of the marker.
+	damage := "AA"
+	if strings.HasSuffix(c.Value, damage) {
+		damage = "BB"
+	}
+	if _, _, ok := user(req(&http.Cookie{Name: c.Name, Value: c.Value[:len(c.Value)-2] + damage})); ok {
 		t.Error("a damaged marker is a proof")
 	}
 	if _, _, ok := admin(req(c)); ok {

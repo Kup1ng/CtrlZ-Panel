@@ -53,7 +53,6 @@ internal/migrate
 internal/migrategen
 internal/mutant
 internal/netkey
-internal/netpool
 internal/profiles
 internal/ratelimit
 internal/reachcheck

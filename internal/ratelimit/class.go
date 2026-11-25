@@ -117,7 +117,7 @@ type Class struct {
 	// it charges the plain network bucket, and httpx.HeldProofHolds charges the proof's keys, which are the
 	// ones ProofAlt classes use, so the limiter builds them for Held as well.
 	Held bool
-	// HeldInvite: a live invite stands in as well (budget.Bucket.HeldInvite); the pipeline hands every plain
+	// HeldInvite: an invite link stands in as well (budget.Bucket.HeldInvite); the pipeline hands every plain
 	// refusal of the class over, a request with no marker included.
 	HeldInvite bool
 }

@@ -9,7 +9,7 @@ import {useMemo, useState} from "react";
 
 import {PageHeader} from "../shell/PageHeader.tsx";
 import {bigActivity, type ActivityDecision, type BigRow} from "./fixtures.ts";
-import {Tech} from "./LabTech.tsx";
+import {Tech} from "../data/Tech.tsx";
 import {SectionTitle} from "./SectionTitle.tsx";
 import {TokenStrip} from "./TokenStrip.tsx";
 

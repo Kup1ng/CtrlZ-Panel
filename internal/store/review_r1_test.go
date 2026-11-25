@@ -456,15 +456,24 @@ func TestPhoneMarkVerifiedRefusesEverythingButOwnLoginOrResetOTP(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	otp := func(phone, purpose, consumed string) uuid.UUID {
+	// otpAs makes the challenge with the tenant stamp the issue function would have given it (question 15): that of the
+	// account of the phone, or the tenant named (the nil uuid for the account's), because PhoneMarkVerified reads the
+	// challenge as the scoped role, which sees one tenant's rows.
+	otpAs := func(phone, purpose, consumed string, tenant uuid.UUID) uuid.UUID {
 		id := uuid.Must(uuid.NewV7())
-		q := `INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at)
-VALUES ($1, $2, $3, '\x01', now() + interval '5 minutes', ` + consumed + `)`
-		if _, err := super.Exec(f.ctx, q, id, phone, purpose); err != nil {
+		q := `INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at, tenant_id)
+VALUES ($1, $2, $3, '\x01', now() + interval '5 minutes', ` + consumed + `,
+  CASE WHEN $3::text IN ('login', 'reset', 'phone_old', 'phone_new') THEN COALESCE($4::uuid, (SELECT u.tenant_id FROM ctrlz.users u WHERE u.phone_e164 = $2)) END)`
+		var as any
+		if tenant != uuid.Nil {
+			as = tenant
+		}
+		if _, err := super.Exec(f.ctx, q, id, phone, purpose, as); err != nil {
 			t.Fatal(err)
 		}
 		return id
 	}
+	otp := func(phone, purpose, consumed string) uuid.UUID { return otpAs(phone, purpose, consumed, uuid.Nil) }
 	verified := func(user uuid.UUID) (v bool) {
 		if err := super.QueryRow(f.ctx, "SELECT phone_verified_at IS NOT NULL FROM ctrlz.users WHERE id = $1", user).Scan(&v); err != nil {
 			t.Fatal(err)
@@ -492,7 +501,8 @@ VALUES ($1, $2, $3, '\x01', now() + interval '5 minutes', ` + consumed + `)`
 		{"purpose invite", otp(f.A.Phone, "invite", "now()")},
 		{"purpose phone_old", otp(f.A.Phone, "phone_old", "now()")},
 		{"purpose phone_new", otp(f.A.Phone, "phone_new", "now()")},
-		{"another number", otp(f.B.Phone, "login", "now()")},
+		// Tenant A's own code for another number: only the binding of the code to the phone of the locked row refuses it.
+		{"another number", otpAs(f.B.Phone, "login", "now()", f.A.Tenant)},
 		{"not consumed", otp(f.A.Phone, "login", "NULL")},
 		{"no such challenge", uuid.Must(uuid.NewV7())},
 	}

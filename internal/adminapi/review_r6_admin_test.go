@@ -211,7 +211,7 @@ func TestEveryDocumentedAdminErrorIsReal(t *testing.T) {
 		b.get("/settings/registration/impact?to=bogus").want(400, "bad_request")
 	}
 	{ // invite
-		b.post("/invites", map[string]any{"phone": "09125550101", "ttl_hours": 1, "locale": "fa", "send_sms": false}).want(201, "")
+		b.post("/invites", map[string]any{"phone": "09125550101", "ttl_hours": 1, "locale": "fa"}).want(201, "")
 		b.post("/invites", map[string]any{"phone": "09125550102", "ttl_hours": maxInviteHours + 1}).want(400, "bad_request")
 		b.post("/invites", map[string]any{"phone": "09125550102", "locale": "xx"}).want(400, "bad_request")
 	}

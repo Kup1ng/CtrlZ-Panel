@@ -38,6 +38,7 @@ func TestTOTP(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	var recoveryCodes []string // shared between the steps below
 	A := f.env.A
+	f.dropSeedCodes(A.Tenant, A.User) // a first enrolment starts with no code, as in production
 
 	other, c := f.client(), f.client()
 	other.mustLogin(A.Phone, pwA)
@@ -200,6 +201,9 @@ func TestTOTP(t *testing.T) {
 		if n := f.count(`SELECT count(*) FROM ctrlz.notifications WHERE kind = 'recovery_codes_regenerated'`); n != 0 {
 			t.Fatalf("%d recovery_codes_regenerated notices before any regeneration, want 0", n)
 		}
+		// The account phone is verified, so the notice also goes out by SMS (question 19, spec 12.3).
+		f.env.Exec(t, `UPDATE ctrlz.users SET phone_verified_at = now() WHERE id = $1`, A.User)
+		f.env.Exec(t, `DELETE FROM ctrlz.sms_outbox`)
 		var out struct {
 			Codes []string `json:"recovery_codes"`
 		}
@@ -215,6 +219,12 @@ func TestTOTP(t *testing.T) {
 		}
 		if n := f.count(`SELECT count(*) FROM ctrlz.notifications WHERE tenant_id <> $1 AND kind = 'recovery_codes_regenerated'`, A.Tenant); n != 0 {
 			t.Fatalf("another tenant has %d recovery_codes_regenerated notices", n)
+		}
+		if n := f.count(`SELECT count(*) FROM ctrlz.sms_outbox WHERE kind = 'notice' AND template_key = 'notice_recovery' AND phone_e164 = $1 AND params_ct IS NULL`, A.Phone); n != 1 {
+			t.Fatalf("%d notice messages for the regeneration, want 1", n)
+		}
+		if n := f.count(`SELECT count(*) FROM ctrlz.sms_outbox`); n != 1 {
+			t.Fatalf("%d messages in the outbox, want only that one", n)
 		}
 		recoveryCodes = out.Codes
 	})

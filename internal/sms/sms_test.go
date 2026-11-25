@@ -78,19 +78,24 @@ func TestClassNames(t *testing.T) {
 }
 
 func TestTemplateSet(t *testing.T) {
-	for _, k := range []string{"otp", "otp_reset", "otp_phone", "invite"} {
+	for _, k := range []string{"otp", "otp_reset", "otp_phone"} {
 		if n, ok := sms.PlaceholderCount(k); !ok || n != 1 {
 			t.Errorf("%s: %d %v", k, n, ok)
 		}
 	}
-	if n, ok := sms.PlaceholderCount("account_exists"); !ok || n != 0 {
-		t.Errorf("account_exists: %d %v", n, ok)
+	for _, k := range []string{"account_exists", "notice_passkey", "notice_recovery"} {
+		if n, ok := sms.PlaceholderCount(k); !ok || n != 0 {
+			t.Errorf("%s: %d %v", k, n, ok)
+		}
+	}
+	if sms.ValidTemplate("invite") {
+		t.Error("the invite template is gone: an invite is never sent by SMS (D67)")
 	}
 	if sms.ValidTemplate("welcome") {
 		t.Error("an unknown key is valid")
 	}
-	if len(sms.Templates()) != 5 {
-		t.Error("five templates")
+	if len(sms.Templates()) != 6 {
+		t.Error("six templates")
 	}
 }
 
@@ -98,11 +103,12 @@ func TestTemplateSet(t *testing.T) {
 // TestTheSeedsAreTheMigrationsBodies ties it to the migrations that really
 // build the rows (0011 and the guarded updates of 0041), so neither can drift alone.
 var seededBodies = map[string][2]string{
-	"otp":            {"کد تایید Ctrl Z: {code}. اعتبار ۵ دقیقه؛ آن را به کسی ندهید.", "Ctrl Z code: {code}. Valid for 5 minutes. Do not share it."},
-	"otp_reset":      {"کد بازیابی رمز Ctrl Z: {code}. اگر شما نخواستید، نادیده بگیرید.", "Ctrl Z password reset code: {code}. Ignore this if you did not ask for it."},
-	"otp_phone":      {"کد تغییر شماره Ctrl Z: {code}. اگر شما نبودید، رمز را عوض کنید.", "Ctrl Z phone change code: {code}. If this was not you, change your password."},
-	"invite":         {"شما به Ctrl Z دعوت شده‌اید. کد دعوت: {code}. این کد را در صفحه دعوت پنل وارد کنید.", "You are invited to Ctrl Z. Invite code: {code}. Enter it on the panel's invite page."},
-	"account_exists": {"برای این شماره قبلا حساب Ctrl Z ساخته شده است. از صفحه ورود یا فراموشی رمز استفاده کنید.", "This number already has a Ctrl Z account. Use the login or forgot password page."},
+	"otp":             {"کد تایید Ctrl Z: {code}. اعتبار ۵ دقیقه؛ آن را به کسی ندهید.", "Ctrl Z code: {code}. Valid for 5 minutes. Do not share it."},
+	"otp_reset":       {"کد بازیابی رمز Ctrl Z: {code}. اگر شما نخواستید، نادیده بگیرید.", "Ctrl Z password reset code: {code}. Ignore this if you did not ask for it."},
+	"otp_phone":       {"کد تغییر شماره Ctrl Z: {code}. اگر شما نبودید، رمز را عوض کنید.", "Ctrl Z phone change code: {code}. If this was not you, change your password."},
+	"account_exists":  {"برای این شماره قبلا حساب Ctrl Z ساخته شده است. از صفحه ورود یا فراموشی رمز استفاده کنید.", "This number already has a Ctrl Z account. Use the login or forgot password page."},
+	"notice_passkey":  {"Passkey تازه ثبت شد. شما نبودید؟ رمز Ctrl Z را بازیابی کنید.", "Ctrl Z: a passkey was added to your account. If this was not you, use the forgot password page."},
+	"notice_recovery": {"کدهای بازیابی Ctrl Z عوض شد. شما نبودید؟ کدها و رمز را عوض کنید.", "Ctrl Z: your recovery codes were replaced. If this was not you, make new codes and change your password."},
 }
 
 func TestCheckBody(t *testing.T) {
@@ -362,7 +368,7 @@ func newRig(t *testing.T) *rig {
 func (r *rig) set() {
 	tpls := map[sms.TemplateRef]sms.ProviderTemplate{}
 	for _, g := range []sms.Gateway{r.priGW, r.fbGW} {
-		for _, k := range []string{"otp", "otp_reset", "otp_phone", "invite"} {
+		for _, k := range []string{"otp", "otp_reset", "otp_phone"} {
 			tpls[sms.TemplateRef{Gateway: g.ID, Key: k, Locale: "fa"}] = sms.ProviderTemplate{ID: "100", ParamNames: []string{"CODE"}}
 		}
 		tpls[sms.TemplateRef{Gateway: g.ID, Key: "account_exists", Locale: "fa"}] = sms.ProviderTemplate{ID: "101"}
@@ -1114,7 +1120,8 @@ func bodyUpdates(t *testing.T, file string) map[string][2]string {
 }
 
 // effectiveBodies is what a migrated database holds: the seed of 0011 with the guarded updates of
-// 0041 on top, key/locale to body.
+// 0041 on top, without the two invite rows 0062 deletes and with the four notice rows it adds (and the advice of
+// 0064 on top of them), key/locale to body.
 func effectiveBodies(t *testing.T) map[string]string {
 	t.Helper()
 	seed := seedRows(t, "0011_auth.sql")
@@ -1134,6 +1141,32 @@ func effectiveBodies(t *testing.T) map[string]string {
 			t.Errorf("0041 guards %s with a text that 0011 does not seed, so the update matches nothing", k)
 		}
 		eff[k] = u[0]
+	}
+	// 0062 (D67 and question 19): an invite is never sent by SMS, and a security notice is.
+	delete(eff, "invite/fa")
+	delete(eff, "invite/en")
+	notices := seedRows(t, "0062_notice_sms.sql")
+	if len(notices) != 4 {
+		t.Fatalf("0062 seeds %d templates, spec 9.4 lists the four of the two notices", len(notices))
+	}
+	for k, v := range notices {
+		eff[k] = v
+	}
+	// 0064 (review dec-c-r2-3): the advice of the two notices names an action that evicts the thief. Each update
+	// guards with the text 0062 seeded, so an operator's edit is never overwritten, and its guard must match
+	// what 0062 really seeds or it is dead.
+	advice := bodyUpdates(t, "0064_notice_sms_advice.sql")
+	if len(advice) != 4 {
+		t.Fatalf("0064 updates %d bodies, the two notices have four", len(advice))
+	}
+	for k, u := range advice {
+		if notices[k] != u[1] {
+			t.Errorf("0064 guards %s with a text that 0062 does not seed, so the update matches nothing", k)
+		}
+		eff[k] = u[0]
+	}
+	if len(eff) != 12 {
+		t.Fatalf("a migrated database holds %d templates, spec 9.4 lists 12", len(eff))
 	}
 	return eff
 }
@@ -1169,7 +1202,7 @@ func TestTheSeedsAreTheMigrationsBodies(t *testing.T) {
 func TestOTPBodiesFitOnePart(t *testing.T) {
 	code := secret.New(strings.Repeat("7", otp.CodeLength))
 	eff := effectiveBodies(t)
-	for _, key := range []string{"otp", "otp_reset", "otp_phone"} {
+	for _, key := range []string{"otp", "otp_reset", "otp_phone", "notice_passkey", "notice_recovery"} {
 		// Both the table of spec 9.4 and the bodies a migrated database holds.
 		for src, bodies := range map[string][2]string{
 			"spec 9.4":   {seededBodies[key][0], seededBodies[key][1]},
@@ -1287,7 +1320,7 @@ func TestScrubbedDropsAnInviteCodeWrittenAnotherWay(t *testing.T) {
 // overwrites an edit, so after one save nothing judged the effective body and the single price the
 // owner enters for an OTP message stopped covering it (a 150 character body is three parts, and
 // sms_cost_cap_daily would count a third of the spend).
-func TestCheckBodyLengthBoundsTheThreeOTPBodiesAndNothingElse(t *testing.T) {
+func TestCheckBodyLengthBoundsTheOnePartBodiesAndNothingElse(t *testing.T) {
 	long := strings.Repeat("a", 150) + " {code}"
 	for _, c := range []struct {
 		name, key, locale, body string
@@ -1302,7 +1335,10 @@ func TestCheckBodyLengthBoundsTheThreeOTPBodiesAndNothingElse(t *testing.T) {
 		{"en body with a Persian letter is UCS-2", "otp", "en", "کد {code}", false},
 		{"en body of exactly 160 units", "otp", "en", strings.Repeat("a", 153) + " {code}", true},
 		{"en body of 161 units", "otp", "en", strings.Repeat("a", 154) + " {code}", false},
-		{"invite is not an OTP body", "invite", "fa", strings.Repeat("ا", 200) + " {code}", true},
+		{"account_exists is two parts and not bounded here", "account_exists", "fa", strings.Repeat("ا", 200), true},
+		{"a notice of 200 letters is two parts", "notice_passkey", "fa", strings.Repeat("ا", 200), false},
+		{"the notice_recovery seed fits", "notice_recovery", "fa", seededBodies["notice_recovery"][0], true},
+		{"the notice_passkey seed fits in English", "notice_passkey", "en", seededBodies["notice_passkey"][1], true},
 	} {
 		err := sms.CheckBodyLength(c.key, c.locale, c.body, otp.CodeLength)
 		if (err == nil) != c.ok {

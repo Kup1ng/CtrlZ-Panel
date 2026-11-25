@@ -29,6 +29,11 @@ describe("check-css", () => {
     expect(check(".a { background: url(https://x.example/a.png); }")).not.toEqual([]);
     expect(check(".a { background: url(//x.example/a.png); }")).not.toEqual([]);
     expect(check("@import url(x.css);")).not.toEqual([]);
+    // wp12-r1-13: an upper-case scheme and the string form of a protocol-relative import.
+    expect(check(".a { background: url(HTTPS://x.example/a.png); }")).not.toEqual([]);
+    expect(check('@import "//fonts.example.com/x.css";')).not.toEqual([]);
+    expect(check("@import '//fonts.example.com/x.css';")).not.toEqual([]);
+    expect(check('@import "./local.css";')).toEqual([]);
     expect(check(".a { background: url(/img/a.png); }")).toEqual([]);
   });
 

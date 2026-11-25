@@ -35,7 +35,7 @@ var updatePairing = flag.Bool("update-mutant-pairing", false, "rewrite testdata/
 // a name added to it by hand, or by -update-mutant-pairing, passed. Now raising the list is an edit of two
 // files, this constant and the file, which no run of the update flag makes on its own; lower the constant
 // when names leave the file.
-const pairingGoldenCeiling = 389
+const pairingGoldenCeiling = 387
 
 // coverageTestNames is the set of test functions the coverage table names, wildcards expanded against
 // the tests of the repository, read by the same walk as compareCoverage.

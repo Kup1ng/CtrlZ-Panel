@@ -15,11 +15,76 @@ import (
 // Every other table it reaches is a tenant table, where tenant_isolation is the only policy it meets. A global
 // table that holds anything of anybody needs a line here, and so a person who decides it.
 var scopedGlobalReach = map[string]string{
-	"announcements":   "operator announcements, shown to every tenant by audience (announcements_for_tenant)",
 	"nodes":           "the operator's node list: only the advertised address, which every endpoint page shows (endpoint_pair_ips)",
 	"node_pairs":      "the operator's node pairs, which the endpoint addresses are resolved through",
 	"public_settings": "the global pair, one row of operator settings",
+	"sms_outbox":      "INSERT only, one row to the verified phone of the tenant's own user, queued by tenant_notice_sms for a security notice; no SELECT, so no other tenant's message is readable",
 	"webauthn_config": "the one RP ID configuration row (rp_id), which the passkey jobs compare a credential with",
+}
+
+// scopedTenantRows are the global tables that hold rows of one tenant and that ctrlz_scoped reads under a
+// scoped_tenant policy (question 15, 0061), each with the column that names the tenant. announcements is the one
+// with a second kind of row, the ones for everybody (audience 'all'), which every tenant of the setting sees.
+var scopedTenantRows = map[string]string{
+	"auth_tickets":   "subject_tenant",
+	"otp_challenges": "tenant_id",
+	"announcements":  "tenant_id",
+}
+
+// checkScopedGlobalTable is the one-tenant-per-setting proof of TestScopedRoleSeesOneTenantOnEveryTableItReaches for
+// a global table of scopedTenantRows: as the role, with the setting at A it sees A's rows and none of B's, at B the
+// other way round, with a third tenant, an empty setting or none it sees no row of any tenant (an announcement for
+// everybody is still seen with a tenant's setting, third included, and with none it is not).
+func (h *harness) checkScopedGlobalTable(tbl, col, a, b, third string) {
+	h.t.Helper()
+	all := 0
+	if tbl == "announcements" {
+		if err := h.super.QueryRow(h.ctx, "SELECT count(*) FROM ctrlz.announcements WHERE audience = 'all'").Scan(&all); err != nil {
+			h.t.Fatal(err)
+		}
+		if all == 0 {
+			h.t.Fatal("announcements has no row for everybody: the test would prove nothing")
+		}
+	}
+	own := map[string]int{}
+	for _, id := range []string{a, b} {
+		var n int
+		if err := h.super.QueryRow(h.ctx, "SELECT count(*) FROM "+ident(tbl)+" WHERE "+col+" = $1", id).Scan(&n); err != nil {
+			h.t.Fatal(err)
+		}
+		if n == 0 {
+			h.t.Fatalf("%s has no seed row for tenant %s: the test would prove nothing", tbl, id)
+		}
+		own[id] = n
+	}
+	for _, c := range []struct {
+		name string
+		guc  *string
+		want int
+	}{
+		{"tenant A", &a, own[a] + all}, {"tenant B", &b, own[b] + all}, {"a third tenant", &third, all},
+		{"an empty setting", str(""), 0}, {"no setting", nil, 0},
+	} {
+		h.inTx(h.fresh(), "scoped", c.guc, func(tx pgx.Tx) {
+			var n int
+			if err := tx.QueryRow(h.ctx, "SELECT count(*) FROM "+ident(tbl)).Scan(&n); err != nil {
+				h.t.Errorf("%s as ctrlz_scoped with %s: %v", tbl, c.name, err)
+				return
+			}
+			if n != c.want {
+				h.t.Errorf("%s as ctrlz_scoped with %s sees %d rows, want %d", tbl, c.name, n, c.want)
+			}
+		})
+	}
+	// The other tenant's rows by name, not only by count: A's setting reads none of B's.
+	if tbl != "announcements" {
+		h.inTx(h.fresh(), "scoped", &a, func(tx pgx.Tx) {
+			var n int
+			if err := tx.QueryRow(h.ctx, "SELECT count(*) FROM "+ident(tbl)+" WHERE "+col+" = $1", b).Scan(&n); err != nil || n != 0 {
+				h.t.Errorf("%s as ctrlz_scoped with tenant A reads %d rows of tenant B (%v)", tbl, n, err)
+			}
+		})
+	}
 }
 
 // TestScopedRoleSeesOneTenantOnEveryTableItReaches is the behaviour half of db-r18-1, read from the LIVE catalog
@@ -56,7 +121,18 @@ ORDER BY 1`)
 	}
 	a, b := h.A.Tenant.String(), h.B.Tenant.String()
 	third := uuid.Must(uuid.NewV7()).String()
+	for _, ids := range []catalogtest.SeedIDs{h.A, h.B} {
+		if err := catalogtest.SeedScoped(h.ctx, h.super, ids); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sawGlobal := map[string]bool{}
 	for _, tbl := range reached {
+		if col, ok := scopedTenantRows[tbl]; ok {
+			sawGlobal[tbl] = true
+			h.checkScopedGlobalTable(tbl, col, a, b, third)
+			continue
+		}
 		if !tenantTable[tbl] {
 			if _, ok := scopedGlobalReach[tbl]; !ok && tbl != "tenants" {
 				t.Errorf("ctrlz_scoped reaches the global table %s, which is not in scopedGlobalReach: say why a function that acts for one tenant needs it", tbl)
@@ -98,6 +174,11 @@ ORDER BY 1`)
 					t.Errorf("%s as ctrlz_scoped with %s sees %d rows, want %d", tbl, c.name, n, c.want)
 				}
 			})
+		}
+	}
+	for tbl := range scopedTenantRows {
+		if !sawGlobal[tbl] {
+			t.Errorf("ctrlz_scoped does not reach %s: the policy and the grant of 0061 are gone, or this test no longer reads the live catalog", tbl)
 		}
 	}
 	// The tenants table is the tenant's own row.
@@ -182,6 +263,13 @@ func TestDefinerOwnerListCanFail(t *testing.T) {
 		{"a policy for the role", `CREATE POLICY planted ON ctrlz.users FOR SELECT TO ctrlz_scoped USING (true)`, `DROP POLICY planted ON ctrlz.users`, "policy planted on users"},
 		{"a policy for PUBLIC", `CREATE POLICY planted_public ON ctrlz.sessions FOR SELECT USING (true)`, `DROP POLICY planted_public ON ctrlz.sessions`, "policy planted_public on sessions"},
 		{"a RESTRICTIVE policy", `CREATE POLICY planted_restrictive ON ctrlz.sessions AS RESTRICTIVE FOR SELECT TO ctrlz_scoped USING (true)`, `DROP POLICY planted_restrictive ON ctrlz.sessions`, "policy planted_restrictive on sessions"},
+		// The exception of question 15 is narrow: the name, the three tables, the role alone, and a condition that
+		// names the setting. Each way out of it is planted (a name that is allowed, on a table that is allowed, so
+		// that only the one property under test is wrong).
+		{"a scoped_tenant policy whose condition is true", `CREATE POLICY scoped_tenant_write ON ctrlz.announcements FOR SELECT TO ctrlz_scoped USING (true)`, `DROP POLICY scoped_tenant_write ON ctrlz.announcements`, "policy scoped_tenant_write on announcements"},
+		{"a scoped_tenant policy on another table", `CREATE POLICY scoped_tenant ON ctrlz.sessions FOR SELECT TO ctrlz_scoped USING (ctrlz.current_tenant_id() IS NOT NULL)`, `DROP POLICY scoped_tenant ON ctrlz.sessions`, "policy scoped_tenant on sessions"},
+		{"a scoped_tenant policy for PUBLIC", `CREATE POLICY scoped_tenant_write ON ctrlz.otp_challenges FOR SELECT USING (ctrlz.current_tenant_id() IS NOT NULL)`, `DROP POLICY scoped_tenant_write ON ctrlz.otp_challenges`, "policy scoped_tenant_write on otp_challenges"},
+		{"a RESTRICTIVE scoped_tenant policy", `CREATE POLICY scoped_tenant_write ON ctrlz.auth_tickets AS RESTRICTIVE FOR SELECT TO ctrlz_scoped USING (ctrlz.current_tenant_id() IS NOT NULL)`, `DROP POLICY scoped_tenant_write ON ctrlz.auth_tickets`, "policy scoped_tenant_write on auth_tickets"},
 		{"BYPASSRLS", `ALTER ROLE ctrlz_scoped BYPASSRLS`, `ALTER ROLE ctrlz_scoped NOBYPASSRLS`, "ctrlz_scoped has BYPASSRLS"},
 		{"SUPERUSER", `ALTER ROLE ctrlz_scoped SUPERUSER`, `ALTER ROLE ctrlz_scoped NOSUPERUSER`, "ctrlz_scoped has SUPERUSER"},
 		{"LOGIN", `ALTER ROLE ctrlz_scoped LOGIN`, `ALTER ROLE ctrlz_scoped NOLOGIN`, "ctrlz_scoped has LOGIN"},

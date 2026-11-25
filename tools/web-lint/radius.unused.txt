@@ -1,12 +1,16 @@
 # HeroUI selectors that use the field radius (rounded-field or --radius-field) and have no row in
 # packages/ui/tokens/radius.table.ts. One selector per line, then " # reason". A selector with no
 # reason fails tools/web-lint/check-rounded-field.mjs, so every line says why the stock corner is
-# acceptable. These were listed in spec 6.3 on 2026-11-07 (WP1); none of them is drawn by a P1 screen yet.
+# acceptable. WP1 listed these on 2026-11-07; WP12 decided each of them on 2026-11-14 (spec 6.3), by
+# reading HeroUI's CSS (input-group.css, number-field.css) and the generated radius file. Nothing
+# here was measured in a browser until WP8 round 9 measured the input group (PasswordField is the first screen to draw one); no P1 screen draws a number field or a date picker.
+# `rounded-field` is 8px (the one --radius), so where a part sits inside a shell whose corner is
+# 0.4 x height (15.6px at height 39, 17.2px at 43) the part's own corner is smaller than its shell's.
 .date-picker__trigger # P1 builds no date input. A row is needed with the first date picker, measured in a browser
 .date-range-picker__trigger # same as .date-picker__trigger
-.input-group__input # inner part: its group (.input-group, which has a row) clips it and the input has no background or border. Check a focus ring in a group once a screen uses one
-.input-group__input:autofill:active # the autofill state of the same inner input
-.input-group__prefix # inner part: only its inline-start corner is rounded, inside the group, which has a row and clips it
-.input-group__suffix # inner part: only its inline-end corner is rounded, inside the group, which has a row and clips it
-.number-field__increment-button # inner part of .number-field__group, which has a row and clips it (overflow hidden)
-.number-field__decrement-button # inner part of .number-field__group, which has a row and clips it (overflow hidden)
+.input-group__input # inner part of .input-group, which has a row. WP8 checked it under autofill (round 9, spec 10.9): HeroUI clips the autofill cover to var(--radius-field), the 8px --radius, and that cover painted over the shell's border and focus ring at the outer corners of a 15.6px shell, in fa (the input is dir=ltr, so its square corners land on the shell's outer side) and in en. The .input-group row now sets --field-radius and --radius-field to the shell's own radius, so the part's corner is the shell's
+.input-group__input:autofill:active # the autofill state of the same inner input: the case the line above is about, fixed by the .input-group row
+.input-group__prefix # inner part: it reads --field-radius, which the .input-group row sets to the shell's radius, so a hover or pressed fill on it follows the shell
+.input-group__suffix # same as .input-group__prefix, at the inline-end corner (PasswordField puts a ghost Button in it)
+.number-field__increment-button # inner part of .number-field__group, which has a row and clips it (overflow hidden), so the shell's corner wins whatever the button's own corner is
+.number-field__decrement-button # same as .number-field__increment-button

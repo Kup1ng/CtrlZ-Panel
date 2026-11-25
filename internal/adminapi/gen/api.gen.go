@@ -370,7 +370,6 @@ type AuditRow struct {
 type CreateInviteRequest struct {
 	Locale   *LocaleCode `json:"locale,omitempty"`
 	Phone    string      `json:"phone"`
-	SendSms  bool        `json:"send_sms"`
 	TtlHours *int        `json:"ttl_hours,omitempty"`
 }
 
@@ -401,11 +400,9 @@ type FreshWindow struct {
 
 // InviteCreated defines model for InviteCreated.
 type InviteCreated struct {
-	// Code Shown once.
-	Code string             `json:"code"`
-	Id   openapi_types.UUID `json:"id"`
+	Id openapi_types.UUID `json:"id"`
 
-	// Link https://<panel host>/invite#<code>. A fragment never reaches a server.
+	// Link https://<panel host>/invite#<signed token>. Shown once. A fragment never reaches a server.
 	Link string `json:"link"`
 }
 
@@ -789,7 +786,7 @@ type ServerInterface interface {
 	// ListInvites Invites, newest first
 	// (GET /invites)
 	ListInvites(w http.ResponseWriter, r *http.Request, params ListInvitesParams)
-	// CreateInvite Make an invite code, and optionally text it
+	// CreateInvite Make an invite link
 	// (POST /invites)
 	CreateInvite(w http.ResponseWriter, r *http.Request)
 	// RevokeInvite Revoke an unused invite
@@ -918,7 +915,7 @@ func (_ Unimplemented) ListInvites(w http.ResponseWriter, r *http.Request, param
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// CreateInvite Make an invite code, and optionally text it
+// CreateInvite Make an invite link
 // (POST /invites)
 func (_ Unimplemented) CreateInvite(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -3640,7 +3637,7 @@ type StrictServerInterface interface {
 	// ListInvites Invites, newest first
 	// (GET /invites)
 	ListInvites(ctx context.Context, request ListInvitesRequestObject) (ListInvitesResponseObject, error)
-	// CreateInvite Make an invite code, and optionally text it
+	// CreateInvite Make an invite link
 	// (POST /invites)
 	CreateInvite(ctx context.Context, request CreateInviteRequestObject) (CreateInviteResponseObject, error)
 	// RevokeInvite Revoke an unused invite

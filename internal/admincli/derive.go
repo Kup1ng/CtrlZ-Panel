@@ -1,6 +1,7 @@
 package admincli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -66,16 +67,22 @@ func deriveKeys(env Env, args []string) error {
 // the root's, so nothing was written, and the ones that do not exist could not be made. It keeps the
 // refusal for errors.Is and has its own exit code (ExitRefusedMissing).
 type missingKeyFilesError struct {
-	missing []string
+	missing []string // file names
+	stale   []string // public files that no longer say what their key file says
 	refusal error
 }
 
 func (e missingKeyFilesError) Error() string {
-	names := make([]string, len(e.missing))
-	for i, d := range e.missing {
-		names[i] = keyring.FileName(d)
+	msg := e.refusal.Error()
+	if len(e.missing) > 0 {
+		msg += "; " + strings.Join(e.missing, ", ") + " is missing and was not made, because a key file is made only from the root that owns the rest"
 	}
-	return e.refusal.Error() + "; " + strings.Join(names, ", ") + " is missing and was not made, because a key file is made only from the root that owns the rest"
+	if len(e.stale) > 0 {
+		// Said apart so the operator does not look for a file that is there: it exists but would give a
+		// verifier a key the key file has dropped.
+		msg += "; " + strings.Join(e.stale, ", ") + " does not match its key file and was not rewritten, because a refused run writes nothing"
+	}
+	return msg
 }
 
 func (e missingKeyFilesError) Unwrap() error { return e.refusal }
@@ -85,6 +92,9 @@ func (e missingKeyFilesError) Unwrap() error { return e.refusal }
 // was and never a mix of files from two roots.
 func deriveAll(env Env, dir string, root secret.Bytes, newRoot bool) error {
 	var missing, foreign []string
+	// missingPublic counts as a missing key file when a refusal stops the run: a public file is a pure
+	// function of its key file, so it is made only from a key file the root has proved.
+	var missingPublic, stalePublic []string
 	var refused []error
 	for _, d := range keyring.Domains() {
 		text, err := secret.BytesFromFile(filepath.Join(dir, keyring.FileName(d)))
@@ -108,11 +118,44 @@ func deriveAll(env Env, dir string, root secret.Bytes, newRoot bool) error {
 			foreign = append(foreign, d)
 		}
 	}
+	for _, d := range keyring.PublicDomains() {
+		// Read, not looked at: a key tool does not decide from a file being there (rule key-identity), and the text
+		// it reads here is judged by nobody, since the public file is rewritten from the key file whatever it says.
+		have, err := secret.BytesFromFile(filepath.Join(dir, keyring.PublicFileName(d)))
+		if errors.Is(err, os.ErrNotExist) {
+			missingPublic = append(missingPublic, d)
+			continue
+		}
+		if err != nil {
+			continue
+		}
+		// A stale file is told apart from a good one even when a refusal stops the run (review dec-a-r1-4): the
+		// public text needs no root, and an install whose kek_root is off the host always ends in a refusal, so a
+		// public file that still lists a key line the operator removed would stay and be trusted by the api for
+		// ever. A key file that is missing is counted above, and one that does not parse was refused above.
+		if keyText, kerr := secret.BytesFromFile(filepath.Join(dir, keyring.FileName(d))); kerr == nil {
+			if want, werr := keyring.PublicText(d, keyText); werr == nil && !bytes.Equal(have.Reveal(), want) {
+				stalePublic = append(stalePublic, d)
+			}
+			keyText.Wipe()
+		}
+		have.Wipe()
+	}
 	if len(refused) > 0 {
 		err := fmt.Errorf("%w; put back the kek_root these files came from, or if it is lost for good run again with --new-root (spec 8.5)", errors.Join(refused...))
-		if len(missing) > 0 {
-			// Nothing is written on a refusal, so these were not made either.
-			return missingKeyFilesError{missing: missing, refusal: err}
+		if len(missing) > 0 || len(missingPublic) > 0 || len(stalePublic) > 0 {
+			// Nothing is written on a refusal, so these were not made or refreshed either.
+			var names, stale []string
+			for _, d := range stalePublic {
+				stale = append(stale, keyring.PublicFileName(d))
+			}
+			for _, d := range missing {
+				names = append(names, keyring.FileName(d))
+			}
+			for _, d := range missingPublic {
+				names = append(names, keyring.PublicFileName(d))
+			}
+			return missingKeyFilesError{missing: names, stale: stale, refusal: err}
 		}
 		return err
 	}
@@ -135,6 +178,11 @@ func deriveAll(env Env, dir string, root secret.Bytes, newRoot bool) error {
 			return fmt.Errorf("%s: %w", keyring.FileName(d), err)
 		}
 		fmt.Fprintf(env.Stdout, "wrote %s (key 1)\n", keyring.FileName(d))
+	}
+	for _, d := range keyring.PublicDomains() {
+		if err := refreshPublic(env, dir, d); err != nil {
+			return err
+		}
 	}
 	if len(foreign) > 0 {
 		// On stderr so the installer script, which hides the list above, still shows
@@ -171,6 +219,43 @@ func rotateDomain(env Env, dir string, root secret.Bytes, domain string, newRoot
 		return fmt.Errorf("%s: %w", keyring.FileName(domain), err)
 	}
 	fmt.Fprintf(env.Stdout, "domain %s: key %d added\n", domain, n)
+	// The public half follows the key file at once, so the api can be recreated with the new number
+	// before admin signs under it (spec 8.4).
+	if slices.Contains(keyring.PublicDomains(), domain) {
+		return refreshPublic(env, dir, domain)
+	}
+	return nil
+}
+
+// refreshPublic writes pub_<domain> from the text of kek_<domain>, or leaves it when it already says the same.
+// The file is a pure function of the key file, so it is never judged, only rewritten when it differs (spec 8.3,
+// D67): a stale file after a rotation, a hand edit and a removed key line all end the same way.
+func refreshPublic(env Env, dir, domain string) error {
+	keyText, err := secret.BytesFromFile(filepath.Join(dir, keyring.FileName(domain)))
+	if err != nil {
+		return fmt.Errorf("%s: cannot be read", keyring.FileName(domain))
+	}
+	want, err := keyring.PublicText(domain, keyText)
+	keyText.Wipe()
+	if err != nil {
+		return fmt.Errorf("%s: %w", keyring.FileName(domain), err)
+	}
+	path := filepath.Join(dir, keyring.PublicFileName(domain))
+	if have, err := secret.BytesFromFile(path); err == nil {
+		same := bytes.Equal(have.Reveal(), want)
+		have.Wipe()
+		if same {
+			fmt.Fprintf(env.Stdout, "kept %s\n", keyring.PublicFileName(domain))
+			return nil
+		}
+	}
+	// The text holds no secret, but the writer is the key file's, with the same mode and the same rename.
+	text := secret.NewBytes(want)
+	defer text.Wipe()
+	if err := writeKeyFile(path, text, true); err != nil {
+		return fmt.Errorf("%s: %w", keyring.PublicFileName(domain), err)
+	}
+	fmt.Fprintf(env.Stdout, "wrote %s\n", keyring.PublicFileName(domain))
 	return nil
 }
 

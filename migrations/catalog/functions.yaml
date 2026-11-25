@@ -201,11 +201,11 @@ security_definer:
     ranks: [otp_challenges]
     no_trail: "login code state; the outcome goes to the caller who holds the code"
   - name: auth_otp_issue
-    isolation: key
+    isolation: tenant
     args: "p_phone text, p_purpose text, p_code_hash bytea, p_delivery_ct bytea, p_ip inet, p_trusted boolean"
     returns: "TABLE(id uuid, allowed boolean)"
     owner: auth
-    auth_owner_reason: "counts sms_counters and inserts otp_challenges, global tables with no tenant column, before any tenant is known"
+    auth_owner_reason: "counts sms_counters and inserts otp_challenges, global tables with no tenant column, before any tenant is known; it stamps the tenant of the account on the challenge (question 15), which it can only read as a pre-tenant lookup of users by phone"
     execute: [tenant]
     ranks: [otp_challenges, sms_counters]
     no_trail: "login code state and the daily caps; the SMS delivery record is the trail"
@@ -221,8 +221,7 @@ security_definer:
     isolation: tenant
     args: "p_request_id uuid"
     returns: "TABLE(outcome text)"
-    owner: auth
-    auth_owner_reason: "reads the consumed codes of otp_challenges, a table with no tenant column that only ctrlz_auth and the worker may see"
+    owner: scoped
     execute: [tenant]
     ranks: [users, phone_change_requests]
     no_trail: "the tenant route writes the audit row and the notice in the same transaction"
@@ -230,8 +229,7 @@ security_definer:
     isolation: tenant
     args: "p_user_id uuid, p_otp_id uuid"
     returns: "TABLE(outcome text)"
-    owner: auth
-    auth_owner_reason: "reads the consumed codes of otp_challenges, a table with no tenant column that only ctrlz_auth and the worker may see"
+    owner: scoped
     execute: [tenant]
     ranks: [users]
     no_trail: "the tenant route writes the audit row in the same transaction"
@@ -339,8 +337,7 @@ security_definer:
     isolation: tenant
     args: "p_user_id uuid"
     returns: "void"
-    owner: auth
-    auth_owner_reason: "auth_tickets is a global table with no row-level security (subject_tenant is a plain column, a ticket is looked up by the hash of a token handed out before a session exists), so ctrlz_scoped would see every tenant's tickets and gain nothing; the predicate in the body is its isolation and the key fixture of TestFunctionIsolation reads it"
+    owner: scoped
     execute: [tenant, admin]
     ranks: [auth_tickets]
     no_trail: "closes open tickets after a credential change that the caller has already recorded"
@@ -455,6 +452,14 @@ security_definer:
     auth_owner_reason: "takes the tenant's profile-creation advisory lock and reads no table; only ctrlz_auth may call pg_advisory_xact_lock (catalog_reach.yaml, advisory-locks), as for audit_lock, so ctrlz_scoped cannot own it"
     execute: [tenant, worker]
     ranks: [idempotency_keys]
+  - name: tenant_notice_sms
+    isolation: tenant
+    args: "p_user_id uuid, p_notice_id uuid, p_cap integer"
+    returns: "boolean"
+    owner: scoped
+    execute: [tenant]
+    ranks: [sms_gateways:ks, sms_outbox:ins]
+    no_trail: "the notice and the audit row of the route (passkey.add, recovery.regenerate), written in the same transaction, are the record; the message is that notice told to the account phone"
   - name: tenant_set_password
     isolation: tenant
     args: "p_user_id uuid, p_password_hash text"
@@ -540,7 +545,7 @@ security_definer:
 
 # Functions in ctrlz that are not SECURITY DEFINER. No PUBLIC EXECUTE.
 helpers:
-  - {name: cap_reached, args: "spent numeric, cap numeric", returns: boolean, ranks: [], execute: [auth, tenant, worker]}
+  - {name: cap_reached, args: "spent numeric, cap numeric", returns: boolean, ranks: [], execute: [auth, scoped, tenant, worker]}
   - {name: credential_gen_bump, args: "", returns: trigger, ranks: []}
   - {name: credential_state, args: "p_one_time boolean, p_expires_at timestamp with time zone, p_needs_second_factor boolean", returns: text, ranks: [], execute: [auth, scoped, tenant, admin]}
   - {name: current_tenant_id, args: "", returns: uuid, ranks: []}

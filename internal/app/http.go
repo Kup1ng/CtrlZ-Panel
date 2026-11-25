@@ -96,7 +96,7 @@ func serviceHandler(cfg Config, rt *Runtime, st *store.Store, log *slog.Logger, 
 			}
 			prev()
 		}
-		h, err = api.New(api.Deps{Log: log, Store: st, Sessions: sessions, Limiter: limiter, Keys: rt.Keys, Hasher: rt.Hasher, PanelHost: cfg.PanelHost, Strict: strict, PlainHTTPOrigin: plainHTTPOrigin(cfg.Env), TrustedProxies: cfg.TrustedProxies, After: after, SpoolDir: cfg.SpoolDir}, health)
+		h, err = api.New(api.Deps{Log: log, Store: st, Sessions: sessions, Limiter: limiter, Keys: rt.Keys, Invites: rt.Public, Hasher: rt.Hasher, PanelHost: cfg.PanelHost, Strict: strict, PlainHTTPOrigin: plainHTTPOrigin(cfg.Env), TrustedProxies: cfg.TrustedProxies, After: after, SpoolDir: cfg.SpoolDir}, health)
 	} else {
 		h, err = adminapi.New(adminapi.Deps{
 			Log: log, Store: st, Sessions: sessions, Limiter: limiter, Keys: rt.Keys, Hasher: rt.Hasher,

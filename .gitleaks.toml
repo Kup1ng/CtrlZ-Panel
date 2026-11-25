@@ -46,3 +46,19 @@ targetRules = ["generic-api-key"]
 paths = ['''^internal/lint/[A-Za-z0-9_]+_test\.go$''']
 regexTarget = "secret"
 regexes = ['''^(argon2\.IDKey|crypto/subtle)$''']
+
+# Spec 16.2: the HeroUI install token lives in the environment of a build machine and nowhere else.
+# The CLI sends it to HeroUI's CDN, so it must not be written into a file, and an `_authToken` line
+# in an .npmrc would send it to the npm registry instead.
+[[rules]]
+id = "heroui-auth-token-assignment"
+description = "A literal assignment of the HeroUI install token. Reading it from the environment (${NAME}, $NAME, env=NAME) is how it is meant to be used."
+regex = '''HEROUI_AUTH_TOKEN["']?(\s*=\s*|:\s+)["']?[^\s"'$<{(`]'''
+keywords = ["heroui_auth_token"]
+
+[[rules]]
+id = "npmrc-auth-token"
+description = "An _authToken line in an .npmrc"
+path = '''(^|[\\/])\.npmrc$'''
+regex = '''_authToken\s*='''
+keywords = ["_authtoken"]

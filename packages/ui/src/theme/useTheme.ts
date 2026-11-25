@@ -62,6 +62,18 @@ function commit(mode: ThemeMode) {
 }
 
 /**
+ * Puts the theme on <html> when it has none. The server renders the classes for `light` and `dark`, and ThemeScript adds them for `system`
+ * and for a first visit, but only a script that the parser runs does: Next's own 404 shell is rebuilt by client recovery (gate-r2-1), a script
+ * element that React creates does not execute, and the recovered <html> comes from the flight data with the font class alone. A visitor on a dark
+ * OS who typed a wrong address then had a light page for good (gate-r11-1). Nothing changes when a class is already there, so the ordinary page
+ * (script ran, or the server chose) is untouched. `root` and `mode` are parameters for the unit test.
+ */
+export function ensureThemeApplied(root: HTMLElement = document.documentElement, mode: ThemeMode = getMode()) {
+  if (root.classList.contains("light") || root.classList.contains("dark")) return;
+  applyTheme(resolve(mode), root);
+}
+
+/**
  * Sets the mode, writes the cookie and applies the classes. Listeners registered
  * with onThemeModeChange run afterwards: that is where a signed-in session sends
  * PATCH /account/preferences {theme}, so this package does not depend on the API client.

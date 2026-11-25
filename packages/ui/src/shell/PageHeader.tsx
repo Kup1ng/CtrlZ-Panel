@@ -8,7 +8,7 @@ import {useEffect, useRef, useState, type ReactNode} from "react";
 
 import {useHaptics} from "../hooks/useHaptics.ts";
 import type {HelpKey} from "./SectionHelp.tsx";
-import {useShellDialog} from "./useShellDialog.ts";
+import {useUrlDialog} from "../dialog/useUrlDialog.ts";
 
 // T-116, spec 8.4. One row: icon, title, a one-line subtitle, the help button;
 // then, at the end, search, the three-dot menu and "+". A button renders only
@@ -70,7 +70,7 @@ function IconTip({label, children}: {label: string; children: ReactNode}) {
 
 export function PageHeader({icon, title, subtitle, helpKey, actions, onSearch, onCreate, createLabel, leading}: PageHeaderProps) {
   const t = useTranslations("shell");
-  const help = useShellDialog("helpPane");
+  const help = useUrlDialog("helpPane");
   const {buzz} = useHaptics();
   const [searchOpen, setSearchOpen] = useState(false);
   const hasActions = !!actions && actions.length > 0;

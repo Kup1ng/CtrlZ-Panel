@@ -105,7 +105,7 @@ func (n *Number) UnmarshalJSON(b []byte) error {
 // The router applies it to every accepted attempt, so a driver cannot forget it
 // (sms-r5-8). A field is dropped whole, never cleaned: a cleaned id would look real and
 // match nothing at the provider. A field is judged as written, with only its digits kept, and
-// folded on both sides (echoFold), so "0912-123-4567" is a number and an invite code echoed
+// folded on both sides (echoFold), so "0912-123-4567" is a number and a code echoed
 // without its hyphens or in lower case is a code (sms-r11-4). Dropping a field that only looks like an
 // echo by chance costs nothing, since both fields are optional bookkeeping.
 func (r Result) Scrubbed(m Message) Result {
@@ -146,13 +146,12 @@ func (f Field) without(needles []string) Field {
 
 // echoFold is the one reading of "the same value written another way" for a sent value: ASCII
 // digits, letters in lower case, every other character removed, and the look-alikes of the
-// Crockford alphabet that invite and recovery codes are typed in read as the characters they
+// Crockford alphabet that recovery codes are typed in read as the characters they
 // stand for (o as 0, i and l as 1), the same folding as invite.Canonical. It is deliberately
 // coarse. It only ever decides to DROP an optional bookkeeping field, so a real id that matches
 // by chance costs nothing, and a code that comes back as "abcde-fghjk" or "ABCDEFGHJK" or with a
-// zero for its letter O must not be kept. The invite code is the case that matters most: it is a
-// registration credential, and a stored copy would let anyone who reads sms_deliveries register
-// before the invitee does.
+// zero for its letter O must not be kept. A login code is the case that matters most: a stored copy
+// would let anyone who reads sms_deliveries sign in before its owner does.
 func echoFold(s string) string {
 	var b strings.Builder
 	for _, r := range digits.ToASCII(s) {

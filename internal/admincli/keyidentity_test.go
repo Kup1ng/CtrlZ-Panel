@@ -290,14 +290,26 @@ func rowDerive(t *testing.T, run keysRunner) {
 						t.Errorf("kek_%s is not key 1 derived from the root on disk", d)
 					}
 				}
-				if len(after) != len(before)+len(plan.created) {
-					t.Errorf("derive left %d files, want %d", len(after), len(before)+len(plan.created))
+				// A public file is made whenever it is missing, from the key file the host has by then (spec 8.3, D67).
+				madePublic := 0
+				for _, d := range keyring.PublicDomains() {
+					name := keyring.PublicFileName(d)
+					if _, had := before[name]; !had {
+						madePublic++
+					}
+					want, err := keyring.PublicText(d, secret.NewBytes([]byte(after["kek_"+d])))
+					if err != nil || after[name] != string(want) {
+						t.Errorf("%s is not the public text of kek_%s", name, d)
+					}
+				}
+				if len(after) != len(before)+len(plan.created)+madePublic {
+					t.Errorf("derive left %d files, want %d", len(after), len(before)+len(plan.created)+madePublic)
 				}
 			})
 		}
 		// Rotation does not depend on the domain beyond its name; two of them, one that is
 		// missing in the "one key file missing" history and one that never is, keep the run short.
-		for _, d := range []string{keyring.DomainUserTOTP, keyring.DomainAdminMAC} {
+		for _, d := range []string{keyring.DomainUserTOTP, keyring.DomainAdminMAC, keyring.DomainInviteSign} {
 			for _, newRoot := range []bool{false, true} {
 				t.Run(fmt.Sprintf("rotate/%s/%s/new-root=%v", h.name, d, newRoot), func(t *testing.T) {
 					dir := t.TempDir()
@@ -331,8 +343,15 @@ func rowDerive(t *testing.T, run keysRunner) {
 						t.Errorf("kek_%s did not get key %d derived from the root on disk", d, next)
 					}
 					for name, b := range before {
-						if name != "kek_"+d && after[name] != b {
+						if name != "kek_"+d && name != keyring.PublicFileName(d) && after[name] != b {
 							t.Errorf("rotating %s rewrote %s", d, name)
+						}
+					}
+					// A domain with a public half has it follow the new key at once, so the api can be recreated first.
+					if slices.Contains(keyring.PublicDomains(), d) {
+						want, err := keyring.PublicText(d, secret.NewBytes(expect.fileText(d)))
+						if err != nil || after[keyring.PublicFileName(d)] != string(want) {
+							t.Errorf("rotating %s did not bring %s up to date", d, keyring.PublicFileName(d))
 						}
 					}
 				})

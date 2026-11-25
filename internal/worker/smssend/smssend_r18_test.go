@@ -57,7 +57,7 @@ func (r *rig) panicWhenLogging(msg string, n int32) {
 // is already `sent` stays so. Before the gate a revive (state back to pending) sent it again.
 func TestAPanicAfterTheRecordOfAnOutboxRowDoesNotReviveIt(t *testing.T) {
 	r := newRig(t)
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 	r.panicWhenLogging("sms sent", 1)
 	if n := r.drain(); n != 1 {
 		t.Fatalf("drained %d rows, want 1", n)
@@ -111,7 +111,7 @@ func TestAPanicInsideTheRecordTransactionRollsItAllBack(t *testing.T) {
 	r := newRig(t)
 	r.pri.reply = func(_ int, w http.ResponseWriter) { http500(w) }
 	r.fb.reply = func(_ int, w http.ResponseWriter) { http500(w) }
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 	r.panicWhenLogging("sms gateway breaker moved one step", 1)
 	if n := r.drain(); n != 1 {
 		t.Fatalf("drained %d rows, want 1", n)

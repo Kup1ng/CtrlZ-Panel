@@ -29,7 +29,7 @@ func TestJunkRegistersCannotSpendTheCodeCheckOfALiveInvitee(t *testing.T) {
 	c := f.client()
 	phone := "+989125553002"
 	code := f.plantInvite(phone, time.Hour, false)
-	const bad = "AAAAA-AAAAA-AAAAA-AAAAA"
+	bad := f.forgedInvite()
 
 	for i := 0; i < 40; i++ {
 		r := c.post("/auth/register", map[string]any{"invite_token": bad, "challenge_id": junkValue(t), "code": "000000"})

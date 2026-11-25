@@ -31,7 +31,11 @@ type fnFix struct {
 	own     string // the rows the success call answers, as fnCtx.summary prints them
 	cross   string // the rows the cross call answers; "*" accepts any answer
 	noCross bool   // the function takes no id: the tenant setting is its only selector
-	effect  string
+	// settingOptional marks a tenant function that serves callers with no setting as well (auth_otp_issue: a login code is
+	// issued before any tenant is known, and the setting only stamps the code of a phone change, question 15), so the case
+	// that calls it with no setting and expects a refusal does not apply.
+	settingOptional bool
+	effect          string
 }
 
 // fnCtx is the transaction a case runs in. It is rolled back, so no case leaves a trace.
@@ -125,9 +129,12 @@ func (h *harness) fnFixtures() map[string]fnFix {
 	// otp plants a consumed or open OTP challenge for the tenant's own phone.
 	otp := func(consumed bool, purpose, phone func(s catalogtest.SeedIDs) string, name string) func(f *fnCtx, s catalogtest.SeedIDs) {
 		return func(f *fnCtx, s catalogtest.SeedIDs) {
-			f.exec(`INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at)
-				VALUES ($1, $2, $3, '\x01', now() + interval '5 minutes', CASE WHEN $4::boolean THEN now() END)`,
-				f.id(name, s), phone(s), purpose(s), consumed)
+			// The four purposes that belong to an account carry its tenant, as auth_otp_issue stamps them (question 15);
+			// the scoped functions read the challenge only through that column.
+			f.exec(`INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at, tenant_id)
+				VALUES ($1, $2, $3, '\x01', now() + interval '5 minutes', CASE WHEN $4::boolean THEN now() END,
+				        CASE WHEN $3::text IN ('login', 'reset', 'phone_old', 'phone_new') THEN $5::uuid END)`,
+				f.id(name, s), phone(s), purpose(s), consumed, s.Tenant)
 		}
 	}
 	own := func(s catalogtest.SeedIDs) string { return s.Phone }
@@ -149,9 +156,9 @@ func (h *harness) fnFixtures() map[string]fnFix {
 		"auth_phone_change_complete": {
 			arrange: func(f *fnCtx, s catalogtest.SeedIDs) {
 				f.exec(`DELETE FROM ctrlz.phone_change_requests WHERE tenant_id = $1`, s.Tenant)
-				f.exec(`INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at) VALUES
-					($1, $3, 'phone_old', '\x01', now() + interval '5 minutes', now()), ($2, $4, 'phone_new', '\x01', now() + interval '5 minutes', now())`,
-					f.id("old", s), f.id("new", s), s.Phone, newPhone(s))
+				f.exec(`INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at, tenant_id) VALUES
+					($1, $3, 'phone_old', '\x01', now() + interval '5 minutes', now(), $5), ($2, $4, 'phone_new', '\x01', now() + interval '5 minutes', now(), $5)`,
+					f.id("old", s), f.id("new", s), s.Phone, newPhone(s), s.Tenant)
 				f.exec(`INSERT INTO ctrlz.phone_change_requests (tenant_id, id, user_id, new_phone_e164, old_otp_id, new_otp_id, expires_at)
 					VALUES ($1, $2, $3, $4, $5, $6, now() + interval '10 minutes')`,
 					s.Tenant, f.id("req", s), s.User, newPhone(s), f.id("old", s), f.id("new", s))
@@ -209,6 +216,18 @@ func (h *harness) fnFixtures() map[string]fnFix {
 				f.exec(`UPDATE ctrlz.users SET totp_secret_ct = '\x0102030405' WHERE id = $1`, s.User)
 			},
 			call: `SELECT ctrlz_fn.keytool_totp_replace($1, '\x0102030405'::bytea, '\x0a0b0c0d'::bytea)`, args: user, own: "(true)", cross: "(false)", effect: fxChanges},
+		// The message goes to sms_outbox, a global table, which no digest of a tenant covers, so the effect is
+		// 'reads' and the answer (true for B's own notice and user, false for A's under B's setting) is what shows
+		// that a row was queued (TestMigration0062LeavesNoInviteMessage and the api tests read the row itself).
+		"tenant_notice_sms": {
+			arrange: func(f *fnCtx, s catalogtest.SeedIDs) {
+				f.exec(`UPDATE ctrlz.users SET phone_verified_at = now() WHERE id = $1`, s.User)
+				f.exec(`INSERT INTO ctrlz.notifications (id, tenant_id, kind, severity) VALUES ($1, $2, 'passkey_added', 'info')`, f.id("notice", s), s.Tenant)
+				f.exec(`INSERT INTO ctrlz.tenant_audit_log (tenant_id, user_id, action) VALUES ($1, $2, 'passkey.add')`, s.Tenant, s.User)
+			},
+			call: `SELECT ctrlz_fn.tenant_notice_sms($1, $2, 3)`,
+			args: nil, // the notice id is made by arrange, see argsWithIDs
+			own:  "(true)", cross: "(false)", effect: fxReads},
 		"tenant_set_password": {call: `SELECT ctrlz_fn.tenant_set_password($1, 'argon2id$new')`, args: user, own: "(true)", cross: "(false)", effect: fxChanges},
 		"worker_enforce_clear_without_live": {
 			arrange: func(f *fnCtx, s catalogtest.SeedIDs) {
@@ -243,7 +262,7 @@ func (h *harness) fnFixtures() map[string]fnFix {
 		"auth_otp_consume": {arrange: otp(false, login, own, "otp"), call: `SELECT outcome FROM ctrlz_fn.auth_otp_consume($1, $2, 'login', '\x01'::bytea)`,
 			args: nil, own: "(ok)", cross: "(invalid)", effect: fxChanges},
 		"auth_otp_issue": {call: `SELECT allowed FROM ctrlz_fn.auth_otp_issue($1, 'login', '\x01'::bytea, '\x02'::bytea, '198.51.100.7'::inet, false)`,
-			args: func(caller, _ catalogtest.SeedIDs) []any { return []any{caller.Phone} }, own: "(true)", noCross: true, effect: fxChanges},
+			args: func(caller, _ catalogtest.SeedIDs) []any { return []any{caller.Phone} }, own: "(true)", noCross: true, effect: fxChanges, settingOptional: true},
 		"auth_ticket_peek": {arrange: ticket, call: `SELECT subject_tenant FROM ctrlz_fn.auth_ticket_peek(` + ticketHash("tk") + `, 'mfa')`,
 			args: ticketArgs, own: "(B.tenant)", noCross: true, effect: fxChanges},
 		"auth_ticket_take": {arrange: ticket, call: `SELECT subject_tenant FROM ctrlz_fn.auth_ticket_take(` + ticketHash("tk") + `, 'mfa')`,
@@ -277,6 +296,8 @@ func (f *fnCtx) argsWithIDs(fn string, caller, subject catalogtest.SeedIDs) ([]a
 		// The challenge is the subject's; the phone is the caller's, which is what a request
 		// from B names.
 		return []any{f.id("otp", subject), caller.Phone}, true
+	case "tenant_notice_sms":
+		return []any{subject.User, f.id("notice", subject)}, true
 	case "auth_register_user":
 		return []any{extraPhone(caller), f.id("inv", subject), f.id("otp", subject)}, true
 	}

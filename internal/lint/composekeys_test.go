@@ -104,8 +104,6 @@ func realComposeTables() composeTables {
 			"api":        {"api_spool:/spool"},
 			"caddy-init": {"caddy_data:/data", "caddy_config:/config"},
 			"caddy":      {"./caddy/Caddyfile:/etc/caddy/Caddyfile:ro", "caddy_data:/data", "caddy_config:/config"},
-			"web-panel":  {"./web-placeholder:/www:ro"},
-			"web-admin":  {"./web-placeholder:/www:ro"},
 			"postgres": {
 				"pgdata:/var/lib/postgresql",
 				"./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro",
@@ -125,8 +123,11 @@ func realComposeTables() composeTables {
 			"caddy": "65532:65532", "caddy-init": "0:0", "web-panel": "65532:65532", "web-admin": "65532:65532",
 			"valkey-api": "999:999", "valkey-admin": "999:999",
 		},
-		// A tmpfs the container writes to: the Valkey zones' /tmp, which holds the ACL file for the length of one read.
+		// A tmpfs the container writes to: the Valkey zones' /tmp, which holds the ACL file for the length of one read,
+		// and the one scratch directory of each web container (its root is read-only and Next writes nothing else).
 		Tmpfs: map[string][]string{
+			"web-panel":    {"/tmp"},
+			"web-admin":    {"/tmp"},
 			"valkey-api":   {"/tmp:size=1m,mode=0700,uid=999,gid=999"},
 			"valkey-admin": {"/tmp:size=1m,mode=0700,uid=999,gid=999"},
 		},
@@ -138,9 +139,12 @@ func realComposeTables() composeTables {
 		Ulimits:  map[string]any{"clickhouse": map[string]any{"nofile": map[string]any{"soft": 262144, "hard": 262144}}},
 		ShmSize:  map[string]string{"postgres": "${PG_SHM_SIZE:-512m}"},
 		Profiles: map[string][]string{"rekey": {"tools"}},
-		// The Panel image is a bare name a registry would resolve (admin-r17-4): every service that runs it is
-		// never pulled. imagePullProblems holds the same fact from the image side.
-		PullPolicy: map[string]string{"api": "never", "admin": "never", "worker": "never", "hub": "never", "migrate": "never", "rekey": "never"},
+		// The Panel image and the two web images are bare names a registry would resolve (admin-r17-4): every
+		// service that runs one is never pulled. imagePullProblems holds the same fact from the image side.
+		PullPolicy: map[string]string{
+			"api": "never", "admin": "never", "worker": "never", "hub": "never", "migrate": "never", "rekey": "never",
+			"web-panel": "never", "web-admin": "never",
+		},
 	}
 }
 
@@ -486,7 +490,6 @@ func TestComposeKeysLintCanFail(t *testing.T) {
 			"./valkey/valkey.conf:/etc/valkey/valkey.conf\n      - ./valkey/start.sh:/etc/valkey/start.sh:ro\n      - ./valkey/maintain.sh:/etc/valkey/maintain.sh:ro\n      - ./valkey/sweep.lua:/etc/valkey/sweep.lua:ro\n      - ../../internal/ratelimit/lua:/etc/valkey/lua:ro\n    networks: [vk_api]"), "writable"},
 		{"an undeclared named volume", plant("hub", "    volumes:\n      - nowhere:/data\n"), "does not declare"},
 		{"a long-form volume", plant("hub", "    volumes:\n      - {type: bind, source: ../../secrets, target: /s}\n"), "long form"},
-		{"a volume added to a service in the table", replace("      - ./web-placeholder:/www:ro\n    user: \"65532:65532\"\n    mem_limit: ${MEM_WEB:-128m}\n    networks: [web]\n\n  web-admin:", "      - ./web-placeholder:/www:ro\n      - ../../apps:/apps:ro\n    user: \"65532:65532\"\n    mem_limit: ${MEM_WEB:-128m}\n    networks: [web]\n\n  web-admin:"), "the table allows"},
 		{"a host path outside the repository", plant("hub", "    volumes:\n      - /etc:/www:ro\n"), "outside the repository"},
 		{"a host path two levels above the repository", plant("hub", "    volumes:\n      - ../../../x:/www:ro\n"), "outside the repository"},
 		{"a host path one level up", plant("hub", "    volumes:\n      - ../x:/www:ro\n"), "outside the repository"},
@@ -540,6 +543,11 @@ func TestComposeKeysLintCanFail(t *testing.T) {
 		{"a profile on the api", plant("api", "    profiles: [tools]\n"), "the profiles"},
 		{"a pull policy on a third-party image", plant("caddy", "    pull_policy: never\n"), "has pull_policy"},
 		{"a pull policy that fetches the Panel image", plant("api", "    pull_policy: always\n"), "has pull_policy"},
+		{"a web service that may be pulled", replace("    image: ${CTRLZ_WEB_ADMIN_IMAGE:-ctrlz/web-admin:dev}\n    pull_policy: never\n", "    image: ${CTRLZ_WEB_ADMIN_IMAGE:-ctrlz/web-admin:dev}\n    pull_policy: missing\n"), "has pull_policy"},
+		{"a second tmpfs in a web service", func(s string) string {
+			return strings.Replace(s, "tmpfs: [\"/tmp\"]", "tmpfs: [\"/tmp\", \"/run/secrets\"]", 1)
+		}, "has the tmpfs"},
+		{"a mount in a web service", plant("web-panel", "    volumes:\n      - ../../apps:/apps:ro\n"), "the table allows"},
 		{"an undeclared network", replace("    networks: [web]\n\n  web-admin:", "    networks: [web, nowhere]\n\n  web-admin:"), "joins the network nowhere"},
 		{"a dependency that is no service", plant("web-panel", "    depends_on: [ghost]\n"), "which is not a service"},
 	} {

@@ -61,16 +61,29 @@ After changing a file under `migrations/postgres/src/`, run `scripts/gen-migrati
 docker build -f deploy/docker/Dockerfile -t ctrlz/panel:dev .   # first: gen-secrets runs the image to derive the key files
 scripts/gen-secrets.sh                 # once; never overwrites, fails on a secret it cannot make or one that is empty
 scripts/select-profile.sh              # writes deploy/compose/.env from the RAM it finds
+# The two dashboard images (spec 3.2). Compose never builds or pulls them (pull_policy: never), so they must exist before up.
+# HeroUI Pro installs from its own CDN with a token, and every build of the deps stage spends one of its daily downloads: build it
+# once per lockfile, keep the image, and build the apps from it. The token goes in only as the BuildKit secret below, never as a
+# build argument, an ENV or a file.
+# Each line goes on only if the one before it worked: a missing ctrlz/web-deps:ci would otherwise be looked up on Docker Hub by the builds below.
+docker build -f deploy/docker/web.Dockerfile --target deps-fresh --secret id=heroui_auth_token,env=HEROUI_AUTH_TOKEN -t ctrlz/web-deps:ci . \
+  && docker image inspect ctrlz/web-deps:ci >/dev/null \
+  && docker build -f deploy/docker/web.Dockerfile --build-arg APP=panel --build-arg DEPS_STAGE=ctrlz/web-deps:ci -t ctrlz/web-panel:dev . \
+  && docker build -f deploy/docker/web.Dockerfile --build-arg APP=admin --build-arg DEPS_STAGE=ctrlz/web-deps:ci -t ctrlz/web-admin:dev .
 docker compose -f deploy/compose/docker-compose.yml up -d
 ```
 
-The image comes first because `gen-secrets.sh` creates `secrets/kek_root` (32 random bytes, 0400, host only, never mounted) and then runs `ctrlz keys derive` in a throw-away container (no network, read-only, all capabilities dropped, the host user) to write one `kek_<domain>` file per key domain. Every run derives the existing key files again from `kek_root` and compares them, so a deleted root, a wrong backup or a root made again is refused by proof and not by a file being there. Copy `kek_root` off the server and keep it apart from the database backups; the host copy may then be deleted (spec 8.3). Plain `docker build` reads no Compose secrets, so the image can exist before any secret does.
+`HEROUI_AUTH_TOKEN` is read from the environment by name and is never written to a file. A rebuilt web image takes the same two `docker build` lines again; the deps image is rebuilt only when `pnpm-lock.yaml` changes, and an app build from a deps image made from another lockfile stops at a hash check (merge-r3-1). The hash detects a stale image, not a hostile one (the check runs inside the image), so never build from a name that is not on this machine. A deps image that `deps-fresh` did not make (installed by hand because the token is not a CDN token) has no hash and is refused: `CTRLZ_WEB_DEPS_IMAGE=<name> sh scripts/web-deps-stamp.sh` adds the hash of this checkout's `pnpm-lock.yaml` to it, and `CTRLZ_WEB_SKIP_DEPS=1 scripts/ci-web.sh` does the same for you. Both state that the image was installed from this lockfile, and neither overwrites a hash that is already there.
+
+The image comes first because `gen-secrets.sh` creates `secrets/kek_root` (32 random bytes, 0400, host only, never mounted) and then runs `ctrlz keys derive` in a throw-away container (no network, read-only, all capabilities dropped, the host user) to write one `kek_<domain>` file per key domain, and `pub_invite_sign`, the public half of the Ed25519 key that signs invite links (D67; the admin container mounts `kek_invite_sign`, the api mounts only the public file, so a compromised api cannot make an invite). Every run derives the existing key files again from `kek_root` and compares them, so a deleted root, a wrong backup or a root made again is refused by proof and not by a file being there. Copy `kek_root` off the server and keep it apart from the database backups; the host copy may then be deleted (spec 8.3). Plain `docker build` reads no Compose secrets, so the image can exist before any secret does.
 
 Networks (spec 17.2): `ingress` (Caddy), `hub_ingress` (hub), `web`, `app` and `backend` (internal, no route out) and `egress` (worker, for the SMS gateways). Only Caddy shares a network with the web containers and with `api` and `admin`; `api` and `admin` have no route out. `scripts/compose-net-test.sh` checks that on a running stack, `scripts/image-smoke.sh` checks the image (the `ctrlz-admin` link, the CA bundle), and `scripts/compose-smoke.sh` brings a throw-away production-mode stack up, runs `ctrlz-admin bootstrap` and `reset-password`, and greps every container log, the audit rows and the admin sessions for the printed one-time passwords (spec 18.4). Run the last one once per phase; it needs the image and Docker, and takes a few minutes.
 
 Only Caddy (80, 443) is published in P1; the hub publishes nothing until its node channel exists (P4). The database, ClickHouse and Valkey are on an internal network. Passwords are Docker secrets, files under `secrets/`, which is not tracked.
 
 **Upgrading an install of the earlier layout (one `valkey` service).** The stack now has two Valkey servers, `valkey-api` and `valkey-admin`, one for each trust zone. Bring the new file up with `--remove-orphans`:
+
+Build the two web images first (the lines above): `up -d` does not build them, and stops on a missing `ctrlz/web-panel:dev` or `ctrlz/web-admin:dev`.
 
 ```sh
 docker compose -f deploy/compose/docker-compose.yml up -d --remove-orphans

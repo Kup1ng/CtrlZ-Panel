@@ -477,7 +477,7 @@ func DeferredRefusal(ctx context.Context) *Error {
 
 // heldProof is what the pipeline keeps for a class with budget.Bucket.HeldProof: the proof the request
 // carries (a device marker whose seal checked) and a function that charges its buckets, and for a class with
-// HeldInvite the function that charges a live invite's.
+// HeldInvite the function that charges an invite link whose signature checked.
 type heldProof struct {
 	marker       bool
 	settle       func() *Error
@@ -492,8 +492,8 @@ func HeldCarried(ctx context.Context) bool {
 }
 
 // InviteProofHolds is called by the handler of a class with budget.Bucket.HeldInvite once it has shown that
-// the invite the request carries is live. It charges the invite's own buckets and gives back the plain
-// network token (when the pipeline took one), so a live invite is neither spent nor refused by the bucket
+// the invite link the request carries opens (a signature that checks, D67). It charges the invite's own buckets and gives back the plain
+// network token (when the pipeline took one), so an invite link that opens is neither spent nor refused by the bucket
 // strangers on its network fill. It returns the refusal of the invite's buckets, or nil. For a class without
 // HeldInvite it returns the refusal the pipeline handed over (DeferredRefusal) and charges nothing.
 func InviteProofHolds(ctx context.Context, inviteID string) *Error {

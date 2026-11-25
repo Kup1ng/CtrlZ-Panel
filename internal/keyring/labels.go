@@ -39,6 +39,9 @@ const (
 	LifeAdminSession = 8 * time.Hour
 	// LifeCeremony is the life of a ticket, stateless ones included (7.5).
 	LifeCeremony = 5 * time.Minute
+	// LifeInvite is the longest life of an invite link and so the longest the admin may set (D67). A link
+	// stays good until its expiry, so it is also how long the old line of invite_sign has to stay in the file.
+	LifeInvite = 30 * 24 * time.Hour
 	// LifeRefresh is the life of one refresh token (3.3). The proof tag inside it lives as long.
 	LifeRefresh = 30 * 24 * time.Hour
 )
@@ -49,6 +52,12 @@ const (
 // second-factor scopes refilled then. The text used to say "the counters restart from zero" and put the
 // restart at the removal (round 9, primitives-r9-2).
 const throttleRemoved = "nothing: counters are made under the newest key only, so they restarted at the rotation, and the long ceilings refilled then"
+
+// otpRotated is what a key rotation costs an OTP code hash (round 26, primitives-r26-2). Ring.MAC always uses the
+// newest key and the database compares the stored hash with the one made now, so a code sent before the
+// containers were recreated no longer matches, whether or not the old line is still in the ring. Throttle rows
+// are the same case (throttleRemoved).
+const otpRotated = "a live code stops matching when the containers are recreated with the new line, not at the removal: a hash is made and checked under the newest key only, so the user asks for a new code"
 
 // Use is one use of a domain key whose values outlive a restart or sit outside the
 // database: a tag on a cookie, a window of rows, a short-lived sealed row.
@@ -80,7 +89,7 @@ func Uses() []Use {
 			"a login or reset step in progress starts again, and a Remember me browser signs in again"},
 		{DomainAuthMAC, LabelThrottle, "throttle rows", LifeThrottle, throttleRemoved},
 		{DomainAuthMAC, LabelOTP, "OTP code hashes", LifeOTP,
-			"a live code no longer matches"},
+			otpRotated},
 		{DomainAuthMAC, LabelCeremony, "passkey login tickets", LifeCeremony,
 			"a passkey login in progress starts again"},
 		{DomainAdminMAC, LabelAdminDevice, "admin device markers", LifeAdminDevice,
@@ -88,6 +97,8 @@ func Uses() []Use {
 		{DomainAdminMAC, LabelThrottle, "throttle rows", LifeThrottle, throttleRemoved},
 		{DomainAdminMAC, LabelSession, "session tags", LifeAdminSession,
 			"the session ends and its admin signs in again"},
+		{DomainInviteSign, LabelInviteLink, "invite links", LifeInvite,
+			"the link no longer opens and the admin makes a new one"},
 	}
 }
 
@@ -135,7 +146,7 @@ func LifeText(d time.Duration) string {
 // LabelNames lists the labels the Label constants define, for the test that keeps
 // Uses complete. The labels are code, not data.
 func LabelNames() []string {
-	return []string{LabelOTP, LabelThrottle, LabelDevice, LabelAdminDevice, LabelSession, LabelCeremony, LabelProof}
+	return []string{LabelOTP, LabelThrottle, LabelDevice, LabelAdminDevice, LabelSession, LabelCeremony, LabelProof, LabelInviteLink}
 }
 
 // Primitive is the one primitive a label's subkey may key.
@@ -146,6 +157,8 @@ const (
 	MACOnly Primitive = iota + 1
 	// SealOnly labels key AES-256-GCM (Ring.SealLabeled, OpenLabeled) and nothing else.
 	SealOnly
+	// SignOnly labels seed Ed25519 (Ring.Sign) and nothing else.
+	SignOnly
 )
 
 // PrimitiveOf is the registered primitive of a label. A label is a subkey,
@@ -162,6 +175,8 @@ func PrimitiveOf(label string) (Primitive, bool) {
 		return MACOnly, true
 	case LabelDevice, LabelAdminDevice:
 		return SealOnly, true
+	case LabelInviteLink:
+		return SignOnly, true
 	}
 	return 0, false
 }
@@ -187,6 +202,9 @@ const (
 	// ModeLabeled domains are only the root of labelled subkeys (HKDF-Expand): only MAC, VerifyMAC,
 	// SealLabeled and OpenLabeled apply, each with a label registered for its primitive.
 	ModeLabeled
+	// ModeSigning domains are the root of one Ed25519 seed (D67): only Ring.Sign applies, under the one
+	// label Uses lists. The public half is derived for the process that only verifies (public.go).
+	ModeSigning
 )
 
 // ModeOf is the registered mode of a domain. A new domain is a line here and a reviewed choice;
@@ -197,8 +215,23 @@ func ModeOf(domain string) (Mode, bool) {
 		return ModeSealed, true
 	case DomainAuthMAC, DomainAdminMAC:
 		return ModeLabeled, true
+	case DomainInviteSign:
+		return ModeSigning, true
 	}
 	return 0, false
+}
+
+// SigningLabel is the one label of a signing domain, the one its Ed25519 seed is derived under.
+func SigningLabel(domain string) (string, bool) {
+	if !modeFor(domain, ModeSigning) {
+		return "", false
+	}
+	for _, u := range Uses() {
+		if u.Domain == domain {
+			return u.Label, true
+		}
+	}
+	return "", false
 }
 
 // modeFor reports whether domain is registered with mode m.

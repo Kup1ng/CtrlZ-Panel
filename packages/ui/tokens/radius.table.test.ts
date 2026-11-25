@@ -72,4 +72,18 @@ describe("radius table (T-474)", () => {
     // The CellSwitch row is not the track: it keeps the rule, and the track inside is a stock .switch__control.
     expect(block(".cell-switch .cell-switch__trigger")).toContain("var(--radius-control-ratio)");
   });
+
+  // wp8-r9-4: the parts of an input group round their free corners with --radius-field, so the shell hands them its own
+  // radius, and keeps its border-radius. Without the first the autofill cover is clipped to the 8px --radius inside
+  // a 15.6px shell; without the second the shell is square.
+  it("the input group gives its inner parts the shell's radius and keeps its own", async () => {
+    const css = await render();
+    const group = css.slice(css.indexOf("  .input-group {"));
+    const body = group.slice(0, group.indexOf("}"));
+    const rule = "min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap))";
+    expect(body).toContain(`border-radius: ${rule};`);
+    // HeroUI reads --field-radius for rounded-field and --radius-field for the autofill clip-path.
+    expect(body).toContain(`--field-radius: ${rule};`);
+    expect(body).toContain(`--radius-field: ${rule};`);
+  });
 });

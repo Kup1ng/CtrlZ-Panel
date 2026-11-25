@@ -1,7 +1,6 @@
 "use client";
 
-import {EmptyState} from "@heroui-pro/react";
-import {Icon} from "@ctrlz/icons/Icon.tsx";
+import {SectionEmpty} from "../feedback/SectionEmpty.tsx";
 import type {GeneralIconName} from "@ctrlz/icons/hugeicons.ts";
 import {useTranslations} from "next-intl";
 
@@ -11,8 +10,7 @@ import type {HelpKey} from "./SectionHelp.tsx";
 
 // Spec 8.9. The page of a later phase: its header and a neutral "not available
 // yet". T-113 needs the route to exist. Each stub has one owner phase, which
-// replaces the page file. The empty state is feedback/SectionEmpty.tsx's job
-// (WP7); this is the same EmptyState markup until that file exists.
+// replaces the page file.
 
 export function StubPage({
   icon,
@@ -33,15 +31,7 @@ export function StubPage({
     <>
       <PageHeader icon={icon} title={title} subtitle={subtitle} helpKey={helpKey} />
       {withOnboarding ? <OnboardingCard /> : null}
-      <EmptyState size="sm">
-        <EmptyState.Header>
-          <EmptyState.Media variant="icon">
-            <Icon name={icon} className="size-5" />
-          </EmptyState.Media>
-          <EmptyState.Title>{t("stub.title")}</EmptyState.Title>
-          <EmptyState.Description>{t("stub.text")}</EmptyState.Description>
-        </EmptyState.Header>
-      </EmptyState>
+      <SectionEmpty icon={icon} title={t("stub.title")} description={t("stub.text")} />
     </>
   );
 }

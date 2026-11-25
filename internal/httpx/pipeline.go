@@ -262,7 +262,7 @@ func (a *API) perOp(next http.Handler) http.Handler {
 				// A Held class is handed over only for a request that carries a proof the handler may find
 				// holds: every other request (no marker) is refused here as before, so a flood from a network
 				// never costs the account read that the handler needs to tell.
-				// A class that also takes a live invite (HeldInvite) hands every plain refusal over: only the
+				// A class that also takes an invite link (HeldInvite) hands every plain refusal over: only the
 				// handler can read the invite token, and it answers the refusal before any I/O unless the request
 				// is an invite request.
 				if !class.Deferred || e.Status != http.StatusTooManyRequests || (class.Held && heldID == "" && !class.HeldInvite) {

@@ -26,13 +26,7 @@ export const APP_NAMESPACES = {
 // file that goes missing later is an error and not an empty page. The owner of
 // a namespace deletes its entry here when the file lands, and adds one line to
 // types.d.ts. A test fails if this list and the files on disk disagree.
-export const PENDING_NAMESPACES = [
-  "errors",
-  "feedback",
-  "auth",
-  "account",
-  "admin",
-] as const satisfies readonly Namespace[];
+export const PENDING_NAMESPACES = [] as const satisfies readonly Namespace[];
 
 export type PendingNamespace = (typeof PENDING_NAMESPACES)[number];
 
@@ -50,10 +44,13 @@ export type AppMessages = Partial<Record<Namespace, MessageTree>>;
 export function pickNamespaces<M extends Record<string, unknown>>(
   messages: M,
   app: AppId,
+  options: {lab?: boolean} = {},
 ): Partial<M> {
   const allowed: readonly string[] = APP_NAMESPACES[app];
   const out: Record<string, unknown> = {};
   for (const [ns, value] of Object.entries(messages)) {
+    // The lab pages answer 404 unless CTRLZ_LAB is "1", and their wording stays home with them (gate-r34-3).
+    if (ns === "lab" && !options.lab) continue;
     if (allowed.includes(ns)) out[ns] = value;
   }
   return out as Partial<M>;

@@ -62,7 +62,7 @@ func TestAPanicAfterTheAcceptIsRecordedAsTheAccept(t *testing.T) {
 
 	t.Run("outbox message", func(t *testing.T) {
 		r := newRig(t)
-		id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+		id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 		if _, err := newWorker(r).Drain(r.env.Ctx); err != nil {
 			t.Fatal(err)
 		}

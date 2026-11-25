@@ -2,6 +2,7 @@ package adminapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	adminapidoc "github.com/Kup1ng/CtrlZ-Panel/api"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/api"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/apispec"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/otp"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/password"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/session"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/authtest"
@@ -56,7 +58,9 @@ func (c *clock) add(d time.Duration) {
 }
 
 type rig struct {
-	t      *testing.T
+	t *testing.T
+	// codes is the code source of the tenant API of this rig, so that a test can finish a registration.
+	codes  *lastCode
 	keys   *keyring.Ring
 	hasher *password.Hasher
 	logs   *syncLog
@@ -114,15 +118,17 @@ func newRigOn(t *testing.T, keys *keyring.Ring, maxConns int32) *rig {
 	if err := tm.WithKeys(tenantKeys, keyring.DomainAuthMAC); err != nil {
 		t.Fatal(err)
 	}
+	codes := &lastCode{}
 	th, err := api.New(api.Deps{
 		Log: slog.New(slog.NewJSONHandler(logs, nil)), Store: tst, Sessions: tm,
 		Limiter: ratelimit.New(ratelimit.Config{Service: ratelimit.Tenant, LocalOnly: true, Now: ck.now}),
-		Keys:    tenantKeys, Hasher: authtest.FastHasher(t), PanelHost: panelHost, Strict: true, Now: ck.now,
+		Keys:    tenantKeys, Invites: authtest.InvitesOf(t, keys), Hasher: authtest.FastHasher(t), PanelHost: panelHost, Strict: true, Now: ck.now,
+		OTPOptions: []otp.Option{otp.WithCodeSource(codes.next)},
 	}, httpx.NewHealth(health))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &rig{t: t, deps: deps, keys: keys, hasher: hasher, logs: logs, once: once, env: env, adm: adm, ck: ck, m: m, lim: lim, h: h, tenant: th, tm: tm, tst: tst}
+	return &rig{t: t, codes: codes, deps: deps, keys: keys, hasher: hasher, logs: logs, once: once, env: env, adm: adm, ck: ck, m: m, lim: lim, h: h, tenant: th, tm: tm, tst: tst}
 }
 
 func (r *rig) adminSession(t *testing.T) session.AdminIssued {
@@ -404,4 +410,26 @@ func itoa(i int) string {
 		b = append([]byte{byte('0' + i%10)}, b...)
 	}
 	return string(b)
+}
+
+// lastCode makes the OTP codes of the tenant API of a rig and remembers the last one, which is what the SMS would
+// have carried.
+type lastCode struct {
+	mu   sync.Mutex
+	n    int
+	code string
+}
+
+func (c *lastCode) next() (secret.String, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.n++
+	c.code = fmt.Sprintf("%06d", 400000+c.n)
+	return secret.New(c.code), nil
+}
+
+func (c *lastCode) last() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.code
 }

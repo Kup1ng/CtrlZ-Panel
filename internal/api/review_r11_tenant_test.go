@@ -7,50 +7,38 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/Kup1ng/CtrlZ-Panel/internal/budget"
 )
 
 // TestAFloodOfJunkInviteTokensCannotRefuseAnInviteeOnAnotherNetwork is tenant-r10-3 (a flood from one /24) and
-// tenant-r11-4 (the same flood from the /64s of one IPv6 /48). The reads of an invite for a request the otp-send bucket
-// refused are bounded per network, per /48 and for the process (internal/netpool, registered as the pool
-// "invite-read"). The flood comes first and keeps running while the invitee asks, from a /24 that strangers filled (the
-// situation of tenant-r9-1); the invitee must pass every time, and the database work the flood caused is bounded by
-// its source's share and not by how long it kept sending: a /24's burst of reads, or for a /48 the 40 tries of
-// invite_net48 and the one row it is kept in, and no row per /64 after that.
+// tenant-r11-4 (the same flood from the /64s of one IPv6 /48), as D67 answers them. The rounds bounded the reads
+// a junk token could cost in a pool (internal/netpool); a junk token now is a forged link, which is refused in
+// process before any read and writes no throttle row, so there is no work left to pool and no row to count.
+// The flood comes first and keeps running while the invitees ask. One invitee is on a /24 that strangers filled
+// (the situation of tenant-r9-1) and must pass every time; the other is on the very /24 the flood comes from, whose
+// plain otp-send bucket the flood spent, and his link opening is what lets him through. The database work the flood
+// caused is none: not a throttle row beyond the one each invitee's own invite has.
 func TestAFloodOfJunkInviteTokensCannotRefuseAnInviteeOnAnotherNetwork(t *testing.T) {
-	pool, ok := budget.FindNetPool(budget.Tenant, "invite-read")
-	if !ok {
-		t.Fatal("the invite-read pool is not registered")
-	}
-	n48, _ := budget.FindScope("invite_net48")
 	cases := []struct {
 		name string
 		// attacker is the source of loop i; fillFrom is the source of the i-th request that fills the otp-send bucket.
 		attacker, fillFrom func(i int) string
-		fills              int
-		// tooMany reports whether the database work of the flood stayed inside its source's share.
-		within func(f *frig) (string, bool)
+		// inviteeOnFlood is the address of an invitee inside the flooded network.
+		inviteeOnFlood func(i int) string
+		fills          int
 	}{
 		{
-			name:     "one /24",
-			attacker: func(i int) string { return fmt.Sprintf("198.51.100.%d", 100+i) },
-			fillFrom: func(i int) string { return fmt.Sprintf("198.51.100.%d", 10+i) },
-			fills:    12,
-			within: func(f *frig) (string, bool) {
-				charged := f.count(`SELECT coalesce(sum(count), 0) FROM ctrlz.auth_throttle WHERE scope = 'invite_net'`)
-				return fmt.Sprintf("%d reads were charged, want at most the network's burst of %d", charged, pool.Burst), charged <= pool.Burst+1
-			},
+			name:           "one /24",
+			attacker:       func(i int) string { return fmt.Sprintf("198.51.100.%d", 100+i) },
+			fillFrom:       func(i int) string { return fmt.Sprintf("198.51.100.%d", 10+i) },
+			inviteeOnFlood: func(i int) string { return fmt.Sprintf("198.51.100.%d", 200+i) },
+			fills:          12,
 		},
 		{
-			name:     "the /64s of one IPv6 /48",
-			attacker: func(i int) string { return fmt.Sprintf("2001:db8:7:%x::1", i+1) },
-			fillFrom: func(i int) string { return fmt.Sprintf("2001:db8:7:%x::2", 0x100+i) },
-			fills:    pool.Burst, // more than 4 x the 5 a minute of the class
-			within: func(f *frig) (string, bool) {
-				rows := f.count(`SELECT count(*) FROM ctrlz.auth_throttle WHERE scope = 'invite_net'`)
-				return fmt.Sprintf("%d throttle rows were written, want at most the %d tries of invite_net48 and its own row", rows, n48.Max), rows <= n48.Max+1
-			},
+			name:           "the /64s of one IPv6 /48",
+			attacker:       func(i int) string { return fmt.Sprintf("2001:db8:7:%x::1", i+1) },
+			fillFrom:       func(i int) string { return fmt.Sprintf("2001:db8:7:%x::2", 0x100+i) },
+			inviteeOnFlood: func(i int) string { return fmt.Sprintf("2001:db8:7:%x::9", 0x200+i) },
+			fills:          40, // more than 4 x the 5 a minute of the class
 		},
 	}
 	for _, tc := range cases {
@@ -58,8 +46,10 @@ func TestAFloodOfJunkInviteTokensCannotRefuseAnInviteeOnAnotherNetwork(t *testin
 			f := newFrig(t, frigOpts{})
 			f.clearThrottle()
 			const phone = "+989125553021"
+			const phoneOnFlood = "+989125553022"
 			code := f.plantInvite(phone, time.Hour, false)
-			const junkToken = "AAAAA-AAAAA-AAAAA-AAAAA"
+			codeOnFlood := f.plantInvite(phoneOnFlood, time.Hour, false)
+			junkToken := f.forgedInvite()
 
 			// Strangers fill the plain otp-send bucket of the invitee's /24 and of the attacker's source.
 			fill := func(from func(i int) string, n int, label string) {
@@ -78,8 +68,11 @@ func TestAFloodOfJunkInviteTokensCannotRefuseAnInviteeOnAnotherNetwork(t *testin
 			fill(func(i int) string { return fmt.Sprintf("203.0.113.%d", 10+i) }, 12, "invitee's /24")
 			fill(tc.fillFrom, tc.fills, "attacker's source")
 			f.clearOTP()
+			// The fills above are strangers' login requests, which write throttle rows of their own: what is counted
+			// below is what the flood of junk invite tokens adds from here.
+			f.clearThrottle()
 
-			// The flood: many loops on the attacker's source, started before the invitee asks.
+			// The flood: many loops on the attacker's source, started before the invitees ask.
 			const loops = 32
 			clients := make([]*client, loops)
 			for i := range clients {
@@ -117,13 +110,21 @@ func TestAFloodOfJunkInviteTokensCannotRefuseAnInviteeOnAnotherNetwork(t *testin
 					passed++
 				}
 			}
+			// And the invitee inside the flooded network itself: his link opens, so the flood's spent bucket is not his.
+			c := f.client()
+			c.ip = tc.inviteeOnFlood(0)
+			onFlood := c.requestOTP(phoneOnFlood, "invite", map[string]any{"invite_token": codeOnFlood}).Code
 			close(stop)
 			wg.Wait()
 			if passed != 5 {
-				t.Errorf("the invitee was answered %d times of 5 while another source flooded the invite reads", passed)
+				t.Errorf("the invitee was answered %d times of 5 while another source flooded junk invite tokens", passed)
 			}
-			if msg, ok := tc.within(f); sent.Load() < 200 || !ok {
-				t.Errorf("the flood sent %d requests and %s", sent.Load(), msg)
+			if onFlood != http.StatusAccepted {
+				t.Errorf("the invitee on the flooded network was answered %d, want 202: his link opens and stands outside the plain bucket", onFlood)
+			}
+			// The flood wrote nothing: the only rows are the one of each invite that asked.
+			if n := f.count(`SELECT count(*) FROM ctrlz.auth_throttle WHERE scope = 'invite_net'`); sent.Load() < 200 || n != 2 {
+				t.Errorf("the flood sent %d requests and %d invite throttle rows exist, want the two of the invitees' own invites", sent.Load(), n)
 			}
 		})
 	}

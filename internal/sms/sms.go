@@ -26,7 +26,7 @@ import (
 // Message per gateway.
 type Message struct {
 	To       string // E.164
-	Template string // otp, otp_reset, otp_phone, invite, account_exists
+	Template string // otp, otp_reset, otp_phone, account_exists, notice_passkey, notice_recovery
 	Locale   string // fa or en
 	Values   map[string]secret.String
 }

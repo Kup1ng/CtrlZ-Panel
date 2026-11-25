@@ -2,3 +2,4 @@
 # repository root, then " # reason". The reason must say why the string is a name and not a
 # request: nothing may load from outside at run time (fixed rule 9, spec 16.1).
 packages/ui/src/proxy/csp.ts # the shape of CTRLZ_VERIFY_ORIGIN in an error message, never fetched
+packages/ui/src/proxy/safeNext.ts # a reserved .invalid base for new URL() to resolve a next value against, only compared, never fetched

@@ -1085,7 +1085,7 @@ mutants:
     docker: true
     why: The issue function counts on the one row 'all' again, so every request, real or decoy, queues on one counter row and a flood of decoys refuses the real requests with 503 (db-r18-2).
     edits:
-      - file: migrations/postgres/0055_review_round18_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           v_gkey   := CASE WHEN pg_catalog.random() < 1.0 / 16 THEN 'all'
                              ELSE 'all:' || (1 + pg_catalog.floor(pg_catalog.random() * 15))::integer END;
@@ -1116,9 +1116,9 @@ mutants:
     edits:
       - file: internal/store/catalogtest/checks.go
         old: |-
-          = 'ctrlz_scoped') = ANY (p.polroles))`)
+          = 'ctrlz_scoped') = ANY (p.polroles))
         new: |-
-          = 'ctrlz_scoped') = ANY (p.polroles) AND false)`)
+          = 'ctrlz_scoped') = ANY (p.polroles) AND false)
     must_fail:
       - pkg: ./internal/store/catalogtest
         tests: [TestDefinerOwnerListCanFail]
@@ -1284,9 +1284,9 @@ mutants:
     edits:
       - file: internal/auth/session/refresh.go
         old: |-
-          if !found || row.UserID != info.UserID || row.RevokedAt != nil
+          if !found || row.UserID != info.UserID {
         new: |-
-          if !found || row.RevokedAt != nil
+          if !found {
     must_fail:
       - pkg: ./internal/auth/session
         tests: [TestRefreshOfASessionThatBelongsToAnotherUserIsRefused]
@@ -1669,7 +1669,7 @@ mutants:
     docker: true
     why: auth_phone_mark_verified stops binding the code to the phone of the locked row, so an OTP login or a reset ticket made from a code for a number the user has left survives a phone change (db-r6-5, db-r6-7).
     edits:
-      - file: migrations/postgres/0029_review_round6_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           WHERE o.id = p_otp_id AND o.phone_e164 = v_phone AND o.purpose IN ('login', 'reset')
         new: |-
@@ -3255,19 +3255,6 @@ mutants:
     must_fail:
       - pkg: ./internal/sms/melipayamak
         tests: [TestBalance]
-  - id: sms-failure-classification-invite-code-longer-than-the-sms-ir-limit
-    rule: sms-failure-classification
-    finding: sms-r9-4
-    why: The formatted invite code grows past the 25 characters sms.ir takes, so every invite fails locally as value_too_long (message scope, a warning, no breaker) and nothing but one test says so.
-    edits:
-      - file: internal/auth/invite/invite.go
-        old: |-
-          groupSize = 5
-        new: |-
-          groupSize = 2
-    must_fail:
-      - pkg: ./internal/sms/smsir
-        tests: [TestEveryValueTheServiceSendsFitsTheProviderLimit]
   - id: caps-and-endings-record-of-an-accepted-send-is-one-attempt
     rule: caps-and-endings
     finding: sms-r9-5
@@ -3872,89 +3859,6 @@ mutants:
     must_fail:
       - pkg: ./internal/budget
         tests: [TestEveryDoorHasARecoveryScopeAndACodeScope]
-  - id: budget-keying-invite-reads-share-one-place
-    rule: budget-keying
-    finding: tenant-r10-3
-    docker: true
-    why: Every network is hashed to one place again, so one host that floods well-shaped invite tokens holds the read that a live invitee on another network needs, and the reads a flood causes are not bounded by its network's share.
-    edits:
-      - file: internal/netpool/netpool.go
-        old: |-
-          n := &p.narrow[maphash.String(p.seed, netkey.Net(addr))%places]
-        new: |-
-          n := &p.narrow[maphash.String(p.seed, netkey.Net(addr))%1]
-    must_fail:
-      - pkg: ./internal/netpool
-        tests: [TestNetReadsAreBoundedPerNetworkAndForTheProcess]
-      - pkg: ./internal/api
-        tests: [TestAFloodOfJunkInviteTokensCannotRefuseAnInviteeOnAnotherNetwork]
-  - id: budget-keying-network-pool-ignores-the-48
-    rule: budget-keying
-    finding: tenant-r11-4
-    docker: true
-    why: The pool bounds a /64 and not the /48 that holds 65,536 of them, so one IPv6 subscriber rotating its /64s holds every slot of the process and is granted a burst per /64.
-    edits:
-      - file: internal/netpool/netpool.go
-        old: |-
-          if key, has := netkey.Wide(addr); has {
-          		w = &p.wide
-        new: |-
-          if key, has := netkey.Wide(addr); has && false {
-          		w = &p.wide
-    must_fail:
-      - pkg: ./internal/netpool
-        tests: [TestOneIPv6AllocationIsOneSource]
-      - pkg: ./internal/budget
-        tests: [TestAbuseANetworkPoolIsBoundedPerNetworkPer48AndForTheProcess]
-      - pkg: ./internal/api
-        tests: [TestAFloodOfJunkInviteTokensCannotRefuseAnInviteeOnAnotherNetwork]
-  - id: budget-keying-network-pool-refused-try-keeps-the-token
-    rule: budget-keying
-    finding: tenant-r11-1
-    why: A try that the process bound refuses gives back the place of its network and not the token, so an invitee who retries while other networks hold the slots empties his own share.
-    edits:
-      - file: internal/netpool/netpool.go
-        old: |-
-          w.refund(wideBurst)
-          		}
-          		n.refund(c.Burst)
-        new: |-
-          w.refund(wideBurst)
-          		}
-          		n.release()
-    must_fail:
-      - pkg: ./internal/netpool
-        tests: [TestARefusedTryGivesBackEverythingItTook]
-      - pkg: ./internal/budget
-        tests: [TestAbuseANetworkPoolIsBoundedPerNetworkPer48AndForTheProcess]
-  - id: budget-keying-network-pool-refill-freezes-on-a-step-back
-    rule: clock-source
-    finding: tenant-r11-2
-    why: The mark of the last refill stays in the future after the clock steps back, so the bucket does not refill until the clock catches up.
-    edits:
-      - file: internal/netpool/netpool.go
-        old: |-
-          case dt < 0:
-        new: |-
-          case dt < -1e18:
-    must_fail:
-      - pkg: ./internal/netpool
-        tests: [TestTheBucketRefillsAfterTheClockStepsBack]
-      - pkg: ./internal/budget
-        tests: [TestAbuseANetworkPoolIsBoundedPerNetworkPer48AndForTheProcess]
-  - id: budget-keying-invite-hit-skips-the-48
-    rule: budget-keying
-    finding: tenant-r11-4
-    why: A junk invite token is charged on its /64 only, so a rotator through the /64s of one /48 writes a throttle row per /64 and has ten tries on each.
-    edits:
-      - file: internal/auth/throttle/throttle.go
-        old: |-
-          if err := s.Charge(ctx, InviteNet48, w); err != nil {
-        new: |-
-          if err := s.Charge(ctx, InviteNet, w); err != nil {
-    must_fail:
-      - pkg: ./internal/budget
-        tests: [TestAbuseAStrangersFillTheNetworkBucketsAndAProofStillPasses]
   - id: budget-keying-network-cut-through-the-wrapper
     rule: budget-keying
     finding: tenant-r12-3
@@ -3962,10 +3866,10 @@ mutants:
     edits:
       - file: internal/api/routes_login.go
         old: |-
-          release, ok := s.inviteReads.Try(httpx.ClientIPFrom(ctx))
+          info, found, err := s.auth.InviteByHash(ctx, ref.Hash)
         new: |-
           _, _ = httpx.Subject(ctx)
-          	release, ok := s.inviteReads.Try(httpx.ClientIPFrom(ctx))
+          	info, found, err := s.auth.InviteByHash(ctx, ref.Hash)
     must_fail:
       - pkg: ./internal/lint
         tests: [TestNoCodeKeysAnythingOnTheNetworkOutsideTheRegistry]
@@ -5184,7 +5088,7 @@ mutants:
     edits:
       - file: internal/admincli/derive.go
         old: |-
-          return missingKeyFilesError{missing: missing, refusal: err}
+          return missingKeyFilesError{missing: names, stale: stale, refusal: err}
         new: |-
           return err
     must_fail:
@@ -5523,7 +5427,7 @@ mutants:
           MaxOTPUnitsFA = 640
     must_fail:
       - pkg: ./internal/sms
-        tests: [TestCheckBodyLengthBoundsTheThreeOTPBodiesAndNothingElse]
+        tests: [TestCheckBodyLengthBoundsTheOnePartBodiesAndNothingElse]
   - id: sms-failure-classification-a-rekey-lifts-the-hold
     rule: sms-failure-classification
     finding: sms-r13-4
@@ -5782,30 +5686,30 @@ mutants:
   - id: boundary-input-the-invite-code-is-outside-the-fold
     rule: boundary-input
     finding: tenant-r15-5
-    why: invite.Canonical stops folding with digits.Typed, the state before round 15, so a code pasted with a direction mark, or typed with Persian digits, is not an invite.
+    why: invite.Open stops folding with digits.Typed, the state before round 15, so a link pasted with a direction mark, or with Persian digits, is not an invite.
     edits:
       - file: internal/auth/invite/invite.go
         old: |-
           for _, r := range digits.Typed(s) {
         new: |-
-          for _, r := range s {
+          for _, r := range s + digits.Typed("") {
     must_fail:
       - pkg: ./internal/auth/digits
         tests: [TestEveryTypedCodeSurvivesTheSameMarks, TestEveryTypedCodeDropsEveryPasteMark]
   - id: boundary-input-the-invite-field-is-on-the-text-pattern
     rule: boundary-input
     finding: tenant-r15-1
-    why: The invite lookup's token goes back to the text pattern, which refuses every mark a paste carries, so the fold of invite.Canonical is dead code for the marks it was written for.
+    why: The invite lookup's token goes back to the text pattern, which refuses every mark a paste carries, so the fold of invite.Open is dead code for the marks it was written for.
     edits:
       - file: api/openapi.yaml
         old: |-
           required: [token]
                 properties:
-                  token: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+                  token: {type: string, minLength: 1, maxLength: 200, pattern: *pastedcontent}
         new: |-
           required: [token]
                 properties:
-                  token: {type: string, maxLength: 128, pattern: *text}
+                  token: {type: string, maxLength: 200, pattern: *text}
     must_fail:
       - pkg: ./internal/lint
         tests: [TestOpenAPIBoundsEveryInput]
@@ -5971,7 +5875,7 @@ mutants:
     docker: true
     why: auth_otp_issue sends pg_notify again (as 0047 did for every accepted request), so the day a stalled listener and a flooding sender fill the cluster's notification queue no OTP can be issued for any tenant; the catalog check reads the function, and the full-queue test shows the commit failing.
     edits:
-      - file: migrations/postgres/0055_review_round18_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           RETURNING ctrlz.otp_challenges.id INTO v_id;
         new: |-
@@ -7976,7 +7880,7 @@ mutants:
     docker: true
     why: The decoy of auth_otp_issue stops probing and locking the one global counter row, so a phone with an account waits behind every real send while a phone without one is answered at once, and the wait tells them apart.
     edits:
-      - file: migrations/postgres/0055_review_round18_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           FOR i IN 1 .. pg_catalog.array_length(v_keys, 1) LOOP
         new: |-
@@ -9113,7 +9017,7 @@ mutants:
     edits:
       - file: scripts/compose-net-test.sh
         old: |-
-          bb=$(awk '/^  web-panel:/ {f=1; next} f && /^    image:/ {print $2; exit}' "$file")
+          bb=$(awk '/^  caddy-init:/ {f=1; next} f && /^    image:/ {print $2; exit}' "$file")
         new: |-
           bb="busybox:1.37"
     must_fail:
@@ -9165,9 +9069,9 @@ mutants:
     edits:
       - file: internal/lint/imagepin_test.go
         old: |-
-          check(path, nonComment(text))
+          check(path, body)
         new: |-
-          _, _ = path, nonComment(text)
+          _, _ = path, body
     must_fail:
       - pkg: ./internal/lint
         tests: [TestImagePinLintCanFail]
@@ -9393,6 +9297,11 @@ mutants:
           PONG) : >"$alive" ;;
         new: |-
           PONG) ;;
+      - file: deploy/compose/valkey/maintain.sh
+        old: |-
+          : >"$alive" # a well-formed answer
+        new: |-
+          : # a well-formed answer
     must_fail:
       - pkg: ./internal/lint
         tests: [TestValkeyServicesCannotSubmitAScript]
@@ -10085,7 +9994,7 @@ mutants:
     edits:
       - file: internal/lint/deploy_test.go
         old: |-
-          logs := l.logsWhen(func(s string) bool { return strings.Contains(s, wantLogger) })
+          logs := l.logsWhen(holds)
         new: |-
           time.Sleep(time.Second)
           logs := l.docker("logs", l.name)
@@ -11860,10 +11769,10 @@ mutants:
     edits:
       - file: internal/store/tenant_auth.go
         old: |-
-          ORDER BY created_at DESC, id DESC
+          ORDER BY s.created_at DESC, s.id DESC
           LIMIT $4`
         new: |-
-          ORDER BY created_at DESC, id DESC
+          ORDER BY s.created_at DESC, s.id DESC
           LIMIT $4 + 1000000`
     must_fail:
       - pkg: ./internal/api
@@ -12914,9 +12823,41 @@ mutants:
     edits:
       - file: deploy/compose/docker-compose.yml
         old: |-
+          TestComposeKeysAreAnAllowList hold this.
             pull_policy: never
         new: |-
+          TestComposeKeysAreAnAllowList hold this.
             pull_policy: missing
+    must_fail:
+      - pkg: ./internal/lint
+        tests: [TestEveryImageIsPinnedByDigest, TestComposeKeysAreAnAllowList]
+  - id: images-are-pinned-the-web-panel-image-may-be-pulled
+    rule: images-are-pinned
+    finding: merge-r2-16
+    why: The web-panel image has a pull policy that lets docker compose pull and up fetch it, so whoever owns docker.io/ctrlz serves the dashboard and sees every sign-in.
+    edits:
+      - file: deploy/compose/docker-compose.yml
+        old: |-
+          image: ${CTRLZ_WEB_PANEL_IMAGE:-ctrlz/web-panel:dev}
+              pull_policy: never
+        new: |-
+          image: ${CTRLZ_WEB_PANEL_IMAGE:-ctrlz/web-panel:dev}
+              pull_policy: missing
+    must_fail:
+      - pkg: ./internal/lint
+        tests: [TestEveryImageIsPinnedByDigest, TestComposeKeysAreAnAllowList]
+  - id: images-are-pinned-the-web-admin-image-may-be-pulled
+    rule: images-are-pinned
+    finding: merge-r2-16
+    why: The web-admin image has a pull policy that lets docker compose pull and up fetch it, so whoever owns docker.io/ctrlz serves the admin dashboard.
+    edits:
+      - file: deploy/compose/docker-compose.yml
+        old: |-
+          image: ${CTRLZ_WEB_ADMIN_IMAGE:-ctrlz/web-admin:dev}
+              pull_policy: never
+        new: |-
+          image: ${CTRLZ_WEB_ADMIN_IMAGE:-ctrlz/web-admin:dev}
+              pull_policy: missing
     must_fail:
       - pkg: ./internal/lint
         tests: [TestEveryImageIsPinnedByDigest, TestComposeKeysAreAnAllowList]
@@ -15127,11 +15068,11 @@ mutants:
         old: |-
           required: [token]
                 properties:
-                  token: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+                  token: {type: string, minLength: 1, maxLength: 200, pattern: *pastedcontent}
         new: |-
           required: [token]
                 properties:
-                  token: {type: string, maxLength: 64, pattern: *pasted}
+                  token: {type: string, maxLength: 200, pattern: *pasted}
     must_fail:
       - pkg: ./internal/lint
         tests: [TestOpenAPIBoundsEveryInput]
@@ -15318,9 +15259,9 @@ mutants:
     edits:
       - file: internal/store/tenant_auth.go
         old: |-
-          ORDER BY created_at DESC, id DESC LIMIT $3)
+          ORDER BY s.created_at DESC, s.id DESC) AS rn
         new: |-
-          ORDER BY created_at ASC, id ASC LIMIT $3)
+          ORDER BY s.created_at ASC, s.id ASC) AS rn
     must_fail:
       - pkg: ./internal/auth/session
         tests: [TestTheCapOnLiveSessionsEndsTheOldestAndNeverRefusesTheLogin]
@@ -15332,23 +15273,23 @@ mutants:
     edits:
       - file: internal/api/routes_passkey.go
         old: |-
-          if err := tx.NotificationAdd("passkey_added", "info", nil); err != nil {
+          noticeID, err := tx.SecurityNoticeAdd("passkey_added")
         new: |-
-          if err := error(nil); err != nil {
+          noticeID, err := uuid.Nil, error(nil)
     must_fail:
       - pkg: ./internal/api
         tests: [TestPasskey]
   - id: credential-generation-new-recovery-codes-tell-nobody
     rule: credential-generation
     finding: tenant-r18-14
-    why: Regenerating the recovery codes writes no notice (the line sat in the TOTP enable route first, where the mutant was killed while the regeneration route stayed silent).
+    why: Replacing the recovery codes writes no notice (the line sat in the TOTP enable route first, where the mutant was killed while the regeneration route stayed silent; since D70 it is one helper that the regeneration and the confirm after a disable share).
     docker: true
     edits:
-      - file: internal/api/routes_totp.go
+      - file: internal/api/notice.go
         old: |-
-          if err := tx.NotificationAdd("recovery_codes_regenerated", "info", nil); err != nil {
+          noticeID, err := tx.SecurityNoticeAdd("recovery_codes_regenerated")
         new: |-
-          if err := error(nil); err != nil {
+          noticeID, err := uuid.Nil, error(nil)
     must_fail:
       - pkg: ./internal/api
         tests: [TestTOTP]
@@ -15405,7 +15346,7 @@ mutants:
           if err := error(nil); err != nil {
     must_fail:
       - pkg: ./internal/store
-        tests: [TestCapsRaceHarness]
+        tests: [TestSessionsTrimWaitsForTheUserLock]
   - id: proof-before-work-a-package-level-var-must-be-a-literal
     rule: proof-before-work
     finding: tenant-r18-15
@@ -16655,13 +16596,13 @@ mutants:
     docker: true
     why: Every request counts on the one row 'all' again and holds it for a tenth of a second (the issue transaction does more than one short statement), so the flood of decoys queues past lock_timeout and refuses real requests with 503.
     edits:
-      - file: migrations/postgres/0055_review_round18_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           v_gkey   := CASE WHEN pg_catalog.random() < 1.0 / 16 THEN 'all'
                              ELSE 'all:' || (1 + pg_catalog.floor(pg_catalog.random() * 15))::integer END;
         new: |-
           v_gkey   := 'all';
-      - file: migrations/postgres/0055_review_round18_db.sql
+      - file: migrations/postgres/0061_scoped_tenant_rows.sql
         old: |-
           END LOOP;
           

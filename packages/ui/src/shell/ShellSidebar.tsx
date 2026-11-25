@@ -6,6 +6,7 @@ import {useAppFormat} from "@ctrlz/i18n/format.ts";
 import {usePathname} from "@ctrlz/i18n/navigation.ts";
 import {Icon} from "@ctrlz/icons/Icon.tsx";
 import {useTranslations} from "next-intl";
+import type {ReactNode} from "react";
 
 import {BellButton} from "./Bell.tsx";
 import {LogoMenu} from "./LogoMenu.tsx";
@@ -17,7 +18,7 @@ import {useShellCounts} from "./useShellCounts.ts";
 // selection props are not used (the API table disallows them). The current page
 // comes from the URL, with `isCurrent`.
 
-export function ShellSidebar({nav, mobile = false}: {nav: NavItem[]; mobile?: boolean}) {
+export function ShellSidebar({nav, userMenu, mobile = false}: {nav: NavItem[]; userMenu?: ReactNode; mobile?: boolean}) {
   const t = useTranslations("shell");
   const pathname = usePathname();
   const counts = useShellCounts();
@@ -98,11 +99,12 @@ export function ShellSidebar({nav, mobile = false}: {nav: NavItem[]; mobile?: bo
           </Sidebar.Menu>
         </Sidebar.Group>
       </Sidebar.Content>
-      {mobile ? null : (
+      {userMenu || !mobile ? (
         <Sidebar.Footer>
-          <Sidebar.Trigger aria-label={t("sidebar.toggle")} />
+          {userMenu}
+          {mobile ? null : <Sidebar.Trigger aria-label={t("sidebar.toggle")} />}
         </Sidebar.Footer>
-      )}
+      ) : null}
     </>
   );
 

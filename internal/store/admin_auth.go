@@ -764,7 +764,10 @@ func (g GlobalTx) PhoneHasAccount(phone string) (bool, error) {
 
 // NewInvite is the input of InviteCreate.
 type NewInvite struct {
-	TokenHash []byte // SHA-256 of the canonical code
+	// ID is made by the caller because it is inside the signed link (spec 11.3, D67), which is minted before the row exists.
+	// The zero value leaves it to the column default, as every other writer of the table does.
+	ID        uuid.UUID
+	TokenHash []byte // SHA-256 of the 140 characters of the link
 	Phone     string
 	Locale    string
 	CreatedBy uuid.UUID
@@ -773,13 +776,13 @@ type NewInvite struct {
 	TTL time.Duration
 }
 
-const qInviteCreate = `INSERT INTO ctrlz.invites (token_hash, phone_e164, locale, created_by, expires_at)
-VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5)) RETURNING id`
+const qInviteCreate = `INSERT INTO ctrlz.invites (id, token_hash, phone_e164, locale, created_by, expires_at)
+VALUES (COALESCE($1::uuid, uuidv7()), $2, $3, $4, $5, now() + make_interval(secs => $6)) RETURNING id`
 
 // InviteCreate stores an invite.
 func (g GlobalTx) InviteCreate(i NewInvite) (uuid.UUID, error) {
 	var id uuid.UUID
-	err := g.tx.QueryRow(g.ctx, qInviteCreate, i.TokenHash, i.Phone, i.Locale, nilUUID(i.CreatedBy), i.TTL.Seconds()).Scan(&id)
+	err := g.tx.QueryRow(g.ctx, qInviteCreate, nilUUID(i.ID), i.TokenHash, i.Phone, i.Locale, nilUUID(i.CreatedBy), i.TTL.Seconds()).Scan(&id)
 	return id, sanitize(err)
 }
 

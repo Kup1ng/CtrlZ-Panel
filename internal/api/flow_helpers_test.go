@@ -86,6 +86,7 @@ type frig struct {
 	h      http.Handler
 	hasher *password.Hasher
 	keys   *keyring.Ring
+	signer *keyring.Ring // the invite_sign key whose public half the api of this rig holds (the admin service of a test)
 	codes  *codeLog
 	logs   *strings.Builder
 	ipSeq  int
@@ -108,6 +109,8 @@ func newFrig(t *testing.T, o frigOpts) *frig {
 	m := session.NewManager(st, session.DefaultPolicy(), ck.now)
 	logs := &strings.Builder{}
 	f := &frig{t: t, env: env, st: st, ck: ck, m: m, hasher: authtest.FastHasher(t), keys: authtest.APIKeys(t), codes: &codeLog{}, logs: logs}
+	var invites *keyring.PublicRing
+	f.signer, invites = authtest.InviteRings(t)
 	if err := m.WithKeys(f.keys, keyring.DomainAuthMAC); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +124,7 @@ func newFrig(t *testing.T, o frigOpts) *frig {
 	f.deps = Deps{
 		Log: slog.New(slog.NewJSONHandler(logs, nil)), Store: st, Sessions: m,
 		Limiter: ratelimit.New(ratelimit.Config{Service: ratelimit.Tenant, LocalOnly: true, Now: ck.now}),
-		Keys:    f.keys, Hasher: f.hasher, PanelHost: host, Strict: true, Now: ck.now,
+		Keys:    f.keys, Invites: invites, Hasher: f.hasher, PanelHost: host, Strict: true, Now: ck.now,
 		OTPOptions: []otp.Option{otp.WithCodeSource(f.codes.next)},
 	}
 	f.after = afterwork.New(0, 0, 0)

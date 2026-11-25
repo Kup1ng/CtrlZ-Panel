@@ -3,6 +3,7 @@ import {ADMIN_PROTECTED_PREFIXES, ADMIN_SESSION_COOKIES} from "@ctrlz/ui/proxy/p
 
 // The admin never passes verifyOrigin: its policy has no extra origin.
 export default createProxy({
+  app: "admin",
   protectedPrefixes: ADMIN_PROTECTED_PREFIXES,
   sessionCookies: ADMIN_SESSION_COOKIES,
 });
@@ -10,5 +11,5 @@ export default createProxy({
 // See apps/panel/src/proxy.ts. Same exclusions, since both apps ship the same
 // public/ names.
 export const config = {
-  matcher: ["/((?!api/|_next/|logos/|logo\.png$|icon\.png$|favicon\.ico$).*)"],
+  matcher: ["/((?!logo\\.png$|icon\\.png$).*)"],
 };

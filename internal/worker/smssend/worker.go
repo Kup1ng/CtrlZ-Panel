@@ -1,6 +1,6 @@
 // Package smssend is the worker that sends SMS (spec 9.5). The queue is the
 // database: it drains otp_challenges (the codes that auth_otp_issue stored for
-// delivery) and sms_outbox (invites and the SMS page's test send), through the
+// delivery) and sms_outbox (the SMS of security notices and the SMS page's test send), through the
 // sms.Router, and writes the outcome back.
 //
 // What makes it safe to run, restart and crash:
@@ -40,6 +40,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/keyring"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/logattr"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/safego"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/sms"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/sms/classify"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
@@ -372,7 +373,7 @@ func (h *heldAccept) take(unknownTemplate string) (sms.Outcome, string) {
 }
 
 // claim takes up to Concurrency rows in one transaction, leaving at least one
-// slot for the outbox so invites are not starved by a stream of codes. ended
+// slot for the outbox so notices are not starved by a stream of codes. ended
 // counts the rows the transaction itself finished.
 //
 // Three things happen here and not later, because each must commit together
@@ -642,18 +643,31 @@ func (w *Worker) endOTPUnsent(ctx context.Context, d store.OTPDelivery, reason s
 // ---------------------------------------------------------------------------
 // Outbox
 
-// outbox sends one queued message (an invite, or a test).
+// outbox sends one queued message (the SMS of a security notice, or a test).
 func (w *Worker) outbox(ctx context.Context, it store.OutboxItem, leaseEnd time.Time, held *heldAccept) {
 	// The daily count and the money cap were applied by the gate in the claim (claim): a
 	// retry is the same message, and counting it again would let an hour of outage use
 	// up the day's allowance, while its money cap is compared again on every claim,
 	// since the day's spending moves. Nothing is checked here: a message that reaches
 	// this point holds the gate's leave.
-	value, err := sms.OpenOutbox(w.keys, it.ID, it.Phone, it.ParamsCT)
-	if err != nil {
-		w.log.Error("sms outbox params unreadable", logattr.ID("outbox", it.ID))
+	var value secret.String
+	switch {
+	case it.Kind == "notice" && len(it.ParamsCT) == 0:
+		// A notice has no value: its template takes none, and the table refuses one (sms_outbox_notice_bare), so
+		// there is nothing to open and no key is needed to send it.
+	case it.Kind == "notice":
+		// A value on a notice cannot be written by the application; if a row has one, something else wrote it.
+		w.log.Error("sms outbox notice carries a value", logattr.ID("outbox", it.ID))
 		w.endOutbox(ctx, it, sms.CodeUnreadable)
 		return
+	default:
+		v, err := sms.OpenOutbox(w.keys, it.ID, it.Phone, it.ParamsCT)
+		if err != nil {
+			w.log.Error("sms outbox params unreadable", logattr.ID("outbox", it.ID))
+			w.endOutbox(ctx, it, sms.CodeUnreadable)
+			return
+		}
+		value = v
 	}
 	out, spent, err := w.send(ctx, leaseEnd, sms.Request{To: it.Phone, Template: it.TemplateKey, Locale: it.Locale, Value: value, Gateway: it.GatewayID})
 	if _, ok := out.Accepted(); ok { // see otp()
@@ -720,7 +734,7 @@ func (w *Worker) send(ctx context.Context, leaseEnd time.Time, req sms.Request) 
 func (w *Worker) finishOutbox(ctx context.Context, it store.OutboxItem, out sms.Outcome, held *heldAccept) {
 	accepted, ok := out.Accepted()
 	// A test send answers once: the operator is waiting for it, and a retry for
-	// an hour would only hide the result. An invite is retried until the sweep
+	// an hour would only hide the result. A notice is retried until the sweep
 	// ends it at the hour (9.5).
 	pinned := it.GatewayID != uuid.Nil
 	terminal := ok || classify.NumberRefused(out) || pinned

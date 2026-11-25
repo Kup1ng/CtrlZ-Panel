@@ -333,6 +333,37 @@ func (t Tx) RecoveryCodesReplace(user uuid.UUID, hashes [][]byte) error {
 	return sanitize(err)
 }
 
+// qHadRecoveryCodes reads the fact "this account was issued a set of recovery codes before" from two sources that
+// cover the two ways a set is lost, and needs no column of its own:
+//   - the codes themselves, used or not: the operator path (keytool_totp_declare_lost, a lost key) clears the seed
+//     but leaves the rows, so an account in that state still holds a set whatever the age of its enrolment, and the
+//     audit log may by then have forgotten it. Only a disable deletes them, and that writes the row below.
+//   - the audit log of the two actions that touch a TOTP in force, the confirm that made it (totp.enable) and the
+//     disable that deleted the set (totp.disable). ctrlz_tenant holds SELECT and INSERT on the log and only the
+//     retention sweep deletes, past 365 days (qSweepAudit). A thief who disables TOTP leaves a totp.disable row a
+//     moment before they confirm a new one, so for the 365 days after the disable it holds whatever the age of
+//     the enrolment it ended. A thief who disables and then waits past the retention with no second factor on the
+//     account finds the log swept and the codes already deleted, and their confirm reads as a first enrolment:
+//     the same state as an account that never had TOTP, which is the owner's open question.
+//
+// user_id is the author of the audit row; for these two actions it is the account itself.
+const qHadRecoveryCodes = `SELECT EXISTS (SELECT 1 FROM ctrlz.recovery_codes WHERE tenant_id = $1 AND user_id = $2)
+OR EXISTS (SELECT 1 FROM ctrlz.tenant_audit_log
+WHERE tenant_id = $1 AND user_id = $2 AND action IN ('totp.enable', 'totp.disable'))`
+
+// HadRecoveryCodes says whether the account was ever issued recovery codes that a later set replaces: the confirm
+// of a TOTP set-up is then a regeneration of the codes and tells the owner so (spec 12.3, D70), and the confirm
+// of an account that never had any is a first enrolment and tells nobody. Call it BEFORE the confirm writes its
+// own audit row, which would otherwise answer yes, and under the user lock the confirm already holds, so two
+// confirms of one account cannot both read "never".
+func (t Tx) HadRecoveryCodes(user uuid.UUID) (bool, error) {
+	var had bool
+	if err := t.tx.QueryRow(t.ctx, qHadRecoveryCodes, t.tenant, user).Scan(&had); err != nil {
+		return false, sanitize(err)
+	}
+	return had, nil
+}
+
 const qRecoveryUse = `UPDATE ctrlz.recovery_codes SET used_at = now()
 WHERE tenant_id = $1 AND used_at IS NULL AND id = ANY (ARRAY(SELECT id FROM ctrlz.recovery_codes WHERE tenant_id = $1 AND user_id = $2 AND code_hash = $3 AND used_at IS NULL` + orderedUpdate + `))`
 
@@ -429,10 +460,41 @@ func (t Tx) SessionByID(id uuid.UUID) (SessionRow, bool, error) {
 	return s, ok, err
 }
 
-const qSessionsList = `SELECT ` + sessionColumns + ` FROM ctrlz.sessions
-WHERE tenant_id = $1 AND user_id = $2 AND revoked_at IS NULL AND absolute_expires_at > $3 AND idle_expires_at > $3
-ORDER BY created_at DESC, id DESC
+// The live rule (question 17, spec 3.3). One text, read by the cap, the list, the ended count and the refresh, so
+// that the four can never disagree about which sessions exist. The parameter order is the same everywhere: $1 the
+// tenant, $3 the application clock; $2 is whatever the statement is about (the user, or the session id). The
+// fragments name the session s, and the refresh token of the EXISTS r.
+//
+// A session is open when it is not revoked and inside its absolute limit. It is live when it is open and either
+// inside its idle limit or still revivable: a Remember me session past its idle limit has a refresh token that
+// POST /auth/refresh would accept, so the cap counts it and the list shows it, and an owner who sees an unknown
+// device can end it. This is not the gate of a session cookie, which stays closed past the idle limit (Check).
+const qSessionOpen = `s.revoked_at IS NULL AND s.absolute_expires_at > $3`
+
+// qRefreshUsable is the part of the refresh check that is a property of the row alone: the cookie's own hash and
+// the family-reuse rules are the caller's.
+const qRefreshUsable = `r.rotated_at IS NULL AND r.revoked_at IS NULL AND r.expires_at > $3`
+
+const qSessionLive = qSessionOpen + ` AND (s.idle_expires_at > $3 OR EXISTS (SELECT 1 FROM ctrlz.refresh_tokens r
+  WHERE r.tenant_id = $1 AND r.session_id = s.id AND ` + qRefreshUsable + `))`
+
+const qSessionsList = `SELECT ` + sessionColumns + ` FROM ctrlz.sessions s
+WHERE s.tenant_id = $1 AND s.user_id = $2 AND ` + qSessionLive + `
+ORDER BY s.created_at DESC, s.id DESC
 LIMIT $4`
+
+const qSessionLiveByID = `SELECT EXISTS (SELECT 1 FROM ctrlz.sessions s WHERE s.tenant_id = $1 AND s.id = $2 AND ` + qSessionLive + `)`
+
+// SessionLive reports whether one session of the tenant is live by the rule above at the application time now.
+// The refresh route asks it under the session row lock, in place of its own comparison of two columns, so that
+// a session the list shows and the cap counts is a session a refresh can bring back (question 17).
+func (t Tx) SessionLive(id uuid.UUID, now time.Time) (bool, error) {
+	var live bool
+	if err := t.tx.QueryRow(t.ctx, qSessionLiveByID, t.tenant, id, now).Scan(&live); err != nil {
+		return false, sanitize(err)
+	}
+	return live, nil
+}
 
 // SessionListLimit is the most sessions one list returns, and is the maxItems of SessionList.sessions in
 // api/openapi.yaml (a test holds the two together). A login past caps.MaxSessions ends the oldest session of the
@@ -566,8 +628,8 @@ func (t Tx) SessionRevoke(user, id uuid.UUID) (bool, error) {
 // under the user row lock of the caller, so the number can differ from what the
 // revocation ends only by a session that expires between them, which the response
 // does not promise to the second.
-const qSessionsLiveOthers = `SELECT count(*) FROM ctrlz.sessions
-WHERE tenant_id = $1 AND user_id = $2 AND id <> $3 AND revoked_at IS NULL AND idle_expires_at > $4 AND absolute_expires_at > $4`
+const qSessionsLiveOthers = `SELECT count(*) FROM ctrlz.sessions s
+WHERE s.tenant_id = $1 AND s.user_id = $2 AND s.id <> $4 AND ` + qSessionLive
 const qSessionsRevokeOthers = `UPDATE ctrlz.sessions SET revoked_at = now()
 WHERE tenant_id = $1 AND revoked_at IS NULL AND id = ANY (ARRAY(SELECT id FROM ctrlz.sessions WHERE tenant_id = $1 AND user_id = $2 AND id <> $3 AND revoked_at IS NULL` + orderedUpdate + `))`
 const qRefreshRevokeOthers = `UPDATE ctrlz.refresh_tokens SET revoked_at = now()
@@ -579,7 +641,7 @@ WHERE tenant_id = $1 AND revoked_at IS NULL AND id = ANY (ARRAY(SELECT id FROM c
 // them, the current one included (log out all).
 func (t Tx) SessionsRevokeOthers(user, keep uuid.UUID, now time.Time) (int, error) {
 	var n int
-	if err := t.tx.QueryRow(t.ctx, qSessionsLiveOthers, t.tenant, user, keep, now).Scan(&n); err != nil {
+	if err := t.tx.QueryRow(t.ctx, qSessionsLiveOthers, t.tenant, user, now, keep).Scan(&n); err != nil {
 		return 0, sanitize(err)
 	}
 	if _, err := t.tx.Exec(t.ctx, qSessionsRevokeOthers, t.tenant, user, keep); err != nil {
@@ -591,16 +653,15 @@ func (t Tx) SessionsRevokeOthers(user, keep uuid.UUID, now time.Time) (int, erro
 	return n, nil
 }
 
-// qSessionsLiveFilter is what makes a session live: not revoked and inside both expiries on the application
-// clock $4 (the clock of every session time, qSessionsList).
-const qSessionsLiveFilter = `tenant_id = $1 AND user_id = $2 AND revoked_at IS NULL AND absolute_expires_at > $4 AND idle_expires_at > $4`
-
-// qSessionsTrimPick chooses the live sessions of one user that are not among the newest $3 (created_at, then id, newest
-// first), on the application clock $4. It only reads: a statement reads one clock, and the revocation stamps the
-// database clock (the same two statements as SessionsRevokeOthers, qSessionsLiveOthers and qSessionsRevokeOthers).
-const qSessionsTrimPick = `SELECT id FROM ctrlz.sessions WHERE ` + qSessionsLiveFilter + `
-  AND id NOT IN (SELECT id FROM ctrlz.sessions WHERE ` + qSessionsLiveFilter + ` ORDER BY created_at DESC, id DESC LIMIT $3)
-ORDER BY id`
+// qSessionsTrimPick chooses the live sessions of one user that are not among the newest $4 (created_at, then id,
+// newest first), on the application clock $3. It only reads: a statement reads one clock, and the revocation
+// stamps the database clock (the same two statements as SessionsRevokeOthers, qSessionsLiveOthers and
+// qSessionsRevokeOthers). The live rule is evaluated once, under the row number, so the cap cannot disagree with
+// itself about a session in one statement.
+const qSessionsTrimPick = `SELECT q.id FROM (
+  SELECT s.id, row_number() OVER (ORDER BY s.created_at DESC, s.id DESC) AS rn FROM ctrlz.sessions s
+  WHERE s.tenant_id = $1 AND s.user_id = $2 AND ` + qSessionLive + `
+) q WHERE q.rn > $4 ORDER BY q.id`
 
 // qSessionsTrim ends the picked sessions, locking the rows in key order like every multi-row write (rule lock-order),
 // and gives back the ids it ended so that their refresh tokens end in the next statement (sessions, then refresh
@@ -643,7 +704,7 @@ func (t Tx) SessionsTrim(user uuid.UUID, keep int, now time.Time) ([]uuid.UUID, 
 	if _, ok, err := t.UserLock(user); err != nil || !ok {
 		return nil, err
 	}
-	picked, err := sessionIDs(t.tx.Query(t.ctx, qSessionsTrimPick, t.tenant, user, int32(keep), now))
+	picked, err := sessionIDs(t.tx.Query(t.ctx, qSessionsTrimPick, t.tenant, user, now, int32(keep)))
 	if err != nil || len(picked) == 0 {
 		return nil, err
 	}
@@ -944,6 +1005,27 @@ type Notification struct {
 	Link      string
 	ReadAt    *time.Time
 	CreatedAt time.Time
+	// Security is true for a kind of SecurityNoticeKinds. Markable says whether the session that asked may mark
+	// it read: always for an ordinary notice, and for a security notice only from a session made after it
+	// (question 19, spec 12.3).
+	Security bool
+	Markable bool
+}
+
+// SecurityNoticeKinds is the one list of the notices that report a change a thief could make to keep access
+// (question 19, tenant-r19-3): a passkey added and the recovery codes replaced. A function and not a variable
+// so that no caller can edit the list the SQL and the page read.
+func SecurityNoticeKinds() []string {
+	return []string{"passkey_added", "recovery_codes_regenerated"}
+}
+
+func isSecurityNotice(kind string) bool {
+	for _, k := range SecurityNoticeKinds() {
+		if k == kind {
+			return true
+		}
+	}
+	return false
 }
 
 const qNotificationAdd = `INSERT INTO ctrlz.notifications (tenant_id, kind, severity, params) VALUES ($1, $2, $3, $4)`
@@ -951,12 +1033,44 @@ const qNotificationAdd = `INSERT INTO ctrlz.notifications (tenant_id, kind, seve
 // NotificationAdd writes a notice in the transaction that changes the thing it
 // reports (a credential event, a stale passkey). params is JSON. It returns no
 // id: the worker holds INSERT on the table without SELECT, and RETURNING needs it.
+// A security notice is written by SecurityNoticeAdd, which does return the id.
 func (t Tx) NotificationAdd(kind, severity string, params []byte) error {
 	if params == nil {
 		params = []byte("{}")
 	}
 	_, err := t.tx.Exec(t.ctx, qNotificationAdd, t.tenant, kind, severity, params)
 	return sanitize(err)
+}
+
+const qSecurityNoticeAdd = `INSERT INTO ctrlz.notifications (tenant_id, kind, severity, params) VALUES ($1, $2, 'info', '{}') RETURNING id`
+
+// SecurityNoticeAdd writes one of the security notices and returns its id, which is what the SMS of the notice
+// is keyed on (SecurityNoticeSMS). A kind that is not on the list is a programming error and refused here, so a
+// notice that would be shown as ordinary cannot be written through this door.
+func (t Tx) SecurityNoticeAdd(kind string) (uuid.UUID, error) {
+	if !isSecurityNotice(kind) {
+		return uuid.Nil, ErrConstraint
+	}
+	var id uuid.UUID
+	if err := t.tx.QueryRow(t.ctx, qSecurityNoticeAdd, t.tenant, kind).Scan(&id); err != nil {
+		return uuid.Nil, sanitize(err)
+	}
+	return id, nil
+}
+
+const qSecurityNoticeSMS = `SELECT ctrlz_fn.tenant_notice_sms($1, $2, $3)`
+
+// SecurityNoticeSMS queues the one SMS of a security notice to the verified phone of the user, through a definer
+// function that names neither phone nor text (spec 12.3). It reports whether a message was queued: false when
+// the account has no verified phone, the day's cap of notice messages is spent, the notice was already
+// answered, or the notice is not the tenant's. Call it AFTER the audit row of the same transaction: the outbox
+// ranks after the audit log (internal/lockrank), and the function counts that row.
+func (t Tx) SecurityNoticeSMS(user, notice uuid.UUID, cap int) (bool, error) {
+	var queued bool
+	if err := t.tx.QueryRow(t.ctx, qSecurityNoticeSMS, user, notice, int32(cap)).Scan(&queued); err != nil {
+		return false, sanitize(err)
+	}
+	return queued, nil
 }
 
 // Cursor is the sort key of the last row of a page: the caller encodes it as
@@ -973,15 +1087,31 @@ func (c Cursor) args() (any, any) {
 	return c.At, c.ID
 }
 
-const qNotificationsPage = `SELECT id, kind, severity, params, COALESCE(link, ''), read_at, created_at
-FROM ctrlz.notifications
-WHERE tenant_id = $1 AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
-ORDER BY created_at DESC, id DESC LIMIT $4`
+// qApartSet is the ids of the unread security notices that SecurityNotices returns: the newest
+// SecurityNoticeListLimit of them. The page and the count leave out exactly this set, so a notice is left out
+// of the list ONLY when it is shown in security_items. An unread security notice older than the newest fifty (a
+// thief can make that many in minutes) stays in the list, reachable by paging, and is not in a place that no
+// response carries (review dec-c-r1-7). $1 tenant, $2 the kinds, $3 the limit.
+const qApartSet = `SELECT a.id FROM ctrlz.notifications a
+  WHERE a.tenant_id = $1 AND a.read_at IS NULL AND a.kind = ANY ($2::text[])
+  ORDER BY a.created_at DESC, a.id DESC LIMIT $3`
 
-// NotificationsPage returns up to limit notices, newest first, after the cursor.
-func (t Tx) NotificationsPage(after Cursor, limit int) ([]Notification, error) {
+// A security notice that is read, or that is past the fifty shown apart, is in the list like any other. Its
+// markable flag is the rule of qNotificationRead for the asking session $7: an ordinary or a read notice is
+// markable, a security notice that is unread only from a session made after it.
+const qNotificationsPage = `SELECT n.id, n.kind, n.severity, n.params, COALESCE(n.link, ''), n.read_at, n.created_at,
+  (NOT (n.kind = ANY ($2::text[])) OR n.read_at IS NOT NULL
+   OR EXISTS (SELECT 1 FROM ctrlz.sessions s WHERE s.tenant_id = $1 AND s.id = $7 AND s.created_at > n.created_at))
+FROM ctrlz.notifications n
+WHERE n.tenant_id = $1 AND ($4::timestamptz IS NULL OR (n.created_at, n.id) < ($4::timestamptz, $5::uuid))
+  AND n.id NOT IN (` + qApartSet + `)
+ORDER BY n.created_at DESC, n.id DESC LIMIT $6`
+
+// NotificationsPage returns up to limit notices that are not shown apart, newest first, after the cursor, with
+// Markable set for the asking session.
+func (t Tx) NotificationsPage(after Cursor, limit int, session uuid.UUID) ([]Notification, error) {
 	at, id := after.args()
-	rows, err := t.tx.Query(t.ctx, qNotificationsPage, t.tenant, at, id, int32(limit))
+	rows, err := t.tx.Query(t.ctx, qNotificationsPage, t.tenant, SecurityNoticeKinds(), int32(SecurityNoticeListLimit), at, id, int32(limit), session)
 	if err != nil {
 		return nil, sanitize(err)
 	}
@@ -989,34 +1119,119 @@ func (t Tx) NotificationsPage(after Cursor, limit int) ([]Notification, error) {
 	var out []Notification
 	for rows.Next() {
 		var n Notification
-		if err := rows.Scan(&n.ID, &n.Kind, &n.Severity, &n.Params, &n.Link, &n.ReadAt, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.Kind, &n.Severity, &n.Params, &n.Link, &n.ReadAt, &n.CreatedAt, &n.Markable); err != nil {
 			return nil, sanitize(err)
 		}
+		n.Security = isSecurityNotice(n.Kind)
 		out = append(out, n)
 	}
 	return out, sanitize(rows.Err())
 }
 
-const qNotificationsUnread = `SELECT count(*) FROM ctrlz.notifications WHERE tenant_id = $1 AND read_at IS NULL`
+// The unread count is the one of the list: every unread notice that is not shown apart.
+const qNotificationsUnread = `SELECT count(*) FROM ctrlz.notifications n
+WHERE n.tenant_id = $1 AND n.read_at IS NULL AND n.id NOT IN (` + qApartSet + `)`
 
-// NotificationsUnread counts unread notices over all rows, not one page.
+// NotificationsUnread counts the unread notices that are not shown apart, over all rows, not one page.
 func (t Tx) NotificationsUnread() (int, error) {
 	var n int
-	if err := t.tx.QueryRow(t.ctx, qNotificationsUnread, t.tenant).Scan(&n); err != nil {
+	if err := t.tx.QueryRow(t.ctx, qNotificationsUnread, t.tenant, SecurityNoticeKinds(), int32(SecurityNoticeListLimit)).Scan(&n); err != nil {
 		return 0, sanitize(err)
 	}
 	return n, nil
 }
 
-const qNotificationRead = `UPDATE ctrlz.notifications SET read_at = COALESCE(read_at, now()) WHERE tenant_id = $1 AND id = $2`
+// SecurityNoticeListLimit is the most unread security notices one page carries (the maxItems of
+// NotificationPage.security_items). The count beside the list says how many there are.
+const SecurityNoticeListLimit = 50
 
-// NotificationRead marks a notice read; false when it is not the tenant's.
-func (t Tx) NotificationRead(id uuid.UUID) (bool, error) {
-	tag, err := t.tx.Exec(t.ctx, qNotificationRead, t.tenant, id)
+// qSecurityNotices is the unread security notices of the tenant with, for each, whether the asking session
+// $2 was made after it. Both times are the database's (created_at defaults), so no clock of the application is
+// compared with one of the database.
+const qSecurityNotices = `SELECT n.id, n.kind, n.severity, n.params, COALESCE(n.link, ''), n.read_at, n.created_at,
+  EXISTS (SELECT 1 FROM ctrlz.sessions s WHERE s.tenant_id = $1 AND s.id = $2 AND s.created_at > n.created_at)
+FROM ctrlz.notifications n
+WHERE n.tenant_id = $1 AND n.read_at IS NULL AND n.kind = ANY ($3::text[])
+ORDER BY n.created_at DESC, n.id DESC LIMIT $4`
+
+// SecurityNotices returns the unread security notices, newest first, with Markable set for the asking session.
+func (t Tx) SecurityNotices(session uuid.UUID) ([]Notification, error) {
+	rows, err := t.tx.Query(t.ctx, qSecurityNotices, t.tenant, session, SecurityNoticeKinds(), int32(SecurityNoticeListLimit))
 	if err != nil {
-		return false, sanitize(err)
+		return nil, sanitize(err)
 	}
-	return tag.RowsAffected() == 1, nil
+	defer rows.Close()
+	var out []Notification
+	for rows.Next() {
+		var n Notification
+		if err := rows.Scan(&n.ID, &n.Kind, &n.Severity, &n.Params, &n.Link, &n.ReadAt, &n.CreatedAt, &n.Markable); err != nil {
+			return nil, sanitize(err)
+		}
+		n.Security = true
+		out = append(out, n)
+	}
+	return out, sanitize(rows.Err())
+}
+
+// qSecurityNoticesUnread counts the set SecurityNotices returns and no more. A notice past the newest fifty is in
+// the list and in NotificationsUnread, so counting it here too would make a badge that adds the two count it twice
+// (review dec-c-r2-1). The count is therefore at most SecurityNoticeListLimit, and equals len(security_items).
+const qSecurityNoticesUnread = `SELECT count(*) FROM (` + qApartSet + `) apart`
+
+// SecurityNoticesUnread counts the unread security notices shown apart: the newest SecurityNoticeListLimit of them.
+func (t Tx) SecurityNoticesUnread() (int, error) {
+	var n int
+	if err := t.tx.QueryRow(t.ctx, qSecurityNoticesUnread, t.tenant, SecurityNoticeKinds(), int32(SecurityNoticeListLimit)).Scan(&n); err != nil {
+		return 0, sanitize(err)
+	}
+	return n, nil
+}
+
+// NoticeRead is the answer of NotificationRead.
+type NoticeRead int
+
+// The answers.
+const (
+	// NoticeUnknown: no such notice in this tenant.
+	NoticeUnknown NoticeRead = iota
+	// NoticeMarked: the notice is read now (or was).
+	NoticeMarked
+	// NoticeLocked: a security notice that the asking session may not mark, because it existed when the notice
+	// was made.
+	NoticeLocked
+)
+
+// The condition is in the one UPDATE and not in the handler, so a caller that forgot to ask cannot mark a
+// security notice from the wrong session. The session must be made after the notice (sessions.created_at is the
+// database's and a rotation or a refresh keeps it). A security notice that is already read is marked again from
+// any session and nothing changes, as for an ordinary one: the page says markable for it, so the endpoint must
+// agree (review dec-c-r1-1).
+const qNotificationRead = `UPDATE ctrlz.notifications n SET read_at = COALESCE(n.read_at, now())
+WHERE n.tenant_id = $1 AND n.id = $2
+  AND (NOT (n.kind = ANY ($4::text[])) OR n.read_at IS NOT NULL
+       OR EXISTS (SELECT 1 FROM ctrlz.sessions s WHERE s.tenant_id = $1 AND s.id = $3 AND s.created_at > n.created_at))`
+
+const qNotificationExists = `SELECT EXISTS (SELECT 1 FROM ctrlz.notifications WHERE tenant_id = $1 AND id = $2)`
+
+// NotificationRead marks a notice read on behalf of a session. A security notice is marked only by a session
+// made after it (question 19, spec 12.3); the answer tells a notice that is not the tenant's from one that is
+// locked, which the handler turns into 404 and 409.
+func (t Tx) NotificationRead(id, session uuid.UUID) (NoticeRead, error) {
+	tag, err := t.tx.Exec(t.ctx, qNotificationRead, t.tenant, id, session, SecurityNoticeKinds())
+	if err != nil {
+		return NoticeUnknown, sanitize(err)
+	}
+	if tag.RowsAffected() == 1 {
+		return NoticeMarked, nil
+	}
+	var exists bool
+	if err := t.tx.QueryRow(t.ctx, qNotificationExists, t.tenant, id).Scan(&exists); err != nil {
+		return NoticeUnknown, sanitize(err)
+	}
+	if exists {
+		return NoticeLocked, nil
+	}
+	return NoticeUnknown, nil
 }
 
 // AnnouncementItem is an announcement with the user's read flag.

@@ -2048,10 +2048,12 @@ type Notification struct {
 	Id        openapi_types.UUID `json:"id"`
 	Kind      string             `json:"kind"`
 	Link      *string            `json:"link,omitempty"`
+	Markable  bool               `json:"markable"`
 
 	// Params The values a notification's text is built from. Scalars only, so the client never renders a structure the server did not bound.
 	Params   NotificationParams   `json:"params"`
 	ReadAt   *time.Time           `json:"read_at,omitempty"`
+	Security bool                 `json:"security"`
 	Severity NotificationSeverity `json:"severity"`
 }
 
@@ -2060,9 +2062,15 @@ type NotificationSeverity string
 
 // NotificationPage defines model for NotificationPage.
 type NotificationPage struct {
-	Items       []Notification `json:"items"`
-	NextCursor  *string        `json:"next_cursor,omitempty"`
-	UnreadCount int            `json:"unread_count"`
+	Items      []Notification `json:"items"`
+	NextCursor *string        `json:"next_cursor,omitempty"`
+
+	// SecurityItems The unread security notices, newest first, the same on every page. They are not in `items` or `unread_count`, except the ones older than the newest 50, which stay in the list so that no unread notice is left out of every response.
+	SecurityItems []Notification `json:"security_items"`
+
+	// SecurityUnreadCount How many unread security notices are in `security_items`, at most 50. A notice older than the newest 50 is in `items` and `unread_count`, not here, so `unread_count` plus this is every unread notice once.
+	SecurityUnreadCount int `json:"security_unread_count"`
+	UnreadCount         int `json:"unread_count"`
 }
 
 // NotificationParams The values a notification's text is built from. Scalars only, so the client never renders a structure the server did not bound.
@@ -3044,7 +3052,7 @@ type ServerInterface interface {
 	// GetAuthConfig What the login page needs before anyone is signed in
 	// (GET /auth/config)
 	GetAuthConfig(w http.ResponseWriter, r *http.Request)
-	// LookupInvite Read an invite code, for the invite page
+	// LookupInvite Read an invite link, for the invite page
 	// (POST /auth/invites/lookup)
 	LookupInvite(w http.ResponseWriter, r *http.Request)
 	// LoginOtp Sign in with a code sent by SMS
@@ -3359,7 +3367,7 @@ func (_ Unimplemented) GetAuthConfig(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// LookupInvite Read an invite code, for the invite page
+// LookupInvite Read an invite link, for the invite page
 // (POST /auth/invites/lookup)
 func (_ Unimplemented) LookupInvite(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -9812,7 +9820,7 @@ type StrictServerInterface interface {
 	// GetAuthConfig What the login page needs before anyone is signed in
 	// (GET /auth/config)
 	GetAuthConfig(ctx context.Context, request GetAuthConfigRequestObject) (GetAuthConfigResponseObject, error)
-	// LookupInvite Read an invite code, for the invite page
+	// LookupInvite Read an invite link, for the invite page
 	// (POST /auth/invites/lookup)
 	LookupInvite(ctx context.Context, request LookupInviteRequestObject) (LookupInviteResponseObject, error)
 	// LoginOtp Sign in with a code sent by SMS

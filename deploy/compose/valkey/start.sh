@@ -74,7 +74,7 @@ if [ "$(grep -c '' "/run/secrets/valkey_password_$zone")" != 1 ] || ! grep -Eqx 
 fi
 {
 	printf 'user default off\n'
-	printf 'user maint on >%s ~ctrlz:rl:* -@all +ping +script|load +script|kill +shutdown +evalsha +scan +type +pttl +hlen +zcard +memory|usage +unlink\n' "$maint_pw"
+	printf 'user maint on >%s ~ctrlz:rl:* -@all +ping +script|load +script|kill +shutdown +evalsha +scan +type +pttl +hlen +zcard +memory|usage +unlink +info\n' "$maint_pw"
 	case "$zone" in
 	api) printf 'user api on >%s ~ctrlz:rl:api:* -@all +hello +auth +reset +client|setinfo +client|setname +evalsha +time +hmget +hset +pexpire\n' "$(tr -d '\r\n' < "/run/secrets/valkey_password_$zone")" ;;
 	admin) printf 'user admin on >%s ~ctrlz:rl:admin:* -@all +hello +auth +reset +client|setinfo +client|setname +evalsha +time +hmget +hset +pexpire +zadd +zremrangebyscore +zrange +zrem +unlink\n' "$(tr -d '\r\n' < "/run/secrets/valkey_password_$zone")" ;;
@@ -82,6 +82,24 @@ fi
 } > /tmp/users.acl
 # Loglevel is warning, so this is the one line a healthy start prints, and it names no value.
 echo "valkey: the ACL file is written, starting the server"
+# A slow clock is what makes a sweep batch stall the limiter for longer: every redis.call of a script reads
+# it, and on a VM without a usable TSC (hyperv_clocksource_tsc_page, xen, hpet) a read traps and costs
+# a hundred microseconds or more (arm64 hosts report arch_sys_counter, a fast vDSO read, and are not warned). The sweep adapts its batch to that (maintain.sh), so this only tells the
+# operator why the limiter may be slow on this host. It never stops the start: the file is absent in some
+# sandboxes and the answer is a hint, not a gate. CTRLZ_CLOCKSOURCE_PATH is the test's; Compose does not set it.
+csfile=${CTRLZ_CLOCKSOURCE_PATH:-/sys/devices/system/clocksource/clocksource0/current_clocksource}
+cs=
+{ read -r cs < "$csfile"; } 2>/dev/null || cs=
+# The name is printed only when it has the shape of a clock source: lowercase letters, digits, underscore and
+# hyphen, at most 31 of them. The path is the test's to choose, so whatever that file holds must never reach the
+# log, a password file included (a password here is 32 or more letters and digits, so it can never have this shape).
+case "$cs" in
+*[!a-z0-9_-]* | ????????????????????????????????*) cs=unreadable ;;
+esac
+case "$cs" in
+'' | tsc | kvm-clock | arch_sys_counter) ;;
+*) echo "valkey: warning: the clock source of this host is $cs, not tsc, kvm-clock or arch_sys_counter; clock reads may be slow here, so the limiter may time out while a sweep batch runs (the sweep sizes and paces its batches for it)" ;;
+esac
 printf '%s' "$maint_pw" > /tmp/maint.pw
 MAINT_USER=maint sh /etc/valkey/maintain.sh &
 exec valkey-server /etc/valkey/valkey.conf --aclfile /tmp/users.acl --maxmemory "${VK_MAXMEMORY:-64mb}"

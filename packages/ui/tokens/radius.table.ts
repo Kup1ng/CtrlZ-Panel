@@ -39,6 +39,13 @@ export type ControlRow = {
   /** Custom property to set instead of `border-radius` (Avatar traces `--avatar-radius`). */
   radiusProp?: string;
   /**
+   * Also set these custom properties to the same radius, for the parts inside a control that round their own free
+   * corners with them (the input, prefix and suffix of an input group). HeroUI reads two: `--field-radius` for
+   * `rounded-field` and `--radius-field` for the autofill clip-path, which is resolved once at :root, so a row
+   * has to set both. The control keeps its own `border-radius`.
+   */
+  innerRadiusProps?: string[];
+  /**
    * An owner decision that exempts this control from the 0.4 rule. Absent means the rule applies,
    * which is the answer D47 gave for avatars, checkboxes and the round header buttons (DESIGN.md Q5).
    * The generator emits the named shape instead of the formula and nothing else, so the exception
@@ -94,7 +101,11 @@ export const rows: Row[] = [
   {kind: "control", selector: ".select__trigger", height: {base: FIELD_TALL, sm: FIELD_SHORT}, source: "select.css, derived (min-h-9 is below the natural height)"},
   {kind: "control", selector: ".autocomplete__trigger", height: {base: FIELD_TALL, sm: FIELD_SHORT}, source: "autocomplete.css, derived"},
   {kind: "control", selector: ".native-select__select", height: {base: FIELD_SHORT}, source: "native-select.css, derived (text-sm at every width, unlike Input)"},
-  {kind: "control", selector: ".input-group", height: {base: FIELD_TALL, sm: FIELD_SHORT}, source: "input-group.css, derived"},
+  // The shell hands its own radius to the parts inside it through --field-radius and --radius-field (input,
+  // prefix, suffix). HeroUI clips an autofilled input to var(--radius-field), which is the 8px --radius, and that cover painted over the
+  // shell's border and focus ring at the outer corners of a 15.6px shell (measured in WP8 round 9, spec 6.3). The
+  // shell keeps its own border-radius.
+  {kind: "control", selector: ".input-group", height: {base: FIELD_TALL, sm: FIELD_SHORT}, innerRadiusProps: ["--field-radius", "--radius-field"], source: "input-group.css, derived (inner parts follow the shell, WP8 round 9)"},
   {kind: "control", selector: ".search-field__group", height: {base: step(9)}, source: "search-field.css (h-9)"},
   {kind: "control", selector: ".number-field__group", height: {base: step(9)}, source: "number-field.css (h-9)"},
   {kind: "control", selector: ".date-input-group", height: {base: step(9)}, source: "date-input-group.css (h-9)"},
@@ -179,6 +190,7 @@ export const rows: Row[] = [
   // `.tile-N` is a square of N spacing steps (use it with `size-N`).
   {kind: "control", selector: ".tile-6", height: {base: step(6)}, source: "our own: a 6-step square, the redirect flag of a profile icon"},
   {kind: "control", selector: ".tile-11", height: {base: step(11)}, source: "our own: an 11-step square, the profile icon of a list row"},
+  {kind: "control", selector: ".row-counter", height: {base: step(10)}, source: "our own: the link of one counter in a list row (RowCounters), about 10 steps tall"},
   {kind: "control", selector: ".service-logo", height: {base: step(9)}, source: "icons/ServiceLogo.tsx (size-9)"},
   {kind: "control", selector: ".skip-link", height: {base: step(9)}, source: "shell.css, skip link (spec 8.1)"},
   {kind: "control", selector: ".page-header__icon", height: {base: step(10)}, source: "shell.css, page header icon (size-10)"},

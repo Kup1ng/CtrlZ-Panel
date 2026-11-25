@@ -430,7 +430,7 @@ func TestFunctionIsolation(t *testing.T) {
 			}
 			role := fn.Execute[0]
 			h.runFunctionCase(t, fn.Name, fix, role, fn.Isolation == "tenant", repl, B, B, fix.own, false, false)
-			if fn.Isolation == "tenant" {
+			if fn.Isolation == "tenant" && !fix.settingOptional {
 				// Every tenant function, once with no setting at all.
 				h.runNoSettingCase(t, fn.Name, fix, role, repl, B)
 			}

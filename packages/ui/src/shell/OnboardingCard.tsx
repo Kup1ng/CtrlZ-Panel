@@ -1,13 +1,15 @@
 "use client";
 
-import {AlertDialog, Button} from "@heroui/react";
+import {AlertDialog, Button, toast} from "@heroui/react";
+import {errorMessageArgs, errorMessageKey} from "@ctrlz/api-client/errors.ts";
 import {ItemCard} from "@heroui-pro/react";
+import {useOnboarding} from "@ctrlz/api-client/hooks/preferences.ts";
 import {useAppFormat} from "@ctrlz/i18n/format.ts";
 import {useRouter} from "@ctrlz/i18n/navigation.ts";
 import {Icon} from "@ctrlz/icons/Icon.tsx";
 import type {GeneralIconName} from "@ctrlz/icons/hugeicons.ts";
 import {useTranslations} from "next-intl";
-import {useCallback, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 
 // T-119, T-309, spec 8.12. The first-run checklist at the top of /profiles.
 //
@@ -29,16 +31,12 @@ export function useOnboardingFacts(): OnboardingFacts {
 }
 
 /**
- * STUB until WP4 lands. The real state is `onboarding_state` and
- * `onboarding_hints.enabled` from GET /account/preferences, and `dismiss` is
- * PATCH /account/preferences {onboarding_state}, which replaces the whole
- * object, so the client sends all of it. Until then the dismissal lasts for this
- * page view only, and "Show hints" is always on.
+ * `onboarding_state` and `onboarding_hints.enabled` come with `Me`. `dismiss` is
+ * PATCH /account/preferences {onboarding_state}, which replaces the whole object, so
+ * the client sends all of it (spec 8.12).
  */
 export function useOnboardingState() {
-  const [dismissed, setDismissed] = useState(false);
-  const dismiss = useCallback(async () => setDismissed(true), []);
-  return {hintsEnabled: true, dismissed, dismiss};
+  return useOnboarding();
 }
 
 type StepId = keyof OnboardingFacts | "tutorial";
@@ -52,14 +50,36 @@ const STEPS: readonly {id: StepId; icon: GeneralIconName; href?: string}[] = [
   {id: "tutorial", icon: "help"},
 ];
 
+/**
+ * The card goes once the dismissal is saved, and the Hide button that had focus goes with it, so focus
+ * would fall to <body> and a keyboard or screen-reader user would start again from the top (spec 17.5).
+ * It moves to the page region, which takes focus on purpose (tabIndex -1). Only when focus is nowhere,
+ * on the card, or still in the confirm dialog (a portal, closing): a person who has moved on keeps where
+ * they are. Called after the card has left the DOM, which is when focus is really lost.
+ */
+function keepFocusInPage() {
+  const active = document.activeElement;
+  if (active && active !== document.body && !active.closest(".onboarding, [role='alertdialog'], [role='dialog']")) return;
+  document.getElementById("main-content")?.focus();
+}
+
 export function OnboardingCard() {
   const t = useTranslations("shell");
   const c = useTranslations("common");
+  const e = useTranslations("errors");
   const format = useAppFormat();
   const router = useRouter();
   const facts = useOnboardingFacts();
   const {hintsEnabled, dismissed, dismiss} = useOnboardingState();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Set when THIS card saved the dismissal, so that hiding it through Account (hints off) moves no focus.
+  const savedHere = useRef(false);
+  useEffect(() => {
+    if (dismissed && savedHere.current) {
+      savedHere.current = false;
+      keepFocusInPage();
+    }
+  }, [dismissed]);
 
   // Hints off in Account hides the card without dismissing it.
   if (!hintsEnabled || dismissed) return null;
@@ -131,7 +151,14 @@ export function OnboardingCard() {
                 variant="danger"
                 onPress={async () => {
                   setConfirmOpen(false);
-                  await dismiss();
+                  savedHere.current = true;
+                  try {
+                    await dismiss();
+                  } catch (error) {
+                    savedHere.current = false;
+                    // The card stays, so say why instead of leaving a rejection nobody reads.
+                    toast.danger(e(errorMessageKey(error), errorMessageArgs(error)));
+                  }
                 }}
               >
                 {t("onboarding.confirm.action")}

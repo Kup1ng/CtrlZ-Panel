@@ -439,8 +439,8 @@ paths:
     post:
       tags: [auth]
       operationId: lookupInvite
-      summary: Read an invite code, for the invite page
-      description: 'Unknown, used, revoked and expired invites are all `404 invite_invalid`. Errors: `invite_invalid`, `too_many_attempts`.'
+      summary: Read an invite link, for the invite page
+      description: 'Forged, unknown, used, revoked and expired invites are all `404 invite_invalid`. Errors: `invite_invalid`, `too_many_attempts`.'
       security: []
       x-ctrlz-auth: none
       x-ctrlz-rate: auth
@@ -983,6 +983,7 @@ paths:
       tags: [notifications]
       operationId: readNotification
       summary: Mark a notification read
+      description: 'Errors: `conflict`. A security notice (`security` true) is marked only by a session made after it; from any other session, the one that caused it included, it is `conflict` and nothing changes.'
       x-ctrlz-auth: session
       x-ctrlz-rate: user-write
       x-ctrlz-token: none
@@ -2157,7 +2158,7 @@ components:
           type: string
           maxLength: 2
           enum: [fa, en]
-        invite_token: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        invite_token: {type: string, minLength: 1, maxLength: 200, pattern: *pastedcontent}
     OtpIssued:
       type: object
       required: [challenge_id, expires_in_s, resend_after_s]
@@ -2285,7 +2286,7 @@ components:
       required: [challenge_id, code]
       properties:
         phone: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
-        invite_token: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        invite_token: {type: string, minLength: 1, maxLength: 200, pattern: *pastedcontent}
         challenge_id: {type: string, minLength: 64, maxLength: 64, pattern: *b64url}
         code: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
         password: {type: string, maxLength: 2048, pattern: *prose}
@@ -2298,7 +2299,7 @@ components:
       additionalProperties: false
       required: [token]
       properties:
-        token: {type: string, minLength: 1, maxLength: 64, pattern: *pastedcontent}
+        token: {type: string, minLength: 1, maxLength: 200, pattern: *pastedcontent}
     InviteInfo:
       type: object
       required: [phone_masked, expires_at]
@@ -2553,7 +2554,7 @@ components:
         enabled: {type: boolean}
     Notification:
       type: object
-      required: [id, kind, severity, params, created_at]
+      required: [id, kind, severity, params, created_at, security, markable]
       properties:
         id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
         kind: {type: string, maxLength: 64, pattern: *word}
@@ -2565,6 +2566,8 @@ components:
         link: {type: string, maxLength: 512, pattern: *text}
         created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
         read_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        security: {type: boolean}
+        markable: {type: boolean}
     NotificationParams:
       type: object
       description: The values a notification's text is built from. Scalars only, so the client never renders a structure the server did not bound.
@@ -2575,7 +2578,7 @@ components:
       x-go-type: map[string]interface{}
     NotificationPage:
       type: object
-      required: [items, unread_count]
+      required: [items, unread_count, security_items, security_unread_count]
       properties:
         items:
           type: array
@@ -2583,6 +2586,16 @@ components:
           items: {$ref: "#/components/schemas/Notification"}
         next_cursor: {type: string, maxLength: 128, pattern: *b64url}
         unread_count: {type: integer, minimum: 0, maximum: 2147483647}
+        security_items:
+          type: array
+          maxItems: 50
+          description: The unread security notices, newest first, the same on every page. They are not in `items` or `unread_count`, except the ones older than the newest 50, which stay in the list so that no unread notice is left out of every response.
+          items: {$ref: "#/components/schemas/Notification"}
+        security_unread_count:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+          description: How many unread security notices are in `security_items`, at most 50. A notice older than the newest 50 is in `items` and `unread_count`, not here, so `unread_count` plus this is every unread notice once.
     Announcement:
       type: object
       required: [id, body, starts_at, read]

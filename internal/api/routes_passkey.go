@@ -320,6 +320,7 @@ func (s *Server) PasskeyFinish(ctx context.Context, req gen.PasskeyFinishRequest
 	// The insert is the only statement here that can fail on a constraint (a
 	// credential id that already exists in any tenant), and a failed statement
 	// aborts the transaction, so a collision is the whole call's failure.
+	smsNotice := s.wantNoticeSMS(ctx)
 	err = s.inTenant(ctx, p.TenantID, func(tx store.Tx) error {
 		// The user row lock first, the order of the other routes (internal/lockrank):
 		// Apply later locks the session row. The cap is not decided here: PasskeyAdd
@@ -360,10 +361,20 @@ func (s *Server) PasskeyFinish(ctx context.Context, req gen.PasskeyFinishRequest
 		// D64 passkey-add-notice). credential_gen is not moved: that would only sign the owner out, and the new passkey
 		// would stay. The audit row below is the trail and this is what the owner sees. It comes after the session event
 		// and before the audit row, which is the order of the lock ranks (notifications 440, audit 460).
-		if err := tx.NotificationAdd("passkey_added", "info", nil); err != nil {
+		noticeID, err := tx.SecurityNoticeAdd("passkey_added")
+		if err != nil {
 			return err
 		}
-		return audit.Tenant(tx, p.UserID, httpx.ClientIPFrom(tx.Context()), audit.PasskeyAdd{CredentialRowID: row.ID})
+		if err := audit.Tenant(tx, p.UserID, httpx.ClientIPFrom(tx.Context()), audit.PasskeyAdd{CredentialRowID: row.ID}); err != nil {
+			return err
+		}
+		// The SMS to the account phone is the sign a thief in the panel cannot hide (question 19, spec 12.3):
+		// after the audit row, whose count the daily cap reads, and in this transaction, so a rolled back
+		// change queues nothing.
+		if smsNotice {
+			return noticeSMS(tx, p.UserID, noticeID)
+		}
+		return nil
 	})
 	if errors.Is(err, store.ErrConflict) {
 		return nil, apiError(passkey.ErrInvalid)
