@@ -570,8 +570,10 @@ VALUES ($1, $2, $3, $4, $5, $6, now() - $7::interval, now() + $8::interval)`,
 	}
 	otp := func(tx pgx.Tx, id uuid.UUID, phone, purpose string, consumedAgo time.Duration) {
 		asSuper(h, tx, "tenant", func() {
-			if _, err := tx.Exec(h.ctx, `INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at)
-VALUES ($1, $2, $3, '\x01', now() + interval '5 minutes', now() - $4::interval)`, id, phone, purpose, fmt.Sprintf("%d milliseconds", consumedAgo.Milliseconds())); err != nil {
+			// The tenant stamp is what auth_otp_issue writes for an account's codes (question 15): the function under test
+			// reads the challenge as ctrlz_scoped, which sees only the rows of the tenant of the setting.
+			if _, err := tx.Exec(h.ctx, `INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at, tenant_id)
+VALUES ($1, $2, $3, '\x01', now() + interval '5 minutes', now() - $4::interval, $5)`, id, phone, purpose, fmt.Sprintf("%d milliseconds", consumedAgo.Milliseconds()), a.Tenant); err != nil {
 				t.Fatal(err)
 			}
 		})

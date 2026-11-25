@@ -12,25 +12,23 @@ import (
 
 // Tests of the P1 auth review, round 3, area "HTTP spine and tenant API".
 
-// TestJunkInviteTokensDoNotBlockALiveInvite is tenant-r3-1: anyone on a network
-// can send bad tokens, so a spent invite_net must refuse the bad ones only. A
-// live token keeps working at the OTP request and at the register, which is the
-// only signup route in the closed mode. The two cannot be told apart without a
-// 100-bit guess, so refusing the live one closed no oracle.
+// TestJunkInviteTokensDoNotBlockALiveInvite is tenant-r3-1: anyone on a network can send bad tokens, and a live
+// invite must keep working beside them at the OTP request and at the register, which is the only signup route in
+// the closed mode. Since D67 a bad token is a forged link: it is refused in process, writes no throttle row and
+// spends no scope of the invite, so what it can fill is the plain bucket of its network, which a link that opens
+// stands outside of (InviteProofHolds).
 func TestJunkInviteTokensDoNotBlockALiveInvite(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	c := f.client()
 	phone := "+989125553001"
 	code := f.plantInvite(phone, time.Hour, false)
-	const bad = "AAAAA-AAAAA-AAAAA-AAAAA"
+	bad := f.forgedInvite()
+	f.clearThrottle() // what the set-up of the rig wrote is not what the junk tokens do
 
-	// 15 junk code requests and 15 junk registers: 30 uses of junk, past the 10 of
-	// invite_net. They have
-	// other limits (otp-send, otp_verify_net), which these counts stay under.
+	// 15 junk code requests and 15 junk registers from the invitee's own network.
 	refused := 0
 	junk := func(r *resp) {
 		if r.Code == 429 {
-			r.want(429, "too_many_attempts")
 			refused++
 		} else {
 			r.want(404, "invite_invalid")
@@ -41,8 +39,8 @@ func TestJunkInviteTokensDoNotBlockALiveInvite(t *testing.T) {
 		junk(c.post("/auth/register", map[string]any{"invite_token": bad, "challenge_id": junkValue(t), "code": "000000"}))
 		f.ck.add(30 * time.Second)
 	}
-	if refused < 15 {
-		t.Fatalf("only %d junk tokens were refused; invite_net did not engage", refused)
+	if n := f.count(`SELECT count(*) FROM ctrlz.auth_throttle`); n != 0 {
+		t.Fatalf("%d junk tokens wrote %d throttle rows, want none (%d were refused by a class)", 30, n, refused)
 	}
 
 	// The live invitation still goes all the way through from the same network.
@@ -54,8 +52,10 @@ func TestJunkInviteTokensDoNotBlockALiveInvite(t *testing.T) {
 	c.post("/auth/register", map[string]any{
 		"invite_token": code, "challenge_id": iss.ID, "code": f.codes.Last(), "password": "Marble-Island-Copper-6620",
 	}).want(201, "")
-	// A bad token on the same network is still refused.
-	c.requestOTP(phone, "invite", map[string]any{"invite_token": bad}).want(429, "too_many_attempts")
+	// Bad links did not spend anything of the invitee: his invite has its own count, and only one.
+	if n := f.count(`SELECT count(*) FROM ctrlz.auth_throttle WHERE scope = 'invite_net'`); n != 1 {
+		t.Fatalf("%d invite throttle rows, want the one of the live invite", n)
+	}
 }
 
 // TestMalformedPhonesDoNotSpendAGlobalBucket is tenant-r3-8: every malformed

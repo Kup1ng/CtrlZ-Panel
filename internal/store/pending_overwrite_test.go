@@ -50,10 +50,10 @@ func TestAPendingPairIsNotReplacedByAnotherPut(t *testing.T) {
 		if got := pending(id); !bytes.Equal(got, owner) {
 			t.Fatal("a second stage replaced the owner's pending pair")
 		}
-		if _, ok, err := g.SMSGatewayDiscardPending("melipayamak"); err != nil || ok {
+		if _, ok, err := g.SMSGatewayDiscardPending("melipayamak", nil); err != nil || ok {
 			t.Fatalf("a discard of a gateway with nothing pending: ok %v err %v", ok, err)
 		}
-		if _, ok, err := g.SMSGatewayDiscardPending("sms_ir"); err != nil || !ok {
+		if _, ok, err := g.SMSGatewayDiscardPending("sms_ir", nil); err != nil || !ok {
 			t.Fatalf("discard: ok %v err %v", ok, err)
 		}
 	})
@@ -150,4 +150,32 @@ func TestTwoStagesAtOnceLeaveExactlyOneWinner(t *testing.T) {
 	if !bytes.Equal(ct, []byte("sealed-first")) || hint != "1111" {
 		t.Fatal("the pending pair is not the first stager's")
 	}
+}
+
+// TestADiscardThatNamesACiphertextLeavesAReplacedPair is admin-r22-1: the discard of a pair judged
+// stranded must not drop the pair that took its place, and the unconditional discard still does.
+func TestADiscardThatNamesACiphertextLeavesAReplacedPair(t *testing.T) {
+	f := newFixture(t)
+	s := f.db.Store(f.ctx, t, store.RoleAdmin)
+	judged, newer := []byte("sealed-judged"), []byte("sealed-newer")
+	var id uuid.UUID
+	f.global(t, s, func(g store.GlobalTx) {
+		var err error
+		if id, err = g.SMSGatewayEnsure(uuid.New(), "sms_ir"); err != nil {
+			t.Fatal(err)
+		}
+		if ok, err := g.SMSGatewayStageCredentials(id, newer, "1234"); err != nil || !ok {
+			t.Fatalf("stage: %v %v", ok, err)
+		}
+	})
+	f.global(t, s, func(g store.GlobalTx) {
+		if _, ok, err := g.SMSGatewayDiscardPending("sms_ir", judged); err != nil || ok {
+			t.Fatalf("a discard of a ciphertext that is not the pending one: ok %v err %v", ok, err)
+		}
+	})
+	f.global(t, s, func(g store.GlobalTx) {
+		if _, ok, err := g.SMSGatewayDiscardPending("sms_ir", newer); err != nil || !ok {
+			t.Fatalf("a discard of the pending ciphertext: ok %v err %v", ok, err)
+		}
+	})
 }

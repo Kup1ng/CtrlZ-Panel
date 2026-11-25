@@ -18,6 +18,7 @@ execute ctrlz_fn.audit_lock()
 execute ctrlz_fn.auth_tickets_revoke(p_user_id uuid)
 policy analytics_read_floors tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy announcement_reads tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy announcements announcements_admin ALL PERMISSIVE using=true check=true
 policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
@@ -141,7 +142,7 @@ table feedback_items UPDATE (admin_reply, replied_at, status)
 table geoip_versions INSERT
 table geoip_versions SELECT
 table geoip_versions UPDATE
-table invites INSERT (created_by, expires_at, locale, phone_e164, token_hash)
+table invites INSERT (created_by, expires_at, id, locale, phone_e164, token_hash)
 table invites SELECT (created_at, expires_at, id, locale, phone_e164, revoked_at, used_at)
 table invites UPDATE (revoked_at)
 table ip_claims SELECT

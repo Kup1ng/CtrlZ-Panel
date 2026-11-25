@@ -34,3 +34,6 @@ coverage/
 
 # Written by next dev on each start; agent notes for this repo live in .claude/.
 apps/*/AGENTS.md
+
+# Output of the e2e stack: the OTP file of the noop SMS driver (spec 17.7)
+deploy/compose/e2e-out/

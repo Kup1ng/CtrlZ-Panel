@@ -87,7 +87,7 @@ func TestAPanicInAPassOfTheSMSLoopStaysWithThatPass(t *testing.T) {
 // its backoff now, like every failed attempt.
 func TestAPanickingOutboxRowTakesTheBackoffAndIsNotResentAtTheLease(t *testing.T) {
 	r := newRig(t)
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 	r.afterSend = func() { panic("canary-panic-value " + code) }
 	if n := r.drain(); n != 1 {
 		t.Fatalf("drained %d rows, want the one that panicked counted as handled", n)

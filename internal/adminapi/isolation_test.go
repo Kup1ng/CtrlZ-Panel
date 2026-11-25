@@ -155,7 +155,7 @@ func forbiddenFields() []string {
 func shownOnce() map[string]string {
 	return map[string]string{
 		"one_time_password": "UserCreated and OneTimePasswordIssued",
-		"code":              "InviteCreated",
+		"link":              "InviteCreated",
 		"secret":            "AdminTotpSetup",
 		"otpauth_uri":       "AdminTotpSetup",
 	}
@@ -303,7 +303,7 @@ func TestStolenAdminCookie(t *testing.T) {
 	// cookie without the authenticator cannot mint an account bound to somebody else's phone, write the text of
 	// every OTP message, or silence an alert and revoke an invite.
 	b.post("/users", map[string]any{"phone": "09125550101"}).want(403, "totp_fresh_required")
-	b.post("/invites", map[string]any{"phone": "09125550102", "send_sms": false}).want(403, "totp_fresh_required")
+	b.post("/invites", map[string]any{"phone": "09125550102"}).want(403, "totp_fresh_required")
 	b.call("DELETE", "/invites/00000000-0000-7000-8000-000000000001", nil).want(403, "totp_fresh_required")
 	b.put("/sms/templates/otp/fa", map[string]any{"body": "your code is {code}"}).want(403, "totp_fresh_required")
 	b.post("/alerts/00000000-0000-7000-8000-000000000002/ack", nil).want(403, "totp_fresh_required")

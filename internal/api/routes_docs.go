@@ -359,8 +359,13 @@ func (s *Server) BatchRules(ctx context.Context, req gen.BatchRulesRequestObject
 				return 0, nil, err
 			}
 			jr := profiles.JobRequest{Kind: profiles.JobRulesBatch, Profile: profile, Total: n, Input: input}
-			if in.Op == "copy" {
+			switch {
+			case in.Op == "copy":
 				jr.Dest = in.DestProfile
+			case in.Op == "move" && in.DestProfile != uuid.Nil && in.DestProfile != profile:
+				// A move to another profile writes both, so the job is refused now for a locked or foreign destination
+				// as the inline move is, and does not take the tenant's one job slot to fail later (spec 10.2 S1).
+				jr.Dest, jr.Move = in.DestProfile, true
 			}
 			return s.queued(tx, jr)
 		}

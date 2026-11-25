@@ -24,12 +24,13 @@ dc() {
   if [ -n "$envfile" ]; then docker compose -p "$project" -f "$file" --env-file "$envfile" "$@"
   else docker compose -p "$project" -f "$file" "$@"; fi
 }
-# The placeholder image is pinned by digest in the Compose file, the one place that names it (round 16,
+# The throw-away busybox is the image the Compose file pins by digest for caddy-init (the web containers run their own
+# images now, and the stack under test runs the placeholder through ci-placeholder.yml). It is pinned by digest in the Compose file, the one place that names it (round 16,
 # admin-r16-9) and as a literal there, with no variable to override it (round 17, admin-r17-6): read it from
 # there. Every docker run below says --pull never, so what it starts is a reference that is on the machine
 # (the stack that is running used it), and a missing one is an error and not a pull of whatever a tag now is.
-bb=$(awk '/^  web-panel:/ {f=1; next} f && /^    image:/ {print $2; exit}' "$file")
-[ -n "$bb" ] || fail "the Compose file has no image for web-panel"
+bb=$(awk '/^  caddy-init:/ {f=1; next} f && /^    image:/ {print $2; exit}' "$file")
+[ -n "$bb" ] || fail "the Compose file has no image for caddy-init"
 docker image inspect "$bb" >/dev/null 2>&1 || docker pull -q "$bb" >/dev/null || fail "the placeholder image $bb is not on this machine and could not be pulled"
 
 # Addresses are read from Docker's own state (round 18 fix gate, admin-r18-19): see step 4 c) for why a refusal by

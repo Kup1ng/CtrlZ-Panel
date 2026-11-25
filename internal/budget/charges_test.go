@@ -52,7 +52,7 @@ var scopeWrappers = map[string][]string{
 	"LoginRefundMalformed": {"login_net", "login_net48"},
 	"OTPVerifyHit":         {"otp_verify_net", "otp_verify_challenge"},
 	"OTPVerifyRefund":      {"otp_verify_net", "otp_verify_challenge"},
-	"InviteHit":            {"invite_net", "invite_net48", "invite_use"},
+	"InviteHit":            {"invite_use"},
 	"AdminLoginHits":       {"admin_login", "admin_login_user", "admin_login_net", "admin_login_marker"},
 	"AdminLoginRefund":     {"admin_login", "admin_login_user", "admin_login_net", "admin_login_marker"},
 	"AdminLoginSuccess":    {"admin_login", "admin_login_user", "admin_login_marker"},

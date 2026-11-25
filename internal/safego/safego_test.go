@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/safego"
@@ -167,27 +168,31 @@ func (w *signalWriter) text() string {
 // goroutine is the code under test, so a Go that kept nothing would end this binary: the lint holds
 // that clause (a mutant of it names TestEveryGoroutineKeepsItsPanic), and this test holds the rest:
 // the count-down put first in fn runs while the panic unwinds, and the log has the unit once.
+//
+// The test runs in a synctest bubble and reads the log after synctest.Wait, which returns when the goroutine has
+// ended. Reading it at the first line, as the version before did, could not tell one line from two: the guard of
+// the mutant that logs a kept panic twice writes both lines in a row, and a read between them saw one and passed
+// (a flake of the first GitHub run of question 15 that let the mutant survive).
 func TestGoCountsDownAUnitThatPanickedAndTheProcessLives(t *testing.T) {
-	w := &signalWriter{got: make(chan struct{})}
-	log := slog.New(slog.NewJSONHandler(w, nil))
-	var wg sync.WaitGroup
-	wg.Add(1)
-	safego.Go(log, unitA, func() {
-		defer wg.Done()
-		panic("canary-go-value")
+	synctest.Test(t, func(t *testing.T) {
+		w := &signalWriter{got: make(chan struct{})}
+		log := slog.New(slog.NewJSONHandler(w, nil))
+		var wg sync.WaitGroup
+		wg.Add(1)
+		safego.Go(log, unitA, func() {
+			defer wg.Done()
+			panic("canary-go-value")
+		})
+		wg.Wait() // a count-down that did not run would hang here until the test timeout
+		synctest.Wait()
+		got := w.text()
+		if strings.Count(got, safego.Msg) != 1 || !strings.Contains(got, `"unit":"a"`) {
+			t.Errorf("the panic was not logged once with its unit: %s", got)
+		}
+		if strings.Contains(got, "canary-go-value") {
+			t.Errorf("the value of the panic reached the log: %s", got)
+		}
 	})
-	wg.Wait() // a count-down that did not run would hang here until the test timeout
-	<-w.got
-	if w.writesAgain(200 * time.Millisecond) {
-		t.Error("the panic was logged twice")
-	}
-	got := w.text()
-	if strings.Count(got, safego.Msg) != 1 || !strings.Contains(got, `"unit":"a"`) {
-		t.Errorf("the panic was not logged once with its unit: %s", got)
-	}
-	if strings.Contains(got, "canary-go-value") {
-		t.Errorf("the value of the panic reached the log: %s", got)
-	}
 }
 
 // TestAfterAndOnDoneKeepThePanicOfTheirCallback runs the two library-started forms (sms-r18-14). As for
@@ -204,25 +209,26 @@ func TestAfterAndOnDoneKeepThePanicOfTheirCallback(t *testing.T) {
 			cancel()
 		},
 	} {
-		w := &signalWriter{got: make(chan struct{})}
-		log := slog.New(slog.NewJSONHandler(w, nil))
-		ran := make(chan struct{}, 2)
-		start(log, func() {
-			ran <- struct{}{}
-			panic("canary-callback-value")
+		// In a bubble, for the reason given at TestGoCountsDownAUnitThatPanickedAndTheProcessLives: the log is read
+		// after the callback's goroutine has ended, so a second line cannot arrive after the count.
+		synctest.Test(t, func(t *testing.T) {
+			w := &signalWriter{got: make(chan struct{})}
+			log := slog.New(slog.NewJSONHandler(w, nil))
+			ran := make(chan struct{}, 2)
+			start(log, func() {
+				ran <- struct{}{}
+				panic("canary-callback-value")
+			})
+			<-ran
+			synctest.Wait()
+			got := w.text()
+			if strings.Count(got, safego.Msg) != 1 || !strings.Contains(got, `"unit":"a"`) {
+				t.Errorf("%s: the panic was not logged once with its unit: %s", name, got)
+			}
+			if strings.Contains(got, "canary-callback-value") {
+				t.Errorf("%s: the value of the panic reached the log: %s", name, got)
+			}
 		})
-		<-ran
-		<-w.got
-		if w.writesAgain(200 * time.Millisecond) {
-			t.Errorf("%s: the panic was logged twice", name)
-		}
-		got := w.text()
-		if strings.Count(got, safego.Msg) != 1 || !strings.Contains(got, `"unit":"a"`) {
-			t.Errorf("%s: the panic was not logged once with its unit: %s", name, got)
-		}
-		if strings.Contains(got, "canary-callback-value") {
-			t.Errorf("%s: the value of the panic reached the log: %s", name, got)
-		}
 	}
 	// A callback that is stopped before it fires never runs.
 	ran := false

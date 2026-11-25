@@ -101,6 +101,15 @@ func TestSpecFactTables(t *testing.T) {
 		t.Fatal("\n" + strings.Join(p2problems, "\n"))
 	}
 	run("routes-profiles", compareRoutes(p2tables["routes-profiles"], profileRoutes(t)))
+	// The P3 routes are compared against their own table in the P3 spec (docs/specs/p3-endpoints.md 9.2).
+	p3tables, p3problems := markedTables(readSpecFile(t, "p3-endpoints.md"))
+	if _, ok := p3tables["routes-endpoints"]; !ok {
+		p3problems = append(p3problems, "the P3 spec has no table marked <!-- spec-fact: routes-endpoints -->")
+	}
+	if len(p3problems) > 0 {
+		t.Fatal("\n" + strings.Join(p3problems, "\n"))
+	}
+	run("routes-endpoints", compareEndpointRoutes(p3tables["routes-endpoints"], endpointRoutes(t)))
 	run("routes-admin", compareRoutes(tables["routes-admin"], adminRoutes(t)))
 	run("admin-fresh", compareFresh(tables["admin-fresh"], adminRoutes(t)))
 	ix := buildTestIndex(t)
@@ -218,6 +227,16 @@ func TestSpecFactsCanFail(t *testing.T) {
 	}
 	grownRoutes["GET /new"] = routeFact{Key: "GET /new", Auth: "none", Rate: "public-read", Status: "204"}
 	expectFail("a route added to the document", compareRoutes(rt, grownRoutes))
+	// The P3 table: a class changed, a route dropped from the table or added to the document must each be noticed.
+	p3, _ := markedTables(readSpecFile(t, "p3-endpoints.md"))
+	re := p3["routes-endpoints"]
+	endpointsNow := endpointRoutes(t)
+	pair := rowOf(re, 0, "`/endpoints/{id}/schedule`")
+	expectFail("an endpoint route's token changed", compareEndpointRoutes(edit(re, pair, re.column("Token"), "read, read"), endpointsNow))
+	expectFail("an endpoint route's rate changed", compareEndpointRoutes(edit(re, pair, re.column("Rate"), "ur, sn"), endpointsNow))
+	expectFail("an endpoint route's auth changed", compareEndpointRoutes(edit(re, pair, re.column("Auth"), "r"), endpointsNow))
+	expectFail("an endpoint route dropped", compareEndpointRoutes(drop(re, pair), endpointsNow))
+	expectFail("a row with a value for neither one nor each method", compareEndpointRoutes(edit(re, pair, re.column("Token"), "read, write, none"), endpointsNow))
 	ra := tables["routes-admin"]
 	expectFail("an admin route's auth changed", compareRoutes(edit(ra, rowOf(ra, 0, "PUT `/settings/registration`"), ra.column("Auth"), "`admin`"), adminRoutesNow))
 

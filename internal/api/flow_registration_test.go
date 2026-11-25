@@ -4,8 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/invite"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/session"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/authtest"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/keyring"
 )
 
 // setMode changes registration_mode and waits out the 30 second public-config
@@ -16,16 +20,41 @@ func (f *frig) setMode(mode string) {
 	f.ck.add(31 * time.Second)
 }
 
-// plantInvite inserts an invite and returns the code a person would type.
+// plantInvite inserts an invite row and returns the link token the admin service of the test signed for it. The
+// token lives as long as the longest invite (keyring.LifeInvite) whatever ttl the row has, so that a row that
+// has expired or been revoked still has a link that opens: the row is the final authority, and that is the case.
 func (f *frig) plantInvite(phone string, ttl time.Duration, revoked bool) string {
 	f.t.Helper()
-	code, hash, err := invite.New()
+	tok, _ := f.plantInviteID(phone, ttl, revoked)
+	return tok
+}
+
+// plantInviteID is plantInvite that also returns the id of the row, for a test that reads its state.
+func (f *frig) plantInviteID(phone string, ttl time.Duration, revoked bool) (string, uuid.UUID) {
+	f.t.Helper()
+	id, err := uuid.NewV7()
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.env.Exec(f.t, `INSERT INTO ctrlz.invites (token_hash, phone_e164, expires_at, revoked_at) VALUES ($1, $2, now() + make_interval(secs => $3),
-		CASE WHEN $4::boolean THEN now() ELSE NULL END)`, hash, phone, ttl.Seconds(), revoked)
-	return code.Reveal()
+	tok, hash, err := invite.Mint(f.signer, id, f.ck.now().Add(keyring.LifeInvite))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	f.env.Exec(f.t, `INSERT INTO ctrlz.invites (id, token_hash, phone_e164, expires_at, revoked_at) VALUES ($1, $2, $3, now() + make_interval(secs => $4),
+		CASE WHEN $5::boolean THEN now() ELSE NULL END)`, id, hash, phone, ttl.Seconds(), revoked)
+	return tok.Reveal(), id
+}
+
+// forgedInvite is a link of the right shape that the api does not open: signed by a key it does not hold. It is what a
+// stranger who has seen a real link can make, and what a flood of junk tokens is made of.
+func (f *frig) forgedInvite() string {
+	f.t.Helper()
+	other, _ := authtest.InviteRings(f.t)
+	tok, _, err := invite.Mint(other, uuid.New(), f.ck.now().Add(time.Hour))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return tok.Reveal()
 }
 
 type issued struct {
@@ -141,7 +170,7 @@ func TestRegistration(t *testing.T) {
 
 	t.Run("a bad invite is one error", func(t *testing.T) {
 		for name, tok := range map[string]string{
-			"unknown":   "AAAAA-AAAAA-AAAAA-AAAAA",
+			"forged":    f.forgedInvite(),
 			"malformed": "nope",
 			"expired":   f.plantInvite("+989125552001", -time.Minute, false),
 			"revoked":   f.plantInvite("+989125552002", time.Hour, true),
@@ -160,13 +189,21 @@ func TestRegistration(t *testing.T) {
 		c.post("/auth/register", map[string]any{"invite_token": code, "challenge_id": iss.ID, "code": f.codes.Last()}).want(401, "otp_invalid")
 	})
 
-	t.Run("guessing invites is limited by network", func(t *testing.T) {
+	t.Run("a forged invite link costs no read", func(t *testing.T) {
+		// The class of the route still bounds how many forged links one network can send: no proof, so the network pays.
+		f.clearThrottle()
 		c := f.client()
-		for i := 0; i < 10; i++ {
-			c.post("/auth/invites/lookup", map[string]any{"token": "AAAAA-AAAAA-AAAAA-AAAAA"}).want(404, "invite_invalid")
+		for i := 0; i < 15; i++ {
+			c.post("/auth/invites/lookup", map[string]any{"token": f.forgedInvite()}).want(404, "invite_invalid")
 			f.ck.add(5 * time.Second) // stay under the rate class of the route
 		}
-		r := c.post("/auth/invites/lookup", map[string]any{"token": "AAAAA-AAAAA-AAAAA-AAAAA"}).want(429, "too_many_attempts")
+		if n := f.count(`SELECT count(*) FROM ctrlz.auth_throttle`); n != 0 {
+			t.Fatalf("forged links wrote %d throttle rows", n)
+		}
+		for i := 0; i < 40; i++ {
+			c.post("/auth/invites/lookup", map[string]any{"token": f.forgedInvite()})
+		}
+		r := c.post("/auth/invites/lookup", map[string]any{"token": f.forgedInvite()}).want(429, "")
 		if r.H.Get("Retry-After") == "" {
 			t.Fatal("no Retry-After")
 		}

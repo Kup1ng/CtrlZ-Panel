@@ -3,8 +3,8 @@
 import {Button} from "@heroui/react";
 import {useTranslations} from "next-intl";
 
-import {ShellModal} from "./ShellModal.tsx";
-import {useShellDialog} from "./useShellDialog.ts";
+import {UrlModal} from "../dialog/UrlModal.tsx";
+import {useUrlDialog} from "../dialog/useUrlDialog.ts";
 
 // T-120. Opens from the "?" in PageHeader, bound to `?helpPane=<key>`. Later
 // phases replace the stub text in shell.help.<key>, and add keys with their page.
@@ -18,14 +18,14 @@ export function isHelpKey(value: string | null): value is HelpKey {
 
 export function SectionHelp() {
   const t = useTranslations("shell");
-  const dialog = useShellDialog("helpPane");
+  const dialog = useUrlDialog("helpPane");
   // An unknown key in a hand-typed URL opens nothing.
   const key = isHelpKey(dialog.value) ? dialog.value : null;
 
   return (
-    <ShellModal
+    <UrlModal
+      dialog={dialog}
       isOpen={key !== null}
-      onClose={dialog.close}
       title={key ? t(`help.${key}.title`) : ""}
       footer={
         <Button className="w-full" variant="secondary" onPress={dialog.close}>
@@ -34,6 +34,6 @@ export function SectionHelp() {
       }
     >
       {key ? <p className="text-sm leading-relaxed">{t(`help.${key}.body`)}</p> : null}
-    </ShellModal>
+    </UrlModal>
   );
 }

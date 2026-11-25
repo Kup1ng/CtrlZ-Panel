@@ -1,4 +1,5 @@
 import type {GeneralIconName} from "@ctrlz/icons/hugeicons.ts";
+import {isOnOrUnder} from "./pathPrefix.ts";
 
 // Navigation is data, so the admin shell (WP10, apps/admin/src/nav.ts) renders
 // through the same sidebar with its own list. Labels are already translated: the
@@ -35,7 +36,7 @@ export type NavGroup = {
 export type NavItem = NavLink | NavAction | NavGroup;
 
 export function isCurrentPath(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
+  return isOnOrUnder(pathname, href);
 }
 
 /** Ids of the groups that hold the current page, so they start open. */

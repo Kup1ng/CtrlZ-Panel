@@ -143,7 +143,7 @@ func TestProductionNeedsATrustedProxy(t *testing.T) {
 	d := c.NewDB(ctx, t)
 	vars := dbEnv(t, d, "ctrlz_tenant")
 	vars["CTRLZ_ENV"] = "production"
-	vars["CTRLZ_KEK_DIR"] = keyDir(t, "user_totp", "otp_delivery", "auth_mac")
+	vars["CTRLZ_KEK_DIR"] = keyDir(t, app.RoleAPI.KeyDomains()...) // every key the api holds, so the start reaches the trusted proxy check
 	vars["CTRLZ_LISTEN"] = "127.0.0.1:0"
 	err := app.Run(ctx, app.RoleAPI, app.Options{Getenv: env(vars), Stdout: &syncBuffer{}, Ready: make(chan string, 1)})
 	if err == nil || !strings.Contains(err.Error(), "CTRLZ_TRUSTED_PROXY") {

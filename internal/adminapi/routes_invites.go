@@ -12,17 +12,21 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/invite"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/phone"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
-	"github.com/Kup1ng/CtrlZ-Panel/internal/sms"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/keyring"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
 )
 
-// Invite lifetimes (spec 11.3).
+// Invite lifetimes (spec 11.3). The longest comes from the key registry: a link stays good until its
+// expiry, so it is also how long the old line of invite_sign has to be kept.
 const (
 	defaultInviteHours = 72
-	maxInviteHours     = 720
+	maxInviteHours     = int(keyring.LifeInvite / time.Hour)
+	// inviteSkew is added to the expiry inside the token so that a clock a few minutes apart between the
+	// admin and the api never makes the token the one that refuses a row that is still live. The row decides.
+	inviteSkew = 5 * time.Minute
 )
 
-// ListInvites is GET /invites. A row never carries a code, only the state.
+// ListInvites is GET /invites. A row never carries a link, only the state.
 func (s *Server) ListInvites(ctx context.Context, req gen.ListInvitesRequestObject) (gen.ListInvitesResponseObject, error) {
 	before, err := uuidCursor(req.Params.Cursor)
 	if err != nil {
@@ -53,10 +57,9 @@ func (s *Server) ListInvites(ctx context.Context, req gen.ListInvitesRequestObje
 	return gen.ListInvites200JSONResponse(out), nil
 }
 
-// CreateInvite is POST /invites (spec 11.3). The code is in this response and
-// nowhere else; the database holds its SHA-256. With send_sms the code is also
-// sealed under sms_cred into an outbox row for the worker, since the admin
-// service has no route out.
+// CreateInvite is POST /invites (spec 11.3, D67). The link is in this response and nowhere else; the database
+// holds the SHA-256 of its token and nothing sends it: the admin copies it and gives it to whomever they
+// choose. The token is signed here, with a key only this process holds.
 func (s *Server) CreateInvite(ctx context.Context, req gen.CreateInviteRequestObject) (gen.CreateInviteResponseObject, error) {
 	if req.Body == nil {
 		return nil, httpx.BadRequest()
@@ -84,11 +87,17 @@ func (s *Server) CreateInvite(ctx context.Context, req gen.CreateInviteRequestOb
 	if hours < 1 || hours > maxInviteHours {
 		return nil, errValidation("ttl_hours", "out_of_range")
 	}
-	code, hash, err := invite.New()
+	// The id is inside the signed token, so it is made here and the row is inserted under it. The expiry in the
+	// token is the row's life plus a margin; the database clock decides for the row.
+	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, err
 	}
-	var id uuid.UUID
+	ttl := time.Duration(hours) * time.Hour
+	token, hash, err := invite.Mint(s.d.Keys, id, s.now().Add(ttl+inviteSkew))
+	if err != nil {
+		return nil, err
+	}
 	var host string
 	err = s.global(ctx, func(g store.GlobalTx) error {
 		taken, err := g.PhoneHasAccount(e164)
@@ -101,38 +110,19 @@ func (s *Server) CreateInvite(ctx context.Context, req gen.CreateInviteRequestOb
 		if host, err = s.panelHost(g); err != nil {
 			return err
 		}
-		id, err = g.InviteCreate(store.NewInvite{
-			TokenHash: hash, Phone: e164, Locale: locale, CreatedBy: p.AdminID,
-			TTL: time.Duration(hours) * time.Hour,
-		})
-		if err != nil {
+		if _, err = g.InviteCreate(store.NewInvite{
+			ID: id, TokenHash: hash, Phone: e164, Locale: locale, CreatedBy: p.AdminID, TTL: ttl,
+		}); err != nil {
 			return err
 		}
-		if b.SendSms {
-			// The id is in the AAD of the sealed value (8.2), so it is made here and
-			// inserted explicitly in the same statement as the ciphertext.
-			oid, err := uuid.NewV7()
-			if err != nil {
-				return err
-			}
-			ct, err := sms.SealOutbox(s.d.Keys, oid, e164, code)
-			if err != nil {
-				return err
-			}
-			if err := g.SMSOutboxInsert(store.NewOutbox{
-				ID: oid, Kind: "invite", Phone: e164, TemplateKey: sms.TemplateInvite, Locale: locale, ParamsCT: ct, CreatedBy: p.AdminID,
-			}); err != nil {
-				return err
-			}
-		}
-		_, err = audit.Admin(g, s.now(), p.AdminID, httpx.ClientIPFrom(g.Context()), audit.InviteCreate{Invite: id, SendSMS: b.SendSms, TTLHours: hours})
+		_, err = audit.Admin(g, s.now(), p.AdminID, httpx.ClientIPFrom(g.Context()), audit.InviteCreate{Invite: id, TTLHours: hours})
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	// A fragment never reaches a server or a log (R21).
-	return gen.CreateInvite201JSONResponse{Id: id, Code: code.Reveal(), Link: "https://" + host + "/invite#" + code.Reveal()}, nil
+	return gen.CreateInvite201JSONResponse{Id: id, Link: "https://" + host + "/invite#" + token.Reveal()}, nil
 }
 
 // RevokeInvite is DELETE /invites/{id}.

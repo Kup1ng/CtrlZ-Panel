@@ -126,9 +126,11 @@ type routeFact struct {
 	// Refs are the names of the shared responses the operation points at (RateLimited, SessionExpired),
 	// which document a code without the Errors sentence.
 	Refs []string
-	// Tag is the first tag of the operation: the P2 routes carry `profiles` and are compared against the table routes-profiles
-	// of the P2 spec (docs/specs/p2-profiles.md 8.2), the others against AUTH 14.2.
+	// Tag is the first tag of the operation. It no longer says which spec owns the route: P3 retagged the P2 operations by
+	// public group (P3 6.5), so the owner is the table that lists the route (see tenantRoutes).
 	Tag string
+	// Token is x-ctrlz-token: what an API token may do with the operation (none, read or write).
+	Token string
 }
 
 type oaDoc map[string]any
@@ -256,6 +258,7 @@ func routeFacts(t *testing.T, doc []byte) map[string]routeFact {
 			}
 			f.Auth, _ = op["x-ctrlz-auth"].(string)
 			f.Rate, _ = op["x-ctrlz-rate"].(string)
+			f.Token, _ = op["x-ctrlz-token"].(string)
 			if rb := asMap(op["requestBody"]); rb != nil {
 				if sc, name := d.jsonSchema(rb); sc != nil {
 					f.Body = name
@@ -307,27 +310,73 @@ func routeFacts(t *testing.T, doc []byte) map[string]routeFact {
 	return out
 }
 
-// tenantRoutes are the routes of AUTH 14.2: the document without the operations of the P2 table.
-func tenantRoutes(t *testing.T) map[string]routeFact {
-	out := map[string]routeFact{}
-	for k, f := range routeFacts(t, api.Tenant()) {
-		if f.Tag != "profiles" {
-			out[k] = f
+// The tenant document is split between three tables by the table that lists a route, and not by a tag: the P2 spec lists
+// the profile routes (routes-profiles), the P3 spec the Endpoint routes (routes-endpoints), AUTH 14.2 the rest. A route
+// that no table lists falls to the AUTH table, which then reports it as one the table does not have, so a new route
+// cannot go unlisted by being left out of both newer tables.
+func tableRouteKeys(t *testing.T, spec, table string) map[string]bool {
+	t.Helper()
+	tb, problems := markedTables(readSpecFile(t, spec))
+	if len(problems) > 0 {
+		t.Fatal(strings.Join(problems, "\n"))
+	}
+	rt, ok := tb[table]
+	if !ok {
+		t.Fatalf("%s has no table marked <!-- spec-fact: %s -->", spec, table)
+	}
+	out := map[string]bool{}
+	for _, r := range rt.rows {
+		for _, k := range routeRowKeys(r[0]) {
+			out[k] = true
 		}
 	}
 	return out
 }
 
-// profileRoutes are the operations of the P2 table routes-profiles.
-func profileRoutes(t *testing.T) map[string]routeFact {
-	out := map[string]routeFact{}
-	for k, f := range routeFacts(t, api.Tenant()) {
-		if f.Tag == "profiles" {
-			out[k] = f
-		}
+var routeRowRE = regexp.MustCompile("^([A-Z]+(?:, [A-Z]+)*) `([^`]+)`$")
+
+// routeRowKeys is the keys of one first cell: METHOD `path`, or METHOD, METHOD `path` for a row that holds two operations.
+func routeRowKeys(cell string) []string {
+	m := routeRowRE.FindStringSubmatch(cell)
+	if m == nil {
+		return nil
+	}
+	var out []string
+	for _, method := range strings.Split(m[1], ", ") {
+		out = append(out, method+" "+m[2])
 	}
 	return out
 }
+
+func tenantRouteSplit(t *testing.T) (tenant, profiles, endpoints map[string]routeFact) {
+	t.Helper()
+	p2 := tableRouteKeys(t, "p2-profiles.md", "routes-profiles")
+	p3 := tableRouteKeys(t, "p3-endpoints.md", "routes-endpoints")
+	tenant, profiles, endpoints = map[string]routeFact{}, map[string]routeFact{}, map[string]routeFact{}
+	for k, f := range routeFacts(t, api.Tenant()) {
+		switch {
+		case p2[k] && p3[k]:
+			t.Errorf("%s is listed by both the P2 and the P3 table", k)
+		case p2[k]:
+			profiles[k] = f
+		case p3[k]:
+			endpoints[k] = f
+		default:
+			tenant[k] = f
+		}
+	}
+	return tenant, profiles, endpoints
+}
+
+// tenantRoutes are the routes of AUTH 14.2: the document without the operations of the P2 and P3 tables.
+func tenantRoutes(t *testing.T) map[string]routeFact { r, _, _ := tenantRouteSplit(t); return r }
+
+// profileRoutes are the operations of the P2 table routes-profiles.
+func profileRoutes(t *testing.T) map[string]routeFact { _, r, _ := tenantRouteSplit(t); return r }
+
+// endpointRoutes are the operations of the P3 table routes-endpoints.
+func endpointRoutes(t *testing.T) map[string]routeFact { _, _, r := tenantRouteSplit(t); return r }
+
 func adminRoutes(t *testing.T) map[string]routeFact { return routeFacts(t, api.Admin()) }
 
 // ---- tests (18.7) -----------------------------------------------------------

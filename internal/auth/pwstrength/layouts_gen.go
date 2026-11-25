@@ -3,6 +3,8 @@
 
 package pwstrength
 
+import "strings"
+
 // isiriKey reads a character of the isiri9147 layout as the US key it sits on.
 // A key of 0 is a combining mark that is dropped. ok is false for a character the
 // layout does not type.
@@ -317,6 +319,183 @@ func isiriFromLatin(r rune) (text string, ok bool) {
 	return "", false
 }
 
+// isiriPress reads the start of s as one key press of the isiri9147 layout, as the US character of that key in that shift state:
+// "[" typed on the shifted P of ISIRI 9147 is "P", and a macro of several letters is one key (round 24, primitives-r24-2).
+// size is the number of bytes of s it used, 0 for none.
+func isiriPress(s string) (key rune, size int) {
+	switch {
+	case strings.HasPrefix(s, "\u200c"): // key 30 shift "B"
+		return 'B', 3
+	case strings.HasPrefix(s, "\u200d"): // key 29 "`"
+		return '`', 3
+	case strings.HasPrefix(s, "﷼"): // key 05 shift "$"
+		return '$', 3
+	case strings.HasPrefix(s, "«"): // key 26 shift "L"
+		return 'L', 2
+	case strings.HasPrefix(s, "»"): // key 25 shift "K"
+		return 'K', 2
+	case strings.HasPrefix(s, "×"): // key 07 shift "^"
+		return '^', 2
+	case strings.HasPrefix(s, "÷"): // key 29 shift "~"
+		return '~', 2
+	case strings.HasPrefix(s, "،"): // key 08 shift "&"
+		return '&', 2
+	case strings.HasPrefix(s, "؛"): // key 28 shift "\""
+		return '"', 2
+	case strings.HasPrefix(s, "؟"): // key 35 shift "?"
+		return '?', 2
+	case strings.HasPrefix(s, "ء"): // key 32 shift "M"
+		return 'M', 2
+	case strings.HasPrefix(s, "آ"): // key 23 shift "H"
+		return 'H', 2
+	case strings.HasPrefix(s, "أ"): // key 22 shift "G"
+		return 'G', 2
+	case strings.HasPrefix(s, "ؤ"): // key 1E shift "A"
+		return 'A', 2
+	case strings.HasPrefix(s, "إ"): // key 21 shift "F"
+		return 'F', 2
+	case strings.HasPrefix(s, "ئ"): // key 1F shift "S"
+		return 'S', 2
+	case strings.HasPrefix(s, "ا"): // key 23 "h"
+		return 'h', 2
+	case strings.HasPrefix(s, "ب"): // key 21 "f"
+		return 'f', 2
+	case strings.HasPrefix(s, "ة"): // key 24 shift "J"
+		return 'J', 2
+	case strings.HasPrefix(s, "ت"): // key 24 "j"
+		return 'j', 2
+	case strings.HasPrefix(s, "ث"): // key 12 "e"
+		return 'e', 2
+	case strings.HasPrefix(s, "ج"): // key 1A "["
+		return '[', 2
+	case strings.HasPrefix(s, "ح"): // key 19 "p"
+		return 'p', 2
+	case strings.HasPrefix(s, "خ"): // key 18 "o"
+		return 'o', 2
+	case strings.HasPrefix(s, "د"): // key 31 "n"
+		return 'n', 2
+	case strings.HasPrefix(s, "ذ"): // key 30 "b"
+		return 'b', 2
+	case strings.HasPrefix(s, "ر"): // key 2F "v"
+		return 'v', 2
+	case strings.HasPrefix(s, "ز"): // key 2E "c"
+		return 'c', 2
+	case strings.HasPrefix(s, "س"): // key 1F "s"
+		return 's', 2
+	case strings.HasPrefix(s, "ش"): // key 1E "a"
+		return 'a', 2
+	case strings.HasPrefix(s, "ص"): // key 11 "w"
+		return 'w', 2
+	case strings.HasPrefix(s, "ض"): // key 10 "q"
+		return 'q', 2
+	case strings.HasPrefix(s, "ط"): // key 2D "x"
+		return 'x', 2
+	case strings.HasPrefix(s, "ظ"): // key 2C "z"
+		return 'z', 2
+	case strings.HasPrefix(s, "ع"): // key 16 "u"
+		return 'u', 2
+	case strings.HasPrefix(s, "غ"): // key 15 "y"
+		return 'y', 2
+	case strings.HasPrefix(s, "ـ"): // key 0C shift "_"
+		return '_', 2
+	case strings.HasPrefix(s, "ف"): // key 14 "t"
+		return 't', 2
+	case strings.HasPrefix(s, "ق"): // key 13 "r"
+		return 'r', 2
+	case strings.HasPrefix(s, "ك"): // key 2C shift "Z"
+		return 'Z', 2
+	case strings.HasPrefix(s, "ل"): // key 22 "g"
+		return 'g', 2
+	case strings.HasPrefix(s, "م"): // key 26 "l"
+		return 'l', 2
+	case strings.HasPrefix(s, "ن"): // key 25 "k"
+		return 'k', 2
+	case strings.HasPrefix(s, "ه"): // key 17 "i"
+		return 'i', 2
+	case strings.HasPrefix(s, "و"): // key 33 ","
+		return ',', 2
+	case strings.HasPrefix(s, "ي"): // key 20 shift "D"
+		return 'D', 2
+	case strings.HasPrefix(s, "ً"): // key 13 shift "R"
+		return 'R', 2
+	case strings.HasPrefix(s, "ٌ"): // key 11 shift "W"
+		return 'W', 2
+	case strings.HasPrefix(s, "ٍ"): // key 12 shift "E"
+		return 'E', 2
+	case strings.HasPrefix(s, "َ"): // key 16 shift "U"
+		return 'U', 2
+	case strings.HasPrefix(s, "ُ"): // key 14 shift "T"
+		return 'T', 2
+	case strings.HasPrefix(s, "ِ"): // key 15 shift "Y"
+		return 'Y', 2
+	case strings.HasPrefix(s, "ّ"): // key 17 shift "I"
+		return 'I', 2
+	case strings.HasPrefix(s, "ْ"): // key 10 shift "Q"
+		return 'Q', 2
+	case strings.HasPrefix(s, "ٓ"): // key 2D shift "X"
+		return 'X', 2
+	case strings.HasPrefix(s, "ٔ"): // key 31 shift "N"
+		return 'N', 2
+	case strings.HasPrefix(s, "٪"): // key 06 shift "%"
+		return '%', 2
+	case strings.HasPrefix(s, "٫"): // key 04 shift "#"
+		return '#', 2
+	case strings.HasPrefix(s, "٬"): // key 03 shift "@"
+		return '@', 2
+	case strings.HasPrefix(s, "ٰ"): // key 2F shift "V"
+		return 'V', 2
+	case strings.HasPrefix(s, "پ"): // key 32 "m"
+		return 'm', 2
+	case strings.HasPrefix(s, "چ"): // key 1B "]"
+		return ']', 2
+	case strings.HasPrefix(s, "ژ"): // key 2E shift "C"
+		return 'C', 2
+	case strings.HasPrefix(s, "ک"): // key 27 ";"
+		return ';', 2
+	case strings.HasPrefix(s, "گ"): // key 28 "'"
+		return '\'', 2
+	case strings.HasPrefix(s, "ی"): // key 20 "d"
+		return 'd', 2
+	case strings.HasPrefix(s, "۰"): // key 0B "0"
+		return '0', 2
+	case strings.HasPrefix(s, "۱"): // key 02 "1"
+		return '1', 2
+	case strings.HasPrefix(s, "۲"): // key 03 "2"
+		return '2', 2
+	case strings.HasPrefix(s, "۳"): // key 04 "3"
+		return '3', 2
+	case strings.HasPrefix(s, "۴"): // key 05 "4"
+		return '4', 2
+	case strings.HasPrefix(s, "۵"): // key 06 "5"
+		return '5', 2
+	case strings.HasPrefix(s, "۶"): // key 07 "6"
+		return '6', 2
+	case strings.HasPrefix(s, "۷"): // key 08 "7"
+		return '7', 2
+	case strings.HasPrefix(s, "۸"): // key 09 "8"
+		return '8', 2
+	case strings.HasPrefix(s, "۹"): // key 0A "9"
+		return '9', 2
+	case strings.HasPrefix(s, "("): // key 0B shift ")"
+		return ')', 1
+	case strings.HasPrefix(s, ")"): // key 0A shift "("
+		return '(', 1
+	case strings.HasPrefix(s, "<"): // key 34 shift ">"
+		return '>', 1
+	case strings.HasPrefix(s, ">"): // key 33 shift "<"
+		return '<', 1
+	case strings.HasPrefix(s, "["): // key 19 shift "P"
+		return 'P', 1
+	case strings.HasPrefix(s, "]"): // key 18 shift "O"
+		return 'O', 1
+	case strings.HasPrefix(s, "{"): // key 1B shift "}"
+		return '}', 1
+	case strings.HasPrefix(s, "}"): // key 1A shift "{"
+		return '{', 1
+	}
+	return 0, 0
+}
+
 // legacyKey reads a character of the kbdfa layout as the US key it sits on.
 // A key of 0 is a combining mark that is dropped. ok is false for a character the
 // layout does not type.
@@ -575,6 +754,145 @@ func legacyFromLatin(r rune) (text string, ok bool) {
 		return "×", true
 	}
 	return "", false
+}
+
+// legacyPress reads the start of s as one key press of the kbdfa layout, as the US character of that key in that shift state:
+// "[" typed on the shifted P of ISIRI 9147 is "P", and a macro of several letters is one key (round 24, primitives-r24-2).
+// size is the number of bytes of s it used, 0 for none.
+func legacyPress(s string) (key rune, size int) {
+	switch {
+	case strings.HasPrefix(s, "ريال"): // key 13 shift "R"
+		return 'R', 8
+	case strings.HasPrefix(s, "«"): // key 25 shift "K"
+		return 'K', 2
+	case strings.HasPrefix(s, "»"): // key 26 shift "L"
+		return 'L', 2
+	case strings.HasPrefix(s, "×"): // key 29 shift "~"
+		return '~', 2
+	case strings.HasPrefix(s, "÷"): // key 29 "`"
+		return '`', 2
+	case strings.HasPrefix(s, "،"): // key 14 shift "T"
+		return 'T', 2
+	case strings.HasPrefix(s, "؛"): // key 15 shift "Y"
+		return 'Y', 2
+	case strings.HasPrefix(s, "؟"): // key 35 shift "?"
+		return '?', 2
+	case strings.HasPrefix(s, "ء"): // key 32 shift "M"
+		return 'M', 2
+	case strings.HasPrefix(s, "آ"): // key 23 shift "H"
+		return 'H', 2
+	case strings.HasPrefix(s, "أ"): // key 31 shift "N"
+		return 'N', 2
+	case strings.HasPrefix(s, "ؤ"): // key 2F shift "V"
+		return 'V', 2
+	case strings.HasPrefix(s, "إ"): // key 30 shift "B"
+		return 'B', 2
+	case strings.HasPrefix(s, "ئ"): // key 32 "m"
+		return 'm', 2
+	case strings.HasPrefix(s, "ا"): // key 23 "h"
+		return 'h', 2
+	case strings.HasPrefix(s, "ب"): // key 21 "f"
+		return 'f', 2
+	case strings.HasPrefix(s, "ة"): // key 2C shift "Z"
+		return 'Z', 2
+	case strings.HasPrefix(s, "ت"): // key 24 "j"
+		return 'j', 2
+	case strings.HasPrefix(s, "ث"): // key 12 "e"
+		return 'e', 2
+	case strings.HasPrefix(s, "ج"): // key 1A "["
+		return '[', 2
+	case strings.HasPrefix(s, "ح"): // key 19 "p"
+		return 'p', 2
+	case strings.HasPrefix(s, "خ"): // key 18 "o"
+		return 'o', 2
+	case strings.HasPrefix(s, "د"): // key 31 "n"
+		return 'n', 2
+	case strings.HasPrefix(s, "ذ"): // key 30 "b"
+		return 'b', 2
+	case strings.HasPrefix(s, "ر"): // key 2F "v"
+		return 'v', 2
+	case strings.HasPrefix(s, "ز"): // key 2E "c"
+		return 'c', 2
+	case strings.HasPrefix(s, "س"): // key 1F "s"
+		return 's', 2
+	case strings.HasPrefix(s, "ش"): // key 1E "a"
+		return 'a', 2
+	case strings.HasPrefix(s, "ص"): // key 11 "w"
+		return 'w', 2
+	case strings.HasPrefix(s, "ض"): // key 10 "q"
+		return 'q', 2
+	case strings.HasPrefix(s, "ط"): // key 2D "x"
+		return 'x', 2
+	case strings.HasPrefix(s, "ظ"): // key 2C "z"
+		return 'z', 2
+	case strings.HasPrefix(s, "ع"): // key 16 "u"
+		return 'u', 2
+	case strings.HasPrefix(s, "غ"): // key 15 "y"
+		return 'y', 2
+	case strings.HasPrefix(s, "ـ"): // key 24 shift "J"
+		return 'J', 2
+	case strings.HasPrefix(s, "ف"): // key 14 "t"
+		return 't', 2
+	case strings.HasPrefix(s, "ق"): // key 13 "r"
+		return 'r', 2
+	case strings.HasPrefix(s, "ل"): // key 22 "g"
+		return 'g', 2
+	case strings.HasPrefix(s, "م"): // key 26 "l"
+		return 'l', 2
+	case strings.HasPrefix(s, "ن"): // key 25 "k"
+		return 'k', 2
+	case strings.HasPrefix(s, "ه"): // key 17 "i"
+		return 'i', 2
+	case strings.HasPrefix(s, "و"): // key 33 ","
+		return ',', 2
+	case strings.HasPrefix(s, "ي"): // key 2D shift "X"
+		return 'X', 2
+	case strings.HasPrefix(s, "ً"): // key 10 shift "Q"
+		return 'Q', 2
+	case strings.HasPrefix(s, "ٌ"): // key 11 shift "W"
+		return 'W', 2
+	case strings.HasPrefix(s, "ٍ"): // key 12 shift "E"
+		return 'E', 2
+	case strings.HasPrefix(s, "َ"): // key 1E shift "A"
+		return 'A', 2
+	case strings.HasPrefix(s, "ُ"): // key 1F shift "S"
+		return 'S', 2
+	case strings.HasPrefix(s, "ِ"): // key 20 shift "D"
+		return 'D', 2
+	case strings.HasPrefix(s, "ّ"): // key 21 shift "F"
+		return 'F', 2
+	case strings.HasPrefix(s, "پ"): // key 2B "\\"
+		return '\\', 2
+	case strings.HasPrefix(s, "چ"): // key 1B "]"
+		return ']', 2
+	case strings.HasPrefix(s, "ژ"): // key 2E shift "C"
+		return 'C', 2
+	case strings.HasPrefix(s, "ک"): // key 27 ";"
+		return ';', 2
+	case strings.HasPrefix(s, "گ"): // key 28 "'"
+		return '\'', 2
+	case strings.HasPrefix(s, "ۀ"): // key 22 shift "G"
+		return 'G', 2
+	case strings.HasPrefix(s, "ی"): // key 20 "d"
+		return 'd', 2
+	case strings.HasPrefix(s, "("): // key 0B shift ")"
+		return ')', 1
+	case strings.HasPrefix(s, ")"): // key 0A shift "("
+		return '(', 1
+	case strings.HasPrefix(s, ","): // key 16 shift "U"
+		return 'U', 1
+	case strings.HasPrefix(s, "["): // key 18 shift "O"
+		return 'O', 1
+	case strings.HasPrefix(s, "\\"): // key 19 shift "P"
+		return 'P', 1
+	case strings.HasPrefix(s, "]"): // key 17 shift "I"
+		return 'I', 1
+	case strings.HasPrefix(s, "{"): // key 1B shift "}"
+		return '}', 1
+	case strings.HasPrefix(s, "}"): // key 1A shift "{"
+		return '{', 1
+	}
+	return 0, 0
 }
 
 // usGrid places a character of the US legend on the keyboard: the row (1 is the number

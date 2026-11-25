@@ -1600,3 +1600,57 @@ func TestAFailureInTheTrimRollsTheWholeLoginBack(t *testing.T) {
 		t.Error("the oldest session survived a login over the cap once the fault was gone")
 	}
 }
+
+// TestARevivableSessionCountsTowardTheCap is question 17 at the cap (spec 3.3, primitives-r19-2). A Remember me
+// session past its idle limit is not a usable cookie, but its refresh token brings it back, so it is live: the
+// cap counts it, and the login that goes over ends the OLDEST revivable session with its refresh token. Before
+// the rule was one text, the cap counted only sessions inside the idle limit, and a thief's old session sat
+// beside fifty live ones for ever. Tenant B's sessions are not counted against A and are not touched.
+func TestARevivableSessionCountsTowardTheCap(t *testing.T) {
+	r := newRig(t)
+	A, B := r.env.A, r.env.B
+	bSession := r.create(t, B.Tenant, B.User, true, false)
+	first := r.create(t, A.Tenant, A.User, true, false)
+	rest := make([]session.Issued, 0, caps.MaxSessions)
+	for i := 1; i < caps.MaxSessions; i++ {
+		rest = append(rest, r.create(t, A.Tenant, A.User, true, false))
+	}
+	// Past the idle limit, inside the absolute one: no cookie opens, every refresh token still does.
+	r.ck.add(session.DefaultPolicy().Idle + time.Minute)
+	if r.alive(t, first.Session, plain) {
+		t.Fatal("a session past its idle limit passed the cookie gate: the premise of the test is gone")
+	}
+	revoked := func(id uuid.UUID) (ended bool, left int) {
+		r.env.Scan(t, `SELECT revoked_at IS NOT NULL FROM ctrlz.sessions WHERE id = $1`, []any{id}, &ended)
+		r.env.Scan(t, `SELECT count(*) FROM ctrlz.refresh_tokens WHERE session_id = $1 AND revoked_at IS NULL`, []any{id}, &left)
+		return ended, left
+	}
+	newest := r.create(t, A.Tenant, A.User, true, false)
+	if ended, left := revoked(first.SessionID); !ended || left != 0 {
+		t.Errorf("the oldest revivable session: ended %v, %d live refresh tokens; want ended with none", ended, left)
+	}
+	for i, iss := range rest {
+		if ended, left := revoked(iss.SessionID); ended || left != 1 {
+			t.Errorf("revivable session %d: ended %v, %d live refresh tokens; want it left alone", i, ended, left)
+		}
+	}
+	if ended, _ := revoked(newest.SessionID); ended {
+		t.Error("the login that went over the cap was ended: it is never refused")
+	}
+	var live int
+	r.env.Scan(t, `SELECT count(*) FROM ctrlz.sessions WHERE user_id = $1 AND revoked_at IS NULL`, []any{A.User}, &live)
+	if live != caps.MaxSessions {
+		t.Errorf("the account holds %d sessions that were not ended, want the cap %d", live, caps.MaxSessions)
+	}
+	if ended, left := revoked(bSession.SessionID); ended || left != 1 {
+		t.Errorf("tenant B's session: ended %v, %d live refresh tokens; want it untouched by A's logins", ended, left)
+	}
+	// A session with no refresh token past its idle limit is dead: it is not counted, and the cap does not end it.
+	short := r.create(t, A.Tenant, A.User, false, false)
+	r.ck.add(session.DefaultPolicy().Idle + time.Minute)
+	r.create(t, A.Tenant, A.User, true, false)
+	r.env.Scan(t, `SELECT count(*) FROM ctrlz.sessions WHERE user_id = $1 AND revoked_at IS NULL AND id = $2`, []any{A.User, short.SessionID}, &live)
+	if live != 1 {
+		t.Error("the cap ended a session that was already dead: it counted a session that no refresh can bring back")
+	}
+}

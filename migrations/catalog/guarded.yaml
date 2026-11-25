@@ -104,7 +104,7 @@ write:
   invites:
     free: [created_at]
     declared:
-      admin: [token_hash, phone_e164, locale, created_by, expires_at, revoked_at]
+      admin: [id, token_hash, phone_e164, locale, created_by, expires_at, revoked_at]
   # No login role holds anything on these two: the functions of ctrlz_fn do.
   auth_tickets:
     free: []
@@ -121,7 +121,9 @@ write:
       worker: [delivery_ct, delivery_claimed_until, delivery_attempts]
   # The admin queues a test message with the columns of store.qSMSOutboxInsert; the
   # state, the attempt count, the claim and the send time are the worker's and take
-  # their defaults when the admin inserts (sms-r4-7).
+  # their defaults when the admin inserts (sms-r4-7). The one other writer is ctrlz_fn.tenant_notice_sms, which is
+  # owned by the NOLOGIN ctrlz_scoped (not a login role, so not judged here): its INSERT is a line of grants.yaml and
+  # an entry of scopedGlobalReach, and it takes neither a phone nor a text from its caller.
   sms_outbox:
     free: [created_at]
     declared:
@@ -360,7 +362,7 @@ secrets:
   # The hash of a node's one-time enrollment token.
   node_enrollments:
     token_hash: [admin, hub]
-  # The sealed invite parameters (the invite token among them) that only the sender opens.
+  # The sealed value of a test send, which only the sender opens. A message of kind notice has none (a CHECK).
   sms_outbox:
     params_ct: [worker]
   # The hash of the password that unlocks a locked profile. Only the unlock route reads it
@@ -936,7 +938,7 @@ all_rows:
   sms_gateways:
     admin: "the admin manages every gateway of the operator and tests its credentials"
     worker: "the sender chooses among all gateways by role and breaker, and sends through whichever is up"
-  # The outbox holds messages queued to be sent (an admin test message, an invite), not decoys:
+  # The outbox holds messages queued to be sent (an admin test message, the notice of a security change), not decoys:
   # every row is one the sender sends.
   sms_outbox:
     worker: "every row is a queued message the sender has to send; a decoy never enters the outbox"

@@ -29,7 +29,21 @@ func (s *Server) tokenProof(r *http.Request, op apispec.Operation) (id, subject 
 		return s.ticketProof(bodyField(r, "ticket"))
 	case "resetPasskeyFinish":
 		return s.ticketProof(ticket.FromRequest(r))
-	case "loginOtp", "resetVerify", "register":
+	case "lookupInvite":
+		return s.inviteProof(bodyField(r, "token"))
+	case "register":
+		// An invite link first when the body carries one: its signature is the proof, and it names the invite
+		// the request is charged to. One that does not open is no proof, and the request is charged to the
+		// network and answered 404 by the handler without a read (D67). With no invite the challenge is the proof.
+		if tok := bodyField(r, "invite_token"); tok != "" {
+			return s.inviteProof(tok)
+		}
+		c, ok := s.otp.OpenChallenge(bodyField(r, "challenge_id"))
+		if !ok {
+			return "", "", false
+		}
+		return c.ProofID, c.Subject, true
+	case "loginOtp", "resetVerify":
 		c, ok := s.otp.OpenChallenge(bodyField(r, "challenge_id"))
 		if !ok {
 			return "", "", false
@@ -53,6 +67,18 @@ func (s *Server) untaggedChallenge(challengeID string) error {
 		return otp.ErrExpired
 	}
 	return otp.ErrInvalid
+}
+
+// inviteProof is the proof of a request that carries an invite link whose signature checks: the invite id, which is
+// the claim of the admin process. The charge to the invite's bucket is what lets an invitee behind a shared network
+// be heard (D64 nat-proof-tag, the invite half, D67). The class charge itself stays: a public route with no rate
+// class would be unmetered signature checks.
+func (s *Server) inviteProof(token string) (id, subject string, ok bool) {
+	ref, ok := s.openInvite(token)
+	if !ok {
+		return "", "", false
+	}
+	return ref.ID.String(), "i:" + ref.ID.String(), true
 }
 
 func (s *Server) ticketProof(tok string) (id, subject string, ok bool) {

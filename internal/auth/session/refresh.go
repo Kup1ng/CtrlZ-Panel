@@ -85,7 +85,17 @@ func (m *Manager) Refresh(ctx context.Context, cookie string, ip netip.Addr) (Re
 		// share, the new refresh row and the audit event all name info.UserID, and a
 		// row that named another user would rotate that user's session under the wrong
 		// name. Refusing is the same answer as a dead session.
-		if !found || row.UserID != info.UserID || row.RevokedAt != nil || !row.AbsoluteExpiresAt.After(now) {
+		if !found || row.UserID != info.UserID {
+			res = RefreshResult{Outcome: RefreshExpired}
+			return nil
+		}
+		// Live by the one rule the cap, the list and the ended count read (3.3, question 17), asked
+		// under the row lock: a session the list shows is a session this call can bring back, and a
+		// revoked or past-absolute one is dead. A concurrent tab that rotated the token left a newer
+		// one, so the session is still live and the grace branch below answers that tab.
+		if live, err := tx.SessionLive(session, now); err != nil {
+			return err
+		} else if !live {
 			res = RefreshResult{Outcome: RefreshExpired}
 			return nil
 		}

@@ -88,7 +88,7 @@ func TestAnInviteAcceptedBeforeALostConnectionIsRecordedByTheRetry(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 	if _, err := w.Drain(r.env.Ctx); err != nil {
 		t.Fatal(err)
 	}

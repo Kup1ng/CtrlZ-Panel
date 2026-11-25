@@ -22,6 +22,7 @@ package keyring
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ed25519"
 	"crypto/hkdf"
 	"crypto/hmac"
 	"crypto/rand"
@@ -43,6 +44,7 @@ const (
 	DomainOTPDelivery = "otp_delivery" // otp_challenges.delivery_ct
 	DomainAuthMAC     = "auth_mac"     // OTP code hash, throttle keys, device cookie
 	DomainAdminMAC    = "admin_mac"    // admin throttle keys
+	DomainInviteSign  = "invite_sign"  // the Ed25519 key that signs invite links (D67); only admin holds it
 	DomainDOHToken    = "doh_token"    // endpoints.doh_token_ct (P3); no rekey tool, see `ctrlz-admin keys status doh_token`
 	DomainCertWrap    = "cert_wrap"    // reserved for P6
 )
@@ -62,11 +64,12 @@ const (
 	LabelAPIToken        = "api_token"        // auth_mac: the tag inside an API token
 	LabelSetupShare      = "setup_share"      // auth_mac: the tag inside a share link
 	LabelProfileDownload = "profile_download" // auth_mac: the tag inside an Apple profile download link
+	LabelInviteLink      = "invite_link"      // invite_sign: the Ed25519 seed that signs an invite link (internal/auth/invite)
 )
 
 // Domains lists every defined domain, reserved ones included.
 func Domains() []string {
-	return []string{DomainUserTOTP, DomainAdminTOTP, DomainSMSCred, DomainOTPDelivery, DomainAuthMAC, DomainAdminMAC, DomainDOHToken, DomainCertWrap}
+	return []string{DomainUserTOTP, DomainAdminTOTP, DomainSMSCred, DomainOTPDelivery, DomainAuthMAC, DomainAdminMAC, DomainInviteSign, DomainDOHToken, DomainCertWrap}
 }
 
 // ValidDomain reports whether name is a defined domain.
@@ -99,6 +102,7 @@ var (
 	ErrNotLoaded = errors.New("keyring: domain not loaded")
 	ErrOpen      = errors.New("keyring: cannot open ciphertext")
 	ErrSeal      = errors.New("keyring: cannot seal")
+	ErrSign      = errors.New("keyring: cannot sign")
 )
 
 // key is one numbered key of a domain.
@@ -403,6 +407,29 @@ func (r *Ring) VerifyMAC(domain, label string, tag []byte, parts ...[]byte) bool
 		}
 	}
 	return ok
+}
+
+// Sign is Ed25519 over msg under the labelled subkey of the newest key of a signing domain (D67). The
+// subkey is the seed, so the private key exists only for the length of this call and is wiped; the
+// caller gets the key number the signature must be checked under and the signature, never a key. It
+// refuses a domain that is not a signing domain and any label but the one Uses lists for it, with
+// ErrSign and no detail: a MAC key or a seal key must never also be a signing seed.
+func (r *Ring) Sign(domain, label string, msg []byte) (n uint16, sig []byte, err error) {
+	dk := r.domains[domain]
+	if dk == nil {
+		return 0, nil, fmt.Errorf("%w: %s", ErrNotLoaded, domain)
+	}
+	if !labelFor(label, SignOnly) || !modeFor(domain, ModeSigning) || !pairListed(domain, label) {
+		return 0, nil, ErrSign
+	}
+	seed, err := subkey(dk.newest.k, label)
+	if err != nil {
+		return 0, nil, ErrSign
+	}
+	defer clear(seed)
+	priv := ed25519.NewKeyFromSeed(seed)
+	defer clear(priv)
+	return dk.newest.n, ed25519.Sign(priv, msg), nil
 }
 
 // KeyNumber reads the key number from bytes 3-4 of a ciphertext, for

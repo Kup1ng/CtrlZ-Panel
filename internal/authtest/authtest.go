@@ -92,11 +92,33 @@ func FastHasher(t *testing.T) *password.Hasher {
 // throw-away keys.
 func AdminKeys(t *testing.T) *keyring.Ring {
 	t.Helper()
-	r, err := keyring.NewEphemeral(keyring.DomainAdminTOTP, keyring.DomainSMSCred, keyring.DomainAdminMAC)
+	r, err := keyring.NewEphemeral(keyring.DomainAdminTOTP, keyring.DomainSMSCred, keyring.DomainAdminMAC, keyring.DomainInviteSign)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return r
+}
+
+// InvitesOf is the public half of the invite_sign key of an admin ring, which is what the api of a test
+// holds when the same test makes links with that ring (D67). One test, one signer, one verifier.
+func InvitesOf(t *testing.T, admin *keyring.Ring) *keyring.PublicRing {
+	t.Helper()
+	p, err := admin.Public(keyring.DomainInviteSign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// InviteRings is a signer holding only invite_sign and the public ring that opens what it signs, for a test of
+// the api that makes links itself and has no admin service.
+func InviteRings(t *testing.T) (*keyring.Ring, *keyring.PublicRing) {
+	t.Helper()
+	r, err := keyring.NewEphemeral(keyring.DomainInviteSign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r, InvitesOf(t, r)
 }
 
 // SharedRings returns the admin service's key ring and the worker's, derived
@@ -112,7 +134,7 @@ func SharedRings(t *testing.T) (admin, worker *keyring.Ring) {
 	root := secret.NewBytes(raw)
 	clear(raw)
 	admin, err := keyring.FromRoot(root, map[string][]uint16{
-		keyring.DomainAdminTOTP: {1}, keyring.DomainSMSCred: {1}, keyring.DomainAdminMAC: {1},
+		keyring.DomainAdminTOTP: {1}, keyring.DomainSMSCred: {1}, keyring.DomainAdminMAC: {1}, keyring.DomainInviteSign: {1},
 	})
 	if err != nil {
 		t.Fatal(err)

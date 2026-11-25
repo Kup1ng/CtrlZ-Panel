@@ -776,15 +776,25 @@ UNION ALL SELECT 'database ' || datname FROM pg_database WHERE pg_get_userbyid(d
 // 10 ---------------------------------------------------------------------------
 
 // ScopedPolicyFindings is the second half of the construction of db-r18-1: ctrlz_scoped meets no policy but
-// tenant_isolation. It reads pg_policy as the server applies it (a policy that names no role applies to PUBLIC,
-// so ctrlz_scoped too), and reports every policy that applies to the role and is not named tenant_isolation, a
-// RESTRICTIVE policy included, and every role attribute that lets it past row-level security.
+// tenant_isolation, with one exception since question 15 (0061, db-r18-17): the three global tables that hold
+// rows of one tenant (auth_tickets, announcements, otp_challenges) each have a policy named scoped_tenant (or
+// scoped_tenant_write, if one policy cannot carry both commands) for the role and for the role alone, PERMISSIVE,
+// whose condition names ctrlz.current_tenant_id(). It reads pg_policy as the server applies it (a policy that
+// names no role applies to PUBLIC, so ctrlz_scoped too), and reports every other policy that applies to the role,
+// a RESTRICTIVE policy included, a scoped_tenant policy anywhere else or one whose condition does not name the
+// setting, and every role attribute that lets it past row-level security.
 func ScopedPolicyFindings(ctx context.Context, q Querier) ([]string, error) {
 	out, err := strs(ctx, q, `
-SELECT format('policy %s on %s applies to ctrlz_scoped and is not tenant_isolation', p.polname, c.relname)
+SELECT format('policy %s on %s applies to ctrlz_scoped and is not tenant_isolation or an accepted scoped_tenant policy', p.polname, c.relname)
 FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
 WHERE p.polname <> 'tenant_isolation'
-  AND (0 = ANY (p.polroles) OR (SELECT oid FROM pg_roles WHERE rolname = 'ctrlz_scoped') = ANY (p.polroles))`)
+  AND (0 = ANY (p.polroles) OR (SELECT oid FROM pg_roles WHERE rolname = 'ctrlz_scoped') = ANY (p.polroles))
+  AND NOT (p.polname IN ('scoped_tenant', 'scoped_tenant_write')
+       AND c.relname IN ('auth_tickets', 'announcements', 'otp_challenges')
+       AND p.polpermissive
+       AND p.polroles = ARRAY[(SELECT oid FROM pg_roles WHERE rolname = 'ctrlz_scoped')]
+       AND COALESCE(pg_get_expr(p.polqual, p.polrelid) LIKE '%ctrlz.current_tenant_id()%', false)
+       AND COALESCE(p.polwithcheck IS NULL OR pg_get_expr(p.polwithcheck, p.polrelid) LIKE '%ctrlz.current_tenant_id()%', false))`)
 	if err != nil {
 		return nil, err
 	}

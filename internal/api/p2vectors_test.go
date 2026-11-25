@@ -327,10 +327,16 @@ func TestD42ThroughTheServiceRoutesAndTheGrandfatheredRows(t *testing.T) {
 	redirect := map[string]any{"enabled": true, "action": "redirect", "target": host}
 	var fl fieldList
 	f.fresh(A.Tenant, A.User).do("PUT", base+"/services/digikala", redirect).want(422, "validation_failed").json(&fl)
-	if !fl.has("/target", "iranian_name") && len(fl.Fields) == 0 {
-		t.Errorf("a Redirect on an Iranian service: fields %+v", fl.Fields)
+	// The pointer is the slug of the request, so the UI can name the service it refuses (spec 3.6); on the batch route it is
+	// the index of the Iranian one among the slugs.
+	if !fl.has("/slugs/0", "iranian_name") {
+		t.Errorf("a Redirect on an Iranian service: fields %+v, want iranian_name at /slugs/0", fl.Fields)
 	}
-	f.fresh(A.Tenant, A.User).post(base+"/services:batch", map[string]any{"op": "set", "slugs": []string{"youtube", "snapp"}, "enabled": true, "action": "redirect", "target": host}).want(422, "validation_failed")
+	var bfl fieldList
+	f.fresh(A.Tenant, A.User).post(base+"/services:batch", map[string]any{"op": "set", "slugs": []string{"youtube", "snapp"}, "enabled": true, "action": "redirect", "target": host}).want(422, "validation_failed").json(&bfl)
+	if !bfl.has("/slugs/1", "iranian_name") || bfl.has("/slugs/0", "iranian_name") {
+		t.Errorf("a batch Redirect on youtube and snapp: fields %+v, want iranian_name at /slugs/1 only", bfl.Fields)
+	}
 	f.fresh(A.Tenant, A.User).do("PUT", base+"/services/youtube", redirect).want(200, "")
 	var n int
 	f.env.Scan(t, `SELECT count(*) FROM ctrlz.profile_services WHERE profile_id = $1 AND service_slug IN ('digikala', 'snapp')`, []any{p.ID}, &n)

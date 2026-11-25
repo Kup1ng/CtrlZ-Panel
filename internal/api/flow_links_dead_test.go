@@ -21,21 +21,22 @@ import (
 type pubOp struct {
 	name  string
 	table string
+	ok    int // the status of a live value: the share view and the download answer 200, the share Apple profile creates a download link and answers 201
 	mint  func(r *linkRig) string
 	call  func(r *linkRig, value string) *resp
 }
 
 func pubOps() []pubOp {
 	return []pubOp{
-		{"share view", "setup_share_tokens",
+		{"share view", "setup_share_tokens", 200,
 			func(r *linkRig) string { return valueOf(r.f.t, r.share(map[string]any{}).URL) },
 			func(r *linkRig, v string) *resp { return r.open(v) }},
-		{"share apple profile", "setup_share_tokens",
+		{"share apple profile", "setup_share_tokens", 201,
 			func(r *linkRig) string { return valueOf(r.f.t, r.share(map[string]any{}).URL) },
 			func(r *linkRig, v string) *resp {
 				return r.f.client().post("/public/share/apple-profile", map[string]any{"link": v, "params": map[string]any{"protocol": "doh"}})
 			}},
-		{"download", "profile_download_tokens",
+		{"download", "profile_download_tokens", 200,
 			func(r *linkRig) string {
 				var dl pLinkURL
 				r.apple(map[string]any{"protocol": "doh"}).want(201, "").json(&dl)
@@ -110,8 +111,8 @@ func TestPublicRoutesRefuseDeadValuesAlike(t *testing.T) {
 				if n := r.uses(op, id); n != 0 {
 					t.Errorf("a %s tenant's request spent %d uses", status, n)
 				}
-				if got := op.call(r, v); got.Code != 200 {
-					t.Errorf("the value of a tenant that is active again answered %d %s: the refusal above was not its status", got.Code, got.Body)
+				if got := op.call(r, v); got.Code != op.ok {
+					t.Errorf("the value of a tenant that is active again answered %d %s, want %d: the refusal above was not its status", got.Code, got.Body, op.ok)
 				}
 				step()
 			}

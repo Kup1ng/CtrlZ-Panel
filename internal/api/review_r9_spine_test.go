@@ -25,7 +25,7 @@ func TestALiveInviteStillGetsItsCodeWhenStrangersFillTheNetwork(t *testing.T) {
 	const other = "+989125553010"
 	code := f.plantInvite(phone, time.Hour, false)
 	second := f.plantInvite(other, time.Hour, false)
-	const bad = "AAAAA-AAAAA-AAAAA-AAAAA"
+	bad := f.forgedInvite()
 
 	on := func(last int) *client { c := f.client(); c.ip = fmt.Sprintf("203.0.113.%d", last); return c }
 	// The flood: strangers on the /24 fill the plain bucket with numbers nobody has.

@@ -15,11 +15,11 @@ tables:
     auth: "S(id,status,plan_id) I"
     keytool: "S(id)"
   users:
-    scoped: "S(id,tenant_id,must_reset,password_expires_at,password_hash,enforce_passkey,totp_enabled_at,totp_secret_ct,totp_pending_at) U(password_hash,password_expires_at,must_reset,password_changed_at,totp_secret_ct,totp_enabled_at,totp_last_step,enforce_passkey,totp_pending_at)"
+    scoped: "S(id,tenant_id,phone_e164,phone_verified_at,locale,must_reset,password_expires_at,password_hash,enforce_passkey,totp_enabled_at,totp_secret_ct,totp_pending_at) U(phone_e164,phone_verified_at,password_hash,password_expires_at,must_reset,password_changed_at,totp_secret_ct,totp_enabled_at,totp_last_step,enforce_passkey,totp_pending_at)"
     tenant: "S(-password_hash-totp_secret_ct) U(locale,theme,onboarding_hints,onboarding_state,password_hash,totp_secret_ct,totp_enabled_at,totp_last_step,enforce_passkey,last_login_at,totp_pending_at,enforce_lift_at,passkey_review_at)"
     keytool: "S(tenant_id,id,totp_secret_ct)"
     admin: "S(-password_hash-totp_secret_ct-credential_gen)"
-    auth: "S(tenant_id,id,phone_e164,password_hash,totp_secret_ct,totp_enabled_at,enforce_passkey,must_reset,phone_verified_at,password_expires_at,enforce_lift_at,password_changed_at,totp_pending_at,credential_gen) U(phone_e164,phone_verified_at,password_hash,password_changed_at,must_reset,password_expires_at,totp_secret_ct,totp_enabled_at,totp_last_step,enforce_passkey,totp_pending_at) I"
+    auth: "S(tenant_id,id,phone_e164,password_hash,totp_secret_ct,totp_enabled_at,enforce_passkey,must_reset,phone_verified_at,password_expires_at,enforce_lift_at,password_changed_at,totp_pending_at,credential_gen) U(password_hash,password_changed_at,must_reset,password_expires_at,totp_secret_ct,totp_enabled_at,totp_last_step,enforce_passkey,totp_pending_at) I"
   recovery_codes:
     tenant: "S I U D"
   sessions:
@@ -45,7 +45,7 @@ tables:
   phone_change_requests:
     tenant: "S I"
     worker: "S(tenant_id,id,expires_at,completed_at) D"
-    auth: "S(tenant_id,id,user_id,new_phone_e164,old_otp_id,new_otp_id,expires_at,completed_at,created_at) U(completed_at)"
+    scoped: "S(tenant_id,id,user_id,new_phone_e164,old_otp_id,new_otp_id,expires_at,completed_at,created_at) U(completed_at)"
   tenant_entitlements:
     tenant: "S"
     compiler: "S"
@@ -54,7 +54,7 @@ tables:
     auth: "S(tenant_id,max_ip_claims) I"
     scoped: "S"
   notifications:
-    scoped: "I(tenant_id,kind,severity,params)"
+    scoped: "S(tenant_id,id,kind) I(tenant_id,kind,severity,params)"
     tenant: "S I(tenant_id,kind,severity,params) U(read_at)"
     worker: "I"
     admin: "I"
@@ -66,7 +66,7 @@ tables:
     tenant: "S I"
     admin: "S U(status,admin_reply,replied_at)"
   tenant_audit_log:
-    scoped: "I(tenant_id,user_id,action,target,params)"
+    scoped: "S(tenant_id,user_id,action,at) I(tenant_id,user_id,action,target,params)"
     tenant: "S I"
     worker: "S(tenant_id,id,at) D"
     auth: "I(tenant_id,user_id,action,target,params)"
@@ -214,10 +214,11 @@ tables:
     worker: "S I U"
   invites:
     worker: "S(id,expires_at,used_at) D"
-    admin: "S(id,phone_e164,locale,expires_at,created_at,used_at,revoked_at) I(token_hash,phone_e164,locale,created_by,expires_at) U(revoked_at)"
+    admin: "S(id,phone_e164,locale,expires_at,created_at,used_at,revoked_at) I(id,token_hash,phone_e164,locale,created_by,expires_at) U(revoked_at)"
     auth: "S(id,token_hash,phone_e164,expires_at,used_at,revoked_at) U(used_at,accepted_tenant_id)"
   otp_challenges:
     worker: "S(id,phone_e164,purpose,code_hash,delivery_ct,expires_at,created_at,delivery_claimed_until,delivery_attempts,consumed_at) U(delivery_ct,delivery_claimed_until,delivery_attempts)"
+    scoped: "S(id,tenant_id,phone_e164,purpose,consumed_at)"
     auth: "S I U D"
   sms_counters:
     worker: "S I U"
@@ -230,6 +231,7 @@ tables:
     worker: "S"
     admin: "S I U"
   auth_tickets:
+    scoped: "S(id,subject_tenant,subject_user,kind,consumed_at) U(consumed_at)"
     auth: "S I U D"
   auth_throttle:
     auth: "S I U D"
@@ -237,6 +239,7 @@ tables:
     worker: "S U(state,progress,started_at,finished_at)"
     admin: "S I U(state,progress,finished_at)"
   sms_outbox:
+    scoped: "I(id,kind,phone_e164,template_key,locale)"
     worker: "S U(state,attempts,claimed_until,last_error,sent_at,params_ct) D"
     admin: "S(id,kind,gateway_id,state,attempts,last_error,created_by,created_at,sent_at) I(id,kind,gateway_id,phone_e164,template_key,locale,params_ct,created_by)"
   sms_deliveries:
@@ -263,7 +266,6 @@ tables:
   announcements:
     scoped: "S"
     worker: "S"
-    auth: "S"
     admin: "S I U D"
   nodes:
     scoped: "S(id,dns_advertised_ip)"

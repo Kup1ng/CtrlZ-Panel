@@ -122,3 +122,28 @@ func TestShortPersianWordsInAPhraseCount(t *testing.T) {
 		}
 	}
 }
+
+// TestFinglishWithAnExtraLetterOnAPersianKeyboardIsRefused is primitives-r21-1: one Latin letter that no
+// spelling explains switched the whole-run Finglish matching off, so the four phrases of r20-2 with a
+// letter added before, after or in the middle were accepted on a Persian layout while the same Latin
+// text is refused. The answer must not depend on which layout was on: a text is refused on the Persian
+// layouts at a floor exactly when its Latin form is refused there.
+func TestFinglishWithAnExtraLetterOnAPersianKeyboardIsRefused(t *testing.T) {
+	c := pwstrength.New()
+	in := pwstrength.Input{Phone: "+989121234567", Username: "ali"}
+	for _, base := range []string{"doostdaramtoro", "khodahafez2024", "mamnunamazshoma", "madaremmehraban"} {
+		mid := len(base) / 2
+		for _, latin := range []string{"x" + base, base + "x", base[:mid] + "x" + base[mid:], base + "q"} {
+			for _, kind := range []password.Kind{password.User, password.Admin} {
+				if check(c, latin, in, kind).OK {
+					continue // the Latin form passes at this floor, so there is nothing to hold the Persian layouts to
+				}
+				for i, typed := range pwstrength.OnPersianKeyboard(c, latin) {
+					if r := check(c, typed, in, kind); r.OK {
+						t.Errorf("%s on Persian layout %d (%q), kind %v: accepted (%+v), but the Latin text is refused", latin, i, typed, kind, r)
+					}
+				}
+			}
+		}
+	}
+}

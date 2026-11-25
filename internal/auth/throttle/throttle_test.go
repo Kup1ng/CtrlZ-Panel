@@ -67,7 +67,6 @@ func TestPoliciesMatchTable45(t *testing.T) {
 		throttle.TOTPSession:      {Max: 5, Window: 15 * time.Minute, ResetOnSuccess: true},
 		throttle.ResetPasskeyUser: {Max: 5, Window: 15 * time.Minute, ResetOnSuccess: true},
 		throttle.OTPVerifyNet:     {Max: 30, Window: 15 * time.Minute},
-		throttle.InviteNet:        {Max: 10, Window: 15 * time.Minute},
 		throttle.AdminLogin:       {Max: 5, Window: 15 * time.Minute, ResetOnSuccess: true},
 		throttle.AdminLoginUser:   {Max: 30, Window: 15 * time.Minute, ResetOnSuccess: true},
 		throttle.AdminLoginNet:    {Max: 20, Window: 15 * time.Minute},

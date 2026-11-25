@@ -63,6 +63,7 @@ func Start(ctx context.Context) (*Server, error) {
 func start(ctx context.Context) (*Server, error) {
 	// The reaper testcontainers starts beside this container holds the Docker socket and is named by tag alone:
 	// make the local copy of that tag the reviewed bytes first (admin-r17-2, -8).
+	deploy.RemoveStaleTestContainers()
 	if err := deploy.PinReaper(ctx); err != nil {
 		return nil, err
 	}
@@ -86,13 +87,13 @@ func start(ctx context.Context) (*Server, error) {
 	})
 	if err != nil {
 		if c != nil {
-			_ = c.Terminate(ctx)
+			terminateFresh(ctx, c)
 		}
 		return nil, err
 	}
 	host, err := c.Host(ctx)
 	if err != nil {
-		_ = c.Terminate(ctx)
+		terminateFresh(ctx, c)
 		return nil, err
 	}
 	if host == "localhost" { // see testpg: the resolver is slow under load
@@ -100,7 +101,7 @@ func start(ctx context.Context) (*Server, error) {
 	}
 	port, err := c.MappedPort(ctx, "6379/tcp")
 	if err != nil {
-		_ = c.Terminate(ctx)
+		terminateFresh(ctx, c)
 		return nil, err
 	}
 	_ = port
@@ -165,4 +166,13 @@ func RunMain(m *testing.M, use func(*Server)) int {
 	defer tcancel()
 	_ = s.Terminate(tctx)
 	return code
+}
+
+// terminateFresh removes a container on an error path with a deadline of its own: the start-up context is the
+// one that has expired when the start gave up on a wait, and Terminate on it fails at once and leaves the
+// container (and the reaper of the run) behind. WithoutCancel keeps its values and drops its end.
+func terminateFresh(ctx context.Context, c testcontainers.Container) {
+	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	_ = c.Terminate(tctx)
 }

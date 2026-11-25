@@ -159,7 +159,6 @@ var moduleStdSafe = map[string]string{
 	"flag":            "command line flags",
 	"fmt":             "formatting",
 	"go/format":       "the generator of the layout tables",
-	"hash/maphash":    "a seeded hash for sharding",
 	"io":              "readers and writers",
 	"io/fs":           "file system types",
 	"iter":            "iterators of the shared name type",
@@ -273,6 +272,7 @@ var osMembers = map[string][]string{
 	"internal/mutant":                      {"MkdirAll", "MkdirTemp", "ReadDir", "ReadFile", "RemoveAll", "Stat", "WriteFile"},                                                               // the mutation tool works in a scratch copy of the tree
 	"tools/mutants":                        {"Exit", "Getwd", "Interrupt", "Stat", "Stderr", "Stdout"},                                                                                       // the mutation tool's command
 	"tools/genmig":                         {"Exit", "Stderr"},                                                                                                                               // the migration generator's command
+	"tools/genpublicapi":                   {"Exit", "ReadFile", "Stderr", "WriteFile"},                                                                                                      // the public document generator reads api/openapi.yaml and writes api/public-openapi.yaml
 	"internal/migrategen":                  {"Open", "ReadDir", "ReadFile", "WriteFile"},                                                                                                     // the migration generator reads the SQL and writes the generated files
 	"internal/auth/pwstrength/layouts/gen": {"Args", "Exit", "Stderr", "WriteFile"},                                                                                                          // the generator of the layout tables
 	"shared/cmd/sharedtool":                {"Args", "Chmod", "CreateTemp", "Exit", "MkdirAll", "ReadDir", "ReadFile", "Remove", "Rename", "Stat", "Stderr", "Stdout"},                       // the checksum tool reads the module tree and rewrites CHECKSUMS and the copy through a temp file, a chmod and a rename

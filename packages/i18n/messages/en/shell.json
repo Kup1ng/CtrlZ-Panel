@@ -71,6 +71,7 @@
     "unread": "{count, plural, one {# unread notification} other {# unread notifications}}",
     "unreadMark": "Unread",
     "open": "Open",
+    "showOlder": "Show older notifications",
     "empty": {
       "title": "No notifications",
       "text": "Anything you need to know will show up here."
@@ -78,6 +79,19 @@
     "severity": {
       "critical": "Important warning",
       "warning": "Warning"
+    },
+    "security": {
+      "title": "Security notices",
+      "markRead": "Mark as read",
+      "markReadAria": "Mark as read: {title}",
+      "notMarkable": "You can clear this notice after you sign in again.",
+      "changePassword": "Change password",
+      "reviewSessions": "Review sessions",
+      "reviewPasskeys": "Review passkeys",
+      "makeNewCodes": "Make new codes",
+      "several": "{count, number} notices of this kind, the first on {first}.",
+      "markFailed": "Some notices could not be cleared yet. Wait a minute and press again.",
+      "markPartial": "{done, number} notices cleared, {left, number} left. Press again to clear them."
     },
     "announcement": "Announcement",
     "generic": "New notification",
@@ -104,13 +118,22 @@
       },
       "passkey_added": {
         "title": "A passkey was added to your account",
-        "text": "If this was not you, remove it from Account, change your password and sign out unknown devices."
+        "text": "A passkey was added to your account on {when}. If this was not you, remove it under Passkeys, then change your password and end the other sessions. If you cannot tell which passkey is yours, use Forgot password on the sign-in page: it ends every session and puts every passkey up for review."
       },
       "recovery_codes_regenerated": {
         "title": "New recovery codes were made",
-        "text": "The old codes no longer work. If this was not you, change your password and sign out unknown devices."
+        "text": "Your recovery codes were replaced on {when}, and the old codes no longer work. If this was not you, make new codes, review your passkeys, then change your password and end the other sessions. New codes are what make the ones a stranger holds useless. A passkey added by someone else signs in on its own, so check that list too."
+      },
+      "totp_lost": {
+        "title": "Your authenticator was cleared",
+        "text": "The service cleared your authenticator because its key was lost. Set up two-step verification again under Account."
+      },
+      "passkey_enforce_cleared": {
+        "title": "Passkey-only sign-in was lifted",
+        "text": "{users, plural, one {# user was} other {# users were}} left with no working passkey, so the passkey-only requirement was lifted for them. They can sign in with a password again and should add a new passkey."
       }
-    }
+    },
+    "moreUnread": "More unread notices are further back than the panel has loaded. Open the notifications and press Show older notifications."
   },
   "help": {
     "close": "Got it",

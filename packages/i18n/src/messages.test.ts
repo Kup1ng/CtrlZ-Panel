@@ -147,6 +147,14 @@ describe("namespaces per app", () => {
     expect(Object.keys(pickNamespaces(all, "panel")).sort()).toEqual(["account", "common"]);
     expect(Object.keys(pickNamespaces(all, "admin")).sort()).toEqual(["admin", "common"]);
   });
+
+  // gate-r34-3: the lab wording is sent only where the lab pages are served.
+  it("sends the lab namespace only when the lab is on", () => {
+    const all = {common: {a: "1"}, lab: {e: "5"}};
+    expect(Object.keys(pickNamespaces(all, "panel"))).toEqual(["common"]);
+    expect(Object.keys(pickNamespaces(all, "panel", {lab: true})).sort()).toEqual(["common", "lab"]);
+    expect(Object.keys(pickNamespaces(all, "admin", {lab: true}))).toEqual(["common"]);
+  });
 });
 
 describe("loadMessages", () => {
@@ -162,5 +170,48 @@ describe("loadMessages", () => {
   it("returns the right language", async () => {
     expect((await loadMessages("fa", "panel")).common?.close).toBe("بستن");
     expect((await loadMessages("en", "panel")).common?.close).toBe("Close");
+  });
+});
+
+describe("errors with a countdown", () => {
+  const countdown = ["rate_limited", "too_many_attempts", "otp_limited", "otp_locked", "server_busy"];
+  const t = (locale: "fa" | "en") =>
+    createTranslator({locale, messages: {errors: read(locale, "errors")} as never, namespace: "errors" as never}) as unknown as (
+      key: string,
+      values: Record<string, unknown>,
+    ) => string;
+
+  // The `one` branch used to say "1 seconds" because it copied the `other` text.
+  it.each(countdown)("%s names the unit in the singular for 1 and in the plural for 2 and 30 in English", (key) => {
+    const en = t("en");
+    expect(en(key, {retryAfterS: 1})).toMatch(/\b1 second\b(?!s)/);
+    expect(en(key, {retryAfterS: 2})).toMatch(/\b2 seconds\b/);
+    expect(en(key, {retryAfterS: 30})).toMatch(/\b30 seconds\b/);
+    expect(en(key, {retryAfterS: 1})).not.toMatch(/seconds/);
+  });
+
+  it.each(countdown)("%s has a no-figure text for 0 and shows the figure otherwise in both languages", (key) => {
+    for (const locale of ["fa", "en"] as const) {
+      const text = t(locale);
+      expect(text(key, {retryAfterS: 0}), `${locale} 0`).not.toMatch(/[0-9۰-۹]/);
+      expect(text(key, {retryAfterS: 5}), `${locale} 5`).toMatch(/[5۵]/);
+    }
+  });
+});
+
+// merge-r4-10. The refusal of a save while a pair waits is read by the admin whose save it refused, who cannot have staged that pair and holds no
+// fingerprint. The console says to discard it then (admin-r20-3); the line once offered Confirm first, which sends the owner looking for a way to
+// confirm what a stolen session may have staged.
+describe("fieldErrors.pending_exists of the admin", () => {
+  const key = (locale: string) => ((read(locale, "admin") as Tree).fieldErrors as Tree).pending_exists as string;
+  it("tells the refused admin to discard, and never offers to confirm", () => {
+    expect(key("en")).toMatch(/discard/i);
+    expect(key("en")).not.toMatch(/confirm it|or discard|confirm or/i);
+    expect(key("en")).toMatch(/someone else/i);
+  });
+  it("says the same in Persian: it names the discard and the other session, and has no confirm-or-discard choice", () => {
+    expect(key("fa")).toContain("دور بریزید");
+    expect(key("fa")).toContain("نشست دیگری");
+    expect(key("fa")).not.toContain("تأیید یا رد");
   });
 });

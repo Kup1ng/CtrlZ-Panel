@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/invite"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/otp"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/sms"
@@ -602,18 +601,13 @@ func TestParseTemplateIDIsTheInt32OfTheProvider(t *testing.T) {
 }
 
 // TestEveryValueTheServiceSendsFitsTheProviderLimit ties the values the service really
-// makes to sms.ir's 25 character parameter limit (sms-r9-4). The formatted invite code is
-// 23 characters, two under the limit, and a longer code (more characters, bigger groups)
-// would make every invite fail locally as value_too_long, a message-scope failure with a
+// makes to sms.ir's 25 character parameter limit (sms-r9-4). An OTP code is
+// six digits, far under the limit, and a longer code (D67 removed the invite code, the one long value)
+// would make every message fail locally as value_too_long, a message-scope failure with a
 // warning and no breaker, so nothing but this test would say so.
 func TestEveryValueTheServiceSendsFitsTheProviderLimit(t *testing.T) {
 	var values []secret.String
 	for range 200 {
-		code, _, err := invite.New()
-		if err != nil {
-			t.Fatal(err)
-		}
-		values = append(values, code)
 		otpCode, err := otp.NewCode()
 		if err != nil {
 			t.Fatal(err)

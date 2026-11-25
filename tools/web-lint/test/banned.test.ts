@@ -38,7 +38,27 @@ describe("physical edges in class strings", () => {
     fails("const a = `flex ${1} ml-2`;", "physical class");
   });
   it("passes the logical ones and look-alikes", () => {
-    for (const cls of ["ms-2", "pe-4", "start-0", "text-start", "border-s", "rounded-e-lg", "rounded-lg", "border-light", "flex-col", "gap-x-3", "pl", "ml"]) {
+    for (const cls of ["ms-2", "pe-4", "start-0", "text-start", "border-s", "rounded-e-full", "rounded-full", "border-light", "flex-col", "gap-x-3", "pl", "ml"]) {
+      passes(`const a = "flex ${cls}";`);
+    }
+  });
+});
+
+describe("radius outside the table (wp4-r4-1)", () => {
+  it("fails on HeroUI's own scale and on a typed arbitrary radius", () => {
+    for (const cls of ["rounded-lg", "rounded-md", "md:rounded-xl", "rounded-t-lg", "rounded-[8px]", "rounded-[calc(0.4*var(--spacing)*8)]", "rounded-s-[12px]"]) {
+      fails(`const a = "flex ${cls}";`, "radius");
+    }
+    fails("const a = `flex rounded-lg ${x}`;", "radius");
+  });
+  it("passes the tokens, the pill and look-alikes", () => {
+    for (const cls of [
+      "rounded-full",
+      "rounded-none",
+      "rounded-(--radius-box)",
+      "rounded-[min(calc(var(--spacing)*8*var(--radius-control-ratio)),var(--radius-control-cap))]",
+      "xrounded-lg",
+    ]) {
       passes(`const a = "flex ${cls}";`);
     }
   });
@@ -74,6 +94,9 @@ describe("external URLs", () => {
     fails(`const a = "https://cdn.example.com/x.js";`, "http");
     fails(`const a = "see http://example.com";`, "http");
     fails("const a = `https://${host}/x`;", "http");
+    // A scheme is case-insensitive in a browser (wp12-r1-13).
+    fails(`const a = "HTTPS://cdn.example.com/x.js";`, "http");
+    fails("const a = `Http://${host}/x`;", "http");
   });
   it("passes the SVG namespace and a plain path", () => {
     passes(`const a = <svg xmlns="http://www.w3.org/2000/svg" />;`);

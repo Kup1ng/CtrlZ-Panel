@@ -37,7 +37,9 @@ func serviceOf(name string) (string, bool) {
 	case "CLICKHOUSE_IMAGE":
 		return "clickhouse", true
 	case "PLACEHOLDER_IMAGE":
-		return "web-panel", true
+		// The web containers run their own images now (spec 3.2). The throw-away placeholder is the busybox that
+		// caddy-init runs, which is the one pinned literal left for it.
+		return "caddy-init", true
 	}
 	return "", false
 }

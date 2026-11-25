@@ -50,7 +50,7 @@ export function ProfileSwitcher({
                   <Command.InputGroup.Prefix>
                     <Icon name="search" className="size-4" />
                   </Command.InputGroup.Prefix>
-                  <Command.InputGroup.Input placeholder={t("profileSwitcher.search")} />
+                  <Command.InputGroup.Input aria-label={t("profileSwitcher.search")} placeholder={t("profileSwitcher.search")} />
                 </Command.InputGroup>
                 <Command.List>
                   {profiles.map((p) => (

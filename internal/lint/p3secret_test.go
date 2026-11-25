@@ -36,13 +36,20 @@ var (
 // which are writes of a ciphertext that was sealed before it reached the statement.
 func readsTheToken(norm string) bool {
 	s := reInsertColsCT.ReplaceAllString(norm, "insert into endpoints ()")
-	// Only the SET list of an UPDATE may assign it: the same text in a WHERE is a filter on the ciphertext, which is a read.
-	if m := reUpdateT.FindStringSubmatchIndex(s); m != nil && m[6] >= 0 {
-		set, rest := s[m[6]:m[7]], ""
-		if end := reSetEnd.FindStringIndex(set); end != nil {
-			set, rest = set[:end[0]], set[end[0]:]
+	// Only the SET list of an UPDATE may assign it: the same text in a WHERE is a filter on the ciphertext, which is a read. Every
+	// UPDATE is judged (a CTE can hold two), each SET list running from the end of its "set " to the next UPDATE and cut at its
+	// WHERE, FROM or RETURNING, the way p2sql_test.go reads it. Rebuilt from the last to the first so the offsets stay true.
+	ups := reUpdateT.FindAllStringSubmatchIndex(s, -1)
+	for i := len(ups) - 1; i >= 0; i-- {
+		start, end := ups[i][1], len(s)
+		if i+1 < len(ups) {
+			end = ups[i+1][0]
 		}
-		s = s[:m[6]] + reTokenAssign.ReplaceAllString(set, "") + rest
+		set, rest := s[start:end], ""
+		if cut := reSetEnd.FindStringIndex(set); cut != nil {
+			set, rest = set[:cut[0]], set[cut[0]:]
+		}
+		s = s[:start] + reTokenAssign.ReplaceAllString(set, "") + rest + s[end:]
 	}
 	return strings.Contains(s, "doh_token_ct")
 }
@@ -174,6 +181,8 @@ func TestP3SecretLintCanFail(t *testing.T) {
 		{"the lookup in another function", `func Show() { db.QueryRow(ctx, "SELECT doh_token_ct FROM ctrlz.endpoints WHERE tenant_id = $1 AND id = $2") }`, 1},
 		{"a list that reads it", `func List() { db.Query(ctx, "SELECT id, doh_token_ct FROM ctrlz.endpoints WHERE tenant_id = $1") }`, 1},
 		{"a return of it", `func Rotate() { db.QueryRow(ctx, "UPDATE ctrlz.endpoints SET doh_token_ct = $3 WHERE tenant_id = $1 AND id = $2 RETURNING doh_token_ct") }`, 1},
+		{"a CTE whose second UPDATE assigns it", `func Rotate() { db.Exec(ctx, "WITH a AS (UPDATE ctrlz.endpoints SET name = $3 WHERE tenant_id = $1 AND id = $2 RETURNING id) UPDATE ctrlz.endpoints SET doh_token_ct = $4 WHERE tenant_id = $1 AND id = $2") }`, 0},
+		{"a CTE whose second UPDATE filters on it", `func Rotate() { db.Exec(ctx, "WITH a AS (UPDATE ctrlz.endpoints SET name = $3 WHERE tenant_id = $1 AND id = $2 RETURNING id) UPDATE ctrlz.endpoints SET name = $4 WHERE doh_token_ct = $5") }`, 1},
 		{"a rotation that writes it", `func Rotate() { db.Exec(ctx, "UPDATE ctrlz.endpoints SET resolver_id = $3, doh_token_ct = $4, doh_token_hash = $5 WHERE tenant_id = $1 AND id = $2") }`, 0},
 		{"an insert that writes it", `func Add() { db.Exec(ctx, "INSERT INTO ctrlz.endpoints (tenant_id, id, name, doh_token_ct, doh_token_hash) VALUES ($1, $2, $3, $4, $5)") }`, 0},
 		{"a filter on it", `func Find() { db.Query(ctx, "SELECT id FROM ctrlz.endpoints WHERE doh_token_ct = $1") }`, 1},

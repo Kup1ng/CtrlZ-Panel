@@ -70,10 +70,12 @@
     border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
   }
 
-  /* input-group.css, derived */
+  /* input-group.css, derived (inner parts follow the shell, WP8 round 9) */
   .input-group {
     --control-h: calc(var(--spacing) * 4 + 1.5rem + 2px);
     border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+    --field-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+    --radius-field: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
   }
   @media (width >= 40rem) {
     .input-group { --control-h: calc(var(--spacing) * 4 + 1.25rem + 2px); }
@@ -433,6 +435,12 @@
   /* our own: an 11-step square, the profile icon of a list row */
   .tile-11 {
     --control-h: calc(var(--spacing) * 11);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* our own: the link of one counter in a list row (RowCounters), about 10 steps tall */
+  .row-counter {
+    --control-h: calc(var(--spacing) * 10);
     border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
   }
 

@@ -150,8 +150,8 @@ func TestFastRefundsOTPsThatExpiredUnsent(t *testing.T) {
 func TestFastEndsStaleOutboxMessages(t *testing.T) {
 	r := newRig(t)
 	r.env.Exec(t, `INSERT INTO ctrlz.sms_outbox (kind, phone_e164, template_key, locale, params_ct, created_at) VALUES
-	  ('invite', '+989121112233', 'invite', 'fa', '\x01', now() - interval '61 minutes'),
-	  ('invite', '+989121112244', 'invite', 'fa', '\x01', now() - interval '5 minutes')`)
+	  ('test', '+989121112233', 'otp', 'fa', '\x01', now() - interval '61 minutes'),
+	  ('test', '+989121112244', 'otp', 'fa', '\x01', now() - interval '5 minutes')`)
 	res, err := r.sweep.Fast(r.env.Ctx)
 	if err != nil || res.StaleOutbox != 1 {
 		t.Fatalf("%+v %v", res, err)
@@ -188,8 +188,8 @@ func TestSlowDeletesWhatOutlivedItsUse(t *testing.T) {
 	  ('otp', gen_random_uuid(), 'noop', 'otp', 'accepted', now() - interval '91 days'),
 	  ('otp', gen_random_uuid(), 'noop', 'otp', 'accepted', now() - interval '10 days')`)
 	ex(`INSERT INTO ctrlz.sms_outbox (kind, phone_e164, template_key, locale, state, created_at) VALUES
-	  ('invite', '+989121112233', 'invite', 'fa', 'sent', now() - interval '31 days'),
-	  ('invite', '+989121112244', 'invite', 'fa', 'sent', now() - interval '3 days')`)
+	  ('test', '+989121112233', 'otp', 'fa', 'sent', now() - interval '31 days'),
+	  ('test', '+989121112244', 'otp', 'fa', 'sent', now() - interval '3 days')`)
 	ex(testpg.PlantCounters(`INSERT INTO ctrlz.sms_counters (day, scope, key, count) VALUES
 	  ((now() AT TIME ZONE 'Asia/Tehran')::date - 3, 'phone', '+989120000073', 2),
 	  ((now() AT TIME ZONE 'Asia/Tehran')::date - 3, 'phone_net', '+989120000073|198.51.100.0/24', 2),
@@ -256,7 +256,7 @@ func TestRunSweepsOnItsOwnAndStops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	env.Exec(t, `INSERT INTO ctrlz.sms_outbox (kind, phone_e164, template_key, locale, created_at) VALUES ('invite', '+989121112233', 'invite', 'fa', now() - interval '2 hours')`)
+	env.Exec(t, `INSERT INTO ctrlz.sms_outbox (kind, phone_e164, template_key, locale, created_at) VALUES ('test', '+989121112233', 'otp', 'fa', now() - interval '2 hours')`)
 	ctx, cancel := context.WithCancel(env.Ctx)
 	done := make(chan error, 1)
 	go func() { done <- s.Run(ctx) }()

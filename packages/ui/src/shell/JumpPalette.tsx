@@ -30,8 +30,8 @@ export function JumpPalette({nav, isOpen, onOpenChange}: {nav: NavItem[]; isOpen
               <Command.InputGroup.Prefix>
                 <Icon name="search" className="size-4" />
               </Command.InputGroup.Prefix>
-              <Command.InputGroup.Input placeholder={t("palette.placeholder")} />
-              <Command.InputGroup.ClearButton />
+              <Command.InputGroup.Input aria-label={t("palette.placeholder")} placeholder={t("palette.placeholder")} />
+              <Command.InputGroup.ClearButton aria-label={c("clear")} />
             </Command.InputGroup>
             <Command.List renderEmptyState={() => <p className="text-muted p-4 text-center text-sm">{c("noResults")}</p>}>
               <Command.Group heading={t("palette.pages")}>

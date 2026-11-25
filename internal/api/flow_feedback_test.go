@@ -15,16 +15,18 @@ func TestFeedbackIsStoredBoundedAndLimitedPerTenantPerDay(t *testing.T) {
 	f := newFrig(t, frigOpts{})
 	A, B := f.env.A, f.env.B
 	a := f.makeSession(A.Tenant, A.User)
+	// The catalogue seed gives each tenant one feedback row ("hi") before the test starts, so every count is against that base.
 	count := func(tenant any) int {
 		return f.count(`SELECT count(*) FROM ctrlz.feedback_items WHERE tenant_id = $1`, tenant)
 	}
 
+	baseA, baseB := count(A.Tenant), count(B.Tenant)
 	a.post("/feedback", map[string]any{"kind": "feature", "body": "please add a dark theme"}).want(201, "")
-	if n := count(A.Tenant); n != 1 {
+	if n := count(A.Tenant); n != baseA+1 {
 		t.Fatalf("%d rows after one message", n)
 	}
 	var kind, body, status string
-	f.env.Scan(t, `SELECT kind, body, status FROM ctrlz.feedback_items WHERE tenant_id = $1`, []any{A.Tenant}, &kind, &body, &status)
+	f.env.Scan(t, `SELECT kind, body, status FROM ctrlz.feedback_items WHERE tenant_id = $1 AND body <> 'hi'`, []any{A.Tenant}, &kind, &body, &status)
 	if kind != "feature" || body != "please add a dark theme" || status != "new" {
 		t.Errorf("row %q %q %q", kind, body, status)
 	}
@@ -43,7 +45,7 @@ func TestFeedbackIsStoredBoundedAndLimitedPerTenantPerDay(t *testing.T) {
 			t.Errorf("%s: %d %s", name, got.Code, got.Body)
 		}
 	}
-	if n := count(A.Tenant); n != 1 {
+	if n := count(A.Tenant); n != baseA+1 {
 		t.Fatalf("a refused body stored a row: %d", n)
 	}
 	a.post("/feedback", map[string]any{"kind": "contact", "body": strings.Repeat("ب", 4000)}).want(201, "")
@@ -56,14 +58,14 @@ func TestFeedbackIsStoredBoundedAndLimitedPerTenantPerDay(t *testing.T) {
 	f.ck.add(2 * time.Second)
 	a.post("/feedback", map[string]any{"kind": "contact", "body": "too many"}).want(429, "rate_limited")
 	f.makeSession(A.Tenant, A.User).post("/feedback", map[string]any{"kind": "contact", "body": "other session"}).want(429, "rate_limited")
-	if n := count(A.Tenant); n != 20 {
-		t.Errorf("%d rows for the tenant, want exactly the 20 the day allows", n)
+	if n := count(A.Tenant); n != baseA+20 {
+		t.Errorf("%d rows for the tenant, want exactly the 20 the day allows on top of the seed row (%d)", n, baseA)
 	}
 
 	// Tenant B has a day of its own, and writes its own row only.
 	b := f.makeSession(B.Tenant, B.User)
 	b.post("/feedback", map[string]any{"kind": "feature", "body": "from b"}).want(201, "")
-	if n := count(B.Tenant); n != 1 {
+	if n := count(B.Tenant); n != baseB+1 {
 		t.Errorf("tenant B holds %d rows", n)
 	}
 
@@ -80,9 +82,10 @@ func TestFeedbackTakesAMessageOfSeveralLines(t *testing.T) {
 	A := f.env.A
 	a := f.makeSession(A.Tenant, A.User)
 	stored := func() []string {
-		// The bodies come back as one JSON array in the order of the ids (uuidv7), so no separator has to be chosen.
+		// The bodies come back as one JSON array in the order of the ids (uuidv7), so no separator has to be chosen. The seed row of the
+		// catalogue ("hi") is not a message of this test.
 		var raw string
-		f.env.Scan(t, `SELECT coalesce(json_agg(body ORDER BY id), '[]'::json)::text FROM ctrlz.feedback_items WHERE tenant_id = $1`, []any{A.Tenant}, &raw)
+		f.env.Scan(t, `SELECT coalesce(json_agg(body ORDER BY id), '[]'::json)::text FROM ctrlz.feedback_items WHERE tenant_id = $1 AND body <> 'hi'`, []any{A.Tenant}, &raw)
 		var out []string
 		if err := json.Unmarshal([]byte(raw), &out); err != nil {
 			t.Fatal(err)

@@ -50,10 +50,13 @@ export type AppShellProps = {
   nav: NavItem[];
   /** From the `sidebar_state` cookie, read on the server, so a collapsed sidebar does not flash open (T-114). */
   defaultSidebarOpen: boolean;
+  /** The admin's user menu (spec 13): a node of the app, shown at the foot of the sidebar in both the desktop and the mobile panel. */
+  userMenu?: ReactNode;
   children: ReactNode;
 };
 
-export function AppShell({nav, defaultSidebarOpen, children}: AppShellProps) {
+// The app (panel or admin) is not a prop: it comes from AppProviders, which each app's layout feeds (wp4-r5-9).
+export function AppShell({nav, defaultSidebarOpen, userMenu, children}: AppShellProps) {
   const c = useTranslations("common");
   const dir = useDirection();
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -87,9 +90,9 @@ export function AppShell({nav, defaultSidebarOpen, children}: AppShellProps) {
           navbar={<MobileBar />}
           sidebar={
             <>
-              <ShellSidebar nav={nav} />
+              <ShellSidebar nav={nav} userMenu={userMenu} />
               <Sidebar.Mobile backdrop="opaque">
-                <ShellSidebar nav={nav} mobile />
+                <ShellSidebar nav={nav} userMenu={userMenu} mobile />
               </Sidebar.Mobile>
             </>
           }

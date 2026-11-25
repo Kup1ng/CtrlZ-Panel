@@ -33,7 +33,7 @@ func TestASendIsBoundedByWhatTheClaimHasLeftAfterAWaitInTheClaimTransaction(t *t
 		t.Fatal(err)
 	}
 	ch := r.request(r.env.A.Phone)
-	id := r.queue("invite", "invite", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
+	id := r.queue("test", "otp", "+989121112233", uuid.Nil, "ABCDEFGHJKMNPQRSTVWX")
 
 	// Another worker's claim transaction holds the outbox counter row for a while: the gate of
 	// this claim waits on it after both leases were stamped.

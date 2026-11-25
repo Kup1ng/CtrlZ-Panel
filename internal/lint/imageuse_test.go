@@ -291,10 +291,40 @@ var composeValueFlags = map[string]bool{
 // dockerCtx is what one script text says about its own shell functions.
 type dockerCtx struct {
 	wrappers  map[string]bool // functions whose body runs docker compose: a call of one is a docker compose
+	flagVars  map[string]bool // variables that hold only `-f <file>` pairs (composeFlagsVar)
 	inWrapper bool            // the line is inside the body of such a function, where "$@" is the caller's words
 }
 
-var shellFuncStart = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{`)
+// shellFuncStart takes an indented definition too: ci-web.sh defines its wrappers inside an `if`, and a definition
+// the lint did not see would leave the "$@" of its body to look like a subcommand nobody judged.
+var shellFuncStart = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{`)
+
+// composeFlagsVar matches the assignment of a variable that holds only `-f <file>` pairs, the way ci-web.sh names
+// its Compose files once: `$files` in the place of the global flags is those flags and not a subcommand. A variable
+// that holds anything else (a subcommand, a flag of another meaning) is not matched, so it still fails.
+var composeFlagsVar = regexp.MustCompile("(?m)^\\s*([A-Za-z_][A-Za-z0-9_]*)=\"(-f [^\\s\"$`]+(?: -f [^\\s\"$`]+)*)\"\\s*$")
+
+// composeFlagVars returns the variables that the script assigns nothing but `-f <file>` pairs. A name counts only when
+// every assignment of it in the text is such a pair line: a second `files="$files pull"` or `files+=" pull"` or
+// `files=$(...)` takes it out, so `$files` is then read as the word it can hold and the subcommand behind it is judged.
+// Assignments are counted by name wherever they stand in a line, so one after `;` or `then` is seen too. Counting more
+// than the shell assigns only makes the lint stricter. Only the forms NAME= and NAME+= are counted: `for NAME in`, `read NAME`,
+// `printf -v NAME` and `${NAME:=` assign the variable and are not seen, so a script that used one of them below its pair line
+// would keep `$files` exempt (webi-r2-10). No script does; the backlog entry says what closing it needs.
+func composeFlagVars(text string) map[string]bool {
+	pairs := map[string]int{}
+	for _, m := range composeFlagsVar.FindAllStringSubmatch(text, -1) {
+		pairs[m[1]]++
+	}
+	out := map[string]bool{}
+	for name, n := range pairs {
+		assign := regexp.MustCompile(`(?:^|[^A-Za-z0-9_$])` + regexp.QuoteMeta(name) + `\+?=`)
+		if len(assign.FindAllStringIndex(text, -1)) == n {
+			out[name] = true
+		}
+	}
+	return out
+}
 
 // dockerWrappers finds the shell functions of a text that run docker compose, and the physical lines of their
 // bodies. Derived from the text and not from the name `dc`, so a wrapper called anything is judged as the
@@ -313,7 +343,10 @@ func dockerWrappers(text string) (names map[string]bool, lines map[int]bool) {
 			}
 		}
 		body := strings.Join(phys[s:min(e+1, len(phys))], "\n")
-		if strings.Contains(body, "docker compose") || strings.Contains(body, "docker-compose") {
+		// A wrapper passes its caller's words on. A function that runs a fixed compose command (ci-web.sh's
+		// cleanup, which a trap calls with no words) takes none, so a call of it is not a compose command.
+		passes := strings.Contains(body, "$@") || strings.Contains(body, "$*")
+		if passes && (strings.Contains(body, "docker compose") || strings.Contains(body, "docker-compose")) {
 			names[m[1]] = true
 			for n := s; n <= e; n++ {
 				lines[n+1] = true
@@ -331,13 +364,14 @@ func dockerWrappers(text string) (names map[string]bool, lines map[int]bool) {
 func dockerImageProblems(path, text string) []string {
 	var out []string
 	wrappers, wrapperLines := dockerWrappers(text)
+	flagVars := composeFlagVars(text)
 	nums, _, joined := logicalLines(text)
 	for k, ln := range joined {
 		trim := strings.TrimSpace(ln)
 		if trim == "" || strings.HasPrefix(trim, "#") {
 			continue
 		}
-		ctx := dockerCtx{wrappers: wrappers, inWrapper: wrapperLines[nums[k]]}
+		ctx := dockerCtx{wrappers: wrappers, flagVars: flagVars, inWrapper: wrapperLines[nums[k]]}
 		for _, p := range dockerLineProblems(path, trim, ctx) {
 			out = append(out, path+":"+itoa(nums[k])+": "+p)
 		}
@@ -347,10 +381,22 @@ func dockerImageProblems(path, text string) []string {
 
 // pullFlagProblem judges the --pull flag in the words of one command: its value is never. A bare --pull (a
 // boolean of `docker build`) is the value true, and so is any other word, so only the literal never passes.
+//
+// `docker build --pull=false` is the one other value: false is the default of a build and means "use the base image that
+// is on this machine", where a run takes always, missing or never and refuses false. A build is judged by the first word
+// that is no flag, so `docker compose build` is not let through by it (and compose build is not on the subcommand list).
 func pullFlagProblem(words []envWord) string {
+	isBuild := false
+	for _, wd := range words {
+		if w := unquote(wd.text); !strings.HasPrefix(w, "-") {
+			isBuild = w == "build"
+			break
+		}
+	}
 	for m, wd := range words {
 		w := unquote(wd.text)
 		switch {
+		case isBuild && w == "--pull=false":
 		case w == "--pull":
 			if m+1 >= len(words) || unquote(words[m+1].text) != "never" {
 				return "--pull without the value never: a flag on the command line overrides pull_policy: never"
@@ -417,6 +463,9 @@ func dockerLineProblems(path, line string, ctx dockerCtx) []string {
 			csub := ""
 			for m := from; m < end; m++ {
 				w := unquote(words[m].text)
+				if ctx.flagVars[strings.Trim(w, "${}")] && strings.HasPrefix(w, "$") {
+					continue // $files: the -f pairs of the script's own assignment
+				}
 				if strings.HasPrefix(w, "-") {
 					if !strings.Contains(w, "=") && composeValueFlags[strings.TrimLeft(w, "-")] {
 						m++

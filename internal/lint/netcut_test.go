@@ -16,7 +16,7 @@ import (
 // The network-cut rule (P1 auth review, rule 6 budget-keying; tenant-r10-3, tenant-r11-4, tenant-r12-1 and -3).
 //
 // A bucket that counts on the network of a client is declared in the registry (internal/budget) and built by one
-// implementation (internal/netpool, internal/throttle, internal/ratelimit). Round 11 enforced that with an AST walk
+// implementation (internal/throttle, internal/ratelimit; internal/netpool was removed with the invite pool by D67). Round 11 enforced that with an AST walk
 // that looked for four spellings: a call to netkey.Net, netkey.Wide, netip.PrefixFrom or netip.ParsePrefix. Round 12
 // found three ways round that walk, all of one kind: it matched names, not the thing the name stands for. An import
 // under another name, a function taken as a value, the method Addr.Prefix, a wrapper that returns the key
@@ -343,15 +343,12 @@ var netCutAllowed = map[string]string{
 	"internal/auth/throttle/throttle.go#(Who).part":                  "the one choke point of the throttle scopes: it builds the network and /48 key parts the registry names",
 	"internal/auth/throttle/throttle.go#(Service).AdminLoginHits":    "the admin login throttle reads the network part through the registry's scope (Who.part)",
 	"internal/auth/throttle/throttle.go#(Service).AdminLoginSuccess": "the admin login throttle clears the network part through the registry's scope",
-	"internal/auth/throttle/throttle.go#(Service).InviteHit":         "the invite throttle charges the network part of the registry's scope",
+	"internal/auth/throttle/throttle.go#(Service).InviteHit":         "the invite throttle only checks that the client address cuts to a network; its scope is keyed on the invite id (D67)",
 	"internal/auth/throttle/throttle.go#(Service).LoginSuccess":      "the login throttle clears the network part of the registry's scope",
 	"internal/auth/throttle/throttle.go#(Service).keyLabelled":       "builds the key of a registered scope from the parts Who.part makes; it keeps no bucket of its own",
 
 	"internal/worker/batchjobs/batchjobs.go#(workerImpl).Work": "no client address is in a job: the checker holds River as a stub, so a call into it and a method of its embedded type look like a possible sink; the function reads the tenant and the job id from the metadata and the args of the job",
 	"internal/worker/batchjobs/batchjobs.go#New":               "builds the River client of the worker: no client address is in it; the checker holds River as a stub, so every call into it looks like a possible sink",
-
-	"internal/netpool/netpool.go#(Pool).Place": "the one implementation of a registered NetPool",
-	"internal/netpool/netpool.go#(Pool).Try":   "the one implementation of a registered NetPool",
 
 	"internal/sms/counterkeys.go#OTPCounterKeys": "the daily SMS counters key their network by the same function; they are stored counters bounded by the SMS caps of spec 5.1, not a pool",
 	"internal/sms/counterkeys.go#netPrefix":      "the daily SMS counters key their network by the same function; they are stored counters bounded by the SMS caps of spec 5.1, not a pool",
@@ -608,7 +605,7 @@ func TestNoCodeKeysAnythingOnTheNetworkOutsideTheRegistry(t *testing.T) {
 	}
 	res := netCutProblems(fset, files, info, netCutAllowed)
 	for _, p := range res.problems {
-		t.Errorf("%s; a bucket keyed on the network is declared in internal/budget (a counter or NetPools) and built by internal/netpool; add a file to netCutAllowed only with a reason that is not a bucket", p)
+		t.Errorf("%s; a bucket keyed on the network is declared in internal/budget (a counter) and built by internal/throttle or internal/ratelimit; add a file to netCutAllowed only with a reason that is not a bucket", p)
 	}
 	var stale []string
 	for file := range netCutAllowed {

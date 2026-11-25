@@ -154,6 +154,23 @@ paths:
 	if got := idLocations(d, session)["query"]; len(got) != 0 {
 		t.Errorf("an unmarked string is a location: %v", got)
 	}
+	// A path value marked false is a catalog key and takes no Cross call, unless it is a uuid: a uuid names a row, whatever
+	// the mark says (p2-B8-r1-15).
+	const pathDoc = `
+openapi: 3.0.3
+info: {title: t, version: "1"}
+paths:
+  /slug/{slug}: {get: {operationId: bySlug, parameters: [{name: slug, in: path, required: true, schema: {type: string, x-ctrlz-rowref: false}}], responses: {"200": {description: ok}}}}
+  /row/{endpoint_id}: {get: {operationId: byMarkedUUID, parameters: [{name: endpoint_id, in: path, required: true, schema: {type: string, format: uuid, x-ctrlz-rowref: false}}], responses: {"200": {description: ok}}}}
+`
+	pd, err := openapi3.NewLoader().LoadFromData([]byte(pathDoc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pathLocs := idLocations(pd, map[string]bool{"bySlug": true, "byMarkedUUID": true})
+	if len(pathLocs["bySlug"]) != 0 || !reflect.DeepEqual(pathLocs["byMarkedUUID"], []string{"path:endpoint_id"}) {
+		t.Errorf("path locations = %v, want none for the catalog key and path:endpoint_id for the uuid", pathLocs)
+	}
 	// And the real document, whose cursor is the case the review found.
 	real, err := openapi3.NewLoader().LoadFromData(apidoc.Tenant())
 	if err != nil {

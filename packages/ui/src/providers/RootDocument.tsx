@@ -11,6 +11,7 @@ import {parseThemeMode, THEME_COOKIE} from "../theme/config.ts";
 import {themeHtmlProps} from "../theme/html.ts";
 import {ThemeScript} from "../theme/ThemeScript.tsx";
 import {AppProviders} from "./AppProviders.tsx";
+import {CspNonceMeta} from "./CspNonceMeta.tsx";
 
 // Spec 4.3. The body of both apps' `[locale]/layout.tsx`, which is the root
 // layout (there is no app/layout.tsx, because next/root-params reads [locale]
@@ -48,13 +49,15 @@ export async function RootDocument({
         {/* React Aria injects one <style> element (touch-action for pressables) and reads
             its nonce from this tag. Without it the strict style-src-elem of spec 15
             blocks the element: measured in a production build, one violation on every
-            page. The nonce is already in every script tag of the same document. */}
-        {nonce ? <meta name="csp-nonce" content={nonce} /> : null}
+            page. The nonce is already in every script tag of the same document. A client component keeps the
+            value of the first load, because a refresh renders the root layout under a new request's nonce and the
+            document's CSP does not change (gate-r1-1). */}
+        {nonce ? <CspNonceMeta nonce={nonce} /> : null}
         <ThemeScript nonce={nonce} />
       </head>
       <body className="bg-background text-foreground">
-        <NextIntlClientProvider messages={pickNamespaces(messages, app) as never}>
-          <AppProviders locale={locale}>{children}</AppProviders>
+        <NextIntlClientProvider messages={pickNamespaces(messages, app, {lab: process.env.CTRLZ_LAB === "1"}) as never}>
+          <AppProviders app={app} locale={locale}>{children}</AppProviders>
         </NextIntlClientProvider>
       </body>
     </html>

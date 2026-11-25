@@ -1,56 +1,37 @@
-import AxeBuilder from "@axe-core/playwright";
-import {expect, test, type Page} from "@playwright/test";
+import type {Page} from "@playwright/test";
+import {expectAccessible} from "@ctrlz/ui/testing/axe.ts";
+import {expect, test} from "@ctrlz/ui/testing/guard.ts";
+
+import {signIn} from "./feedback-support.ts";
 
 // Spec 8.10 and 5.3, 6.3. What the lab pages prove, now that the theme lab is gone (D17, T-485):
 // the 5,000-row virtual lists, an accessibility pass over them, and the colour and radius tokens
 // that a page of ours has to show (the chart palette, the off switch in dark, the tile radii).
 //
-// The server must run with CTRLZ_LAB=1, and the numbers mean something only against a production
-// build (`next build`, `next start`): a dev server compiles on the first hit and is slower. The
-// token-lab of spec 6.3 will add the rest of the radius rows; the strip on the virtual-lab
+// The server must run with CTRLZ_LAB=1, E2E_MODE=lab picks the lab project (one worker), and the numbers
+// mean something only against a production build (`next build`, `next start`): a dev server compiles on
+// the first hit and is slower. The token-lab of spec 6.3 holds the rest of the radius rows (radius.spec.ts); the strip on the virtual-lab
 // (packages/ui/src/lab/TokenStrip.tsx) holds the few that moved here.
 
 const MODES = ["light", "dark"] as const;
 // The button that builds the virtualised grid in the browser (it stays off the server render).
 const BUILD_BUTTON = {fa: "ساخت جدول", en: "Build the grid"} as const;
 
-// No external request, no console error, no page error (spec 17.2, until the shared guard lands).
-// Only the origin is kept, since a URL may hold a token.
-const problemsOf = new WeakMap<Page, () => void>();
+// External requests, CSP violations and console errors fail every test through the shared guard (spec 17.2).
 
-test.beforeEach(async ({page, baseURL}) => {
-  const own = new URL(baseURL!).origin;
-  const external: string[] = [];
-  const problems: string[] = [];
-  page.on("request", (r) => {
-    const url = new URL(r.url());
-    if (!/^https?:$/.test(url.protocol)) return;
-    if (url.origin !== own) external.push(url.origin);
-  });
-  // A CSP violation is a failure (spec 17.2). The proxy sets the policy on every page.
-  await page.addInitScript(() => {
-    (window as unknown as {__csp: string[]}).__csp = [];
-    document.addEventListener("securitypolicyviolation", (e) => (window as unknown as {__csp: string[]}).__csp.push(e.effectiveDirective));
-  });
-  page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
-  page.on("console", (m) => {
-    if (m.type() === "error") problems.push(`console: ${m.text().slice(0, 200)}`);
-  });
-  problemsOf.set(page, () => {
-    expect(external, "requests to another origin").toEqual([]);
-    expect(problems, "console and page errors").toEqual([]);
-  });
-});
-
-test.afterEach(async ({page}) => {
-  const csp = await page.evaluate(() => (window as unknown as {__csp?: string[]}).__csp ?? []).catch(() => []);
-  expect(csp, "CSP violations").toEqual([]);
-  problemsOf.get(page)?.();
+// The lab pages sit in the tenant shell, whose session gate asks /me (WP4). Without an answer it logged
+// a 404 and the page never reached its content, so this file fails in any mode since WP4 added the gate.
+// The mock answers it as a signed-in tenant.
+test.beforeEach(async ({context, baseURL}) => {
+  await signIn(context, baseURL);
 });
 
 async function openLab(page: Page, baseURL: string, lang: "fa" | "en", mode: "light" | "dark", query = "") {
   // The cookie is what the server renders the theme from, so the first byte already has the class.
   await page.context().addCookies([{name: "ctrlz_theme", value: mode, url: baseURL}]);
+  // The mocked /me says the user's theme is "system", and the server's value wins over the cookie once
+  // /me has answered (spec 5.1). "System" must then resolve to the mode under test.
+  await page.emulateMedia({colorScheme: mode});
   await page.goto(`/${lang}/virtual-lab${query}`);
   await page.evaluate(() => document.fonts.ready);
   const html = page.locator("html");
@@ -60,6 +41,9 @@ async function openLab(page: Page, baseURL: string, lang: "fa" | "en", mode: "li
   await expect(html).toHaveAttribute("data-theme", mode, {timeout: 30_000});
   await expect(html).toHaveClass(new RegExp(`\\b${mode}\\b`));
   await expect(html).toHaveClass(new RegExp(`\\bflat-${mode}\\b`));
+  // The page sits behind the session gate, which shows its content only once /me has answered. The
+  // checks that follow read the DOM at once, so they wait for the token strip first.
+  await page.locator('[data-shapes="switch"]').waitFor();
 }
 
 // ---- Tokens ---------------------------------------------------------------------------------
@@ -410,9 +394,7 @@ for (const lang of ["fa", "en"] as const) {
       await page.getByRole("button", {name: BUILD_BUTTON[lang]}).click();
       await expect(page.locator(".data-grid [role=\"gridcell\"]").first()).toBeVisible({timeout: 60_000});
       await page.waitForTimeout(1000);
-      const result = await new AxeBuilder({page}).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
-      const serious = result.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
-      expect(serious.map((v) => v.id + ": " + v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(" | "))).toEqual([]);
+      await expectAccessible(page, {screen: "lab"});
     });
   }
 }

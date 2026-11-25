@@ -257,3 +257,47 @@
   text-overflow: clip;
   white-space: normal;
 }
+
+/* ---- Admin user menu (WP10, spec 13) ------------------------------------ */
+
+/* The trigger is a ghost button the width of the sidebar: avatar, name, and under it the fresh-TOTP line. */
+.admin-user-trigger {
+  inline-size: 100%;
+  min-inline-size: 0;
+  justify-content: flex-start;
+  gap: calc(var(--spacing) * 2);
+  block-size: auto;
+  padding-block: calc(var(--spacing) * 2);
+}
+
+.admin-user-text {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: start;
+}
+
+.admin-user-name {
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.admin-user-fresh {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* Collapsed to the icon rail: only the avatar stays. */
+.sidebar[data-state="collapsed"] .admin-user-text {
+  display: none;
+}
+
+.sidebar[data-state="collapsed"] .admin-user-trigger {
+  padding-inline: 0;
+  justify-content: center;
+}

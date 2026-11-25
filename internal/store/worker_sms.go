@@ -44,7 +44,7 @@ type OTPDelivery struct {
 // row on the ground that its claim lapsed wait this long past the lapse (sms-r10-5): a record
 // that meets a lock timeout rolls back and pauses, and for the pause nothing locks the row, so a
 // lapsed lease alone would let the exhausted pass or the expiry refund the global slot of a code
-// the provider had accepted, or the stale-outbox sweep fail an invite it had delivered. A lease
+// the provider had accepted, or the stale-outbox sweep fail a message it had delivered. A lease
 // that lapsed more than RecordBudget ago has no record still running (the record starts before
 // the lease ends, and a stop only shortens it).
 const RecordBudget = 40 * time.Second
@@ -445,7 +445,7 @@ WHERE id = $1 AND state = 'pending'`
 
 // OutboxFinish ends a message as sent or failed. Either way params_ct goes to
 // NULL: a compromised worker holds the sms_cred key and must not be able to open
-// past invite codes (9.5). lastError is a short code, never provider text.
+// what a past message held (9.5). lastError is a short code, never provider text.
 func (g GlobalTx) OutboxFinish(id uuid.UUID, state string, lastError closed.Text) (Won, error) {
 	arg, err := textArg(lastError)
 	if err != nil {

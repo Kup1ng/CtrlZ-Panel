@@ -7,7 +7,6 @@ import (
 	"sync"
 	"unicode"
 
-	"github.com/ccojocar/zxcvbn-go"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -338,15 +337,9 @@ type finglishMode uint8
 const (
 	// finglishOff: never. A text that is itself the Persian layer's reading of Latin keys has no Finglish.
 	finglishOff finglishMode = iota
-	// finglishFree: a spelling counts wherever it sits in the text. This is a text a person wrote.
+	// finglishFree: a spelling counts wherever it sits in the text. Every reading of the password is scored
+	// this way, the key-position reading of a Persian layout included (primitives-r23-3).
 	finglishFree
-	// finglishWholeRun: a spelling counts only when the spellings (and words) explain every Latin letter
-	// of the text. This is a reading made from key positions (primitives-r20-2): it is what a person
-	// types when they mean a Latin password and the keyboard is left in Persian mode, so a Finglish
-	// phrase must be refused there too. But the Latin letters of a random Persian text are only what its
-	// keys happen to type, and a chance spelling in a part of them says nothing (primitives-r19-3).
-	// Random text almost never decomposes completely.
-	finglishWholeRun
 )
 
 // persianEntropy cuts text (already folded) into the cheapest pieces. It returns the entropy in bits
@@ -355,7 +348,7 @@ const (
 // zxcvbn once, as the text a guesser would try after the words.
 //
 // finglish says whether, and how far, a run of Latin letters may be read as a spelling of a Persian word.
-func persianEntropy(text string, inputs []string, finglish finglishMode) (bits float64, hit bool) {
+func persianEntropy(text string, z *zxMemo, finglish finglishMode) (bits float64, hit bool) {
 	rs := []rune(text)
 	n := len(rs)
 	if n == 0 {
@@ -368,12 +361,9 @@ func persianEntropy(text string, inputs []string, finglish finglishMode) (bits f
 		best[i] = math.Inf(1)
 	}
 	for i := 0; i < n; i++ {
-		// One character at brute-force cost. In whole-run mode a Latin letter has no such cost: it must
-		// be inside a spelling, or the text is not a Finglish phrase.
-		if cb := charBits(rs[i]); finglish != finglishWholeRun || !isLatinLetter(rs[i]) {
-			if c := best[i] + cb; c < best[i+1] {
-				best[i+1], from[i+1] = c, piece{from: i, bits: cb, kind: 'c'}
-			}
+		// One character at brute-force cost.
+		if cb := charBits(rs[i]); best[i]+cb < best[i+1] {
+			best[i+1], from[i+1] = best[i]+cb, piece{from: i, bits: cb, kind: 'c'}
 		}
 		// A word of the list. A word of two letters is in every random run (primitives-r19-3), so it
 		// counts only as a whole run or next to another word piece (primitives-r20-3): Persian is typed
@@ -415,9 +405,6 @@ func persianEntropy(text string, inputs []string, finglish finglishMode) (bits f
 			}
 		}
 	}
-	if math.IsInf(best[n], 1) {
-		return 0, false // whole-run mode, and a Latin letter that no spelling explains
-	}
 	var residue []rune
 	for j := n; j > 0; j = from[j].from {
 		p := from[j]
@@ -444,7 +431,7 @@ func persianEntropy(text string, inputs []string, finglish finglishMode) (bits f
 		for i, j := 0, len(residue)-1; i < j; i, j = i+1, j-1 {
 			residue[i], residue[j] = residue[j], residue[i]
 		}
-		bits += zxcvbn.PasswordStrength(string(residue), inputs).Entropy
+		bits += z.strength(string(residue)).Entropy
 	}
 	return bits, true
 }
@@ -553,8 +540,8 @@ func foldedHead(text string) string {
 // The text is cut after the fold, not before: NFKC expands a compatibility character into several, and
 // the scoring bound (scoredRunes) is there because zxcvbn is superlinear in the length it is given
 // (primitives-r19-4).
-func persianScore(text string, inputs []string, finglish finglishMode) (score int, hit bool) {
-	bits, hit := persianEntropy(foldedHead(text), inputs, finglish)
+func persianScore(text string, z *zxMemo, finglish finglishMode) (score int, hit bool) {
+	bits, hit := persianEntropy(foldedHead(text), z, finglish)
 	if !hit {
 		return maxScore, false
 	}
@@ -584,4 +571,15 @@ func isPersianLetterText(t string) bool {
 		}
 	}
 	return false
+}
+
+// lowerASCII lower-cases the ASCII capitals of s and nothing else: a layout reading treats a capital as the
+// shifted key, and the same key unshifted is what a person who typed a Persian word blind meant.
+func lowerASCII(s string) string {
+	return strings.Map(func(r rune) rune {
+		if isUpperLatin(r) {
+			return r + ('a' - 'A')
+		}
+		return r
+	}, s)
 }

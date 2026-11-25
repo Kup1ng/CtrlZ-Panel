@@ -114,65 +114,64 @@ func TestCreateUserAndList(t *testing.T) {
 	}
 }
 
-// TestInvites covers 11.3 and the admin side of T-330.
-func TestInvites(t *testing.T) {
+// TestCreateInviteReturnsALinkOnceAndQueuesNothing covers 11.3 (D67): an invite is a signed link the admin
+// copies. Nothing is sent, so no outbox row exists, and the link is in the creating response and nowhere else.
+func TestCreateInviteReturnsALinkOnceAndQueuesNothing(t *testing.T) {
 	r := newRig(t)
 	b, _ := r.admin(t)
 	r.env.ResetSMS(t)
 
 	var inv struct {
 		ID   string `json:"id"`
-		Code string `json:"code"`
 		Link string `json:"link"`
 	}
-	b.post("/invites", map[string]any{"phone": "09125550001", "send_sms": false}).want(201, "").json(&inv)
-	if len(strings.ReplaceAll(inv.Code, "-", "")) != 20 || inv.Link != "https://"+panelHost+"/invite#"+inv.Code {
-		t.Fatalf("invite = %+v", inv)
+	create := b.post("/invites", map[string]any{"phone": "09125550001"}).want(201, "")
+	create.json(&inv)
+	if strings.Contains(string(create.Body), "code") {
+		t.Fatalf("the response still has a code: %s", create.Body)
 	}
-	want, err := invite.Hash(inv.Code)
-	if err != nil {
-		t.Fatal(err)
+	prefix := "https://" + panelHost + "/invite#"
+	token, ok := strings.CutPrefix(inv.Link, prefix)
+	if !ok || len(token) != invite.TokenChars {
+		t.Fatalf("link = %d characters, want the panel host, /invite# and a %d character token", len(inv.Link), invite.TokenChars)
+	}
+	// The api of this rig holds the public half of the key that signed it, and the row names the same invite.
+	ref, ok := invite.Open(authtest.InvitesOf(t, r.keys), r.ck.now(), token)
+	if !ok || ref.ID.String() != inv.ID {
+		t.Fatalf("the link does not open to its own invite id: %v", ok)
 	}
 	var stored []byte
 	r.env.Scan(t, `SELECT token_hash FROM ctrlz.invites WHERE id = $1`, []any{inv.ID}, &stored)
-	if string(stored) != string(want) {
-		t.Fatal("the stored hash is not the hash of the canonical code")
+	if string(stored) != string(ref.Hash) {
+		t.Fatal("the stored hash is not the hash of the link")
 	}
 	if r.count(t, `SELECT count(*) FROM ctrlz.sms_outbox`) != 0 {
-		t.Fatal("an invite without send_sms queued a message")
+		t.Fatal("an invite queued a message")
 	}
-	// The list holds no code.
+	// A body that still asks for an SMS is not the schema.
+	b.post("/invites", map[string]any{"phone": "09125550009", "send_sms": true}).want(400, "bad_request")
+	// The list holds no link.
 	list := b.get("/invites").want(200, "")
-	if strings.Contains(string(list.Body), inv.Code) || strings.Contains(string(list.Body), "code") {
-		t.Fatalf("the list shows a code: %s", list.Body)
+	if strings.Contains(string(list.Body), token) || strings.Contains(string(list.Body), "link") || strings.Contains(string(list.Body), "code") {
+		t.Fatalf("the list shows a link or a code: %s", list.Body)
 	}
-	b.post("/invites", map[string]any{"phone": r.env.A.Phone, "send_sms": false}).want(409, "phone_unavailable")
-	b.post("/invites", map[string]any{"phone": "x", "send_sms": false}).want(422, "invalid_phone")
-	b.post("/invites", map[string]any{"phone": "09125550002", "send_sms": false, "ttl_hours": 0}).want(400, "bad_request")
-	b.post("/invites", map[string]any{"phone": "09125550002", "send_sms": false, "ttl_hours": 721}).want(400, "bad_request")
-
-	// send_sms: one outbox row whose value opens only under the sms_cred key.
+	b.post("/invites", map[string]any{"phone": r.env.A.Phone}).want(409, "phone_unavailable")
+	b.post("/invites", map[string]any{"phone": "x"}).want(422, "invalid_phone")
+	b.post("/invites", map[string]any{"phone": "09125550002", "ttl_hours": 0}).want(400, "bad_request")
+	b.post("/invites", map[string]any{"phone": "09125550002", "ttl_hours": 721}).want(400, "bad_request")
 	var inv2 struct {
 		ID   string `json:"id"`
-		Code string `json:"code"`
+		Link string `json:"link"`
 	}
-	b.post("/invites", map[string]any{"phone": "09125550003", "send_sms": true, "locale": "en", "ttl_hours": 24}).want(201, "").json(&inv2)
-	var oid uuid.UUID
-	var ct []byte
-	var kind, tmpl string
-	r.env.Scan(t, `SELECT id, kind, template_key, params_ct FROM ctrlz.sms_outbox`, nil, &oid, &kind, &tmpl, &ct)
-	if kind != "invite" || tmpl != "invite" || len(ct) == 0 {
-		t.Fatalf("outbox row: %s %s %d bytes", kind, tmpl, len(ct))
+	b.post("/invites", map[string]any{"phone": "09125550003", "locale": "en", "ttl_hours": 24}).want(201, "").json(&inv2)
+	tok2 := strings.TrimPrefix(inv2.Link, prefix)
+	// The token of a 24 hour invite expires with the row, plus the margin, and not at the thirty days of the longest life.
+	ref2, ok := invite.Open(authtest.InvitesOf(t, r.keys), r.ck.now(), tok2)
+	if !ok || ref2.Expires.After(r.ck.now().Add(25*time.Hour)) || ref2.Expires.Before(r.ck.now().Add(23*time.Hour)) {
+		t.Fatalf("the expiry inside the token = %v for a 24 hour invite", ref2.Expires)
 	}
-	got, err := sms.OpenOutbox(r.keys, oid, "+989125550003", ct)
-	if err != nil || got.Reveal() != inv2.Code {
-		t.Fatalf("the sealed value does not open to the code: %v", err)
-	}
-	if _, err := sms.OpenOutbox(authtest.AdminKeys(t), oid, "+989125550003", ct); err == nil {
-		t.Fatal("the sealed value opened under another key")
-	}
-	if _, err := sms.OpenOutbox(r.keys, oid, "+989125550999", ct); err == nil {
-		t.Fatal("the sealed value opened for another phone (the AAD holds the phone)")
+	if r.count(t, `SELECT count(*) FROM ctrlz.sms_outbox`) != 0 {
+		t.Fatal("a second invite queued a message")
 	}
 
 	// Revoke.
@@ -198,16 +197,23 @@ func TestInvites(t *testing.T) {
 	if has(acts, "invite.create") != 2 || has(acts, "invite.revoke") != 1 {
 		t.Fatalf("audit: %v", acts)
 	}
-	// The audit row records the ttl and send_sms, never the code or the phone.
-	if r.count(t, `SELECT count(*) FROM ctrlz.audit_log WHERE params::text LIKE '%' || $1 || '%' OR params::text LIKE '%0912555%' OR target LIKE '%0912555%'`, inv.Code) != 0 {
-		t.Fatal("the audit log holds a code or a phone")
+	// The audit row records the ttl only: no token, no code, no phone, and no send_sms.
+	if r.count(t, `SELECT count(*) FROM ctrlz.audit_log WHERE params::text LIKE '%' || $1 || '%' OR params::text LIKE '%0912555%' OR target LIKE '%0912555%' OR params::text LIKE '%send_sms%'`, token) != 0 {
+		t.Fatal("the audit log holds a link, a phone or send_sms")
+	}
+	if r.count(t, `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'invite.create' AND params::text <> '{"ttl_hours": 72}' AND params::text <> '{"ttl_hours": 24}'`) != 0 {
+		t.Fatal("an invite.create row holds more than ttl_hours")
+	}
+	// No sink holds the token: the logs of the process do not either.
+	if strings.Contains(r.logs.String(), token) || strings.Contains(r.logs.String(), tok2) {
+		t.Fatal("a log holds a link token")
 	}
 }
 
-// TestInviteSMSThroughTheWorker runs the real worker loop with the noop gateway:
-// the admin seals the code under sms_cred, the worker opens it with its own copy
-// of the key, sends, and clears the ciphertext (T-330, 18.2 "Invite SMS").
-func TestInviteSMSThroughTheWorker(t *testing.T) {
+// TestATestSendReachesTheGatewayWithItsSealedValue is what remains of the old invite-through-the-worker test (D67):
+// the admin seals the value under sms_cred, the worker opens it with its own copy of the key, sends, and clears the
+// ciphertext (T-330, 18.2). An invite is no longer one of the messages.
+func TestATestSendReachesTheGatewayWithItsSealedValue(t *testing.T) {
 	adminKeys, workerKeys := authtest.SharedRings(t)
 	r := newRigKeys(t, adminKeys)
 	b, _ := r.admin(t)
@@ -226,26 +232,6 @@ func TestInviteSMSThroughTheWorker(t *testing.T) {
 	go func() { defer close(done); _ = w.Run(ctx) }()
 	t.Cleanup(func() { cancel(); <-done })
 
-	var inv struct {
-		ID   string `json:"id"`
-		Code string `json:"code"`
-	}
-	b.post("/invites", map[string]any{"phone": "09125550004", "send_sms": true, "locale": "en"}).want(201, "").json(&inv)
-	waitFor(t, 20*time.Second, "the outbox row to be sent", func() bool {
-		return r.count(t, `SELECT count(*) FROM ctrlz.sms_outbox WHERE state = 'sent' AND params_ct IS NULL`) == 1
-	})
-	line, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(line), `"template":"invite"`) || !strings.Contains(string(line), inv.Code) || !strings.Contains(string(line), "+989125550004") {
-		t.Fatalf("noop received %q", line)
-	}
-	// The delivery log holds neither the phone nor the text.
-	if r.count(t, `SELECT count(*) FROM ctrlz.sms_deliveries WHERE row_to_json(sms_deliveries)::text LIKE '%0912555%' OR row_to_json(sms_deliveries)::text LIKE '%' || $1 || '%'`, inv.Code) != 0 {
-		t.Fatal("sms_deliveries holds a phone or a code")
-	}
-
 	// A test send through the same path (T-330): pinned to the gateway.
 	var q struct {
 		OutboxID string `json:"outbox_id"`
@@ -258,6 +244,20 @@ func TestInviteSMSThroughTheWorker(t *testing.T) {
 		b.get("/sms/outbox/" + q.OutboxID).json(&st)
 		return st.State == "sent"
 	})
+	line, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(line), `"template":"otp"`) || !strings.Contains(string(line), "+989125550005") {
+		t.Fatalf("noop received %q", line)
+	}
+	if r.count(t, `SELECT count(*) FROM ctrlz.sms_outbox WHERE state = 'sent' AND params_ct IS NOT NULL`) != 0 {
+		t.Fatal("a sent row kept its sealed value")
+	}
+	// The delivery log holds neither the phone nor the text.
+	if r.count(t, `SELECT count(*) FROM ctrlz.sms_deliveries WHERE row_to_json(sms_deliveries)::text LIKE '%0912555%'`) != 0 {
+		t.Fatal("sms_deliveries holds a phone")
+	}
 
 	// The template with no placeholder takes no value; its test send is sent and
 	// raises no payload alert (review sms-r1-17).
@@ -537,7 +537,7 @@ func TestSMSPage(t *testing.T) {
 		} `json:"items"`
 	}
 	b.get("/sms/templates").want(200, "").json(&tl)
-	if len(tl.Items) != 10 {
+	if len(tl.Items) != 12 { // the ten of 0011 less the two invite rows, plus the four of the notices (0062)
 		t.Fatalf("templates: %d", len(tl.Items))
 	}
 	b.put("/sms/templates/otp/en", map[string]any{"body": "Your Ctrl Z code is {code}."}).want(200, "")
@@ -752,7 +752,7 @@ func TestChainSurvivesTheRoutes(t *testing.T) {
 	r := newRig(t)
 	b, _ := r.admin(t)
 	b.post("/users", map[string]any{"phone": "09125550010"}).want(201, "")
-	b.post("/invites", map[string]any{"phone": "09125550011", "send_sms": false}).want(201, "")
+	b.post("/invites", map[string]any{"phone": "09125550011"}).want(201, "")
 	b.put("/sms/limits", func() map[string]any {
 		var l map[string]any
 		b.get("/sms/limits").json(&l)
@@ -883,12 +883,11 @@ func TestPanelHostSpellingsReachTheOriginAndTheLink(t *testing.T) {
 			t.Errorf("%q: origins = %v, want %s", c.configured, cfg.Origins, c.origin)
 		}
 		var inv struct {
-			Code string `json:"code"`
 			Link string `json:"link"`
 		}
-		b.callOn(h, adminHost, "POST", "/invites", map[string]any{"phone": "09125550077", "send_sms": false}).want(201, "").json(&inv)
-		if want := c.origin + "/invite#" + inv.Code; inv.Link != want {
-			t.Errorf("%q: link = %q, want %q", c.configured, inv.Link, want)
+		b.callOn(h, adminHost, "POST", "/invites", map[string]any{"phone": "09125550077"}).want(201, "").json(&inv)
+		if tok, ok := strings.CutPrefix(inv.Link, c.origin+"/invite#"); !ok || len(tok) != invite.TokenChars {
+			t.Errorf("%q: link has %d characters, want %s/invite# and a token of %d", c.configured, len(inv.Link), c.origin, invite.TokenChars)
 		}
 		r.env.Exec(t, `DELETE FROM ctrlz.invites`)
 	}
@@ -901,4 +900,88 @@ func confirmAtConsole(t *testing.T, r *rig, provider string) {
 	t.Helper()
 	r.env.Exec(t, `UPDATE ctrlz.sms_gateways SET credentials_ct = credentials_pending_ct, hint = pending_hint,
   credentials_pending_ct = NULL, pending_hint = NULL WHERE provider = $1 AND credentials_pending_ct IS NOT NULL`, provider)
+}
+
+// TestAnAdminMadeLinkRegistersTheInvitee is D67 end to end across the two services of a rig: the admin ring signs
+// the link, the public half held by the api opens it, and the invitee registers a new tenant of his own. Two
+// invitees end in two tenants, and neither sees anything of the other (two-tenant rule).
+func TestAnAdminMadeLinkRegistersTheInvitee(t *testing.T) {
+	r := newRig(t)
+	b, _ := r.admin(t)
+	tenantsBefore := r.count(t, `SELECT count(*) FROM ctrlz.tenants`)
+
+	type invitee struct {
+		phone, e164 string
+		tenant      string
+		b           *browser
+	}
+	people := []*invitee{{phone: "09125550201", e164: "+989125550201"}, {phone: "09125550202", e164: "+989125550202"}}
+	for _, p := range people {
+		var inv struct {
+			Link string `json:"link"`
+		}
+		b.post("/invites", map[string]any{"phone": p.phone}).want(201, "").json(&inv)
+		_, tok, ok := strings.Cut(inv.Link, "#")
+		if !ok {
+			t.Fatalf("no fragment in the link")
+		}
+		p.b = r.browser()
+		p.b.callOn(r.tenant, panelHost, "POST", "/auth/invites/lookup", map[string]any{"token": tok}).want(200, "")
+		var iss struct {
+			ID string `json:"challenge_id"`
+		}
+		// The phone of the request is ignored: the invite's own is used.
+		p.b.callOn(r.tenant, panelHost, "POST", "/auth/otp/request", map[string]any{"phone": "09120000001", "purpose": "invite", "invite_token": tok}).want(202, "").json(&iss)
+		p.b.callOn(r.tenant, panelHost, "POST", "/auth/register", map[string]any{
+			"invite_token": tok, "challenge_id": iss.ID, "code": r.codes.last(), "password": "Marble-Island-Copper-6620",
+		}).want(201, "")
+		var me struct {
+			Tenant struct {
+				ID string `json:"id"`
+			} `json:"tenant"`
+		}
+		p.b.callOn(r.tenant, panelHost, "GET", "/me", nil).want(200, "").json(&me)
+		p.tenant = me.Tenant.ID
+		// Used up: the same link is the one 404 now.
+		r.browser().callOn(r.tenant, panelHost, "POST", "/auth/invites/lookup", map[string]any{"token": tok}).want(404, "invite_invalid")
+	}
+	if people[0].tenant == "" || people[0].tenant == people[1].tenant {
+		t.Fatalf("two invitees ended in tenants %q and %q, want two of their own", people[0].tenant, people[1].tenant)
+	}
+	if got := r.count(t, `SELECT count(*) FROM ctrlz.tenants`); got != tenantsBefore+2 {
+		t.Fatalf("%d tenants after two invitations, want %d", got, tenantsBefore+2)
+	}
+	// Neither sees the other, nor a seeded tenant: each /me names its own phone only.
+	for i, p := range people {
+		body := string(p.b.callOn(r.tenant, panelHost, "GET", "/me", nil).want(200, "").Body)
+		other := people[1-i]
+		if !strings.Contains(body, p.tenant) || strings.Contains(body, other.tenant) || strings.Contains(body, other.e164) {
+			t.Errorf("the account of invitee %d shows another tenant: %s", i, body)
+		}
+	}
+	// A link the other rig's signer made is not opened by this api (another key), and the admin list shows both used.
+	var rows struct {
+		Items []struct {
+			Phone string `json:"phone_e164"`
+			State string `json:"state"`
+		} `json:"items"`
+	}
+	b.get("/invites").want(200, "").json(&rows)
+	used := 0
+	for _, it := range rows.Items {
+		if it.State == "used" && (it.Phone == people[0].e164 || it.Phone == people[1].e164) {
+			used++
+		}
+	}
+	if used != 2 {
+		t.Errorf("the admin list shows %d of the two invites used", used)
+	}
+	other := newRig(t)
+	ob, _ := other.admin(t)
+	var foreign struct {
+		Link string `json:"link"`
+	}
+	ob.post("/invites", map[string]any{"phone": "09125550203"}).want(201, "").json(&foreign)
+	_, ftok, _ := strings.Cut(foreign.Link, "#")
+	r.browser().callOn(r.tenant, panelHost, "POST", "/auth/invites/lookup", map[string]any{"token": ftok}).want(404, "invite_invalid")
 }

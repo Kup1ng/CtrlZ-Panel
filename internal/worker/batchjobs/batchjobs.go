@@ -131,18 +131,7 @@ func New(cfg Config) (*Runner, error) {
 	jr := &profiles.JobRunner{Env: cfg.Env, Store: cfg.Store}
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &workerImpl{run: jr})
-	client, err := river.NewClient(drv, &river.Config{
-		Schema:               "river",
-		PollOnly:             true,
-		FetchPollInterval:    cfg.Poll,
-		JobTimeout:           JobTimeout,
-		RescueStuckJobsAfter: RescueAfter,
-		Queues:               map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 2}},
-		Workers:              workers,
-		Logger:               cfg.Log,
-		// The reindexer needs the owner of the river tables, which the worker is not.
-		ReindexerSchedule: neverSchedule{},
-	})
+	client, err := river.NewClient(drv, riverConfig(cfg, workers))
 	if err != nil {
 		return nil, err
 	}
@@ -326,5 +315,23 @@ func (r *Runner) pass(ctx context.Context, name loopName, f func(context.Context
 	defer safego.Keep(r.cfg.Log, name)
 	if err := f(ctx); err != nil && ctx.Err() == nil {
 		r.cfg.Log.Warn("batch job loop failed", logattr.Enum("loop", name))
+	}
+}
+
+// riverConfig is the configuration the runner gives River, in one place so a test can read the two bounds that must keep
+// their order: a run is stopped at JobTimeout and River rescues a job it thinks stuck only after RescueAfter, which is
+// later, so a live job slowed to just under its timeout is never run a second time at once (spec 3.5, 10.5).
+func riverConfig(cfg Config, workers *river.Workers) *river.Config {
+	return &river.Config{
+		Schema:               "river",
+		PollOnly:             true,
+		FetchPollInterval:    cfg.Poll,
+		JobTimeout:           JobTimeout,
+		RescueStuckJobsAfter: RescueAfter,
+		Queues:               map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 2}},
+		Workers:              workers,
+		Logger:               cfg.Log,
+		// The reindexer needs the owner of the river tables, which the worker is not.
+		ReindexerSchedule: neverSchedule{},
 	}
 }

@@ -118,7 +118,8 @@ var composeEnvTable = map[string]map[string]string{
 // list is the review: a new line is a new way for the host to put a value into a container or a limit, so it
 // is read for what the value could carry. None of them is a credential; passwords come from files.
 var composeHostVariables = map[string]string{
-	"CTRLZ_IMAGE": "the name of the Panel image under test", "CTRLZ_ENV": "production, or test for the smoke",
+	"CTRLZ_IMAGE": "the name of the Panel image under test", "CTRLZ_WEB_PANEL_IMAGE": "the name of the web-panel image built on this machine", "CTRLZ_WEB_ADMIN_IMAGE": "the name of the web-admin image built on this machine",
+	"CTRLZ_ENV":        "production, or test for the smoke",
 	"CTRLZ_PANEL_HOST": "a host name", "CTRLZ_ADMIN_HOST": "a host name", "CTRLZ_HTTP_PORT": "a port", "CTRLZ_HTTPS_PORT": "a port",
 	"CTRLZ_SECRETS_DIR":           "the directory of the secret files, a path and no content",
 	"CTRLZ_ENV_FORMAT_2":          "the marker of the .env layout",
@@ -340,7 +341,7 @@ func TestComposeEnvironmentLintCanFail(t *testing.T) {
 		"an environment in the list form":               {plant("    environment:\n      VK_ZONE: api\n      VK_MAXMEMORY: ${VALKEY_MAXMEMORY:-64mb}\n", "    environment:\n      - VK_ZONE=api\n      - VK_MAXMEMORY=${VALKEY_MAXMEMORY:-64mb}\n"), "as a list or a scalar"},
 		"a nested value":                                {plant("      VK_ZONE: api\n", "      VK_ZONE: {a: b}\n"), "not a scalar"},
 		"an environment for a service with no row":      {plant("  web-panel:\n", "  web-panel:\n    environment:\n      A: b\n"), "has an environment and no row"},
-		"a host variable in a command":                  {plant(`command: ["httpd", "-f", "-p", "3000", "-h", "/www"]`, `command: ["httpd", "-f", "-p", "3000", "-h", "${SMS_API_PASS}"]`), "SMS_API_PASS"},
+		"a host variable in a command":                  {plant(`test: ["CMD", "node", "-e", "fetch(`, `test: ["CMD", "node", "-e", "${SMS_API_PASS}fetch(`), "SMS_API_PASS"},
 		"a bare host variable in a limit":               {plant("mem_limit: ${MEM_WEB:-128m}", "mem_limit: $SMS_API_PASS"), "SMS_API_PASS"},
 	}
 	names := make([]string, 0, len(cases))

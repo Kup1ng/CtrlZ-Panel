@@ -57,7 +57,7 @@ func adminEvents() []audit.AdminEvent {
 		audit.AdminLogin{Admin: id}, audit.AdminLogout{Admin: id}, audit.AdminLoginFailed{}, audit.AdminPasswordChange{Admin: id},
 		audit.AdminTOTPEnroll{Admin: id}, audit.AdminTOTPFresh{Admin: id}, audit.AdminNoticesAck{Admin: id, Cleared: 1, Kept: 2}, audit.UserCreate{Tenant: id},
 		audit.UserPasswordReissue{Tenant: id, UserID: id, WasExpired: true, RevokedSessions: 2},
-		audit.InviteCreate{Invite: id, SendSMS: true, TTLHours: 72}, audit.InviteRevoke{Invite: id},
+		audit.InviteCreate{Invite: id, TTLHours: 72}, audit.InviteRevoke{Invite: id},
 		audit.RegistrationModeChange{From: "closed", To: "open", Graced: 3, SuspendedAtOnce: 1, GraceDays: 14},
 		audit.WebauthnConfigChange{FromRP: "a.test", ToRP: "b.test", Credentials: 2, Users: 1},
 		audit.SMSGatewayChange{Gateway: id, Fields: []audit.Field{audit.FieldCredentials}}, audit.SMSRoutingChange{Gateway: id, Fields: []audit.Field{audit.FieldPrimary}},

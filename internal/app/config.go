@@ -337,9 +337,18 @@ func (r Role) KeyDomains() []string {
 	case RoleAPI:
 		return []string{keyring.DomainUserTOTP, keyring.DomainOTPDelivery, keyring.DomainAuthMAC, keyring.DomainDOHToken}
 	case RoleAdmin:
-		return []string{keyring.DomainAdminTOTP, keyring.DomainSMSCred, keyring.DomainAdminMAC}
+		return []string{keyring.DomainAdminTOTP, keyring.DomainSMSCred, keyring.DomainAdminMAC, keyring.DomainInviteSign}
 	case RoleWorker:
 		return []string{keyring.DomainSMSCred, keyring.DomainOTPDelivery}
+	}
+	return nil
+}
+
+// PublicDomains are the signing domains whose public half this role holds (spec 8.3, D67). The api opens
+// invite links and can never make one: it gets pub_invite_sign, which is no secret, and not the key.
+func (r Role) PublicDomains() []string {
+	if r == RoleAPI {
+		return []string{keyring.DomainInviteSign}
 	}
 	return nil
 }

@@ -72,7 +72,7 @@ func runSMSPending(ctx context.Context, env Env, args []string) error {
 		for _, r := range rows {
 			// The address is written here and not by stagedBy: a function that returned the text of an
 			// address would make every caller a source of the network cut lint's key flow.
-			when, ip := "(no audit row of the staging among the last 200 gateway changes)", ""
+			when, ip := "(no audit row of the staging)", ""
 			if sr := staged[r.Provider]; sr.found {
 				ip = "an unknown address"
 				if sr.ip != nil {
@@ -102,11 +102,30 @@ func runSMSPending(ctx context.Context, env Env, args []string) error {
 // owner tell their own PUT from a stolen session's. Rows of the cost, of a confirmation and of a discard
 // name other fields and are skipped.
 func stagedBy(g store.GlobalTx, gateway uuid.UUID) (stagedRow, error) {
-	rows, err := g.AuditPage(0, "sms.gateway_change", 200)
-	if err != nil {
-		return stagedRow{}, err
-	}
 	target := audit.SMSGatewayChange{Gateway: gateway}.Target()
+	// Page back until a staging row or the start of the log. A fixed window let a stolen session bury
+	// the row of its own pair under cost-only PUTs, each of which writes an sms.gateway_change row of
+	// its own (admin-r21-4).
+	const page = 200
+	var before int64
+	for {
+		rows, err := g.AuditPage(before, "sms.gateway_change", page)
+		if err != nil {
+			return stagedRow{}, err
+		}
+		if row, ok, err := stagingRow(g, target, rows); err != nil || ok {
+			return row, err
+		}
+		if len(rows) < page {
+			return stagedRow{}, nil
+		}
+		before = rows[len(rows)-1].ID
+	}
+}
+
+// stagingRow picks, from rows (newest first), the newest that names the gateway and the field
+// credentials.
+func stagingRow(g store.GlobalTx, target string, rows []store.AuditRow) (stagedRow, bool, error) {
 	for _, r := range rows {
 		if r.Target != target {
 			continue
@@ -128,18 +147,18 @@ func stagedBy(g store.GlobalTx, gateway uuid.UUID) (stagedRow, error) {
 		if r.AdminID != nil {
 			who = "admin " + r.AdminID.String()
 			if a, ok, err := g.AdminUserByID(*r.AdminID); err != nil {
-				return stagedRow{}, err
+				return stagedRow{}, false, err
 			} else if ok {
 				who = fmt.Sprintf("admin %q", a.Username)
 			}
 		}
-		return stagedRow{found: true, at: r.At.UTC().Format("2006-01-02 15:04:05 UTC"), who: who, ip: r.IP}, nil
+		return stagedRow{found: true, at: r.At.UTC().Format("2006-01-02 15:04:05 UTC"), who: who, ip: r.IP}, true, nil
 	}
-	return stagedRow{}, nil
+	return stagedRow{}, false, nil
 }
 
-// stagedRow is the audit row that staged a pair, as parts. found is false when the last 200 gateway
-// changes hold none.
+// stagedRow is the audit row that staged a pair, as parts. found is false when the log holds no
+// staging row of the gateway.
 type stagedRow struct {
 	found bool
 	at    string
@@ -228,7 +247,7 @@ func runSMSDiscard(ctx context.Context, env Env, args []string) error {
 	provider := pos[0]
 	return withTools(ctx, env, func(t *Tools) error {
 		return t.Store.WithGlobal(ctx, store.TxOpts{}, func(g store.GlobalTx) error {
-			id, ok, err := g.SMSGatewayDiscardPending(provider)
+			id, ok, err := g.SMSGatewayDiscardPending(provider, nil)
 			if err != nil {
 				return err
 			}

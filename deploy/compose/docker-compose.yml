@@ -47,7 +47,9 @@
 #   - An install of the earlier layout (one `valkey` service) is upgraded with `up -d --remove-orphans`:
 #     a plain `up -d` leaves the old `valkey` container running on `backend` with its password-less user and
 #     one maxmemory for both services, which is the hole the two zones close (README.md, Upgrading).
-#   - The web images are placeholders until P1.
+#   - The two web containers run the images of deploy/docker/web.Dockerfile (spec 3.2). They are built on the
+#     machine and never pulled. The busybox placeholder of web-placeholder/ is gone from this file; the Go CI
+#     (scripts/compose-smoke.sh) starts the stack with ci-placeholder.yml, which puts it back (no token, no CDN).
 
 name: ctrlz
 
@@ -123,8 +125,9 @@ x-valkey: &valkey
   mem_limit: ${MEM_VALKEY:-128m}
   healthcheck:
     # The container's own loop is the judge: maintain.sh signs in as the maintenance user and touches
-    # /tmp/valkey-alive after each PONG, so a server that is stuck (BUSY), down or without its scripts is
-    # unhealthy within a minute, and no client has to sign in with a password-less user (admin-r16-12).
+    # /tmp/valkey-alive after each PONG and after each sweep batch it got a reply to (a paced pass on a slow
+    # host lasts minutes), so a server that is stuck (BUSY), down or without its scripts is unhealthy within
+    # a minute, and no client has to sign in with a password-less user (admin-r16-12).
     # It also waits for the marker maintain.sh writes once every limiter script has loaded (admin-r13-5).
     # No service depends on a healthy valkey (compose_p1_test.go, spec 17.2: a Valkey outage must not
     # stop a service): a service that starts first meets NOSCRIPT and its limiter treats that as the
@@ -220,7 +223,8 @@ services:
     # empty at start (the image owns /spool).
     volumes:
       - api_spool:/spool
-    secrets: [pg_tenant_password, valkey_password_api, kek_user_totp, kek_otp_delivery, kek_auth_mac, kek_doh_token]
+    # pub_invite_sign is the public half of the key that signs invite links (D67): the api can open a link and cannot make one.
+    secrets: [pg_tenant_password, valkey_password_api, kek_user_totp, kek_otp_delivery, kek_auth_mac, kek_doh_token, pub_invite_sign]
     healthcheck: &go-health-8080
       test: ["CMD", "/usr/local/bin/ctrlz", "healthcheck", "http://127.0.0.1:8080/healthz"]
       interval: 10s
@@ -249,7 +253,7 @@ services:
       # The admin container has 128 MiB: one 46 MiB hash, and no stored hash larger than the budget.
       CTRLZ_ARGON2_BUDGET_MIB: ${CTRLZ_ADMIN_ARGON2_BUDGET_MIB:-64}
       GOMEMLIMIT: ${GOMEMLIMIT_ADMIN:-96MiB}
-    secrets: [pg_admin_password, valkey_password_admin, kek_admin_totp, kek_sms_cred, kek_admin_mac]
+    secrets: [pg_admin_password, valkey_password_admin, kek_admin_totp, kek_sms_cred, kek_admin_mac, kek_invite_sign]
     healthcheck:
       <<: *go-health-8080
       test: ["CMD", "/usr/local/bin/ctrlz", "healthcheck", "http://127.0.0.1:8081/healthz"]
@@ -362,21 +366,49 @@ services:
 
   web-panel:
     <<: *hardened
-    image: busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
-    command: ["httpd", "-f", "-p", "3000", "-h", "/www"]
-    volumes:
-      - ./web-placeholder:/www:ro
+    # The image of deploy/docker/web.Dockerfile, built on the machine that runs the stack (spec 3.2):
+    #   docker build -f deploy/docker/web.Dockerfile --build-arg APP=panel -t ctrlz/web-panel:dev .
+    # Never pulled: the name is a public-registry name, and whoever owned it there would serve the dashboard
+    # (the same reason as the Panel image above). The tag exists only on this machine, so a variable is the
+    # way to name another build, as for CTRLZ_IMAGE.
+    image: ${CTRLZ_WEB_PANEL_IMAGE:-ctrlz/web-panel:dev}
+    pull_policy: never
     user: "65532:65532"
+    # Next's standalone server writes nothing under its own folder at run time (images are unoptimised and
+    # no page is cached on disk), so a read-only root holds with the one scratch directory below.
+    tmpfs: ["/tmp"]
+    # A page, never /logo.png or /icon.png. The files of public/ are served with 200 even when the proxy is
+    # broken: a wrong CTRLZ_VERIFY_ORIGIN makes every proxied request a 500 while the process stays up
+    # (spec 15.3, 15.5), and only a request that goes through the proxy sees it. /fa/login is public in
+    # both apps. The image has no curl or wget, and node is there anyway.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/fa/login',{redirect:'manual'}).then((r)=>process.exit(r.status===200?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     mem_limit: ${MEM_WEB:-128m}
     networks: [web]
 
   web-admin:
     <<: *hardened
-    image: busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
-    command: ["httpd", "-f", "-p", "3000", "-h", "/www"]
-    volumes:
-      - ./web-placeholder:/www:ro
+    # Built the same way, with --build-arg APP=admin.
+    image: ${CTRLZ_WEB_ADMIN_IMAGE:-ctrlz/web-admin:dev}
+    pull_policy: never
     user: "65532:65532"
+    # Next's standalone server writes nothing under its own folder at run time (images are unoptimised and
+    # no page is cached on disk), so a read-only root holds with the one scratch directory below.
+    tmpfs: ["/tmp"]
+    # A page, never /logo.png or /icon.png. The files of public/ are served with 200 even when the proxy is
+    # broken: a wrong CTRLZ_VERIFY_ORIGIN makes every proxied request a 500 while the process stays up
+    # (spec 15.3, 15.5), and only a request that goes through the proxy sees it. /fa/login is public in
+    # both apps. The image has no curl or wget, and node is there anyway.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/fa/login',{redirect:'manual'}).then((r)=>process.exit(r.status===200?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     mem_limit: ${MEM_WEB:-128m}
     networks: [web]
 
@@ -593,10 +625,13 @@ networks:
   # hub have a plain bridge: caddy for its published ports, the hub for the route out
   # and for the node port it publishes from P4; a container on one plain and several
   # internal networks takes its route from the plain one.
-  # Afterwards only caddy shares a network with a web container, and only caddy
-  # joins the web containers to api and admin, so a compromised web container
+  # Afterwards only caddy shares a network with api or admin, and only caddy
+  # joins the web containers to them, so a compromised web container
   # cannot reach api:8080 or admin:8081 with a forged X-Forwarded-For. api and
   # admin have no route out either. Only caddy, hub and worker can reach out.
+  # The two web containers still share the one `web` network, so a compromised
+  # panel can open web-admin:3000 without Caddy's per-site rules (merge-r1-5,
+  # recorded for the P8 review: one internal network per web container).
   # Dual stack, with a ULA range, on purpose. Docker publishes 80 and 443 on [::]
   # as well. On an IPv4-only network it serves an IPv6 client through the
   # userland proxy, which connects to caddy from the bridge gateway, so every IPv6
@@ -705,3 +740,8 @@ secrets:
     file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_doh_token
   kek_admin_mac:
     file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_admin_mac
+  # The signing key of invite links is admin's alone (D67); its public half, which is no secret, is the api's alone.
+  kek_invite_sign:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_invite_sign
+  pub_invite_sign:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pub_invite_sign

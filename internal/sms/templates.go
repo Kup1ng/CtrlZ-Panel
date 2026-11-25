@@ -8,22 +8,24 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 )
 
-// The five templates of spec 9.4. A key is the contract between the code that
+// The templates of spec 9.4. A key is the contract between the code that
 // asks for a message and the approved copy a gateway holds, so the set is closed.
 const (
 	TemplateOTP           = "otp"
 	TemplateOTPReset      = "otp_reset"
 	TemplateOTPPhone      = "otp_phone"
-	TemplateInvite        = "invite"
 	TemplateAccountExists = "account_exists"
+	// The two security notices of question 19 (spec 12.3): no value, one billed part each.
+	TemplateNoticePasskey  = "notice_passkey"
+	TemplateNoticeRecovery = "notice_recovery"
 )
 
 // Templates lists the keys, in the order the SMS page shows them.
 func Templates() []string {
-	return []string{TemplateOTP, TemplateOTPReset, TemplateOTPPhone, TemplateInvite, TemplateAccountExists}
+	return []string{TemplateOTP, TemplateOTPReset, TemplateOTPPhone, TemplateAccountExists, TemplateNoticePasskey, TemplateNoticeRecovery}
 }
 
-// ValidTemplate reports whether key is one of the five.
+// ValidTemplate reports whether key is one of the templates.
 func ValidTemplate(key string) bool {
 	_, ok := PlaceholderCount(key)
 	return ok
@@ -47,12 +49,12 @@ func OtherLocale(l string) string {
 const placeholder = "{code}"
 
 // PlaceholderCount is how many values a template takes: one code, or none for
-// account_exists. ok is false for an unknown key.
+// account_exists and the two notices. ok is false for an unknown key.
 func PlaceholderCount(key string) (n int, ok bool) {
 	switch key {
-	case TemplateOTP, TemplateOTPReset, TemplateOTPPhone, TemplateInvite:
+	case TemplateOTP, TemplateOTPReset, TemplateOTPPhone:
 		return 1, true
-	case TemplateAccountExists:
+	case TemplateAccountExists, TemplateNoticePasskey, TemplateNoticeRecovery:
 		return 0, true
 	}
 	return 0, false
@@ -68,8 +70,7 @@ var (
 
 // CheckBody validates the text an operator edits on the SMS page: exactly the
 // key's number of {code} markers, and nothing else that is not on a closed
-// alphabet. A provider refuses a link in a variable and the invite code replaced
-// it (finding 6), and an operator must not be able to submit an address for
+// alphabet. A provider refuses a link in a variable (finding 6), and an operator must not be able to submit an address for
 // approval inside the copy.
 //
 // The check is an allow list on purpose. Unicode has an open set of characters
@@ -125,7 +126,8 @@ func CheckBody(key, body string) error {
 
 // The one-part bound of owner decision D58 (sms-r11-2, sms-r13-3). Both providers bill each part
 // of a message, and a Persian part holds 70 UCS-2 units, a Latin one 160 GSM-7 characters. The
-// three OTP templates are the highest-volume ones and the price an operator enters for them is
+// three OTP templates are the highest-volume ones, and the two notices (question 19) are held to the same bound so that a
+// message is one part whatever it says. The price an operator enters for them is
 // one price per message, so the cap on spend (sms_cost_cap_daily) counts one part for each. A body
 // that needs two parts makes that count too low, and the bound has to hold for the body that is
 // really sent: the seeds (TestOTPBodiesFitOnePart) and every edit made on the SMS page, which is
@@ -141,10 +143,11 @@ var ErrBodyTooLong = errors.New("sms: template body does not fit one billed part
 
 // oneBilledPart says whether key is a template the D58 bound holds for.
 func oneBilledPart(key string) bool {
-	return key == TemplateOTP || key == TemplateOTPReset || key == TemplateOTPPhone
+	return key == TemplateOTP || key == TemplateOTPReset || key == TemplateOTPPhone ||
+		key == TemplateNoticePasskey || key == TemplateNoticeRecovery
 }
 
-// CheckBodyLength holds the three OTP templates to one billed part, rendered with a code of
+// CheckBodyLength holds the three OTP templates and the two notices to one billed part, rendered with a code of
 // codeLength digits: at most MaxOTPUnitsFA UCS-2 units in Persian, and in English at most
 // MaxOTPUnitsEN GSM-7 units with every character in the GSM alphabet (one outside it sends the
 // whole message as UCS-2, 70 units). Other keys are not bounded here. CheckBody judges the

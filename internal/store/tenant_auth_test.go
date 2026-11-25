@@ -334,9 +334,9 @@ func TestTenantMethodsDoNotReachAnotherTenant(t *testing.T) {
 		}
 		must("TicketsRevoke", tx.TicketsRevoke(f.A.User))
 		// Notices.
-		ok, err = tx.NotificationRead(aNotification)
-		falsy("NotificationRead", ok, err)
-		if l, err := tx.NotificationsPage(store.Cursor{}, 50); err != nil || len(l) != 1 {
+		read, err := tx.NotificationRead(aNotification, uuid.Must(uuid.NewV7()))
+		falsy("NotificationRead", read != store.NoticeUnknown, err)
+		if l, err := tx.NotificationsPage(store.Cursor{}, 50, uuid.Must(uuid.NewV7())); err != nil || len(l) != 1 {
 			t.Errorf("NotificationsPage: %d rows, %v (B has its own seed row only)", len(l), err)
 		} else if l[0].ID == aNotification {
 			t.Error("NotificationsPage returned A's notification")
@@ -766,8 +766,9 @@ func TestPhoneChangeNoticesAndSettings(t *testing.T) {
 		id             uuid.UUID
 		phone, purpose string
 	}{{oldID, f.A.Phone, "phone_old"}, {newID, "+989135550003", "phone_new"}} {
-		if _, err := super.Exec(f.ctx, `INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at)
-VALUES ($1, $2, $3, '\x01', now() + interval '5 minutes', now() + interval '1 second')`, o.id, o.phone, o.purpose); err != nil {
+		// Stamped with the tenant, as auth_otp_issue does (question 15): the completion reads the codes as the scoped role.
+		if _, err := super.Exec(f.ctx, `INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at, tenant_id)
+VALUES ($1, $2, $3, '\x01', now() + interval '5 minutes', now() + interval '1 second', $4)`, o.id, o.phone, o.purpose, f.A.Tenant); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -790,8 +791,8 @@ VALUES ($1, $2, $3, '\x01', now() + interval '5 minutes', now() + interval '1 se
 		t.Fatal(err)
 	}
 	loginOTP := uuid.Must(uuid.NewV7())
-	if _, err := super.Exec(f.ctx, `INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at)
-VALUES ($1, $2, 'login', '\x01', now() + interval '5 minutes', now())`, loginOTP, f.B.Phone); err != nil {
+	if _, err := super.Exec(f.ctx, `INSERT INTO ctrlz.otp_challenges (id, phone_e164, purpose, code_hash, expires_at, consumed_at, tenant_id)
+VALUES ($1, $2, 'login', '\x01', now() + interval '5 minutes', now(), $3)`, loginOTP, f.B.Phone, f.B.Tenant); err != nil {
 		t.Fatal(err)
 	}
 	f.inTenant(t, s, f.B.Tenant, func(tx store.Tx) {
@@ -817,12 +818,12 @@ VALUES ($1, $2, 'login', '\x01', now() + interval '5 minutes', now())`, loginOTP
 				t.Fatal(err)
 			}
 		}
-		page1, err := tx.NotificationsPage(store.Cursor{}, 4)
+		page1, err := tx.NotificationsPage(store.Cursor{}, 4, uuid.Must(uuid.NewV7()))
 		if err != nil || len(page1) != 4 {
 			t.Fatalf("page 1: %d %v", len(page1), err)
 		}
 		last := page1[len(page1)-1]
-		page2, err := tx.NotificationsPage(store.Cursor{At: last.CreatedAt, ID: last.ID}, 4)
+		page2, err := tx.NotificationsPage(store.Cursor{At: last.CreatedAt, ID: last.ID}, 4, uuid.Must(uuid.NewV7()))
 		if err != nil || len(page2) != 2 {
 			t.Fatalf("page 2: %d %v (6 rows in all)", len(page2), err)
 		}
@@ -836,7 +837,7 @@ VALUES ($1, $2, 'login', '\x01', now() + interval '5 minutes', now())`, loginOTP
 		if n, _ := tx.NotificationsUnread(); n != 6 {
 			t.Errorf("unread %d", n)
 		}
-		if ok, _ := tx.NotificationRead(page1[0].ID); !ok {
+		if res, _ := tx.NotificationRead(page1[0].ID, uuid.Must(uuid.NewV7())); res != store.NoticeMarked {
 			t.Error("read failed")
 		}
 		if n, _ := tx.NotificationsUnread(); n != 5 {

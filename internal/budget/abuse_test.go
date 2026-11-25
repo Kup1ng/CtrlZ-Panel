@@ -125,10 +125,6 @@ func spend(t *testing.T, s *throttle.Service, sc throttle.Scope, who func(i int)
 func proofEntry(name string) func(s *throttle.Service, ip string, i int) error {
 	ctx := context.Background()
 	switch name {
-	case "invite_net", "invite_net48":
-		return func(s *throttle.Service, ip string, _ int) error {
-			return s.InviteHit(ctx, netip.MustParseAddr(ip), victim.Invite)
-		}
 	case "otp_verify_net":
 		return func(s *throttle.Service, ip string, _ int) error {
 			return s.OTPVerifyHit(ctx, netip.MustParseAddr(ip), victim.Challenge)
@@ -146,8 +142,6 @@ func proofEntry(name string) func(s *throttle.Service, ip string, i int) error {
 func noProofEntry(name string) func(s *throttle.Service, ip string) error {
 	ctx := context.Background()
 	switch name {
-	case "invite_net", "invite_net48":
-		return func(s *throttle.Service, ip string) error { return s.InviteHit(ctx, netip.MustParseAddr(ip), uuid.Nil) }
 	case "otp_verify_net":
 		return func(s *throttle.Service, ip string) error {
 			return s.OTPVerifyHit(ctx, netip.MustParseAddr(ip), uuid.Nil)
@@ -660,11 +654,12 @@ func TestAbuseSessionLookup(t *testing.T) {
 	for _, svc := range []ratelimit.Service{ratelimit.Tenant, ratelimit.Admin} {
 		t.Run(string(svc), func(t *testing.T) {
 			h := newHarness(t, svc)
-			// The roomiest session class, so that only the lookup budget can refuse.
+			// The roomiest session class an operation names, so that only the lookup budget can refuse. A class the pipeline charges by itself
+			// (a day budget such as link-create or token-create) has no route in the harness and would answer 404.
 			var session string
 			best := 0
 			for _, c := range ratelimit.Classes(svc) {
-				if c.Key == ratelimit.BySession && c.Name != ratelimit.SessionLookup && c.Limits[0].Max > best {
+				if c.Key == ratelimit.BySession && !ratelimit.ChargedByThePipeline(c.Name) && c.Limits[0].Max > best {
 					session, best = c.Name, c.Limits[0].Max
 				}
 			}

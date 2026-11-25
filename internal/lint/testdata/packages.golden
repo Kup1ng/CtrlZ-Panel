@@ -57,7 +57,6 @@ internal/migrategen
 internal/mobileconfig
 internal/mutant
 internal/netkey
-internal/netpool
 internal/profiles
 internal/publicapi
 internal/ratelimit

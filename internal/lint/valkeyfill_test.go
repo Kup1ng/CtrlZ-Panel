@@ -102,7 +102,7 @@ func (f *valkeyFill) waitLimiter(t *testing.T, service, subject string, within t
 // fillUntilFull writes junk as a service user, large values first and then smaller ones, until the server
 // answers OOM, the way the reviewer reproduced it, and returns the names of the keys it wrote.
 //
-// The container's sweep runs every MAINT_INTERVAL (2 s) and deletes this very junk, so the fill has to
+// The container's sweep runs a pass at least every MAINT_INTERVAL (2 s) and deletes this very junk, so the fill has to
 // outrun it. Written one command at a time over Docker Desktop's port forward on a loaded machine, the
 // 100 KB values went in at about 3 MB/s, the sweep removed them as fast as they came and the server never
 // filled (the first full CI run of round 15 failed on exactly that: 1600 writes, no OOM). So the writes are
@@ -405,48 +405,128 @@ func maintScanCount(t *testing.T, name, pattern string) int {
 	return n
 }
 
+// floodKeys writes n keys that look exactly like the limiter's (a two field hash with a lifetime inside the
+// bound) into a service's zone as that service, with `valkey-cli --pipe` from inside the container, and fails the
+// test when any of them is refused (OOM included).
+func floodKeys(t *testing.T, f *valkeyFill, service string, n int) {
+	t.Helper()
+	// RESP by hand: *argc, then $len and the argument for each. The lifetime is 30 minutes (1800000 ms),
+	// inside the sweep's bound and long enough for the test even on a slow host: a container that a killed
+	// test leaves behind then has a keyspace that expires, and its sweep goes idle by itself instead of
+	// walking 50,000 keys for 11 days.
+	prog := fmt.Sprintf(`BEGIN{for(i=0;i<%d;i++){k=sprintf("ctrlz:rl:%s:flood:%%d",i);`+
+		`printf "*6\r\n$4\r\nHSET\r\n$%%d\r\n%%s\r\n$6\r\ntokens\r\n$1\r\n1\r\n$2\r\nat\r\n$1\r\n1\r\n",length(k),k;`+
+		`printf "*3\r\n$7\r\nPEXPIRE\r\n$%%d\r\n%%s\r\n$7\r\n1800000\r\n",length(k),k}}`, n, service)
+	out, err := deploy.Docker(context.Background(), "exec", "-e", "REDISCLI_AUTH="+valkeyPasswords[service], f.zones[service].name, "sh", "-c",
+		"awk '"+prog+"' | valkey-cli --user "+service+" --no-auth-warning --pipe --pipe-timeout 1").CombinedOutput()
+	// --pipe ends with an ECHO that the service users do not hold (and say so, once): the replies
+	// of the flood itself are what is counted, and an OOM among them fails the test.
+	var replies int
+	if i := strings.LastIndex(string(out), "replies: "); i >= 0 {
+		_, _ = fmt.Sscanf(string(out)[i:], "replies: %d", &replies)
+	}
+	if strings.Contains(string(out), "OOM") || replies < 2*n {
+		t.Fatalf("%s: the flood was refused or did not run (%v, %d replies of %d): %.300s", service, err, replies, 2*n, out)
+	}
+}
+
+// maintMemory reads used_memory and maxmemory of a zone's server, signed in as the container's maintenance user
+// (which holds INFO for the sweep's pressure flag).
+func maintMemory(t *testing.T, name string) (used, limit int) {
+	t.Helper()
+	out, err := deploy.Docker(context.Background(), "exec", name, "sh", "-c",
+		`pw=$(sed -n 's/^user maint on >\([^ ]*\) .*/\1/p' /tmp/users.acl); REDISCLI_AUTH=$pw valkey-cli --user maint --no-auth-warning info memory`).CombinedOutput()
+	if err != nil {
+		t.Fatalf("info memory as maint: %v\n%.300s", err, out)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		fmt.Sscanf(line, "used_memory:%d", &used)
+		fmt.Sscanf(line, "maxmemory:%d", &limit)
+	}
+	if used == 0 || limit == 0 {
+		t.Fatalf("info memory answered no used_memory or maxmemory: %.300s", out)
+	}
+	return used, limit
+}
+
+// TestValkeySweepCutsAFloodThatFillsTheInstanceWithoutPausing: a credential holder that fills the instance makes
+// every limiter write answer OOM, so the sweep must not pace itself then (round 1, sweep-r1-correctness-1). The
+// zone has a small maxmemory and the flood takes it most of the way to it, far past half and past the budget of
+// 40,000 keys. The pressure flag is over half of maxmemory, so what the sweep owes is to bring the instance back
+// UNDER half (the limiter then writes again, and what is left above the budget is cut at the paced speed); the loop
+// must say it ran without pauses, and the instance must be under half within the time unpaced batches of 200
+// keys need on this host. Paced, getting there takes the pass that scans the 40,000 keys it keeps and then deletes
+// at a fifth of the server's time, about three times as long.
+func TestValkeySweepCutsAFloodThatFillsTheInstanceWithoutPausing(t *testing.T) {
+	// The sweep must not trim the zone while the flood is still coming in: on a fast host it keeps pace with it and the
+	// instance never passes half. So the loop sits idle for a minute after its first pass, and the flood, which is written
+	// in a few seconds, is what the next pass finds.
+	const n = 90000
+	f := startValkeyFill(t, "16mb", "-e", "MAINT_INTERVAL=60")
+	cost, err := hostCallCost()
+	if err != nil {
+		t.Fatalf("measuring the host's redis.call cost: %v", err)
+	}
+	// Per batch of 200 keys: seven calls a deleted key at the host's cost, and 70 ms for the start of valkey-cli.
+	batch := 70*time.Millisecond + time.Duration(200*7*cost)*time.Microsecond
+	wait := time.Duration(n/200)*batch*3/2 + 60*time.Second + 60*time.Second // the idle minute before the pass
+	floodKeys(t, f, "api", n)
+	floodedAt := time.Now()
+	name := f.zones["api"].name
+	used, limit := maintMemory(t, name)
+	t.Logf("after the flood: %d of %d bytes in use (%.0f%%)", used, limit, 100*float64(used)/float64(limit))
+	if used*2 <= limit {
+		t.Fatalf("the flood left the instance at %d of %d bytes, not over half: it does not test the pressure path", used, limit)
+	}
+	if !testwait.Holds(wait, 2*time.Second, func() bool {
+		used, limit = maintMemory(t, name)
+		return used*2 <= limit
+	}) {
+		t.Fatalf("the instance is still at %d of %d bytes after %v, over half; log:\n%s", used, limit, wait, logsOf(name))
+	}
+	if !strings.Contains(logsOf(name), "over half of its memory") {
+		t.Errorf("the loop never said it ran without pauses; log:\n%s", logsOf(name))
+	}
+	t.Logf("the instance is back under half (%d of %d bytes) %v after the flood, within the %v this host is allowed", used, limit, time.Since(floodedAt).Round(time.Second), wait)
+}
+
 // TestValkeySweepKeepsEachServiceInsideItsKeyBudget floods a service with keys that look exactly like the
 // limiter's (a two field hash with a lifetime inside the bound), more than MAX_KEYS of them. Valkey cannot
 // tell them from real ones, so the budget is what bounds the instance: the keys past it are deleted, and the
 // other service keeps writing. The flood is sent from inside the container with `valkey-cli --pipe`: the same
 // commands one by one, over the host's port forward or from valkey-cli's line mode, run at a few hundred a
 // second and a hundred thousand of them take minutes.
+//
+// How long the sweep takes to cut the flood is the host's: a pass is paced to a fifth of the server's time, so
+// it lasts five times the work, and the work is about six redis.call a key at what a call costs here
+// (sweepPassBudget), which is a minute or more on a VM with a slow clock and under a second on an ordinary host. The
+// two zones are two servers, so the floods run side by side.
 func TestValkeySweepKeepsEachServiceInsideItsKeyBudget(t *testing.T) {
 	f := startValkeyFill(t, "64mb")
 	maxKeys := luaConst(t, "sweep.lua", "MAX_KEYS")
 	n := maxKeys + maxKeys/4
-	// The passwords the zones were started with: a second, typed copy went stale when the start line began to
-	// require 32 or more letters and digits (admin-r17-7), and every sign-in of the flood was then refused.
-	pws := valkeyPasswords
-	for _, service := range []string{"api", "admin"} {
-		// RESP by hand: *argc, then $len and the argument for each.
-		prog := fmt.Sprintf(`BEGIN{for(i=0;i<%d;i++){k=sprintf("ctrlz:rl:%s:flood:%%d",i);`+
-			`printf "*6\r\n$4\r\nHSET\r\n$%%d\r\n%%s\r\n$6\r\ntokens\r\n$1\r\n1\r\n$2\r\nat\r\n$1\r\n1\r\n",length(k),k;`+
-			`printf "*3\r\n$7\r\nPEXPIRE\r\n$%%d\r\n%%s\r\n$10\r\n1000000000\r\n",length(k),k}}`, n, service)
-		out, err := deploy.Docker(context.Background(), "exec", "-e", "REDISCLI_AUTH="+pws[service], f.zones[service].name, "sh", "-c",
-			"awk '"+prog+"' | valkey-cli --user "+service+" --no-auth-warning --pipe --pipe-timeout 1").CombinedOutput()
-		// --pipe ends with an ECHO that the service users do not hold (and say so, once): the replies
-		// of the flood itself are what is counted, and an OOM among them fails the test.
-		var replies int
-		if i := strings.LastIndex(string(out), "replies: "); i >= 0 {
-			_, _ = fmt.Sscanf(string(out)[i:], "replies: %d", &replies)
+	wait := sweepPassBudget(t, n)
+	t.Run("floods", func(t *testing.T) {
+		for _, service := range []string{"api", "admin"} {
+			t.Run(service, func(t *testing.T) {
+				t.Parallel()
+				floodKeys(t, f, service, n)
+				// Wait until the sweep has cut the flood to its budget, and look at what is left.
+				left := 0
+				if !testwait.Holds(wait, 2*time.Second, func() bool {
+					left = maintScanCount(t, f.zones[service].name, "ctrlz:rl:"+service+":flood:*")
+					return left <= maxKeys
+				}) {
+					t.Fatalf("%s: %d flood keys are left after %v, the budget is %d", service, left, wait, maxKeys)
+				}
+				if left < maxKeys/2 {
+					t.Errorf("%s: the sweep cut the flood down to %d keys, far below the budget of %d; log:\n%s", service, left, maxKeys, logsOf(f.zones[service].name))
+				}
+				t.Logf("%s: %d of %d flood keys left (budget %d)", service, left, n, maxKeys)
+			})
 		}
-		if strings.Contains(string(out), "OOM") || replies < 2*n {
-			t.Fatalf("%s: the flood was refused or did not run (%v, %d replies of %d): %.300s", service, err, replies, 2*n, out)
-		}
-		// Wait until the sweep has cut the flood to its budget, and look at what is left.
-		left := 0
-		if !testwait.Holds(90*time.Second, time.Second, func() bool {
-			left = maintScanCount(t, f.zones[service].name, "ctrlz:rl:"+service+":flood:*")
-			return left <= maxKeys
-		}) {
-			t.Fatalf("%s: %d flood keys are left, the budget is %d", service, left, maxKeys)
-		}
-		if left < maxKeys/2 {
-			t.Errorf("%s: the sweep cut the flood down to %d keys, far below the budget of %d; log:\n%s", service, left, maxKeys, logsOf(f.zones[service].name))
-		}
-		t.Logf("%s: %d of %d flood keys left (budget %d)", service, left, n, maxKeys)
-	}
+	})
 	// Both services still write.
 	f.waitLimiter(t, "api", "after-flood", 10*time.Second)
 	f.waitLimiter(t, "admin", "after-flood", 10*time.Second)

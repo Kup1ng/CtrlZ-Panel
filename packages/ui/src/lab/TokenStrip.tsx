@@ -13,8 +13,8 @@ import {SectionTitle} from "./SectionTitle.tsx";
 // A small strip of the things lab.spec.ts measures that no other lab page holds (spec 5.3 and 6.3):
 // the chart palette on a real sparkline, every size and state of a switch, a cell switch, the avatar and
 // checkbox that D47 leaves on the 0.4 rule, and the two tile squares whose radius comes from
-// radius.table.ts. The token-lab of spec 6.3 will hold the full set of radius rows; until it exists,
-// these few keep the assertions that moved here running.
+// radius.table.ts. The token-lab (TokenLab.tsx, spec 6.3) holds the full set of radius rows and
+// radius.spec.ts measures them; these few stay for lab.spec.ts, which also reads the chart colours and the off switch.
 
 const SIZES = ["sm", "md", "lg"] as const;
 const STATES: {key: "off" | "on" | "offDisabled" | "onDisabled"; selected: boolean; disabled: boolean}[] = [

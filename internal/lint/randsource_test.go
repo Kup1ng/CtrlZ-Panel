@@ -26,7 +26,8 @@ import (
 // math/rand or math/rand/v2, each with the reason. A new entry is a reviewed decision; a stale one fails.
 func mathRandAllowed() map[string]string {
 	return map[string]string{
-		"internal/auth/password/floor.go::RealTiming": "the jitter of the response-time floor of a login; it blurs a timing, it protects no value",
+		"internal/auth/password/floor.go::RealTiming":   "the jitter of the response-time floor of a login; it blurs a timing, it protects no value",
+		"internal/endpoints/links.go::publicRetryPause": "the 10 to 60 ms pause before a public route retries a lost lock race once; it spreads two requests apart and protects no value",
 	}
 }
 

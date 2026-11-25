@@ -117,7 +117,7 @@ func TestComposeKeyFilesFollowTheDomains(t *testing.T) {
 	c := loadCompose(t)
 	want := map[string][]string{
 		"api":    {"kek_auth_mac", "kek_doh_token", "kek_otp_delivery", "kek_user_totp"},
-		"admin":  {"kek_admin_mac", "kek_admin_totp", "kek_sms_cred"},
+		"admin":  {"kek_admin_mac", "kek_admin_totp", "kek_invite_sign", "kek_sms_cred"},
 		"worker": {"kek_otp_delivery", "kek_sms_cred"},
 		"rekey":  {"kek_user_totp"},
 	}
@@ -131,6 +131,22 @@ func TestComposeKeyFilesFollowTheDomains(t *testing.T) {
 		sort.Strings(got)
 		if strings.Join(got, ",") != strings.Join(want[name], ",") {
 			t.Errorf("%s mounts key files %v, want %v", name, got, want[name])
+		}
+	}
+	// The public half of a signing domain is a Compose secret too (D67), and the api alone mounts it: the key that
+	// signs a link is the admin's alone, so a compromised api or worker cannot make an invite.
+	for name, s := range c.Services {
+		has := false
+		for _, sec := range s.Secrets {
+			if sec == "pub_invite_sign" {
+				has = true
+			}
+			if sec == "kek_invite_sign" && name != "admin" {
+				t.Errorf("%s mounts the signing key of invite links", name)
+			}
+		}
+		if has != (name == "api") {
+			t.Errorf("%s mounts pub_invite_sign = %v, want only the api to", name, has)
 		}
 	}
 	if _, ok := c.Secrets["kek_root"]; ok {

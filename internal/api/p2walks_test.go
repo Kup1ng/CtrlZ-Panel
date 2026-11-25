@@ -234,6 +234,71 @@ func TestS1TheLockOfADestinationAndASource(t *testing.T) {
 			t.Errorf("a refused big batch changed %s", d)
 		}
 	})
+	// The destination of a transfer is judged before a job is queued, as the inline one is: a Move or a Copy of more than
+	// 1,000 rules into a locked, a missing or another tenant's profile answers 423 or 404, takes no job slot and leaves the
+	// digest, the idempotency keys and the outbox as they were (p2-B8-r1-9).
+	for _, c := range []struct {
+		name, op string
+		dest     func(s, other *scn) string
+		lockDest bool
+		lockSrc  bool
+		want     int
+		code     string
+	}{
+		{"move into a locked destination", "move", func(s, _ *scn) string { return s.ids["profile2"] }, true, false, 423, "profile_locked"},
+		{"copy into a locked destination", "copy", func(s, _ *scn) string { return s.ids["profile2"] }, true, false, 423, "profile_locked"},
+		{"move out of a locked source", "move", func(s, _ *scn) string { return s.ids["profile2"] }, false, true, 423, "profile_locked"},
+		{"move into a profile that does not exist", "move", func(*scn, *scn) string { return uuid.NewString() }, false, false, 404, "not_found"},
+		{"move into another tenant's profile", "move", func(_, o *scn) string { return o.ids["profile"] }, false, false, 404, "not_found"},
+		{"copy into another tenant's profile", "copy", func(_, o *scn) string { return o.ids["profile"] }, false, false, 404, "not_found"},
+		{"move into a profile that does not exist, the source locked", "move", func(*scn, *scn) string { return uuid.NewString() }, false, true, 404, "not_found"},
+	} {
+		t.Run("a "+c.op+" above 1,000 items: "+c.name, func(t *testing.T) {
+			s := newScn(w.f, w.f.env.A.Tenant, w.f.env.A.User, "A")
+			other := newScn(w.f, w.f.env.B.Tenant, w.f.env.B.User, "B")
+			w.f.env.Exec(t, `DELETE FROM ctrlz.batch_jobs WHERE tenant_id = $1`, s.tenant)
+			dest := c.dest(s, other)
+			if c.lockDest {
+				w.lockRow(dest)
+			}
+			if c.lockSrc {
+				w.lockRow(s.ids["profile"])
+			}
+			before, boxBefore := w.digest(), w.outbox()
+			body := map[string]any{"op": c.op, "ids": uuids(1001), "dest_profile_id": dest, "dest_root": true}
+			s.send(p2Spec{method: "POST", path: "/profiles/" + s.ids["profile"] + "/rules:batch", hdr: s.key(), body: body}).want(c.want, c.code)
+			if d := changed(before, w.digest()); d != "" {
+				t.Errorf("a refused big %s changed %s", c.op, d)
+			}
+			if added := since(boxBefore, w.outbox()); len(added) != 0 {
+				t.Errorf("a refused big %s wrote the outbox rows %+v", c.op, added)
+			}
+			if n := w.f.count(`SELECT count(*) FROM ctrlz.batch_jobs WHERE tenant_id = $1`, s.tenant); n != 0 {
+				t.Errorf("a refused big %s left %d jobs", c.op, n)
+			}
+		})
+	}
+	// The locked source with a missing destination answers 404 inline and as a job alike, whichever id is the lower: the
+	// two guards of an inline Move are taken in id order, so the destination is checked to exist before either (p2-B8-r2-3).
+	// A destination of all zeros sorts before every profile id, one of all f after.
+	for _, d := range []struct{ name, id string }{
+		{"a destination with a lower id", "00000000-0000-4000-8000-000000000001"},
+		{"a destination with a higher id", "ffffffff-ffff-4fff-8fff-ffffffffffff"},
+	} {
+		for _, n := range []int{2, 1001} {
+			t.Run(fmt.Sprintf("a move of %d rules from a locked source to a missing profile: %s", n, d.name), func(t *testing.T) {
+				s := newScn(w.f, w.f.env.A.Tenant, w.f.env.A.User, "A")
+				w.f.env.Exec(t, `DELETE FROM ctrlz.batch_jobs WHERE tenant_id = $1`, s.tenant)
+				w.lockRow(s.ids["profile"])
+				before := w.digest()
+				body := map[string]any{"op": "move", "ids": uuids(n), "dest_profile_id": d.id, "dest_root": true}
+				s.send(p2Spec{method: "POST", path: "/profiles/" + s.ids["profile"] + "/rules:batch", hdr: s.key(), body: body}).want(404, "not_found")
+				if c := changed(before, w.digest()); c != "" {
+					t.Errorf("a refused move changed %s", c)
+				}
+			})
+		}
+	}
 }
 
 // wantOutbox is what spec 3.2 says each operation marks, written here once and held against the document: a delete marks the
@@ -417,24 +482,35 @@ func TestS7AtomicityOfEveryBatch(t *testing.T) {
 	}
 	s := newScn(w.f, w.f.env.A.Tenant, w.f.env.A.User, "A")
 	base := "/profiles/" + s.ids["profile"]
-	for name, sp := range map[string]p2Spec{
-		"create": {method: "POST", path: base + "/rules", body: map[string]any{"patterns": []string{"ok1.example", "ok2.example", "bad..name"}, "action": "block"}},
-		"import": {method: "POST", path: "/profiles:import", hdr: s.key(),
-			body: map[string]any{"document": b64(`{"format":"ctrlz-profile","version":1,"kind":"custom","name":"Atomic","rules":[` + long("ok1.example", "ok2.example", "bad..name") + `]}`)}},
-		"upload": {method: "POST", path: base + "/folders/" + s.ids["folder"] + ":upload", hdr: s.key(),
-			body: map[string]any{"document": b64(`{"format":"ctrlz-rules","version":1,"rules":[` + long("ok1.example", "ok2.example", "bad..name") + `]}`)}},
-		"services": {method: "POST", path: base + "/services:batch",
-			body: map[string]any{"op": "set", "slugs": []string{"youtube", "netflix", "no-such-service"}, "enabled": true, "action": "block"}},
-		"rules batch": {method: "POST", path: base + "/rules:batch", hdr: s.key(),
-			body: map[string]any{"op": "delete", "ids": []string{s.ids["rule"], s.ids["rule2"], uuid.NewString()}}},
-		"rules batch edit": {method: "POST", path: base + "/rules:batch", hdr: s.key(),
-			body: map[string]any{"op": "edit", "ids": []string{s.ids["rule"], s.ids["rule2"], uuid.NewString()}, "set": map[string]any{"comment": "x"}}},
+	type bad struct {
+		sp     p2Spec
+		status int    // the refusal the bad item must give: a 400 would mean the schema refused the body before the bad item was reached
+		at     string // the pointer of the bad item, "" for a refusal with no field (a row that is not there)
+	}
+	for name, c := range map[string]bad{
+		"create": {p2Spec{method: "POST", path: base + "/rules", body: map[string]any{"patterns": []string{"ok1.example", "ok2.example", "bad..name"}, "action": "block"}}, 422, "/patterns/2"},
+		"import": {p2Spec{method: "POST", path: "/profiles:import", hdr: s.key(),
+			body: map[string]any{"document": b64(`{"format":"ctrlz-profile","version":1,"kind":"custom","name":"Atomic","rules":[` + long("ok1.example", "ok2.example", "bad..name") + `]}`)}}, 422, "/rules/2/pattern"},
+		"upload": {p2Spec{method: "POST", path: base + "/folders/" + s.ids["folder"] + ":upload", hdr: s.key(),
+			body: map[string]any{"document": b64(`{"format":"ctrlz-rules","version":1,"rules":[` + long("ok1.example", "ok2.example", "bad..name") + `]}`)}}, 422, "/rules/2/pattern"},
+		"services": {p2Spec{method: "POST", path: base + "/services:batch",
+			body: map[string]any{"op": "set", "slugs": []string{"youtube", "netflix", "no-such-service"}, "enabled": true, "action": "block"}}, 422, "/slugs/2"},
+		"rules batch": {p2Spec{method: "POST", path: base + "/rules:batch", hdr: s.key(),
+			body: map[string]any{"op": "delete", "ids": []string{s.ids["rule"], s.ids["rule2"], uuid.NewString()}}}, 404, ""},
+		"rules batch edit": {p2Spec{method: "POST", path: base + "/rules:batch", hdr: s.key(),
+			body: map[string]any{"op": "edit", "ids": []string{s.ids["rule"], s.ids["rule2"], uuid.NewString()}, "set": map[string]any{"comment": "x"}}}, 404, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			before, box := w.digest(), w.outbox()
-			r := s.send(sp)
-			if r.Code < 400 || r.Code >= 500 {
-				t.Fatalf("a request with one bad item last answered %d %s, want a refusal of the client", r.Code, r.Body)
+			r := s.send(c.sp)
+			if r.Code != c.status {
+				t.Fatalf("a request with one bad item last answered %d %s, want %d", r.Code, r.Body, c.status)
+			}
+			if c.at != "" {
+				var fl fieldList
+				if err := json.Unmarshal(r.Body, &fl); err != nil || len(fl.Fields) != 1 || fl.Fields[0].Name != c.at {
+					t.Errorf("the refusal is %s, want the one field %s: the bad item must be what was refused", r.Body, c.at)
+				}
 			}
 			if d := changed(before, w.digest()); d != "" {
 				t.Errorf("the refused request changed %s", d)

@@ -672,3 +672,92 @@ func compareTestNames(lines []string, ix testIndex) []string {
 	}
 	return problems
 }
+
+// ---- the P3 route table (P3 9.2) ---------------------------------------------
+
+var (
+	endpointAuth = map[string]string{"s": "session", "r": "reauth", "n": "none"}
+	endpointRate = map[string]string{"ur": "user-read", "uw": "user-write", "sn": "sensitive"}
+	parenRE      = regexp.MustCompile(`\s*\([^)]*\)`)
+)
+
+// perMethod spreads a cell of the P3 table over the methods of its row: one value stands for every method, and as many
+// values as methods are taken in the order of the methods (P3 9.2). Any other count is a problem of the row.
+func perMethod(cell string, methods int) ([]string, bool) {
+	parts := strings.Split(parenRE.ReplaceAllString(cell, ""), ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	switch len(parts) {
+	case 1:
+		out := make([]string, methods)
+		for i := range out {
+			out[i] = parts[0]
+		}
+		return out, true
+	case methods:
+		return parts, true
+	}
+	return nil, false
+}
+
+// compareEndpointRoutes is compareRoutes for the P3 table. Its cells are written for a reader: the auth and rate classes are
+// abbreviations, a row may hold two operations, and a request, a success or an error cell is prose in places ("4.3", "as
+// PATCH"). So it compares what is exact in both: that each listed route is in the document, and its auth, its token value
+// and the first rate class it charges. A route of the table that the document lacks, and one whose class differs, fail.
+func compareEndpointRoutes(tb specTable, routes map[string]routeFact) []string {
+	if problems := tb.needColumns("Method, path", "Auth", "Token", "Rate"); len(problems) > 0 {
+		return problems
+	}
+	var problems []string
+	seen := map[string]bool{}
+	for i, r := range tb.rows {
+		at := specAt(tb.name, tb.lines[i])
+		keys := routeRowKeys(r[0])
+		if len(keys) == 0 {
+			problems = append(problems, fmt.Sprintf("%s: %q is not METHOD `path`", at, r[0]))
+			continue
+		}
+		auths, ok1 := perMethod(r[tb.column("Auth")], len(keys))
+		tokens, ok2 := perMethod(r[tb.column("Token")], len(keys))
+		rates, ok3 := perMethod(r[tb.column("Rate")], len(keys))
+		if !ok1 || !ok2 || !ok3 {
+			problems = append(problems, fmt.Sprintf("%s: the auth, token and rate cells name neither one value nor one per method", at))
+			continue
+		}
+		for n, key := range keys {
+			f, ok := routes[key]
+			if !ok {
+				problems = append(problems, fmt.Sprintf("%s: %s is not in the OpenAPI document", at, key))
+				continue
+			}
+			if seen[key] {
+				problems = append(problems, fmt.Sprintf("%s: %s is listed twice", at, key))
+			}
+			seen[key] = true
+			auth := auths[n]
+			if long, ok := endpointAuth[auth]; ok {
+				auth = long
+			}
+			if auth != f.Auth {
+				problems = append(problems, fmt.Sprintf("%s: %s has auth %q in the spec, %q in the document", at, key, auth, f.Auth))
+			}
+			if tokens[n] != f.Token {
+				problems = append(problems, fmt.Sprintf("%s: %s has token %q in the spec, %q in the document", at, key, tokens[n], f.Token))
+			}
+			rate, _, _ := strings.Cut(rates[n], " + ")
+			if long, ok := endpointRate[rate]; ok {
+				rate = long
+			}
+			if rate != f.Rate {
+				problems = append(problems, fmt.Sprintf("%s: %s has rate %q in the spec, %q in the document", at, key, rate, f.Rate))
+			}
+		}
+	}
+	for key := range routes {
+		if !seen[key] {
+			problems = append(problems, fmt.Sprintf("spec-fact %s: the OpenAPI document has %s, the table does not", tb.name, key))
+		}
+	}
+	return problems
+}

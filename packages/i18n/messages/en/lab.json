@@ -42,5 +42,32 @@
       "off": "unchecked",
       "on": "checked"
     }
+  },
+  "tokenLab": {
+    "title": "Radius table",
+    "subtitle": "One sample of every row of the radius table, measured by the radius test",
+    "intro": "Controls follow 0.4 x height, capped at 30px. Boxes are 20px at any height. The switch is a pill.",
+    "controls": "Controls",
+    "boxes": "Boxes and sections",
+    "sample": "Sample",
+    "option": "Option",
+    "optionOther": "Another option",
+    "search": "Search",
+    "number": "Number",
+    "code": "Code",
+    "tab": "Tab",
+    "page": "1",
+    "stepperMinus": "Decrease",
+    "stepperPlus": "Increase",
+    "cellLabel": "Cell",
+    "prefix": "+98",
+    "chipLabel": "Label",
+    "badgeLabel": "5",
+    "kbdKey": "K",
+    "avatarInitial": "C",
+    "itemTitle": "Title",
+    "itemText": "Description",
+    "kpiTitle": "Title",
+    "kpiValue": "128"
   }
 }

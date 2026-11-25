@@ -35,7 +35,7 @@ import (
 
 var credentialStatements = []struct{ Const, Pkg, Digest, What string }{
 	{"qSMSGatewayStageCredentials", "internal/store", "4822eae97f89d56c", "WRITES credentials_pending_ct only: what a PUT saves carries nothing"},
-	{"qSMSGatewayDiscardPending", "internal/store", "6b199988bdf3ffa6", "WRITES credentials_pending_ct to NULL: drops the pair that waits, called from the console only (a route that could discard and stage would put the silent overwrite back)"},
+	{"qSMSGatewayDiscardPending", "internal/store", "541b9e454964f133", "WRITES credentials_pending_ct to NULL: drops the pair that waits, called from the console only (a route that could discard and stage would put the silent overwrite back)"},
 	{"qSMSGatewayConfirm", "internal/store", "1b2912a6d91e6208", "WRITES credentials_ct from the pending pair, only for the hint and the fingerprint of the staging PUT: the one activation, called from the console only"},
 	{"qSMSCredentialsReplace", "internal/store", "45d0f48ad69fc4fb", "WRITES credentials_ct with the re-seal of the same plaintext, compare-first (rekey)"},
 	{"qSMSPendingCredentialsReplace", "internal/store", "31372e497a9c24fe", "WRITES credentials_pending_ct with the re-seal of the same plaintext, compare-first (rekey)"},

@@ -57,6 +57,7 @@ function controlBlock(row) {
   const base = body(row.height.base);
   if (row.setsHeight) base.push("height: var(--control-h);");
   base.push(`${radiusProp}: ${RADIUS};`);
+  for (const prop of row.innerRadiusProps ?? []) base.push(`${prop}: ${RADIUS};`);
   out.push(`  ${row.selector} {\n${base.map((l) => `    ${l}`).join("\n")}\n  }`);
   for (const [name, width] of BREAKPOINTS) {
     const h = row.height[name];

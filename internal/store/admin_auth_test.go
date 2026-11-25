@@ -534,7 +534,7 @@ func TestAdminSMSSettings(t *testing.T) {
 		// Separate admin requests in production; one transaction here for brevity.
 		g.ForgetLocks()
 		tpls, err := g.SMSTemplates()
-		if err != nil || len(tpls) != 10 {
+		if err != nil || len(tpls) != 12 { // the ten of 0011 less the two invite rows, plus the four of the notices (0062)
 			t.Fatalf("templates: %d %v", len(tpls), err)
 		}
 		if ok, _ := g.SMSTemplateSet("otp", "en", "Code {code}"); !ok {

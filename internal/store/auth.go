@@ -301,15 +301,43 @@ const qOTPIssue = `SELECT id, allowed FROM ctrlz_fn.auth_otp_issue($1, $2, $3, $
 // it counts on its own phone key and passes the soft breaker. Decoys pass
 // false.
 func (a AuthLookups) OTPIssue(ctx context.Context, phone, purpose string, codeHash, deliveryCT []byte, ip netip.Addr, trusted bool) (OTPIssued, error) {
-	v, _, err := one(ctx, a.s, qOTPIssue, func(r pgx.Row) (v OTPIssued, err error) {
-		var id *uuid.UUID
-		err = r.Scan(&id, &v.Allowed)
-		if id != nil {
-			v.ID = *id
-		}
-		return v, err
-	}, phone, purpose, codeHash, deliveryCT, addrArg(ip), trusted)
+	v, _, err := one(ctx, a.s, qOTPIssue, scanOTPIssued, phone, purpose, codeHash, deliveryCT, addrArg(ip), trusted)
 	return v, err
+}
+
+// scanOTPIssued reads the one row of auth_otp_issue. A refusal answers a NULL id, which stays the nil uuid.
+func scanOTPIssued(r pgx.Row) (v OTPIssued, err error) {
+	var id *uuid.UUID
+	err = r.Scan(&id, &v.Allowed)
+	if id != nil {
+		v.ID = *id
+	}
+	return v, err
+}
+
+// OTPIssueForTenant is OTPIssue made inside the transaction of one tenant, on that transaction's one connection
+// (no second connection is taken, so it cannot nest). It exists for the one challenge that has an owner before it has
+// an account: the code for the NEW number of a phone change (question 15, migration 0061). auth_otp_issue stamps
+// otp_challenges.tenant_id itself, from the account of the phone for the other purposes and from the setting of the
+// transaction for phone_new; the function that completes the change reads the challenge as ctrlz_scoped, which sees
+// only the rows of the tenant of its setting, so a phone_new code issued with no setting could never be used.
+// The caller is the tenant API, so the refusals of the caps and the cooldown are answered as for OTPIssue (Allowed
+// false, nothing stored) and the transaction commits with nothing in it.
+func (a AuthLookups) OTPIssueForTenant(ctx context.Context, tenant uuid.UUID, phone, purpose string, codeHash, deliveryCT []byte, ip netip.Addr, trusted bool) (OTPIssued, error) {
+	// The same refusal as every single-statement call (one): a request holds one connection at a time, and this call
+	// opens a transaction of its own, so a context that already belongs to one (or to a busy request scope) is refused
+	// before the tenant is even looked at.
+	if scopeBusy(ctx) || ctx.Value(txMarker{}) != nil {
+		return OTPIssued{}, ErrNested
+	}
+	var out OTPIssued
+	err := a.s.WithTenant(ctx, tenant, TxOpts{}, func(tx Tx) error {
+		var err error
+		args := []any{phone, purpose, codeHash, deliveryCT, addrArg(ip), trusted}
+		out, err = scanOTPIssued(tx.tx.QueryRow(tx.ctx, qOTPIssue, args...))
+		return sanitize(err)
+	})
+	return out, err
 }
 
 const qOTPCheck = `SELECT outcome FROM ctrlz_fn.auth_otp_check($1, $2, $3, $4)`

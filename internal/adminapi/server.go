@@ -41,7 +41,7 @@ type Deps struct {
 	Store    *store.Store
 	Sessions *session.Manager
 	Limiter  *ratelimit.Limiter
-	// Keys holds the admin's key domains (admin_totp, sms_cred, admin_mac). New
+	// Keys holds the admin's key domains (admin_totp, sms_cred, admin_mac, invite_sign). New
 	// refuses to build without them, so a missing key stops the start-up and not
 	// the first admin login.
 	Keys *keyring.Ring
@@ -128,7 +128,7 @@ func New(d Deps, health httpx.Health) (http.Handler, error) {
 	if d.Keys == nil || d.Hasher == nil {
 		return nil, errors.New("adminapi: Keys and Hasher are required")
 	}
-	if err := d.Keys.Require(keyring.DomainAdminTOTP, keyring.DomainSMSCred, keyring.DomainAdminMAC); err != nil {
+	if err := d.Keys.Require(keyring.DomainAdminTOTP, keyring.DomainSMSCred, keyring.DomainAdminMAC, keyring.DomainInviteSign); err != nil {
 		return nil, err
 	}
 	if d.NewOneTime == nil {

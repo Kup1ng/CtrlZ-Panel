@@ -7,7 +7,7 @@
 // string is wrong for the same reason as a bare `left` in a `placement` prop: Persian is the
 // default, and a physical edge is the wrong edge in RTL.
 
-export type Restriction = {selector: string; message: string; tag: "placement" | "class" | "dark" | "url" | "intl" | "script"};
+export type Restriction = {selector: string; message: string; tag: "placement" | "class" | "radius" | "dark" | "url" | "intl" | "script"};
 
 // A class token written with a physical edge. `rounded-lg` and `border-light` do not match,
 // because the edge letter must be followed by `-`, a space or the end.
@@ -23,6 +23,12 @@ const PHYSICAL_CLASS = new RegExp(
     `${EDGE_START}(border|rounded)-(l|r|tl|tr|bl|br)(-|\\s|$)`,
   ].join("|"),
 ).source;
+
+// The radius rule (spec 6.1): every corner comes from the table, the generated file or a --radius-
+// token. HeroUI's own scale (rounded-lg is 8px) and an arbitrary value with a typed number are
+// corners no table row owns. `rounded-full` and `rounded-(--radius-box)` stay allowed.
+const STOCK_RADIUS = new RegExp(String.raw`${EDGE_START}rounded-([a-z]{1,2}-)?(xs|sm|md|lg|xl|2xl|3xl|4xl)(\s|$)`).source;
+const TYPED_RADIUS = new RegExp(String.raw`${EDGE_START}rounded-([a-z]{1,2}-)?\[(?![^\]]*--radius-)`).source;
 
 const DARK_VARIANT = new RegExp(`${EDGE_START}dark:`).source;
 
@@ -57,6 +63,26 @@ export const restrictedSyntax: Restriction[] = [
     message: "A physical class (ml-, pr-, left-, text-left, border-l, rounded-r, ...). Use the logical one: ms-, pe-, start-, text-start, border-s, rounded-e.",
   },
   {
+    tag: "radius",
+    selector: `Literal[value=${re(STOCK_RADIUS)}]`,
+    message: "A radius outside the table: rounded-lg and the like are HeroUI's own scale, and rounded-[...] must name a --radius- token. Use rounded-(--radius-box), or a row in radius.table.ts (spec 6.1).",
+  },
+  {
+    tag: "radius",
+    selector: `TemplateElement[value.raw=${re(STOCK_RADIUS)}]`,
+    message: "A radius outside the table: rounded-lg and the like are HeroUI's own scale, and rounded-[...] must name a --radius- token. Use rounded-(--radius-box), or a row in radius.table.ts (spec 6.1).",
+  },
+  {
+    tag: "radius",
+    selector: `Literal[value=${re(TYPED_RADIUS)}]`,
+    message: "A radius outside the table: rounded-lg and the like are HeroUI's own scale, and rounded-[...] must name a --radius- token. Use rounded-(--radius-box), or a row in radius.table.ts (spec 6.1).",
+  },
+  {
+    tag: "radius",
+    selector: `TemplateElement[value.raw=${re(TYPED_RADIUS)}]`,
+    message: "A radius outside the table: rounded-lg and the like are HeroUI's own scale, and rounded-[...] must name a --radius- token. Use rounded-(--radius-box), or a row in radius.table.ts (spec 6.1).",
+  },
+  {
     tag: "dark",
     selector: `Literal[value=${re(DARK_VARIANT)}]`,
     message: "No `dark:` variant: semantic tokens already change per theme (DESIGN.md).",
@@ -74,12 +100,12 @@ export const restrictedSyntax: Restriction[] = [
   {
     tag: "url",
     // An xmlns value is a namespace, not a request, so it is the one exemption.
-    selector: `Literal[value=${re(URL_IN_TEXT)}]:not(JSXAttribute[name.name=/^xmlns/] > Literal)`,
+    selector: `Literal[value=${re(URL_IN_TEXT)}i]:not(JSXAttribute[name.name=/^xmlns/] > Literal)`,
     message: "No http(s) URL in code: nothing may load from outside at run time (fixed rule 9). Add a reviewed line to tools/web-lint/url-allow.txt if it is a name, not a request.",
   },
   {
     tag: "url",
-    selector: `TemplateElement[value.raw=${re(URL_IN_TEXT)}]`,
+    selector: `TemplateElement[value.raw=${re(URL_IN_TEXT)}i]`,
     message: "No http(s) URL in code: nothing may load from outside at run time (fixed rule 9).",
   },
   {
@@ -123,6 +149,9 @@ export const exemptFiles = {
   rawIntl: ["packages/i18n/src/format.ts", "packages/icons/src/ServiceLogo.tsx", "packages/icons/src/monogram.ts"],
   // The theme controller reads the resolved mode.
   themeBranch: ["packages/ui/src/theme/**"],
+  // The only two files that import Hugeicons (spec 7.2), and the one hook that maps a direction to an arrow key (T-466).
+  hugeicons: ["packages/icons/src/hugeicons.ts", "packages/icons/src/Icon.tsx"],
+  arrowKeys: ["packages/ui/src/hooks/useDirectionalKeys.ts"],
 };
 
 /** The syntax bans for a file that is exempt from the given tags. */

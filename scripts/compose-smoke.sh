@@ -10,7 +10,7 @@
 # Needs Docker and the image (docker build -f deploy/docker/Dockerfile -t ctrlz/panel:dev .).
 # Starts every service of the Compose file that runs on its own: postgres, the two Valkey servers
 # (valkey-api, valkey-admin), clickhouse, migrate, api, admin, worker, hub, caddy and the two web
-# placeholders. Round 8 started only the Go services and caddy, so the Valkey ACL line, the ClickHouse wrapper and the hub never ran,
+# containers (the busybox placeholder, see below). Round 8 started only the Go services and caddy, so the Valkey ACL line, the ClickHouse wrapper and the hub never ran,
 # the secret canary searched the logs of containers that never read those secrets, and the
 # console's Valkey clear only ever met a Valkey that was not there (round 9, admin-r9-4). Everything
 # is removed at the end, including the volumes of the throw-away project.
@@ -29,6 +29,16 @@ fail() { echo "compose-smoke: $*" >&2; exit 1; }
 
 docker image inspect "$image" >/dev/null 2>&1 || fail "image $image not found; build it first (docker build -f deploy/docker/Dockerfile -t $image .)"
 
+# The Go CI has no token and no CDN, so it cannot build the web images (deploy/docker/web.Dockerfile). The two web
+# containers run the busybox placeholder instead, through ci-placeholder.yml: this run judges the Go services, the
+# networks and the secrets, and the real web images are the business of scripts/ci-web.sh. The placeholder image
+# is the one the Compose file pins by digest for caddy-init, the one place that names it (round 16, admin-r16-9),
+# as a literal with no variable to override it (round 17, admin-r17-6): read it from there. The stack has pulled it
+# by now; a docker run says --pull never like every docker run of this script.
+bb=$(awk '/^  caddy-init:/ {f=1; next} f && /^    image:/ {print $2; exit}' deploy/compose/docker-compose.yml)
+[ -n "$bb" ] || fail "the Compose file has no image for caddy-init"
+docker image inspect "$bb" >/dev/null 2>&1 || docker pull -q "$bb" >/dev/null || fail "the placeholder image $bb is not on this machine and could not be pulled"
+
 # A path Docker Desktop on Windows can mount; on Linux the path is already right.
 host_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
 
@@ -43,12 +53,14 @@ envfile="$work/env"
   grep -v '^#' deploy/compose/.env.example | grep -v '^$' | grep -v '^CTRLZ_HTTP_PORT\|^CTRLZ_HTTPS_PORT\|^CTRLZ_IMAGE'
   grep -v '^#' deploy/compose/profiles/small.env | grep -v '^$'
   echo "CTRLZ_IMAGE=$image"
+  echo "CTRLZ_WEB_PANEL_IMAGE=$bb"
+  echo "CTRLZ_WEB_ADMIN_IMAGE=$bb"
   echo "CTRLZ_HTTP_PORT=$http_port"
   echo "CTRLZ_HTTPS_PORT=$https_port"
   echo "CTRLZ_SECRETS_DIR=$(host_path "$secrets")"
 } > "$envfile"
 
-dc() { docker compose -p "$project" -f deploy/compose/docker-compose.yml --env-file "$(host_path "$envfile")" "$@"; }
+dc() { docker compose -p "$project" -f deploy/compose/docker-compose.yml -f deploy/compose/ci-placeholder.yml --env-file "$(host_path "$envfile")" "$@"; }
 
 cleanup() {
   docker rm -f "${project}-bootstrap" "${project}-reset" "${project}-tty" "${project}-tty-init" "${project}-unlock" >/dev/null 2>&1 || true
@@ -58,7 +70,7 @@ cleanup() {
 trap cleanup EXIT
 
 sh scripts/gen-secrets.sh "$secrets" >/dev/null || fail "gen-secrets failed"
-for f in kek_root kek_user_totp kek_admin_totp kek_sms_cred kek_otp_delivery kek_auth_mac kek_admin_mac kek_doh_token; do
+for f in kek_root kek_user_totp kek_admin_totp kek_sms_cred kek_otp_delivery kek_auth_mac kek_admin_mac kek_doh_token kek_invite_sign pub_invite_sign; do
   [ -s "$secrets/$f" ] || fail "gen-secrets did not make $f"
 done
 
@@ -134,12 +146,6 @@ dc run -T --name "${project}-reset" -v "$(host_path "$out"):/out" admin ctrlz-ad
 # read (Docker Desktop hides this, a Linux runner does not). Read them as root in a
 # throw-away container, so the script does not depend on the host's user (review
 # round 3, admin-r3-6).
-# The placeholder image is pinned by digest in the Compose file, the one place that names it (round 16,
-# admin-r16-9), as a literal with no variable to override it (round 17, admin-r17-6): read it from there. The
-# stack has pulled it by now; a docker run says --pull never like every docker run of this script.
-bb=$(awk '/^  web-panel:/ {f=1; next} f && /^    image:/ {print $2; exit}' deploy/compose/docker-compose.yml)
-[ -n "$bb" ] || fail "the Compose file has no image for web-panel"
-docker image inspect "$bb" >/dev/null 2>&1 || docker pull -q "$bb" >/dev/null || fail "the placeholder image $bb is not on this machine and could not be pulled"
 read_out() { docker run --pull never --rm -v "$(host_path "$out"):/out:ro" "$bb" cat "/out/$1" || fail "could not read $1 from the out directory"; }
 pw1=$(read_out bootstrap | sed 's/^[^:]*: //')
 pw2=$(read_out reset | sed 's/^[^:]*: //')

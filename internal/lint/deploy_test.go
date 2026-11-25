@@ -3,6 +3,7 @@ package lint_test
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -397,23 +398,56 @@ func (l *caddyLab) logsWhen(cond func(logs string) bool) string {
 	return logs
 }
 
-func (l *caddyLab) wantClean(wantLogger string) {
+// wantClean waits until holds is true of the log (a line of the path the test exercises) and then requires that no
+// canary is anywhere in it.
+func (l *caddyLab) wantClean(what string, holds func(logs string) bool) {
 	l.t.Helper()
-	logs := l.logsWhen(func(s string) bool { return strings.Contains(s, wantLogger) })
+	logs := l.logsWhen(holds)
 	for _, canary := range []string{canaryPath, canaryQuery, "CANARYBEARER", "CANARYCOOKIE", "CANARYFORWARDED"} {
 		if strings.Contains(logs, canary) {
 			l.t.Errorf("Caddy's log contains %q:\n%s", canary, logs)
 		}
 	}
-	if !strings.Contains(logs, wantLogger) {
-		l.t.Errorf("no %s line in the output, so that error path was not logged at all:\n%s", wantLogger, logs)
+	if !holds(logs) {
+		l.t.Errorf("no %s in the output, so that path was not logged at all:\n%s", what, logs)
 	}
+}
+
+// siteAccessLogger is the name of an access logger that one of the SITES owns. The sites' loggers are named log0,
+// log1 and so on in the order Caddy meets the site blocks, and the catch-all :443 site and the port 80 site each
+// added one, so the number is not a fact this test relies on: the default logger excludes http.log.access, so a
+// line from any http.log.access.log<N> is a site's own.
+var siteAccessLogger = regexp.MustCompile(`^http\.log\.access\.log[0-9]+$`)
+
+// siteAccessLine reports whether the log holds an access line that a site's own logger wrote for a request to host
+// with this status, and whose request has neither a uri nor headers (the quiet_log filter removed them).
+func siteAccessLine(logs, host string, status int) bool {
+	for _, ln := range strings.Split(logs, "\n") {
+		var line struct {
+			Logger  string `json:"logger"`
+			Status  int    `json:"status"`
+			Request struct {
+				Host    string          `json:"host"`
+				URI     json.RawMessage `json:"uri"`
+				Headers json.RawMessage `json:"headers"`
+			} `json:"request"`
+		}
+		if json.Unmarshal([]byte(ln), &line) != nil || !siteAccessLogger.MatchString(line.Logger) {
+			continue
+		}
+		if line.Request.Host == host && line.Status == status && line.Request.URI == nil && line.Request.Headers == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // TestCaddyErrorLogHasNoRequestURI (live): the upstream is down, a request with
 // a canary token in its path and query gets a 502, and the canary must appear
 // nowhere in what Caddy logged. This is the check that "caddy log had no URI"
-// skipped: it was made on the success path only.
+// skipped: it was made on the success path only. The site has a handle_errors block, which makes Caddy treat a
+// refused upstream as handled, so no http.log.error line is written any more; what is logged for the request is its
+// access line, and that line must show the 502 and carry no URI.
 func TestCaddyErrorLogHasNoRequestURI(t *testing.T) {
 	l := newCaddyLab(t)
 	client := l.start()
@@ -421,7 +455,9 @@ func TestCaddyErrorLogHasNoRequestURI(t *testing.T) {
 	if status != http.StatusBadGateway {
 		t.Fatalf("got status %d; with no upstream the proxy should answer 502 (the test is not exercising the error path)", status)
 	}
-	l.wantClean("http.log.error")
+	l.wantClean("access line of the site with status 502 and no request uri", func(logs string) bool {
+		return siteAccessLine(logs, "panel.localhost", http.StatusBadGateway)
+	})
 }
 
 // TestCaddyAbortedBodyLogHasNoRequestURI (live): the upstream closes in the
@@ -436,7 +472,7 @@ func TestCaddyAbortedBodyLogHasNoRequestURI(t *testing.T) {
 	if err == nil || (status != 0 && status != http.StatusOK) {
 		t.Fatalf("status %d, error %v; the request should fail or the body be cut short (the test is not exercising the abort path)", status, err)
 	}
-	l.wantClean("http.handlers.reverse_proxy")
+	l.wantClean("http.handlers.reverse_proxy line", func(logs string) bool { return strings.Contains(logs, "http.handlers.reverse_proxy") })
 }
 
 // TestCaddyUnmatchedHostLogHasNoRequestURI (live): the quiet_log filter hangs on
@@ -484,13 +520,16 @@ func TestCaddyUnmatchedHostLogHasNoRequestURI(t *testing.T) {
 
 	// The last request is the one whose line the site's own logger writes; its line is what the wait is for.
 	// The earlier requests (to other hosts) finished before it began, and a stream of lines is read in order.
-	logs := l.logsWhen(func(s string) bool { return strings.Contains(s, "http.log.access.log0") })
+	// The logger is found by what it is (a site's access logger) and not by its number: the catch-all :443 site and
+	// the port 80 site have a quiet_log of their own, so the name of the panel site's logger is not a fact of this file.
+	// The upstream is down, so the correct host answers 502, as TestCaddyErrorLogHasNoRequestURI shows.
+	logs := l.logsWhen(func(s string) bool { return siteAccessLine(s, "panel.localhost", http.StatusBadGateway) })
 	for _, canary := range []string{canaryPath, canaryQuery, "CANARYBEARER", "CANARYCOOKIE", "CANARYFORWARDED"} {
 		if strings.Contains(logs, canary) {
 			t.Errorf("Caddy's log contains %q:\n%s", canary, logs)
 		}
 	}
-	if !strings.Contains(logs, "http.log.access.log0") {
+	if !siteAccessLine(logs, "panel.localhost", http.StatusBadGateway) {
 		t.Errorf("the site's own access logger wrote nothing, so the test is not showing that it still works:\n%s", logs)
 	}
 }
@@ -721,6 +760,31 @@ func TestPostgresAllowsNoPreparedTransactions(t *testing.T) {
 		}
 		if strings.Contains(string(b), "max_prepared_transactions") {
 			t.Errorf("%s mentions max_prepared_transactions: a profile may not raise it", p)
+		}
+	}
+}
+
+// TestSiteAccessLineJudgesWhatItClaims is the container-free check of the helper the two live Caddy tests wait on: a
+// helper that accepted any line would let "no canary in the log" pass on a log that holds nothing of the request.
+func TestSiteAccessLineJudgesWhatItClaims(t *testing.T) {
+	line := func(logger, host string, status int, request string) string {
+		return fmt.Sprintf(`{"level":"info","logger":%q,"msg":"handled request","request":{"proto":"HTTP/2.0","method":"GET","host":%q%s},"status":%d}`, logger, host, request, status)
+	}
+	good := line("http.log.access.log1", "panel.localhost", 502, "")
+	if !siteAccessLine("noise\n"+good+"\n", "panel.localhost", 502) {
+		t.Fatal("a site's filtered access line was not recognised")
+	}
+	for name, logs := range map[string]string{
+		"a line that still has the uri":     line("http.log.access.log0", "panel.localhost", 502, `,"uri":"/s/x"`),
+		"a line that still has the headers": line("http.log.access.log0", "panel.localhost", 502, `,"headers":{}`),
+		"the default logger's line":         line("http.log.access", "panel.localhost", 502, ""),
+		"another status":                    line("http.log.access.log0", "panel.localhost", 200, ""),
+		"another host":                      line("http.log.access.log0", "other.example", 502, ""),
+		"the error logger":                  line("http.log.error", "panel.localhost", 502, ""),
+		"an empty log":                      "",
+	} {
+		if siteAccessLine(logs, "panel.localhost", 502) {
+			t.Errorf("%s was accepted as the site's filtered access line", name)
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -23,4 +24,10 @@ func (r *Runner) WorkDelivery(ctx context.Context, tenant, jobID string, attempt
 func IsCancel(err error) bool {
 	var c *rivertype.JobCancelError
 	return errors.As(err, &c)
+}
+
+// RiverBounds is what the runner really gives River: the bound that stops a run and the one after which River rescues a job.
+func RiverBounds(cfg Config) (timeout, rescue time.Duration) {
+	c := riverConfig(cfg, river.NewWorkers())
+	return c.JobTimeout, c.RescueStuckJobsAfter
 }
