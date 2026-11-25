@@ -4326,16 +4326,16 @@ mutants:
     must_fail:
       - pkg: ./internal/lint
         tests: [TestComposePublishesNoDatabasePort]
-  - id: exposure-is-declared-header-says-the-hub-publishes-a-port
+  - id: exposure-is-declared-header-forgets-the-hubs-node-port
     rule: exposure-is-declared
     finding: admin-r11-2
-    why: The publish bullet of the Compose header names the hub as publishing a port while the hub has no ports (the header of round 10), so an operator opens a port the rule says is closed.
+    why: The publish bullet of the Compose header names only caddy while the hub publishes the node port 9443 (P4), so an operator reading the header leaves a port open on the firewall that nobody listed.
     edits:
       - file: deploy/compose/docker-compose.yml
         old: |-
-          The hub publishes none: it joins caddy
+          Only caddy (80, 443) and the hub (9443, the node port) publish ports.
         new: |-
-          The hub's node port is published too: it joins caddy
+          Only caddy (80, 443) publishes ports.
     must_fail:
       - pkg: ./internal/lint
         tests: [TestComposeHeaderPublishBulletMatchesThePorts]

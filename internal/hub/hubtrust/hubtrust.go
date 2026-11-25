@@ -302,7 +302,7 @@ func (c *CAs) raise(ctx context.Context, severity string, kind store.HubAlertKin
 	}
 	if err := c.Alerts.HubAlert(ctx, severity, kind, params); err != nil {
 		if c.Log != nil {
-			c.Log.Error("an alert could not be inserted, it is tried again at the next pass", "kind", string(kind))
+			c.Log.Error("an alert could not be inserted, it is tried again at the next pass")
 		}
 		c.amu.Lock()
 		if len(c.pending) < 16 {
