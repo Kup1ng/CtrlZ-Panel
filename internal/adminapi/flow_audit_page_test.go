@@ -56,7 +56,7 @@ func TestAuditPaging(t *testing.T) {
 	r.env.Exec(t, `INSERT INTO ctrlz.admin_users (id, username, password_hash) VALUES ($1, 'gone-admin', 'x')`, gone)
 	insert := func(n int, action string, admin any) {
 		for i := 0; i < n; i++ {
-			r.env.Exec(t, `INSERT INTO ctrlz.audit_log (admin_id, action, target, params, entry_hash) VALUES ($1, $2, 'test', '{}', '\x00')`, admin, action)
+			r.env.Exec(t, `INSERT INTO ctrlz.audit_log (at, admin_id, action, target, params, entry_hash) VALUES (now(), $1, $2, 'test', '{}', '\x00')`, admin, action)
 		}
 	}
 	insert(7, "test.a", seedAdmin)
