@@ -1,0 +1,807 @@
+# The Panel on one server (stage 1 of the growth path, R37).
+#
+#   docker build -f deploy/docker/Dockerfile -t ctrlz/panel:dev .   the image first (spec 8.3)
+#   scripts/gen-secrets.sh            create secrets/ (once), kek_root and the kek_<domain> files
+#   scripts/select-profile.sh         write deploy/compose/.env from the detected RAM
+#   docker compose -f deploy/compose/docker-compose.yml up -d
+#
+# Rules this file keeps:
+#   - Only caddy (80, 443) publishes ports in P1. The hub publishes none: it joins caddy
+#     here in P4, with its mTLS listener. No database, ClickHouse or Valkey port is
+#     ever published, and their networks are internal: they have no route to the outside.
+#     A Valkey server is on the internal network of its own zone and no other (vk_api, vk_admin),
+#     shared with that zone's one service only.
+#   - Every password is a Docker secret, a file under /run/secrets. No password
+#     is an environment variable of a long-running process, a command-line
+#     argument or an image layer. One place holds a derived form: ClickHouse keeps
+#     a SHA-256 hash of its password in users.d. Each Valkey zone (valkey-api, valkey-admin) is a server of
+#     its own with one service ACL user and one secret, and no secret is mounted into two services. One password is made by a
+#     container and not held in a secret: the maintenance user of Valkey, whose value is made by
+#     valkey/start.sh, is in the tmpfs ACL file and in one file there that maintain.sh deletes after
+#     reading it. maintain.sh gives it to each valkey-cli in REDISCLI_AUTH on that command alone, so
+#     the only process that has it in its environment lives for one command, never a long-running
+#     one. The one other environment assignment of a container, start.sh's MAINT_USER=maint (a user
+#     name, no credential), is named for the same reason. The lint
+#     TestNoPasswordIsAnEnvironmentOfALongRunningProcess refuses ANY other assignment before a
+#     command, `export` or `env` in a file of deploy/ or scripts/, whatever the variable is called, and
+#     lists the lines it allows with the reason (round 16, admin-r16-5).
+#   - Every container has no-new-privileges, a memory limit and rotated logs. All
+#     but postgres and clickhouse also drop every capability and have a read-only
+#     root, and add back only what the file names: caddy NET_BIND_SERVICE (its
+#     binary carries that file capability) and caddy-init CHOWN. The two database
+#     images are the exception on both counts and keep Docker's default capability
+#     set (less what no-new-privileges removes) and a writable root: they start as
+#     root to fix the ownership of their data directory and then drop to their own
+#     user, which needs CHOWN, SETUID and SETGID and a root they can write. The
+#     only other root container is caddy-init, a one-shot that does one chown and
+#     has no network. internal/lint TestComposeContainersAreLimitedAndRotated and
+#     TestComposeContainersRunAsNonRoot hold this list; a third exception fails them.
+#   - Nothing pulls from the internet at run time. Every image is pinned by tag AND digest
+#     (tag@sha256:<index digest>, the tag kept readable), and this file is the one place that
+#     names an image, as a literal reference with no ${VAR:-default} around it: a variable of an old .env
+#     would override it (admin-r17-6). The container tests and the smoke scripts read them from here
+#     (deploy/images.go). internal/lint TestEveryImageIsPinnedByDigest
+#     fails for an image or a FROM line without a digest (round 16, admin-r16-1, -9, -15). The
+#     offline package (P6, P7) needs exactly these images. Read a digest with
+#     `docker buildx imagetools inspect <image>`, which does not move a local tag.
+#   - An install of the earlier layout (one `valkey` service) is upgraded with `up -d --remove-orphans`:
+#     a plain `up -d` leaves the old `valkey` container running on `backend` with its password-less user and
+#     one maxmemory for both services, which is the hole the two zones close (README.md, Upgrading).
+#   - The two web containers run the images of deploy/docker/web.Dockerfile (spec 3.2). They are built on the
+#     machine and never pulled. The busybox placeholder of web-placeholder/ is gone from this file; the Go CI
+#     (scripts/compose-smoke.sh) starts the stack with ci-placeholder.yml, which puts it back (no token, no CDN).
+
+name: ctrlz
+
+# An .env written for an earlier layout is refused, by every compose command, until it is written again
+# (scripts/select-profile.sh --force). A variable of an old .env keeps overriding what this file now says: a
+# memory size sized for one Valkey that now applies to each of two, a name this file stopped reading. Compose
+# interpolates the whole document, so this line fails the load when .env.example's marker is missing (round 17,
+# admin-r17-6). The marker's name is the layout it stands for; a later change of what .env means takes a new name.
+x-env-format: "${CTRLZ_ENV_FORMAT_2:?.env is from an earlier layout: run scripts/select-profile.sh --force (it keeps the old file as .env.bak, copy your host names, ports and secret directory back from it)}"
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-hardened: &hardened
+  restart: unless-stopped
+  logging: *logging
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  read_only: true
+  pids_limit: 512
+
+x-go-env: &go-env
+  CTRLZ_DB_HOST: postgres
+  CTRLZ_DB_PORT: "5432"
+  CTRLZ_DB_NAME: ctrlz
+  CTRLZ_DB_SSLMODE: disable
+  # production refuses to start without every key file of the role's domains
+  # (spec 17.2). Only CTRLZ_ENV=test may run on throw-away keys, and nothing
+  # here sets it.
+  CTRLZ_ENV: ${CTRLZ_ENV:-production}
+  # A directory, read for the kek_<domain> files. The name has no "KEY" in it on
+  # purpose: the compose lint treats any variable with KEY as a secret file.
+  CTRLZ_KEK_DIR: /run/secrets
+
+x-go-service: &go-service
+  <<: *hardened
+  # One image for all five Go roles. Only "migrate" builds it, and every other
+  # role waits for migrate, so the image exists before they start.
+  image: ${CTRLZ_IMAGE:-ctrlz/panel:dev}
+  # The name is a public-registry name (docker.io/ctrlz/panel), so nothing may ever pull it: `docker compose
+  # pull` and `up` pull a service with no build section and no policy, and whoever owns that namespace on a
+  # registry or a mirror would run a binary that holds every password and key file of the stack (round 17,
+  # admin-r17-4). `pull` skips a service whose policy is `never`, and `up` never fetches it: `migrate` builds the
+  # image when it is missing (it has a build section) and every other role waits for migrate (README, Running the stack). internal/lint TestEveryImageIsPinnedByDigest and TestComposeKeysAreAnAllowList hold this.
+  pull_policy: never
+  # Longer than a shutdown takes in the worst case (admin-r15-2). app.Run gives the server
+  # ShutdownTimeout (15 s) to finish its requests and then, in the api, the queue of work owed after an
+  # answer another ShutdownTimeout to drain before the pool closes, and Docker's default of 10 s sent
+  # SIGKILL in the middle of that, so the failed-login rows the drain exists for vanished with no
+  # line. internal/lint TestComposeGraceCoversTheShutdownBudget holds this to twice the budget.
+  stop_grace_period: 45s
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+# What the two Valkey servers share; each service adds its zone, its secret, its volumes and its network.
+x-valkey: &valkey
+  <<: *hardened
+  image: valkey/valkey:8.1@sha256:5032c4dd7abe08d6fd9382054608183e2bf1f7e3895ef619b8784698454325f7
+  # Not root (review round 1). The image drops to this user only when it starts valkey-server itself, and
+  # the command is a shell, so without this line the server would run as root. 999 owns /data in the
+  # image, so a fresh volume is writable. A volume made by an earlier version of this file is owned by
+  # root and has to be removed once (docker volume rm).
+  user: "999:999"
+  command: ["sh", "/etc/valkey/start.sh"]
+  # The /tmp tmpfs holds the ACL file and the maintenance password for the length of one read.
+  tmpfs: ["/tmp:size=1m,mode=0700,uid=999,gid=999"]
+  # Half of what the one shared instance had, for each zone: the key budget of a zone (sweep.lua) fits
+  # in the smallest maxmemory with room to spare, and the two together cost what the one did.
+  mem_limit: ${MEM_VALKEY:-128m}
+  healthcheck:
+    # The container's own loop is the judge: maintain.sh signs in as the maintenance user and touches
+    # /tmp/valkey-alive after each PONG and after each sweep batch it got a reply to (a paced pass on a slow
+    # host lasts minutes), so a server that is stuck (BUSY), down or without its scripts is unhealthy within
+    # a minute, and no client has to sign in with a password-less user (admin-r16-12).
+    # It also waits for the marker maintain.sh writes once every limiter script has loaded (admin-r13-5).
+    # No service depends on a healthy valkey (compose_p1_test.go, spec 17.2: a Valkey outage must not
+    # stop a service): a service that starts first meets NOSCRIPT and its limiter treats that as the
+    # outage it is until the load.
+    test: ["CMD-SHELL", "test -f /tmp/limiter-scripts-loaded && find /tmp/valkey-alive -mmin -1 | grep -q valkey-alive"]
+    interval: 10s
+    timeout: 4s
+    retries: 5
+
+services:
+  # One-shot: caddy runs as 65532, and a fresh named volume is owned by root,
+  # which caddy could not write its certificates to. This container holds the
+  # one capability it needs, does one chown and exits; it has no network and no
+  # port. It is the only container of the stack that runs as root, and only for
+  # the length of that command.
+  caddy-init:
+    restart: "no"
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN"]
+    read_only: true
+    pids_limit: 16
+    image: busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+    user: "0:0"
+    command: ["chown", "65532:65532", "/data", "/config"]
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 16m
+    network_mode: none
+
+  caddy:
+    <<: *hardened
+    image: caddy:2.10@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+    # Not root (review round 1). The image runs as root unless told otherwise, and
+    # this is the process that faces the internet. The caddy binary carries the
+    # file capability cap_net_bind_service, so a container with every capability
+    # dropped cannot even start it (exec fails with EPERM, with or without
+    # no-new-privileges). That one capability stays in the bounding set, the file
+    # capability hands it to the non-root process, and it is all the process has.
+    # Checked on caddy:2.10: CapEff is 0x400 as uid 65532.
+    user: "65532:65532"
+    cap_add: ["NET_BIND_SERVICE"]
+    ports:
+      - "${CTRLZ_HTTP_PORT:-80}:80"
+      - "${CTRLZ_HTTPS_PORT:-443}:443"
+    environment:
+      CTRLZ_PANEL_HOST: ${CTRLZ_PANEL_HOST:-panel.localhost}
+      CTRLZ_ADMIN_HOST: ${CTRLZ_ADMIN_HOST:-admin.localhost}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: ${MEM_CADDY:-256m}
+    # A fixed address on app: api and admin accept X-Forwarded-For from this one
+    # peer only (CTRLZ_TRUSTED_PROXY), so a container that reaches them over app or
+    # backend cannot write the header itself (review round 3, admin-r3-13).
+    networks:
+      ingress:
+      web:
+      app:
+        ipv4_address: 10.213.78.200
+    depends_on:
+      caddy-init: {condition: service_completed_successfully}
+      api: {condition: service_started}
+      admin: {condition: service_started}
+      web-panel: {condition: service_started}
+      web-admin: {condition: service_started}
+
+  api:
+    <<: *go-service
+    command: ["api"]
+    environment:
+      <<: *go-env
+      CTRLZ_LISTEN: ":8080"
+      CTRLZ_TRUSTED_PROXY: 10.213.78.200
+      CTRLZ_DB_PASSWORD_FILE: /run/secrets/pg_tenant_password
+      CTRLZ_DB_MAX_CONNS: ${CTRLZ_API_DB_MAX_CONNS:-16}
+      CTRLZ_PANEL_HOST: ${CTRLZ_PANEL_HOST:-panel.localhost}
+      # Its own Valkey: a server, an ACL user, a password and a network of the api's own (round 16, admin-r16-6).
+      CTRLZ_VALKEY_ADDR: valkey-api:6379
+      CTRLZ_VALKEY_USER: api
+      CTRLZ_VALKEY_PASSWORD_FILE: /run/secrets/valkey_password_api
+      CTRLZ_ARGON2_CONCURRENCY: ${CTRLZ_API_ARGON2_CONCURRENCY:-2}
+      # The api share of the container for Argon2 (spec 4.1): slots times memory per slot.
+      CTRLZ_ARGON2_BUDGET_MIB: ${CTRLZ_API_ARGON2_BUDGET_MIB:-128}
+      GOMEMLIMIT: ${GOMEMLIMIT_API:-200MiB}
+      # The spool of the heavy operations (spec 6.5): a disk volume, never a tmpfs, whose pages count as the container's
+      # memory. The api empties it at start and refuses to start when it cannot write there.
+      CTRLZ_SPOOL_DIR: /spool
+    # 128 files of at most 16 MiB and 128 shares of 4 MiB of spilled answers are 2.5 GiB of disk at the most; the volume is
+    # empty at start (the image owns /spool).
+    volumes:
+      - api_spool:/spool
+    # pub_invite_sign is the public half of the key that signs invite links (D67): the api can open a link and cannot make one.
+    secrets: [pg_tenant_password, valkey_password_api, kek_user_totp, kek_otp_delivery, kek_auth_mac, kek_doh_token, pub_invite_sign]
+    healthcheck: &go-health-8080
+      test: ["CMD", "/usr/local/bin/ctrlz", "healthcheck", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 4s
+      retries: 5
+      start_period: 5s
+    mem_limit: ${MEM_API:-256m}
+    networks: [app, backend, vk_api]
+
+  admin:
+    <<: *go-service
+    command: ["admin"]
+    environment:
+      <<: *go-env
+      CTRLZ_LISTEN: ":8081"
+      CTRLZ_TRUSTED_PROXY: 10.213.78.200
+      CTRLZ_DB_PASSWORD_FILE: /run/secrets/pg_admin_password
+      CTRLZ_DB_MAX_CONNS: ${CTRLZ_ADMIN_DB_MAX_CONNS:-5}
+      CTRLZ_ADMIN_HOST: ${CTRLZ_ADMIN_HOST:-admin.localhost}
+      # Invite links and the Passkey origin check read the panel host (spec 7.2).
+      CTRLZ_PANEL_HOST: ${CTRLZ_PANEL_HOST:-panel.localhost}
+      CTRLZ_VALKEY_ADDR: valkey-admin:6379
+      CTRLZ_VALKEY_USER: admin
+      CTRLZ_VALKEY_PASSWORD_FILE: /run/secrets/valkey_password_admin
+      CTRLZ_ARGON2_CONCURRENCY: "1"
+      # The admin container has 128 MiB: one 46 MiB hash, and no stored hash larger than the budget.
+      CTRLZ_ARGON2_BUDGET_MIB: ${CTRLZ_ADMIN_ARGON2_BUDGET_MIB:-64}
+      GOMEMLIMIT: ${GOMEMLIMIT_ADMIN:-96MiB}
+    secrets: [pg_admin_password, valkey_password_admin, kek_admin_totp, kek_sms_cred, kek_admin_mac, kek_invite_sign, wildcard_intake_pub, web_intake_pub]
+    # Read-only: hub_tls.spki for the install command, and the signed bundles and root.json it checks (P4 3.3).
+    volumes:
+      - hub_public:/var/lib/ctrlz/hub_public:ro
+      - ../../deploy/bundles:/var/lib/ctrlz/bundles:ro
+    healthcheck:
+      <<: *go-health-8080
+      test: ["CMD", "/usr/local/bin/ctrlz", "healthcheck", "http://127.0.0.1:8081/healthz"]
+    mem_limit: ${MEM_ADMIN:-128m}
+    networks: [app, backend, vk_admin]
+
+  # Tenant jobs, sweeps, River, and the policy compiler on its own pool with its
+  # own credentials (spec section 13, item 1). It is the one Go service with a
+  # route out, on the egress network: the SMS drivers dial their two fixed
+  # hosts (D23). ACME and update fetches arrive with the phases that need them.
+  worker:
+    <<: *go-service
+    command: ["worker"]
+    environment:
+      <<: *go-env
+      # Health only: loopback, for the healthcheck inside the container (the app refuses a
+      # health-only role on any other address, admin-r10-4).
+      CTRLZ_LISTEN: "127.0.0.1:8083"
+      CTRLZ_DB_PASSWORD_FILE: /run/secrets/pg_worker_password
+      CTRLZ_DB_COMPILER_PASSWORD_FILE: /run/secrets/pg_compiler_password
+      CTRLZ_DB_MAX_CONNS: ${CTRLZ_WORKER_DB_MAX_CONNS:-4}
+      # Two jobs of 10,000 items each hold a document, its planned rows and the statement body at once (spec 6.5 (c)); the
+      # ceiling sits under the container limit so the collector works before the cgroup kill, which would also stop the SMS
+      # sender and the sweeps of every tenant.
+      GOMEMLIMIT: ${GOMEMLIMIT_WORKER:-200MiB}
+    secrets: [pg_worker_password, pg_compiler_password, kek_sms_cred, kek_otp_delivery]
+    healthcheck:
+      <<: *go-health-8080
+      test: ["CMD", "/usr/local/bin/ctrlz", "healthcheck", "http://127.0.0.1:8083/healthz"]
+    mem_limit: ${MEM_WORKER:-256m}
+    networks: [backend, egress]
+
+  # Node-facing from P4. In P1 it serves only the health endpoints, on loopback, and publishes
+  # nothing: the node channel (mTLS) does not exist yet, and a published port would hand the
+  # internet an unauthenticated /readyz that takes a pooled database connection (admin-r10-4).
+  # P4 adds the node listener and its port here, and keeps the health mux on loopback.
+  hub:
+    <<: *go-service
+    command: ["hub"]
+    environment:
+      <<: *go-env
+      CTRLZ_LISTEN: "127.0.0.1:7443"
+      CTRLZ_DB_PASSWORD_FILE: /run/secrets/pg_hub_password
+      # The key the hub derives UDP proof codes from (contract 3.5). It is shared
+      # with the nodes through NodeConfig, never stored in Postgres, and no other
+      # service mounts it: whoever could read it could compute the code that went
+      # to somebody else's address.
+      CTRLZ_PROOF_KEY_FILE: /run/secrets/proof_key
+      CTRLZ_DB_MAX_CONNS: ${CTRLZ_HUB_DB_MAX_CONNS:-4}
+    # The panel-node trust (spec P4 3.3): only the hub holds these. The two public halves of the intake keys are
+    # in admin, the private ones here (wildcard) and in domain-apply (web), so admin can seal a key it uploads and
+    # cannot open one. node_ca_pem is node_ca.pem of the spec, a public file: a secret's file name has to be the
+    # secret's own name here.
+    secrets: [pg_hub_password, proof_key, policy_key, node_ca_key, node_ca_pem, hub_tls_key, zone_ca_key, wildcard_intake_key, spool_key]
+    # hub_public: the hub writes the SHA-256 of its TLS key's SPKI there (hub_tls.spki) at each start and admin
+    # reads it to print the install command. bundles: the signed bundles and root.json, read-only.
+    volumes:
+      - hub_public:/var/lib/ctrlz/hub_public
+      - ../../deploy/bundles:/var/lib/ctrlz/bundles:ro
+    healthcheck:
+      <<: *go-health-8080
+      test: ["CMD", "/usr/local/bin/ctrlz", "healthcheck", "http://127.0.0.1:7443/healthz"]
+    mem_limit: ${MEM_HUB:-384m}
+    networks: [hub_ingress, backend]
+
+  # One-shot: applies the migrations as ctrlz_migrator and exits. Every Go role
+  # waits for it to finish.
+  migrate:
+    <<: *go-service
+    restart: "no"
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    command: ["migrate"]
+    environment:
+      <<: *go-env
+      CTRLZ_DB_PASSWORD_FILE: /run/secrets/pg_migrator_password
+    secrets: [pg_migrator_password]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 128m
+    # The only address pg_hba.conf lets ctrlz_migrator log in from. The role
+    # owns every table and can undo FORCE ROW LEVEL SECURITY, so its password is
+    # worth as much as the data; no other container can use it even if it
+    # learns it. Keep this address and the one in postgres/pg_hba.conf in step.
+    networks:
+      backend:
+        ipv4_address: 10.213.77.200
+
+  # One-shot key rotation for the TOTP seeds (spec 8.4):
+  #   docker compose --profile tools run --rm rekey rekey user_totp
+  # The second "rekey" is the subcommand, because run replaces the command. It
+  # runs as ctrlz_keytool, a login of its own, and is the only place that meets
+  # kek_user_totp. It was ctrlz_worker until review round 4 (db-r4-3, db-r4-6): the
+  # long-running worker reads the login codes it sends, so whatever could switch
+  # off or rewrite a second factor must not be reachable with its password.
+  # The same container clears the seeds of a lost key, after `ctrlz-admin keys
+  # declare-lost user_totp` has recorded it (review round 3, db-r3-1):
+  #   docker compose --profile tools run --rm rekey declare-lost user_totp --key-number N --yes
+  # It is here and not in the admin service because the admin role must not be able
+  # to switch off a tenant's second factor.
+  rekey:
+    <<: *go-service
+    profiles: [tools]
+    restart: "no"
+    command: ["rekey"]
+    environment:
+      <<: *go-env
+      CTRLZ_DB_PASSWORD_FILE: /run/secrets/pg_keytool_password
+    secrets: [pg_keytool_password, kek_user_totp]
+    mem_limit: 128m
+    # The only address pg_hba.conf lets ctrlz_keytool log in from, like the
+    # migrator's: a copy of the password is of no use from another container.
+    # Keep this address and the one in postgres/pg_hba.conf in step.
+    networks:
+      backend:
+        ipv4_address: 10.213.77.201
+
+  # One-shot: applies a domain change on the server (spec P4 10.4):
+  #   docker compose --profile tools run --rm domain-apply
+  # It runs as ctrlz_domain_apply, a login of its own that reads domain_settings and the panel and admin
+  # certificates and writes the applied_* columns, with the one secret web_intake_key that opens the sealed keys
+  # of those two certificates and that no other container holds. The subcommand and the files it writes (.env and
+  # the Caddy data volume) arrive with scripts/domain-apply.sh.
+  domain-apply:
+    <<: *go-service
+    profiles: [tools]
+    restart: "no"
+    command: ["domain-apply"]
+    environment:
+      <<: *go-env
+      CTRLZ_DB_PASSWORD_FILE: /run/secrets/pg_domain_apply_password
+    secrets: [pg_domain_apply_password, web_intake_key]
+    mem_limit: 128m
+    # The only address pg_hba.conf lets ctrlz_domain_apply log in from. Keep this address and the one in
+    # postgres/pg_hba.conf in step.
+    networks:
+      backend:
+        ipv4_address: 10.213.77.202
+
+  web-panel:
+    <<: *hardened
+    # The image of deploy/docker/web.Dockerfile, built on the machine that runs the stack (spec 3.2):
+    #   docker build -f deploy/docker/web.Dockerfile --build-arg APP=panel -t ctrlz/web-panel:dev .
+    # Never pulled: the name is a public-registry name, and whoever owned it there would serve the dashboard
+    # (the same reason as the Panel image above). The tag exists only on this machine, so a variable is the
+    # way to name another build, as for CTRLZ_IMAGE.
+    image: ${CTRLZ_WEB_PANEL_IMAGE:-ctrlz/web-panel:dev}
+    pull_policy: never
+    user: "65532:65532"
+    # Next's standalone server writes nothing under its own folder at run time (images are unoptimised and
+    # no page is cached on disk), so a read-only root holds with the one scratch directory below.
+    tmpfs: ["/tmp"]
+    # A page, never /logo.png or /icon.png. The files of public/ are served with 200 even when the proxy is
+    # broken: a wrong CTRLZ_VERIFY_ORIGIN makes every proxied request a 500 while the process stays up
+    # (spec 15.3, 15.5), and only a request that goes through the proxy sees it. /fa/login is public in
+    # both apps. The image has no curl or wget, and node is there anyway.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/fa/login',{redirect:'manual'}).then((r)=>process.exit(r.status===200?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: ${MEM_WEB:-128m}
+    networks: [web]
+
+  web-admin:
+    <<: *hardened
+    # Built the same way, with --build-arg APP=admin.
+    image: ${CTRLZ_WEB_ADMIN_IMAGE:-ctrlz/web-admin:dev}
+    pull_policy: never
+    user: "65532:65532"
+    # Next's standalone server writes nothing under its own folder at run time (images are unoptimised and
+    # no page is cached on disk), so a read-only root holds with the one scratch directory below.
+    tmpfs: ["/tmp"]
+    # A page, never /logo.png or /icon.png. The files of public/ are served with 200 even when the proxy is
+    # broken: a wrong CTRLZ_VERIFY_ORIGIN makes every proxied request a 500 while the process stays up
+    # (spec 15.3, 15.5), and only a request that goes through the proxy sees it. /fa/login is public in
+    # both apps. The image has no curl or wget, and node is there anyway.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/fa/login',{redirect:'manual'}).then((r)=>process.exit(r.status===200?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: ${MEM_WEB:-128m}
+    networks: [web]
+
+  postgres:
+    restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    image: postgres:18.7@sha256:e754b839f447639b7004895f4d8a4bfcb4e9dbe3a1bc035f27f646562a16fd61
+    # The official entrypoint with the watchdog beside it (postgres/entrypoint.sh): the one party a
+    # compromised service role does not control. It ends a role's transaction older than
+    # CTRLZ_PG_WATCHDOG_MAX_TX seconds and a role's backend that holds, with no progress, a lock that a
+    # session has waited more than CTRLZ_PG_WATCHDOG_MAX_BLOCK seconds for, whatever timeouts the role set for itself
+    # (db-r15-7, db-r16-3). The entrypoint script is PID 1 and Postgres its child, so the watchdog is not
+    # an untracked child of the postmaster (its death would crash-restart the cluster, db-r16-10), and
+    # the healthcheck below needs a recent sweep, so a watchdog that does not run is visible (db-r16-4).
+    # internal/lint TestComposeWiresTheWatchdog holds this block to the scripts.
+    entrypoint: ["sh", "/ctrlz-postgres/entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-384MB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-1GB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-4MB}
+      - -c
+      - maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-96MB}
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-60}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_superuser_password
+      # Read by initdb/10-bootstrap.sh on the first start only.
+      CTRLZ_DB_NAME: ctrlz
+      CTRLZ_PG_CONN_MIGRATOR: ${CTRLZ_PG_CONN_MIGRATOR:-3}
+      CTRLZ_PG_CONN_TENANT: ${CTRLZ_PG_CONN_TENANT:-20}
+      CTRLZ_PG_CONN_HUB: ${CTRLZ_PG_CONN_HUB:-10}
+      CTRLZ_PG_CONN_COMPILER: ${CTRLZ_PG_CONN_COMPILER:-4}
+      CTRLZ_PG_CONN_WORKER: ${CTRLZ_PG_CONN_WORKER:-10}
+      CTRLZ_PG_CONN_ADMIN: ${CTRLZ_PG_CONN_ADMIN:-8}
+      CTRLZ_PG_CONN_TOOLS: ${CTRLZ_PG_CONN_TOOLS:-4}
+      CTRLZ_PG_STATEMENT_TIMEOUT: ${CTRLZ_PG_STATEMENT_TIMEOUT:-30s}
+      CTRLZ_PG_LOCK_TIMEOUT: ${CTRLZ_PG_LOCK_TIMEOUT:-5s}
+      CTRLZ_PG_IDLE_TX_TIMEOUT: ${CTRLZ_PG_IDLE_TX_TIMEOUT:-60s}
+      CTRLZ_PG_TX_TIMEOUT: ${CTRLZ_PG_TX_TIMEOUT:-120s}
+      # The watchdog (postgres/watchdog.sh) ends a service role's backend whose transaction is older than
+      # this many seconds, whatever settings the role gave itself (db-r15-7). Keep it above CTRLZ_PG_TX_TIMEOUT.
+      CTRLZ_PG_WATCHDOG_MAX_TX: ${CTRLZ_PG_WATCHDOG_MAX_TX:-300}
+      # ... and a service backend that holds a lock that a session has waited for more than this many
+      # seconds and has made no progress with it (idle in its transaction for that long), with the members
+      # of its role queued ahead of that waiter (db-r16-3). Keep it below CTRLZ_PG_LOCK_TIMEOUT, or an
+      # honest waiter gives up before it counts, and keep the interval a little below the gap between the
+      # two so a sweep falls inside the waiter's window.
+      CTRLZ_PG_WATCHDOG_MAX_BLOCK: ${CTRLZ_PG_WATCHDOG_MAX_BLOCK:-2}
+      # A holder that never goes idle (a chain of statements) is ended when its transaction is older than
+      # this many seconds and it blocks such a waiter (db-r16-23). Keep it above CTRLZ_PG_TX_TIMEOUT
+      # (db-r17-16): the one age an honest transaction cannot pass is the transaction_timeout that Postgres
+      # itself enforces, NOT lock_timeout (that bounds one wait, and an honest transaction takes several
+      # waits and runs statements of up to statement_timeout between them). Below it, an honest holder that
+      # makes progress would be ended; above it, only a role that removed its own timeout is.
+      CTRLZ_PG_WATCHDOG_MAX_HOLD: ${CTRLZ_PG_WATCHDOG_MAX_HOLD:-150}
+      CTRLZ_PG_WATCHDOG_INTERVAL: ${CTRLZ_PG_WATCHDOG_INTERVAL:-2}
+    secrets:
+      - pg_superuser_password
+      - pg_migrator_password
+      - pg_tenant_password
+      - pg_hub_password
+      - pg_compiler_password
+      - pg_worker_password
+      - pg_keytool_password
+      - pg_domain_apply_password
+      - pg_admin_password
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+      - ../../migrations/postgres/bootstrap:/ctrlz-bootstrap:ro
+      - ./postgres/entrypoint.sh:/ctrlz-postgres/entrypoint.sh:ro
+      - ./postgres/watchdog.sh:/ctrlz-postgres/watchdog.sh:ro
+    shm_size: ${PG_SHM_SIZE:-512m}
+    mem_limit: ${MEM_POSTGRES:-1536m}
+    healthcheck:
+      # Over TCP on purpose: the first-start init server listens on the socket
+      # only, and a socket check would report ready before the Go roles can connect.
+      # The second half asks the watchdog's own heartbeat (a sweep ran recently), so a watchdog that is not
+      # running, or cannot get in, makes the container unhealthy and the services that wait for it do not
+      # start (db-r16-4).
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ctrlz_migrator -d ctrlz -q && sh /ctrlz-postgres/watchdog.sh --healthy"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 10s
+    networks: [backend]
+
+  clickhouse:
+    restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    image: clickhouse/clickhouse-server:26.2@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
+    # The official entrypoint would take the password from CLICKHOUSE_PASSWORD,
+    # which then stays in the server's environment for its whole life, writes it
+    # in clear into users.d, and puts it in the arguments of clickhouse-client
+    # when it creates CLICKHOUSE_DB. This wrapper does the user setup itself
+    # instead: it writes the SHA-256 of the secret into users.d, removes the
+    # built-in "default" user, and tells the entrypoint to leave users alone. The
+    # password is then in no environment and no argument. The database "ctrlz"
+    # is created by the ClickHouse migrations (P5), not by the entrypoint, which
+    # would need the password on its command line to do it.
+    #
+    # With the official user setup off, this script is the only thing standing
+    # between the server and a user without a password. So it stops, with a
+    # non-zero exit, on an empty secret and on a failed write (set -e): the
+    # entrypoint would otherwise start with the built-in "default" user and none
+    # of its own localhost-only fallback. CR and LF are removed from the secret
+    # before it is hashed because the Go services read the same file and drop a
+    # trailing CR LF (secret.FromFile), while the shell would keep the CR; a file
+    # of only CR LF is empty to both.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        umask 077
+        if [ -z "$$(tr -d '\r\n' < /run/secrets/clickhouse_password)" ]; then
+          echo "clickhouse: the password file is empty or unreadable; not starting" >&2
+          exit 1
+        fi
+        hash=$$(tr -d '\r\n' < /run/secrets/clickhouse_password | sha256sum | cut -d' ' -f1)
+        cat > /etc/clickhouse-server/users.d/ctrlz-user.xml <<EOT
+        <clickhouse>
+          <users>
+            <default remove="remove"/>
+            <ctrlz>
+              <password_sha256_hex>$$hash</password_sha256_hex>
+              <profile>default</profile>
+              <networks><ip>::/0</ip></networks>
+              <quota>default</quota>
+              <access_management>1</access_management>
+            </ctrlz>
+          </users>
+        </clickhouse>
+        EOT
+        chown clickhouse:clickhouse /etc/clickhouse-server/users.d/ctrlz-user.xml
+        unset hash
+        # One line that names no value: the server logs at warning level and a healthy start prints
+        # nothing, so without it the secret canary of the Compose smoke could not tell a wrapper that ran
+        # from a container that never started (round 9, admin-r9-4).
+        echo "clickhouse: the user file is written, starting the server"
+        exec /entrypoint.sh
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+      CH_MAX_SERVER_MEMORY_USAGE: ${CH_MAX_SERVER_MEMORY_USAGE:-2000000000}
+    secrets: [clickhouse_password]
+    volumes:
+      - chdata:/var/lib/clickhouse
+      - ./clickhouse/ctrlz.xml:/etc/clickhouse-server/config.d/ctrlz.xml:ro
+    ulimits:
+      nofile: {soft: 262144, hard: 262144}
+    mem_limit: ${MEM_CLICKHOUSE:-2560m}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+      start_period: 20s
+    networks: [backend]
+
+  # The auth role of R44, once per trust zone (round 16, admin-r16-6, -7, -13): no eviction, append-only
+  # file every second, a fixed memory ceiling, and a server of its own for the api and for the admin. One
+  # shared instance had one maxmemory and one set of client slots, so whoever could reach it (a holder of
+  # either service credential, or any container on the backend network) could keep both limiters failing
+  # and, with them, every tenant's SMS code and the owner's console login. Valkey has no per-user quota,
+  # so the boundary is the process: each zone's server has its own maxmemory, its own ACL with one
+  # service user and its own volume, and sits on an internal network that only its own service shares
+  # (vk_api, vk_admin). The worker, the hub, Postgres and ClickHouse reach neither. The start line,
+  # with the ACL and the reasons, is deploy/compose/valkey/start.sh; the no-persistence "tail" instance
+  # arrives with its first user.
+  valkey-api:
+    <<: *valkey
+    environment:
+      VK_ZONE: api
+      VK_MAXMEMORY: ${VALKEY_MAXMEMORY:-64mb}
+    secrets: [valkey_password_api]
+    volumes:
+      - valkey_api_data:/data
+      - ./valkey/valkey.conf:/etc/valkey/valkey.conf:ro
+      - ./valkey/start.sh:/etc/valkey/start.sh:ro
+      - ./valkey/maintain.sh:/etc/valkey/maintain.sh:ro
+      - ./valkey/sweep.lua:/etc/valkey/sweep.lua:ro
+      - ../../internal/ratelimit/lua:/etc/valkey/lua:ro
+    networks: [vk_api]
+
+  valkey-admin:
+    <<: *valkey
+    environment:
+      VK_ZONE: admin
+      VK_MAXMEMORY: ${VALKEY_MAXMEMORY:-64mb}
+    secrets: [valkey_password_admin]
+    volumes:
+      - valkey_admin_data:/data
+      - ./valkey/valkey.conf:/etc/valkey/valkey.conf:ro
+      - ./valkey/start.sh:/etc/valkey/start.sh:ro
+      - ./valkey/maintain.sh:/etc/valkey/maintain.sh:ro
+      - ./valkey/sweep.lua:/etc/valkey/sweep.lua:ro
+      - ../../internal/ratelimit/lua:/etc/valkey/lua:ro
+    networks: [vk_admin]
+
+networks:
+  # Four plain or internal bridges instead of one shared one (spec 17.2, finding
+  # 10). A port cannot be published from an internal network, so caddy and the
+  # hub have a plain bridge: caddy for its published ports, the hub for the route out
+  # and for the node port it publishes from P4; a container on one plain and several
+  # internal networks takes its route from the plain one.
+  # Afterwards only caddy shares a network with api or admin, and only caddy
+  # joins the web containers to them, so a compromised web container
+  # cannot reach api:8080 or admin:8081 with a forged X-Forwarded-For. api and
+  # admin have no route out either. Only caddy, hub and worker can reach out.
+  # The two web containers still share the one `web` network, so a compromised
+  # panel can open web-admin:3000 without Caddy's per-site rules (merge-r1-5,
+  # recorded for the P8 review: one internal network per web container).
+  # Dual stack, with a ULA range, on purpose. Docker publishes 80 and 443 on [::]
+  # as well. On an IPv4-only network it serves an IPv6 client through the
+  # userland proxy, which connects to caddy from the bridge gateway, so every IPv6
+  # visitor would reach caddy, and then api and admin, as one address and share every
+  # per-address limit (admin_login_net, the OTP caps): one abuser would lock the
+  # owner out over IPv6 (review round 3, admin-r3-10). With IPv6 enabled Docker
+  # forwards with ip6tables NAT, which keeps the client's source address. This
+  # needs the daemon's ip6tables, which is on by default since Docker 27. If the
+  # range clashes with a network of the host, change it here.
+  ingress:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: fd00:213:77:1::/64
+  hub_ingress:
+    driver: bridge
+  web:
+    driver: bridge
+    internal: true
+  app:
+    driver: bridge
+    internal: true
+    # A fixed subnet so caddy has a fixed address (see caddy). Containers get
+    # addresses from the lower half; caddy's is in the upper half. If the range
+    # clashes with a network of the host, change it here and in caddy's address and
+    # CTRLZ_TRUSTED_PROXY.
+    ipam:
+      config:
+        - subnet: 10.213.78.0/24
+          ip_range: 10.213.78.0/25
+  # The worker alone: SMS gateways. Compose cannot name destinations; the
+  # drivers dial fixed hosts and a host firewall rule closes the rest (P6).
+  egress:
+    driver: bridge
+  # One internal network for each Valkey zone, shared by that zone's server and its one service and by
+  # nobody else (round 16, admin-r16-6): a peer on backend, the worker or the hub for one, cannot reach either
+  # server, so it cannot hold its client slots or fill it.
+  vk_api:
+    driver: bridge
+    internal: true
+  vk_admin:
+    driver: bridge
+    internal: true
+  # No route out: database and ClickHouse cannot reach the internet,
+  # and nothing outside the stack can reach them.
+  backend:
+    driver: bridge
+    internal: true
+    # A fixed subnet so the migrator can be allowed by address (see migrate).
+    # Containers are given addresses from the lower half only; the migrator's
+    # is in the upper half. If this range clashes with a network of the host,
+    # change it here and in postgres/pg_hba.conf.
+    ipam:
+      config:
+        - subnet: 10.213.77.0/24
+          ip_range: 10.213.77.0/25
+
+volumes:
+  pgdata:
+  chdata:
+  valkey_api_data:
+  valkey_admin_data:
+  caddy_data:
+  caddy_config:
+  hub_public:
+  api_spool:
+
+secrets:
+  pg_superuser_password:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pg_superuser_password
+  pg_migrator_password:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pg_migrator_password
+  pg_tenant_password:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pg_tenant_password
+  pg_hub_password:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pg_hub_password
+  pg_compiler_password:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pg_compiler_password
+  pg_worker_password:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pg_worker_password
+  pg_keytool_password:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pg_keytool_password
+  pg_admin_password:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pg_admin_password
+  pg_domain_apply_password:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pg_domain_apply_password
+  clickhouse_password:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/clickhouse_password
+  valkey_password_api:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/valkey_password_api
+  valkey_password_admin:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/valkey_password_admin
+  proof_key:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/proof_key
+  # The panel-node trust (spec P4 3.3), made by scripts/gen-secrets.sh.
+  policy_key:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/policy_key
+  node_ca_key:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/node_ca_key
+  node_ca_pem:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/node_ca_pem
+  hub_tls_key:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/hub_tls_key
+  zone_ca_key:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/zone_ca_key
+  wildcard_intake_key:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/wildcard_intake_key
+  wildcard_intake_pub:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/wildcard_intake_pub
+  web_intake_key:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/web_intake_key
+  web_intake_pub:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/web_intake_pub
+  spool_key:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/spool_key
+  # One key file per domain (spec 8.1), derived from kek_root by
+  # scripts/gen-secrets.sh. kek_root itself is never mounted into a container.
+  kek_user_totp:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_user_totp
+  kek_otp_delivery:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_otp_delivery
+  kek_auth_mac:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_auth_mac
+  kek_admin_totp:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_admin_totp
+  kek_sms_cred:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_sms_cred
+  kek_doh_token:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_doh_token
+  kek_admin_mac:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_admin_mac
+  # The signing key of invite links is admin's alone (D67); its public half, which is no secret, is the api's alone.
+  kek_invite_sign:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/kek_invite_sign
+  pub_invite_sign:
+    file: ${CTRLZ_SECRETS_DIR:-../../secrets}/pub_invite_sign

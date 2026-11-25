@@ -1,0 +1,979 @@
+# Role reach (P1 auth review round 5, rule 2 "role-reach"; spec 16.2a).
+#
+# DEFAULT DENY. For the tables below no LOGIN role holds INSERT or UPDATE on a
+# column unless this file declares it, and for the secret columns none holds SELECT
+# unless this file declares it. A column added later is guarded from its first day
+# (only the columns named in `free` are open), a role added later is denied
+# everything (the test loops over pg_roles, not over a list), and a grant that is
+# declared here but no longer held fails too, so the list can only shrink without
+# a reviewed diff.
+#
+# Why a deny list of nothing and an allow list of everything: column grants cannot
+# restrict the value written or the rows touched, so every change that takes a
+# second factor, a credential, a revocation or a trail row out of the owning
+# service's hands is ONE SECURITY DEFINER function owned by NOLOGIN ctrlz_auth
+# (functions.yaml, `trail` or `no_trail`), which checks its precondition against
+# database state and is EXECUTE-granted to one login role. `declared` below is only
+# for the service that is itself the author of that data: the tenant API for its own
+# tenant's users, sessions and tokens (every statement is bounded by tenant_isolation
+# and the setting it set), the admin API for its own admin_users and admin_sessions
+# and the invites it hands out, the SMS worker for the bookkeeping of the messages it
+# sends. Each of those is a reviewed line, and none lets another role in.
+#
+# Roles are the short names of grants.yaml (ctrlz_<short>).
+
+# LOGIN roles that are not judged: they own the tables, so Postgres gives them every
+# privilege and a REVOKE cannot take it away. ctrlz_migrator is bound by FORCE RLS
+# (it sees no row without a tenant setting, TestMigratorSeesNothing) and logs in
+# only from the address of the migrate container (deploy/compose pg_hba.conf).
+owners: [migrator]
+
+# Tables whose columns are written only by a declared role. `free` lists the columns
+# any role may write (none of them is a credential, a factor, a revocation, a token
+# or a bookkeeping field). `declared` maps a role to the columns it may write, or
+# "*" for every guarded column of the table.
+write:
+  users:
+    free: [locale, theme, onboarding_hints, onboarding_state, last_login_at, created_at, updated_at]
+    declared:
+      # The user's own password change, TOTP enrolment, Enforce Passkey and review
+      # flags, under the user row lock of the tenant API. Never the worker, the key
+      # tool or the admin: they go through the functions of functions.yaml.
+      tenant: [password_hash, totp_secret_ct, totp_enabled_at, totp_last_step, enforce_passkey, totp_pending_at, enforce_lift_at, passkey_review_at]
+  # The tenant row itself. status and admin_hold are an admin decision (suspend, hold) and
+  # deleted_at is the purge's clock; the tenant owner writes only its own settings. The
+  # worker held UPDATE (status, deleted_at) and could undo a suspension or lock a healthy
+  # tenant out (db-r5-6); the purge, when P5 builds it, is a definer function.
+  tenants:
+    free: [home_countries, raw_retention_days, aggregate_retention_months, created_at, updated_at]
+    declared:
+      admin: [status, admin_hold]
+  sessions:
+    free: [last_seen_at, created_at, updated_at, ip, user_agent]
+    declared:
+      tenant: "*"
+  # The lock (P2 spec 2.2 item 11, 3.1): its five columns change only through Lock and Unlock of
+  # the tenant API, and through the admin removal of a lock P7 builds (declared as held). The
+  # content columns are written by the guard of internal/profiles, which is code, not a grant.
+  profiles:
+    free: [tenant_id, id, name, kind, version, disabled_until, compiled_hash, created_at, updated_at]
+    declared:
+      tenant: [lock_state, lock_message, lock_password_hash, locked_by, locked_at]
+      admin: [lock_state, lock_message, lock_password_hash, locked_by, locked_at]
+  refresh_tokens:
+    free: [created_at, updated_at]
+    declared:
+      tenant: "*"
+  api_tokens:
+    free: [created_at, updated_at]
+    declared:
+      tenant: "*"
+  webauthn_credentials:
+    free: [created_at, updated_at]
+    declared:
+      tenant: "*"
+  recovery_codes:
+    free: [created_at]
+    declared:
+      tenant: "*"
+  phone_change_requests:
+    free: [created_at, updated_at]
+    declared:
+      tenant: "*"
+  setup_share_tokens:
+    free: [created_at]
+    declared:
+      tenant: "*"
+  profile_download_tokens:
+    free: [created_at]
+    declared:
+      tenant: "*"
+  # The one-time state (must_change_password, password_expires_at, and the stamps that
+  # go with it) moves only through the ctrlz_fn.admin_account_* functions (rule
+  # one-time-state), so the admin API holds the rest of its own row and nothing of that.
+  admin_users:
+    free: [created_at, updated_at]
+    declared:
+      admin: [password_hash, totp_secret_ct, totp_last_step, disabled_at, last_login_at, pending_notice]
+  admin_sessions:
+    free: [created_at, ip, user_agent]
+    declared:
+      admin: "*"
+  # An invite is created and revoked by the admin API. It never writes the
+  # accepted-by or used-at columns: auth_register_user does, as ctrlz_auth.
+  invites:
+    free: [created_at]
+    declared:
+      admin: [id, token_hash, phone_e164, locale, created_by, expires_at, revoked_at]
+  # No login role holds anything on these two: the functions of ctrlz_fn do.
+  auth_tickets:
+    free: []
+    declared: {}
+  auth_throttle:
+    free: []
+    declared: {}
+  # The code hash and its attempts are ctrlz_auth's. The sender keeps the sealed
+  # delivery copy and its claim, and writes nothing else. It READS the code hash: see the read
+  # section below (primitives-r18-14).
+  otp_challenges:
+    free: [created_at]
+    declared:
+      worker: [delivery_ct, delivery_claimed_until, delivery_attempts]
+  # The admin queues a test message with the columns of store.qSMSOutboxInsert; the
+  # state, the attempt count, the claim and the send time are the worker's and take
+  # their defaults when the admin inserts (sms-r4-7). The one other writer is ctrlz_fn.tenant_notice_sms, which is
+  # owned by the NOLOGIN ctrlz_scoped (not a login role, so not judged here): its INSERT is a line of grants.yaml and
+  # an entry of scopedGlobalReach, and it takes neither a phone nor a text from its caller.
+  sms_outbox:
+    free: [created_at]
+    declared:
+      admin: [id, kind, gateway_id, phone_e164, template_key, locale, params_ct, created_by]
+      worker: [state, attempts, claimed_until, last_error, sent_at, params_ct]
+  # The per-phone, per-network and cost counters of the daily caps: the worker
+  # refunds, adds cost and sweeps them; the admin reads the global rows through
+  # admin_sms_stats and writes nothing.
+  sms_counters:
+    free: []
+    declared:
+      worker: "*"
+
+# Columns no login role may SELECT unless declared. Per table, per column, the roles.
+# [] is nobody: only ctrlz_auth (NOLOGIN) and its functions read the column.
+read:
+  users:
+    password_hash: []
+    # The rekey container opens and re-seals every seed under the old and the new
+    # key; it is the one role with the user_totp key ring.
+    totp_secret_ct: [keytool]
+  admin_users:
+    password_hash: [admin]
+    totp_secret_ct: [admin]
+  admin_sessions:
+    token_hash: [admin]
+  sessions:
+    token_hash: [tenant]
+  refresh_tokens:
+    token_hash: [tenant]
+  api_tokens:
+    token_hash: [tenant]
+  recovery_codes:
+    code_hash: [tenant]
+  invites:
+    token_hash: []
+  setup_share_tokens:
+    token_hash: [tenant]
+  profile_download_tokens:
+    token_hash: [tenant]
+  auth_tickets:
+    token_hash: []
+    payload: []
+  # The sender reads the code hash back for one reason: the sealed delivery copy is bound to the
+  # hash of its own row (P1 auth review round 18, primitives-r18-2, D64 otp-aad-row), so the
+  # sender cannot open a copy that was moved onto another challenge. The sender holds no auth_mac
+  # key and reads the code in the clear when it opens the copy, so the hash gives it nothing it
+  # could not already compute and no way to test a guess.
+  otp_challenges:
+    code_hash: [worker]
+    delivery_ct: [worker]
+  # The raw keys are phones, networks and addresses, decoys included, and "<phone>|trusted"
+  # says a request came from a known device. The sender holds SELECT because its statements read
+  # the global rows, and row-level security (migration 0035, policy worker_global_rows) shows it
+  # those rows and no other: see row_bound below, which check 22 compares with the live policy,
+  # and sms-r8-3 and sms-r8-7, which found the worker reading every phone and address of the
+  # last three days through this column (sms-r6-2 had taken the same facts from otp_challenges).
+  sms_counters:
+    key: [worker]
+  # Sealed under sms_cred, which opens the provider's API key or password (sms-r5-5).
+  # The worker reads it to send. The admin role reads it because the admin container
+  # also runs `ctrlz-admin keys rekey sms_cred` and `keys status`, which open and
+  # re-seal it, and because its gateway queries test `credentials_ct IS NOT NULL`,
+  # which needs SELECT on the column. No HTTP route of the admin API selects the
+  # column or opens it back (SMSCredentialsSealed has two callers, both in admincli),
+  # so the reach is the container's, not the routes'; code execution or an injection
+  # inside the admin API could still use it, with the key in the same process. That is
+  # the declared cost. Closing it takes a migration (a generated `configured` column
+  # in place of the NULL test) and moving rekey to the keytool role; it is recorded as
+  # a follow-up in Plan.md and not done in round 5. Every other role, the tenant API
+  # and the compiler first, stays out, and a new reach fails check 22.
+  sms_gateways:
+    credentials_ct: [admin, worker]
+    # The credentials a PUT saved and the console has not confirmed (0055): sealed the same way, readable by
+    # the same two roles for the same reasons (rekey re-seals them, `keys status` counts them, and the worker
+    # reads the row with a table-level SELECT), and selected by no sender (admin-r18-1).
+    credentials_pending_ct: [admin, worker]
+
+# Trail tables: the evidence of what happened to an account. A login role may append,
+# and may not UPDATE or DELETE a row unless declared here. `update` maps a role to
+# the columns it may update (a flag such as the read mark, never the content);
+# `delete` maps a role to the name of the RESTRICTIVE policy that bounds its DELETE by
+# the age of the row (policies.yaml holds the text). TRUNCATE is refused to everybody.
+trail:
+  tenant_audit_log:
+    update: {}
+    delete:
+      worker: worker_retention
+  notifications:
+    update:
+      tenant: [read_at]
+    delete: {}
+  audit_log:
+    update: {}
+    delete: {}
+  sms_deliveries:
+    update: {}
+    delete: {}
+
+# Credential generation (P1 auth review round 5, rule 5 "credential-generation";
+# catalog check 25, internal/lint credgen rule, spec 3.7, 5.5, 5.7, 10.2, 16.1).
+#
+# users and admin_users carry credential_gen, a counter that a BEFORE UPDATE
+# trigger (ctrlz.credential_gen_bump) moves whenever one of `columns` changes, whoever
+# writes (a route, a definer function, the console, the table owner). Every artefact
+# derived from a first-factor check (the session opened after Argon2, an mfa ticket,
+# a rehash write, a device marker, a reauth) carries the (subject, generation) it was
+# derived from, and internal/credgen refuses it when either differs. No consumer
+# compares a hand-picked list of fields any more, so a column added later cannot be
+# forgotten by one of them.
+#
+# Every guarded column of the two tables (the live columns minus `free` in `write`)
+# is either a credential column (`columns`: the trigger's arguments, read from the live
+# trigger) or has a reason in `other`. A column that is in neither fails check 25, so
+# adding a guarded column forces the decision. A credential column is one whose change
+# makes what a past verification proved worth less: the secrets, the factors, the
+# one-time state, the login identity and whatever switches the login off or changes
+# what it must ask for.
+# One rule inside the trigger function is not a column of this list (migration 0029, db-r6-4): a
+# change of totp_secret_ct does not move the generation when totp_enabled_at is set and the same
+# on both sides, because the factor in force is the same one and the ciphertext can only have been
+# re-sealed under another key (`ctrlz rekey`). A seed written while no factor is in force, a factor
+# turned on, off or replaced (totp_enabled_at) all still move it.
+credential_gen:
+  users:
+    columns: [phone_e164, password_hash, password_changed_at, password_expires_at, must_reset, totp_secret_ct, totp_enabled_at, enforce_passkey, enforce_lift_at]
+    other:
+      tenant_id: "key; a row never moves between tenants"
+      id: "key"
+      role: "a single value in v1 (CHECK role = 'owner')"
+      phone_verified_at: "stamped by the SMS proof itself (auth_phone_mark_verified), which is the artefact, not a credential it checks"
+      totp_last_step: "the replay counter of the second factor: it moves on every accepted code, so counting it would end every ticket the moment a code is used"
+      totp_pending_at: "an enrolment that is not a factor yet; confirming it moves totp_enabled_at, and starting it moves totp_secret_ct"
+      passkey_review_at: "a flag on passkeys, which are rows of webauthn_credentials and not columns here"
+      credential_gen: "the counter itself; the trigger overwrites whatever a writer puts there"
+  admin_users:
+    columns: [username, password_hash, password_changed_at, password_expires_at, must_change_password, totp_secret_ct, totp_enabled_at, disabled_at]
+    other:
+      id: "key"
+      totp_last_step: "the replay counter of the second factor"
+      last_login_at: "a record of the login, written by the login itself"
+      pending_notice: "a notice shown at the next sign-in; no factor reads it"
+      credential_gen: "the counter itself"
+
+# DELETE (P1 auth review round 5, findings db-r5-1 and db-r5-6; catalog check 22).
+#
+# Default deny, like the columns: for every write-guarded table, the roles that may delete
+# its rows, each with the reason. {} is nobody. A role is counted as deleting a table when it
+# holds DELETE on it OR on any parent whose ON DELETE CASCADE reaches it (read from
+# pg_constraint): the cascade runs as the table owner, so it is bounded by nothing the
+# child's grants or policies say. A cascade into a TRAIL table is never allowed (the trail
+# section above has no cascade entry to declare). TRUNCATE is refused to every role on every
+# table of the schema, with no list.
+#
+# Nobody deletes a user, an admin or a tenant as a service: the account purge is a P5 job
+# and arrives as a definer function that deletes only a tenant in status 'deleting' past the
+# grace period, with its own line here. Until then a role that could delete the root of
+# those cascades could erase every credential, factor and trail row of a tenant (the worker
+# held DELETE on tenants, db-r5-6), or empty admin_users so that the console bootstrap hands
+# a fresh account to whoever calls it (the admin held it, db-r5-1).
+delete:
+  tenants: {}
+  users: {}
+  admin_users: {}
+  auth_tickets: {}
+  auth_throttle: {}
+  sessions:
+    tenant: "logout and password change remove the user's own sessions of its tenant"
+    worker: "the retention sweep, a day past the absolute expiry (qSweepSessions)"
+  refresh_tokens:
+    tenant: "rotation and logout remove the user's own refresh tokens of its tenant"
+    worker: "the retention sweep, a day past the expiry (qSweepRefresh)"
+  profiles:
+    tenant: "the Delete route removes an unlocked profile of its own tenant (P2 spec 3.3)"
+  api_tokens:
+    tenant: "a user deletes its own API tokens"
+  webauthn_credentials:
+    tenant: "a user removes its own passkeys"
+  recovery_codes:
+    tenant: "regeneration replaces the whole set of the user (qRecoveryDelete)"
+  phone_change_requests:
+    worker: "the retention sweep, a day past the expiry (qSweepPhone)"
+  setup_share_tokens:
+    tenant: "a user deletes the share links of its own Endpoints, and an Endpoint's delete cascades"
+    worker: "the retention sweep of expired links"
+  profile_download_tokens:
+    tenant: "a user deletes the download links of its own Endpoints, and an Endpoint's delete cascades"
+    worker: "the retention sweep of expired links"
+  admin_sessions:
+    admin: "the admin service sweeps its own sessions a day past their end (qAdminSessionsDeleteExpired)"
+  invites:
+    worker: "the retention sweep, 90 days past the expiry (qSweepBatchInvites)"
+  sms_outbox:
+    worker: "the retention sweep, 30 days after creation (qSweepBatchOutbox)"
+  # Nobody holds DELETE: the retention sweep of the raw per-phone, per-network and per-address
+  # counters is ctrlz_fn.worker_sweep_sms_counters, and a trigger refuses any delete inside
+  # the retention for every role (sms-r8-3, sms-r8-6).
+  sms_counters: {}
+  # Nobody holds DELETE here either: the 24 hour retention sweep is ctrlz_fn.worker_sweep_otp_challenges,
+  # because the sender cannot see the decoy rows it would have to delete (db-r9-3).
+  otp_challenges: {}
+
+# Secret columns of tables outside the auth set (P1 auth review round 5, finding db-r5-8),
+# in the shape of `read`. Check 22 finds every column whose NAME looks secret (a sealed
+# value `*_ct`, a `*_hash`, anything with `secret` in it, or a column called payload,
+# credential(s), token or password) across the whole schema and fails one that is in none of
+# `read`, `secrets` and `read_open`, so a column added tomorrow cannot be readable by a role
+# nobody decided on. This file is a separate section from `read` only because clocks.yaml
+# covers the tables of `read` and `write`, and those are the auth tables.
+secrets:
+  # The sealed key of a certificate. Only the hub reads it back, to serve it to nodes (certificates are the
+  # panel-node trust, spec PS 7). The admin issues and the worker renews, and both only WRITE a sealed key: an
+  # INSERT or an UPDATE of the column needs no SELECT on it, so neither holds one (P1 auth review round 18,
+  # db-r18-11: the same class as the sealed SMS credentials, a role that never opens a sealed secret does not
+  # read it, because the day the P6 key ring is mounted in its container a compromised process could open every
+  # node's TLS key with no trace). A role that must read it back adds itself here with the reason.
+  certificates:
+    wrapped_key_ct: [domain_apply, hub]
+  # The sealed DoH token of an Endpoint, and the hash the resolver looks it up by.
+  endpoints:
+    doh_token_ct: [tenant]
+    doh_token_hash: [compiler]
+    # The id in the address of the Endpoint: whoever knows it can use the Endpoint's profile, so
+    # it is a capability like the token, and its readers are a reviewed list (db-r6-3).
+    resolver_id: [compiler, tenant]
+    # The resolver id the last Apple profile was built for (T-248), kept to tell that a rotation made the profile
+    # stale. A copy of a capability, so it is read by the tenant alone; the compiler has no use for it.
+    apple_profile_resolver_id: [tenant]
+  # The hub writes the hash of the TXT code it derived and never reads it back; the claim
+  # function compares it as ctrlz_auth.
+  ip_proof_challenges:
+    txt_code_hash: []
+    # The identity (RIDHash of a resolver id) an encrypted query arrived on, written by the hub. It can name another
+    # tenant's Endpoint, so like observed_ip nobody reads it but the claim function (ctrlz_auth).
+    observed_rid_hash: []
+  # The hash of a node's one-time enrollment token.
+  node_enrollments:
+    token_hash: [admin, hub]
+  # The sealed value of a test send, which only the sender opens. A message of kind notice has none (a CHECK).
+  sms_outbox:
+    params_ct: [worker]
+  # The hash of the password that unlocks a locked profile. Only the unlock route reads it
+  # (P2 migration 0070 narrowed the compiler and the worker to every other column).
+  profiles:
+    lock_password_hash: [tenant]
+  # The hash key of a throttle line: an HMAC of a phone, an address or an account, which only the
+  # definer functions of ctrlz_auth read and write (db-r6-10).
+  auth_throttle:
+    key: []
+  # The stored answer of a replayed call. It can hold whatever the call returned, a one-time
+  # token or a recovery code included, so it is decided as a secret, not by its name (db-r6-3).
+  idempotency_keys:
+    response: [tenant]
+  # A fragment of the proxy configuration of a node location: the outbound it names carries
+  # the credentials of the upstream (P3), so it is decided as a secret before the P3 code exists. The four
+  # roles hold table-level SELECT from P0, declared as held; P3 narrows them to what each needs,
+  # and the entry then fails as stale and shrinks.
+  node_location_configs:
+    fragment: [admin, compiler, hub, worker]
+    last_good_fragment: [admin, compiler, hub, worker]
+
+# Personal data (P1 auth review round 7, finding db-r7-5): the columns that record a phone
+# number, an address or a user agent, so which person did what from where. They hold no
+# credential, so the secret test never asked about them, and only the grants golden stood between
+# a role and the record of which address asked a code for which phone; a grant added to the
+# golden and grants.yaml in one commit passed it. Check 22 finds every column named like a phone
+# (phone, msisdn, e164), an email, a user agent or an address (ip, ips) of a type that can hold
+# the value (a flag, a time or a counter with such a name is not asked), across the whole schema,
+# and fails one that is in neither `personal` nor `personal_open`. A column of any other name can
+# be listed here too (otp_challenges.trusted records how the address was judged). Readers are
+# the roles that may SELECT it, the same list as `read`, and a role that holds it undeclared, or
+# a declared one that no longer does, fails.
+personal:
+  admin_sessions:
+    ip: [admin]
+    user_agent: [admin]
+  api_tokens:
+    allowed_ips: [tenant]
+  audit_log:
+    ip: [admin]
+  # Where a tenant's person is on the network: the prefix, the city and the provider of an authorized
+  # address (db-r8-2). The prefix is what policy.proto carries to the nodes (the compiler) and what the
+  # hub matches a query against; the city and the provider are shown to the tenant and written by the
+  # worker that learns an address. ctrlz_compiler was narrowed to the prefix in 0037.
+  authorized_ips:
+    cidr: [compiler, hub, tenant, worker]
+    city: [tenant, worker]
+    isp: [tenant, worker]
+  # The device behind a client row. ClientRecord (policy.proto) carries none of the three, so the
+  # compiler holds none (0037).
+  clients:
+    hostname: [tenant, worker]
+    ip: [tenant, worker]
+    mac: [tenant, worker]
+  endpoint_ddns_hosts:
+    hostname: [tenant, worker]
+    last_ips: [tenant, worker]
+  invites:
+    phone_e164: [admin]
+  # The prefix a tenant claimed. ClaimRecord (policy.proto) carries it, the admin approves a wide
+  # claim by reading it, ctrlz_auth (a NOLOGIN role, so not listed) makes and moves claims, and the worker
+  # reaches the table for the grace sweep.
+  ip_claims:
+    cidr: [admin, compiler, tenant, worker]
+  # Nobody reads the address that observed a challenge: the claim function compares it as ctrlz_auth.
+  ip_proof_challenges:
+    observed_ip: []
+  # Which address asked a code for which phone, and how the address was judged. The sender reads the
+  # phone it sends to and nothing else of the row (sms-r6-2 took ip and trusted away); only ctrlz_auth
+  # and its functions read the address.
+  otp_challenges:
+    ip: []
+    phone_e164: [worker]
+    trusted: []
+  phone_change_requests:
+    new_phone_e164: [tenant]
+  # The expanded builder request of an Apple profile link holds the network names (SSIDs) the tenant chose to
+  # exclude, so where its people are (home, office). Only the tenant reads it; the auth and worker column lists
+  # leave it out, and a later grant to another role must be a personal-data decision.
+  profile_download_tokens:
+    params: [tenant]
+  # The EDNS client subnet a tenant chose to send upstream: the tenant types the network it wants to look
+  # like, which can be its own. Read by the tenant and by the compiler that writes it into the policy. The worker holds the
+  # P0 table-level SELECT for its location availability job (declared as held, to narrow when that job
+  # exists).
+  profile_options:
+    ecs_v4: [compiler, tenant, worker]
+    ecs_v6: [compiler, tenant, worker]
+  sessions:
+    ip: [tenant]
+    user_agent: [tenant]
+  sms_outbox:
+    phone_e164: [worker]
+  # The domain a visitor of a tenant asked to have unblocked: behaviour of the tenant's people.
+  unblock_requests:
+    qname: [tenant]
+  tenant_audit_log:
+    ip: [tenant]
+  users:
+    phone_e164: [admin, tenant]
+
+# Personal-looking columns that name no person, with the reason, for any role holding the table.
+personal_open:
+  locations:
+    city: "the city of a point of presence the operator owns; infrastructure, not a person"
+  plans:
+    max_authorized_ips: "a limit on how many addresses a tenant may authorize, a count; no address is stored in it"
+  profile_options:
+    block_custom_v4: "the address a tenant chose to answer a blocked name with; a setting, not the address of a person"
+    block_custom_v6: "the address a tenant chose to answer a blocked name with; a setting, not the address of a person"
+    default_target_ipv4: "the address a tenant chose as the default redirect target; a setting, not the address of a person"
+    default_target_ipv6: "the address a tenant chose as the default redirect target; a setting, not the address of a person"
+  profile_services:
+    target_ipv4: "the address a tenant chose to send a service to; a setting, not the address of a person"
+    target_ipv6: "the address a tenant chose to send a service to; a setting, not the address of a person"
+  rule_folders:
+    target_ipv4: "the address a tenant chose to answer a folder's names with; a setting, not the address of a person"
+    target_ipv6: "the address a tenant chose to answer a folder's names with; a setting, not the address of a person"
+  rules:
+    target_ipv4: "the address a tenant chose to answer a rule's name with; a setting, not the address of a person"
+    target_ipv6: "the address a tenant chose to answer a rule's name with; a setting, not the address of a person"
+  system_settings:
+    otp_cap_ip: "a limit on codes per network, a count; no address is stored in it"
+    otp_cap_phone: "a limit on codes per phone, a count; no phone is stored in it"
+    otp_cap_phone_net: "a limit on codes per phone and network, a count; neither is stored in it"
+    otp_cap_phone_trusted: "a limit on codes per phone for a trusted network, a count; neither is stored in it"
+  tenant_entitlements:
+    max_authorized_ips: "a limit on how many addresses a tenant may authorize, a count; no address is stored in it"
+  node_enrollments:
+    bound_ip: "the address of a node the operator owns that an enrollment token is bound to; infrastructure, not a person"
+    dns_bind_ip: "the address the enrolling node says it listens on; infrastructure of the operator, not a person"
+    dns_advertised_ip: "the address the enrolling node says it is reached on; infrastructure of the operator, not a person"
+    proxy_bind_ip: "the address the enrolling node says its proxy listens on; infrastructure of the operator, not a person"
+    proxy_advertised_ip: "the address the enrolling node says its proxy is reached on; infrastructure of the operator, not a person"
+    enrolled_from: "the source address of the node's Enroll call, which the admin compares with the host; infrastructure of the operator, not a person"
+    hostname: "the host name the enrolling node reports for itself; a host of the operator, not a person"
+  node_upstreams:
+    address: "the address of an upstream resolver the operator configured; infrastructure, not a person"
+    bootstrap_ip: "the address of an upstream resolver the operator configured; infrastructure, not a person"
+  nodes:
+    dns_advertised_ip: "the address of a node the operator owns, published in DNS; infrastructure, not a person"
+    dns_bind_ip: "the address a node of the operator listens on; infrastructure, not a person"
+    proxy_advertised_ip: "the address of a node the operator owns, published for the proxy; infrastructure, not a person"
+    proxy_bind_ip: "the address a node of the operator listens on for the proxy; infrastructure, not a person"
+
+# Columns whose name looks secret and that any role with the table may read, with the
+# reason. They are digests of public or the caller's own data, or links in a hash chain.
+read_open:
+  # Numeric columns are decided by name too (db-r7-5): an integer can hold a code or a PIN. These
+  # hold none.
+  admin_users:
+    credential_gen: "a counter that moves when a credential changes; it proves that something changed and reveals nothing of the credential"
+  users:
+    credential_gen: "a counter that moves when a credential changes; it proves that something changed and reveals nothing of the credential"
+  plans:
+    max_api_tokens: "a limit, the number of API tokens a tenant may hold"
+  tenant_entitlements:
+    max_api_tokens: "a limit, the number of API tokens a tenant may hold"
+  audit_log:
+    entry_hash: "a link of the admin audit chain; it proves order and holds no secret (spec 13.1)"
+    prev_hash: "the previous link of the admin audit chain"
+  config_log:
+    entry_hash: "a link of the config log chain that nodes verify"
+    prev_hash: "the previous link of the config log chain"
+    payload: "the signed config entry every node downloads; it holds no credential"
+  config_snapshot:
+    entry_hash: "the hash of a config snapshot that nodes verify"
+  idempotency_keys:
+    status_code: "the HTTP status of the stored answer, a number of three digits that opens nothing"
+    request_hash: "a digest of the caller's own request body, compared to detect a replay"
+    key: "the Idempotency-Key header the caller chose; it names a replay and opens nothing, and the row is the caller's own under the tenant policy"
+  profile_download_tokens:
+    params_hash: "a digest of the parameters a link was made for; the token itself is token_hash"
+  profiles:
+    compiled_hash: "the digest of the compiled policy, which nodes compare"
+  api_tokens:
+    token_prefix: "the first characters of a token, kept to tell tokens apart in the list; too short to use and never the token (the token is token_hash)"
+  catalog_versions:
+    key: "the table hash key of a catalog version, a public identifier nodes use to ask for the table"
+  certificates:
+    chain_pem: "the public certificate chain, which every node and client receives; the sealed private key is wrapped_key_ct"
+  endpoint_types:
+    key: "the name of an Endpoint type in the catalog (a closed vocabulary)"
+  locations:
+    country_code: "an ISO country code of a node location"
+  rules:
+    rule_key: "the normalised match key of a custom rule, the tenant's own domain or address"
+  sms_deliveries:
+    template_key: "the name of the SMS template that was sent (a closed vocabulary), not its parameters"
+  sms_gateways:
+    last_error_code: "the provider's error code of the last failure, from a closed alphabet (sms.Field)"
+    held_code: "the closed code of the refusal that put the gateway on hold (an sms.Code, at most 32 characters of one alphabet); a status number of the provider or a fixed word, never a piece of its reply"
+  sms_outbox:
+    template_key: "the name of the SMS template (a closed vocabulary); the parameters are params_ct"
+  sms_provider_templates:
+    key: "the name of an SMS template at a provider (a closed vocabulary)"
+  sms_templates:
+    key: "the name of an SMS template (a closed vocabulary)"
+  webauthn_credentials:
+    credential_id: "the id of a passkey, which the browser sends in the clear with every assertion; it opens nothing without the private key"
+    public_key: "the public half of a passkey, which verifies an assertion and cannot sign one"
+
+# Free-form columns (text, bytea, jsonb, arrays) whose name does not look secret and that hold
+# no credential, per table with the reason (db-r6-3, db-r6-10). The name test alone failed open:
+# a column added tomorrow as accept_token, api_key, otp_seed or code would not have matched it.
+# Now every column of a free-form type is decided the day it exists, whatever it is called, so
+# one that is in none of read, secrets, read_open and this list fails check 22. A fixed-width
+# column (a counter, a time, a flag, an address, an id) cannot hold a credential and is not asked.
+open:
+  admin_jobs:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [kind, params, progress, state]
+  admin_users:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "an operator account name and a notice code; the name identifies an operator, not a tenant's person, and its readers are fixed by the admin grants"
+    columns: [pending_notice, username]
+  alerts:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [kind, params, severity]
+  announcements:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [audience, body]
+  api_tokens:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the token kind and the name the tenant gave it; the addresses it is limited to are the personal column allowed_ips"
+    columns: [kind, name]
+  audit_log:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "action codes, targets as ids and closed params; the address and user agent of the actor are the separate personal columns"
+    columns: [action, params, target]
+  auth_throttle:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the closed scope name of a throttle bucket; the subject it counts is a hash in a guarded column, never a phone or an address"
+    columns: [scope]
+  auth_tickets:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "closed names of the first factor and the kind of a ticket; no phone, address or place"
+    columns: [first_factor, kind]
+  authorized_ips:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the source of an authorization; the prefix and where it is are the personal columns cidr, city and isp"
+    columns: [source]
+  # input is the validated items of a queued Import, Upload or batch (the tenant's own rules, never a
+  # secret: a document holds no lock password), cleared when the job ends. error is a closed code and
+  # JSON pointers of schema member names.
+  batch_jobs:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [error, input, kind, result, state]
+  block_pages:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [message, title, unblock_mode, unblock_url]
+  bundles:
+    why: "public content and its digest, which nodes and tenants read freely; no credential (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [kind, sha256, state, store_ref, version]
+  catalog_common_domains:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [pattern]
+  catalog_filter:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [category_id, id, kind, name_en, name_fa, state]
+  catalog_filter_mode:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [filter_id, mode, sources]
+  catalog_filter_table:
+    why: "public content and its digest, which nodes and tenants read freely; no credential (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [filter_id, hash, mode, state, store_ref]
+  catalog_infra_denylist:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [pattern]
+  catalog_no_redirect_domain:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [pattern, scope]
+  catalog_protected_domains:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [pattern]
+  catalog_rewrites:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [kind, name, target]
+  catalog_service:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [allowed_regions, category_id, license, logo_ref, name_en, name_fa, slug, source, state]
+  catalog_service_alias:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [alias, slug]
+  catalog_service_category:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [id, name_en, name_fa]
+  catalog_service_domain:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [kind, pattern, slug]
+  catalog_versions:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [state]
+  certificates:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [kind, names, source, state]
+  clients:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "labels, aliases and a closed source of a device row; the device's host name is the personal column hostname and its address ip"
+    columns: [alias, analytics_level, group_name, label, source]
+  config_log:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [class]
+  config_snapshot:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [store_ref]
+  domain_settings:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [admin_host, applied_admin_host, applied_panel_host, dns_zone, panel_host, prev_dns_zone]
+  endpoint_ddns_hosts:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the last resolution error text; the host name and the addresses it resolved to are the personal columns hostname and last_ips"
+    columns: [last_error]
+  endpoint_groups:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [name]
+  endpoint_types:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [icon, name_en, name_fa]
+  endpoints:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [admin_state, analytics_level, comment, name, schedule_timezone, type]
+  feedback_items:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "text the tenant wrote to the operator and the operator's reply; read by that tenant and the admin only, so it is open to them by design"
+    columns: [admin_reply, body, context, kind, status]
+  filter_preview_jobs:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [filter_id, from_mode, result_ref, status, to_mode]
+  geoip_versions:
+    why: "public content and its digest, which nodes and tenants read freely; no credential (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [kind, sha256, version]
+  idempotency_keys:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the route a replay belongs to; the stored response is the secret column and has its own entry"
+    columns: [route]
+  invites:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the locale of an invitation; the phone it is for is the separate personal column phone_e164"
+    columns: [locale]
+  ip_claims:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the proof method, the source and the state of a claim; the claimed prefix is the personal column cidr"
+    columns: [proof_method, source, state]
+  ip_proof_challenges:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "a label and a closed protocol name; the observed address is the personal column observed_ip"
+    columns: [label, observed_protocol]
+  job_outbox:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [args, kind]
+  leases:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [holder, name]
+  locations:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "a point of presence the operator owns (a city of a node), not a place of a person"
+    columns: [label]
+  free_dns_counters:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "counts by transport, outcome and rcode of the Plain DNS queries of sources with no identity; no name and no address (SC 5.2a)"
+    columns: [outcome, protocol]
+  node_dns_requests:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [kind, reason, state]
+  node_spki_retired:
+    why: "the SHA-256 of a node key that was admitted once; a public digest"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [spki_sha256]
+  pair_event_state:
+    why: "the signed PairTable of the hub's last event, which every node receives; no credential"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [last_table]
+  node_certs:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [serial]
+  node_enrollments:
+    why: "the public fingerprint of the node key and the state; the token is token_hash (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [cert_der, csr_der, key_fingerprint, node_version, os_release, spki_sha256, state]
+  node_location_configs:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [note, tag]
+  node_quarantine:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [item, reason]
+  node_resolver_rules:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [match_type, match_value, target_group]
+  node_upstreams:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [group_name, kind, tls_name]
+  nodes:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [cert_serial, name, prev_cert_serial, resolve_mode, spki_sha256, status, version_info]
+  notifications:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "a closed kind, severity, an in-app link and closed params of a notice the user reads in their own account"
+    columns: [kind, link, params, severity]
+  otp_challenges:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the purpose of a code; the phone and the address that asked are the separate personal columns"
+    columns: [purpose]
+  plans:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [name]
+  policy_artifacts:
+    why: "public content and its digest, which nodes and tenants read freely; no credential (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [hash, kind, store_ref]
+  policy_outbox:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [aggregate_type]
+  profile_filters:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [filter_id, mode]
+  profile_options:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [block_response, default_action, default_target_host, default_target_kind, ecs_mode]
+  profile_presets:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [content, kind]
+  profile_services:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [action, service_slug, target_host, target_kind]
+  profiles:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [kind, lock_message, lock_state, name]
+  rule_folders:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [action, kind, name, target_host, target_kind]
+  rules:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [action, comment, match_kind, target_host, target_kind]
+  sessions:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the authentication method of a session; the address and user agent are the separate personal columns"
+    columns: [auth_method]
+  setup_share_tokens:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [client]
+  sms_counters:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [scope]
+  sms_deliveries:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the gateway's own ids, status and cost of a message; no phone is stored in a delivery row"
+    columns: [cost_raw, outcome, provider, provider_msg_id, provider_status, source]
+  sms_gateways:
+    why: "the provider name, role, sender, an at most 8 character hint to tell gateways apart, and held_ct_sum and unusable_ct_sum, the SHA-256 of the sealed credentials a hold or the worker's judgement that no sender can be built was made for (digests of ciphertext, which open nothing); the credentials are credentials_ct (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [hint, held_ct_sum, pending_hint, provider, role, sender, unusable_ct_sum]
+  sms_outbox:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "message kind, locale, state and the last gateway error; the phone it goes to is the separate personal column phone_e164"
+    columns: [kind, last_error, locale, state]
+  sms_provider_templates:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [locale, param_names, provider_template_id]
+  sms_templates:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the text of a message the operator wrote, with placeholders; the phone it goes to is the personal column of sms_outbox"
+    columns: [body, locale]
+  system_settings:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [registration_mode]
+  tenant_assets:
+    why: "public content and its digest, which nodes and tenants read freely; no credential (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [bytes, kind, mime, sha256]
+  tenant_audit_log:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "action codes, targets as ids and closed params; the address and user agent of the actor are the separate personal columns"
+    columns: [action, params, target]
+  tenants:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
+    columns: [home_countries, status]
+  unblock_requests:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the request text a tenant's visitor wrote to the tenant, read by that tenant alone (the hub only inserts, the worker only deletes). The domain asked about is the personal column qname"
+    columns: [message, status]
+  update_status:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [class, last_error, version]
+  users:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "locale, theme, onboarding state and role of an account; the phone is the separate personal column phone_e164"
+    columns: [locale, onboarding_hints, onboarding_state, role, theme]
+  webauthn_config:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [allowed_origins, rp_id]
+  webauthn_credentials:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "the name the user gave a passkey, its authenticator class and its relying-party id; no phone, address or place"
+    columns: [attestation_type, name, rp_id, transports]
+
+
+# Row predicates that bound a declared reach on a table with row-level security (check 22,
+# checkRowBound). A SELECT privilege says nothing about rows; the sender holds SELECT on
+# sms_counters because its own statements read the global rows, and its policy shows it those
+# and no other. Each predicate must be the one the role's policy states, and the proof with
+# seeded rows is TestTheWorkerRoleSeesTheGlobalCounterRowsOnly.
+row_bound:
+  # The sealed key of a certificate is read by the hub (the rows of the CAs and uploaded wildcards it serves to
+  # nodes) and by ctrlz_domain_apply (the two web certificates it installs); the policies hub_read and
+  # domain_apply_read say which rows (P4 3.2 item 5). The admin issues and the worker renews and neither reads
+  # the key back (db-r18-11).
+  certificates:
+    hub: "kind = ANY (ARRAY['wildcard'::text, 'node_ca'::text, 'zone_ca'::text])"
+    domain_apply: "kind = ANY (ARRAY['panel'::text, 'admin'::text])"
+  sms_counters:
+    worker: "scope = 'global'"
+  # The sender's statements touch only the rows that carry a sealed code (claim, clear, expiry,
+  # exhaustion, lease), marked `deliverable` at insert. A decoy (an unknown phone) has a row with
+  # the phone and the purpose and no code, and showing it would tell the sender which numbers
+  # have no account: the fact the decoy hides (db-r9-3).
+  otp_challenges:
+    worker: "deliverable"
+
+# Declared readers of a secret or personal column of a global table that are NOT bounded by a policy
+# (check 22, checkRowBound): why each needs every row. A reader whose statements need only some rows
+# is bounded with row-level security and goes in row_bound instead, so this list is the one place a
+# reviewer reads "this role sees the whole table" and decides.
+all_rows:
+  # Rows of the admin service itself: its operators, their sessions, their audit trail and the
+  # invites they issue. No tenant's or visitor's row lives in these tables.
+  admin_sessions:
+    admin: "the admin service owns the table: the sessions of its own operators, listed and swept by it"
+  admin_users:
+    admin: "the admin service logs the operators in and manages them; every row is an operator account of the platform"
+  audit_log:
+    admin: "the Audit page shows the platform audit log to operators in full; the rows are operator and platform events"
+  invites:
+    admin: "the operators create and list every invite; the console is the one surface that shows them"
+  # Operator-owned infrastructure: the panel-node trust, the nodes' proxy configuration and the SMS
+  # gateways. A row is a certificate, an enrollment, a location or a gateway of the operator, not
+  # about a tenant or a person, and each reader below works on every one of them.
+  node_enrollments:
+    admin: "the admin issues enrollments and lists every one"
+    hub: "the hub verifies the token of whichever node enrolls"
+  node_location_configs:
+    admin: "declared as held from P0 (the entry of secrets above); P3 narrows it and this entry goes"
+    compiler: "declared as held from P0 (the entry of secrets above); P3 narrows it and this entry goes"
+    hub: "declared as held from P0 (the entry of secrets above); P3 narrows it and this entry goes"
+    worker: "declared as held from P0 (the entry of secrets above); P3 narrows it and this entry goes"
+  sms_gateways:
+    admin: "the admin manages every gateway of the operator and tests its credentials"
+    worker: "the sender chooses among all gateways by role and breaker, and sends through whichever is up"
+  # The outbox holds messages queued to be sent (an admin test message, the notice of a security change), not decoys:
+  # every row is one the sender sends.
+  sms_outbox:
+    worker: "every row is a queued message the sender has to send; a decoy never enters the outbox"
+
+  # Tenant tables that a policy other than tenant_isolation shows to a service role in full
+  # (admin_read, USING (true)). tenant_isolation bounds whoever opens WithTenant for one tenant;
+  # these roles do not, so the reason is written here and not left to the policy (db-r10-2).
+  users:
+    admin: "the Users page lists every tenant's users to the operators (GET /users, filtered by phone prefix, no log data), and the invite and recovery flows look a user up across tenants; the policy is admin_read"
+  ip_claims:
+    admin: "the claims page lists every claim of every tenant to the operators and releases or suspends one (admin_read); a claim is a cidr, and an overlap across tenants is what the console exists to show"

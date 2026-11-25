@@ -1,0 +1,73 @@
+{
+  "format": 1,
+  "catalog": {
+    "key_hex": "000000000000000000000000000000a1",
+    "version": 1,
+    "filters": [
+      {"name": "ads", "id": 1, "mode": 1, "domains": ["suffix:ads.listed.example", "suffix:ads.foreign.example"]}
+    ],
+    "services": [
+      {"name": "ir-svc", "wire": 40, "domains": ["suffix:svc.listed.example"]},
+      {"name": "fr-svc", "wire": 41, "domains": ["suffix:svc.foreign.example"]}
+    ],
+    "categories": [],
+    "safe_search": {},
+    "youtube": {},
+    "no_redirect": ["listed.example", "iran.example.com", "host:host-only.example.net"]
+  },
+  "geo": {
+    "country": {"93.184.216.34": "US", "2.176.0.1": "IR"},
+    "asn": {}
+  },
+  "locations": {
+    "healthy": [1, 2, 3, 4],
+    "latency": {"1": 50, "2": 20, "3": 30}
+  },
+  "self": {
+    "dns_ip": "198.51.100.1",
+    "proxy_ip": "198.51.100.2",
+    "peer_proxy_ip": "198.51.100.3",
+    "peer_usable": true,
+    "panel_hostnames": ["panel.example.ir"]
+  },
+  "profiles": {
+    "rules": {"rules": [
+      {"name": "r-old", "token": "old.listed.example", "action": "redirect", "target": {"kind": "location", "location": 2}},
+      {"name": "r-com", "token": "*.example.com", "action": "redirect", "target": {"kind": "location", "location": 2}},
+      {"name": "r-ir", "token": "shop.example.ir", "action": "redirect", "target": {"kind": "location", "location": 2}},
+      {"name": "r-iran", "token": "shop.xn--mgba3a4f16a", "action": "redirect", "target": {"kind": "location", "location": 2}},
+      {"name": "r-host", "token": "host-only.example.net", "action": "redirect", "target": {"kind": "location", "location": 2}},
+      {"name": "r-hostw", "token": "*.host-only.example.net", "action": "redirect", "target": {"kind": "location", "location": 2}},
+      {"name": "r-foreign", "token": "foreign.example.net", "action": "redirect", "target": {"kind": "location", "location": 2}},
+      {"name": "r-ip", "token": "ip.listed.example", "action": "redirect", "target": {"kind": "ip", "v4": "203.0.113.9"}},
+      {"name": "r-host-target", "token": "host.listed.example", "action": "redirect", "target": {"kind": "host", "host": "target.example.net"}},
+      {"name": "r-auto", "token": "auto.listed.example", "action": "redirect", "target": {"kind": "auto", "set": [1, 2, 3]}},
+      {"name": "r-block", "token": "block.listed.example", "action": "block"},
+      {"name": "r-hop", "token": "hop.listed.example", "action": "redirect", "target": {"kind": "location", "location": 2}},
+      {"name": "r-hop-foreign", "token": "hop.foreign.example", "action": "redirect", "target": {"kind": "location", "location": 2}}
+    ]},
+    "svc": {
+      "services": [
+        {"name": "ir-svc", "action": "redirect", "target": {"kind": "location", "location": 2}},
+        {"name": "fr-svc", "action": "redirect", "target": {"kind": "location", "location": 2}}
+      ],
+      "filters": ["ads"]
+    },
+    "geo": {"rules": [{"name": "g-us", "token": "@US", "action": "redirect", "target": {"kind": "location", "location": 2}}]},
+    "default": {"default": "redirect", "default_target": {"kind": "location", "location": 2}},
+    "default-hop": {
+      "default": "redirect", "default_target": {"kind": "location", "location": 2},
+      "rules": [{"name": "d-byp", "token": "bypass-target.example", "action": "bypass"}]
+    },
+    "walk": {"rules": [{"name": "w-red", "token": "hop.listed.example", "action": "redirect", "target": {"kind": "location", "location": 2}},
+                       {"name": "w-red-f", "token": "hop.foreign.example", "action": "redirect", "target": {"kind": "location", "location": 2}}]}
+  },
+  "endpoints": {
+    "e-rules": {"profile1": "rules", "pair_locs": [1, 2, 3, 4]},
+    "e-svc": {"profile1": "svc", "pair_locs": [1, 2, 3, 4]},
+    "e-geo": {"profile1": "geo", "pair_locs": [1, 2, 3, 4]},
+    "e-default": {"profile1": "default", "pair_locs": [1, 2, 3, 4]},
+    "e-default-hop": {"profile1": "default-hop", "pair_locs": [1, 2, 3, 4]},
+    "e-walk": {"profile1": "walk", "pair_locs": [1, 2, 3, 4]}
+  }
+}
