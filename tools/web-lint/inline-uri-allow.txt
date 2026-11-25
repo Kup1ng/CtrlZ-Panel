@@ -1,0 +1,2 @@
+# A built file that may hold a data: or blob: URI although the policy has img-src 'self' and font-src 'self' (spec 15.2, gate-r13-2).
+# One line per file: <part of the path>  # why it is safe. Nothing is allowed today: the first line here is a review item.

@@ -1,0 +1,179 @@
+# Every relation in schema ctrlz, as tenant or global (spec sections 4, 5 and 12).
+# A table that is not listed fails the test, which is how a forgotten fixture is
+# caught. schema_migrations is goose's version table: global, no grants, and
+# its columns are goose's, not the spec's version/applied_at.
+
+# Tenant tables: tenant_id uuid NOT NULL, FORCE ROW LEVEL SECURITY, the
+# tenant_isolation policy, a primary key that leads with tenant_id.
+# tenants is the one table keyed by id instead (the tenant is the row).
+tenant_key_exceptions: [tenants]
+tenant:
+  - tenants
+  - analytics_read_floors
+  - announcement_reads
+  - api_tokens
+  - authorized_ips
+  - batch_jobs
+  - block_pages
+  - clients
+  - endpoint_ddns_hosts
+  - endpoint_groups
+  - endpoints
+  - feedback_items
+  - filter_preview_jobs
+  - idempotency_keys
+  - ip_claims
+  - ip_proof_challenges
+  - job_outbox
+  - notifications
+  - phone_change_requests
+  - policy_outbox
+  - profile_download_tokens
+  - profile_filters
+  - profile_options
+  - profile_services
+  - profiles
+  - recovery_codes
+  - refresh_tokens
+  - rule_folders
+  - rules
+  - schedule_windows
+  - sessions
+  - setup_share_tokens
+  - tenant_assets
+  - tenant_audit_log
+  - tenant_entitlements
+  - unblock_requests
+  - users
+  - webauthn_credentials
+
+# Global tables: no tenant_id column and no RLS. Reach is by explicit grant.
+global:
+  - admin_jobs
+  - admin_sessions
+  - admin_users
+  - alerts
+  - announcements
+  - audit_log
+  - auth_throttle
+  - auth_tickets
+  - bundles
+  - catalog_common_domains
+  - catalog_filter
+  - catalog_filter_mode
+  - catalog_filter_table
+  - catalog_infra_denylist
+  - catalog_no_redirect_domain
+  - catalog_protected_domains
+  - catalog_rewrites
+  - catalog_service
+  - catalog_service_alias
+  - catalog_service_category
+  - catalog_service_domain
+  - catalog_versions
+  - certificates
+  - config_log
+  - config_snapshot
+  - domain_settings
+  - endpoint_types
+  - geoip_versions
+  - invites
+  - leases
+  - location_availability
+  - locations
+  - node_certs
+  - node_enrollments
+  - node_location_configs
+  - node_pairs
+  - node_quarantine
+  - node_resolver_rules
+  - node_upstreams
+  - nodes
+  - otp_challenges
+  - plans
+  - policy_artifacts
+  - profile_presets
+  - public_settings
+  - schema_migrations
+  - sms_counters
+  - sms_deliveries
+  - sms_gateways
+  - sms_outbox
+  - sms_provider_templates
+  - sms_templates
+  - system_settings
+  - update_status
+  - webauthn_config
+
+# Global columns that carry a tenant id as a plain value. No global table has
+# a foreign key to a tenant row.
+value_columns:
+  - announcements.tenant_id
+  - invites.accepted_tenant_id
+  # Stamped by auth_otp_issue for the challenges of an account (question 15, 0061); a plain value, no foreign key.
+  - otp_challenges.tenant_id
+
+# Global tables that have row-level security ON, each with its named policies in policies.yaml.
+# Check 04 refuses RLS on any other global table, and refuses a listed table that has it off.
+global_rls:
+  - announcements
+  - auth_tickets
+  - otp_challenges
+  - sms_counters
+
+# Indexes on tenant tables that do not lead with tenant_id (spec section 6.3).
+# Each is a lookup by a high-entropy or globally unique key that happens
+# before the tenant is known, or the compiler's cross-tenant drain.
+non_leading_indexes:
+  - users(phone_e164)
+  - sessions(token_hash)
+  - refresh_tokens(token_hash)
+  - api_tokens(token_hash)
+  - webauthn_credentials(credential_id)
+  - endpoints(id)
+  - endpoints(resolver_id)
+  - ip_claims(cidr)
+  - ip_proof_challenges(label)
+  - setup_share_tokens(token_hash)
+  - profile_download_tokens(token_hash)
+  - policy_outbox(created_at)
+
+# Constraints the spec names (test 17). contains must appear in the stored
+# definition.
+named_constraints:
+  - {table: ip_claims, name: ip_claims_no_overlap, contains: "EXCLUDE USING gist (cidr inet_ops WITH &&) WHERE ((state = ANY (ARRAY['active'::text, 'grace'::text])))"}
+  - {table: schedule_windows, name: schedule_windows_no_overlap, contains: "EXCLUDE USING gist (tenant_id WITH =, endpoint_id WITH =, minutes WITH &&)"}
+  - {table: nodes, name: nodes_slot_range, contains: "CHECK (((slot >= 1) AND (slot <= 4)))"}
+  - {table: node_pairs, name: node_pairs_distinct, contains: "CHECK ((primary_node_id <> fallback_node_id))"}
+  - {table: users, name: users_phone_e164_key, contains: "UNIQUE (phone_e164)"}
+  - {table: ip_proof_challenges, name: ip_proof_challenges_udp_has_code, contains: "CHECK (((observed_protocol IS DISTINCT FROM 'udp'::text) OR (txt_code_hash IS NOT NULL)))"}
+  - {table: ip_proof_challenges, name: ip_proof_challenges_lifetime, contains: "CHECK ((expires_at <= (created_at + '00:15:00'::interval)))"}
+  - {table: nodes, name: nodes_resolve_mode_check, contains: "hybrid"}
+  - {table: clients, name: clients_profiles_differ, contains: "profile2_id <> profile_id"}
+  - {table: schedule_windows, name: schedule_windows_profiles_differ, contains: "profile2_id <> profile_id"}
+  - {table: ip_claims, name: ip_claims_proof_method_check, contains: "ARRAY['verify_tcp'::text, 'verify_udp_txt'::text, 'secure_dns'::text]"}
+  - {table: block_pages, name: block_pages_unblock_mode_url, contains: "(unblock_mode = 'custom'::text) = (unblock_url IS NOT NULL)"}
+  - {table: block_pages, name: block_pages_text_controls, contains: "(title !~ '["}
+  - {table: catalog_filter, name: catalog_filter_wire_by_kind, contains: "wire_id >= 1000"}
+  - {table: catalog_service, name: catalog_service_wire_id_range, contains: "4294967295"}
+  - {table: users, name: users_one_time_password, contains: "password_expires_at IS NULL"}
+  - {table: webauthn_credentials, name: webauthn_credentials_name_len, contains: "char_length(name) <= 64"}
+  - {table: sms_outbox, name: sms_outbox_notice_bare, contains: "(params_ct IS NULL) AND (gateway_id IS NULL)"}
+  - {table: phone_change_requests, name: phone_change_requests_lifetime, contains: "00:15:00"}
+  # A counter a cap compares with never starts below zero (db-r10-1, rule caps-and-endings).
+  - {table: sms_counters, name: sms_counters_count_not_negative, contains: "CHECK ((count >= 0))"}
+  - {table: sms_counters, name: sms_counters_cost_not_negative, contains: "CHECK ((cost >= (0)::numeric))"}
+  - {table: auth_throttle, name: auth_throttle_count_not_negative, contains: "CHECK ((count >= 0))"}
+  # The price that feeds the spend is judged where it is stored (db-r11-1): a negative price made
+  # the counter's own guard refuse every accepted-send record. NaN passes ">= 0", so it is named.
+  - {table: sms_gateways, name: sms_gateways_cost_not_negative, contains: "(cost_per_message <> 'NaN'::numeric)"}
+  # The same line for the other two numeric columns the money cap reads (db-r12-1, db-r12-3): the
+  # spend itself and the cap itself. Check 27 asks it of every numeric column, not only these.
+  - {table: sms_counters, name: sms_counters_cost_not_nan, contains: "(cost <> 'NaN'::numeric)"}
+  - {table: system_settings, name: system_settings_sms_cost_cap_not_nan, contains: "(sms_cost_cap_daily <> 'NaN'::numeric)"}
+
+# Numeric columns that may accept NaN or an infinity, each with the reason (check 27). Postgres sorts NaN above every
+# number, so a lower bound alone does not refuse it, and an unbounded numeric or a float holds +-Infinity too (a
+# numeric(p, s) refuses those by its type). Any other numeric column needs a CHECK, enforced and validated, on the
+# column alone that is false for NaN and for both infinities. Empty: covered_share is held by BETWEEN 0 AND 1, which NaN fails.
+nan_exempt: []

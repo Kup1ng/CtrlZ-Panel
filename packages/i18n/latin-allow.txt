@@ -1,0 +1,18 @@
+# Latin words that may appear in a Persian message. One word per line, then
+# " # reason". A new word needs a reason a reviewer accepts: Persian has a word
+# for almost everything, and a product name or a protocol is the exception.
+Ctrl # product name
+Z # product name
+English # the language's own name in the language switch
+Passkey # the name users see in browsers and phones
+TOTP # protocol name, shown beside the app's code field
+OTP # same, for the one-time SMS code
+SMS # used as is in Persian text
+DNS # product category
+IP # used as is
+API # the name of the interface, as in the sidebar entry and its help text
+GSM # the name of the SMS character set, as in "GSM-7", shown in the template editor count
+QR # the name of the scan code, as in "QR code"
+RP # the WebAuthn term in the name of the "RP ID" field
+DoH # protocol name, the encrypted-DNS way the IP-claim message points to (P3 2.2)
+DoT # same, for DNS over TLS

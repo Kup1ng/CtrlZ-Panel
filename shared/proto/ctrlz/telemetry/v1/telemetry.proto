@@ -1,0 +1,89 @@
+// Node to hub telemetry (contract section 12). Dedupe key is (node_id, batch_id);
+// node_id comes from the client certificate, never from a field (R18).
+syntax = "proto3";
+
+package ctrlz.telemetry.v1;
+
+import "ctrlz/common/v1/common.proto";
+
+option go_package = "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/telemetry/v1;telemetryv1";
+
+// sealed is compressed LogRows under X25519 plus an AEAD to the hub key (R16),
+// so a stolen spool file reveals nothing.
+message LogBatch {
+  uint64 batch_id = 1;
+  uint32 count = 2;
+  bytes ephemeral_pub = 3;
+  bytes nonce = 4;
+  bytes sealed = 5;
+}
+
+message LogRows {
+  repeated LogRow rows = 1;
+}
+
+// client_id is a compiled or auto-assigned id, never free text (R8, R21).
+message LogRow {
+  int64 ts = 1;
+  uint64 row_id = 2;
+  bytes endpoint_id = 3;
+  bytes client_id = 4;
+  bytes profile_id = 5;
+  bytes profile2_id = 6;
+  bytes schedule_window_id = 7;
+  bytes qname_wire = 8;
+  uint32 qtype = 9;
+  uint32 rcode = 10;
+  ctrlz.common.v1.Action action = 11;
+  ctrlz.common.v1.Stage decision_stage = 12;
+  bytes decision_ref = 13;
+  uint32 location = 14;
+  ctrlz.common.v1.Protocol protocol = 15;
+  bytes source_ip = 16;
+  string source_country = 17;
+  uint32 source_asn = 18;
+  string answer_country = 19;
+  uint32 asn = 20;
+  repeated bytes cname_chain = 21;
+  uint64 config_seq = 22;
+  uint64 catalog_version = 23;
+  uint32 traffic_cat = 24;
+  uint32 latency_us = 25;
+}
+
+message CountersBatch {
+  uint64 batch_id = 1;
+  int64 bucket_start = 2;
+  repeated Counter counters = 3;
+}
+
+message Counter {
+  bytes endpoint_id = 1;
+  ctrlz.common.v1.Protocol protocol = 2;
+  ctrlz.common.v1.Action action = 3;
+  uint64 count = 4;
+}
+
+message ActivityBatch {
+  uint64 batch_id = 1;
+  repeated ActivityEntry entries = 2;
+}
+
+// Buckets are 5 minutes. Never a qname. Sent at every analytics level and for
+// Do Not Log, so "is this device alive" works without any query history.
+message ActivityEntry {
+  bytes endpoint_id = 1;
+  string client_label = 2;
+  bytes claim_id = 3;
+  bytes source_ip_hash = 4;
+  int64 last_seen_bucket = 5;
+  int64 first_seen_bucket = 6;
+  ctrlz.common.v1.Protocol protocol = 7;
+}
+
+// durable is true only after fsync at the hub; a node deletes spool data only
+// on durable acks.
+message Ack {
+  uint64 batch_id = 1;
+  bool durable = 2;
+}

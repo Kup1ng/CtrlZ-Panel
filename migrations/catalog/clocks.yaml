@@ -1,0 +1,196 @@
+# Clock source (P1 auth review round 5, rule 3 "clock-source"; spec 3.3, 3.5, 4.5, 10.2,
+# 10.5, 16.1). Read by internal/clockrule.
+#
+# Every security timestamp column has exactly ONE clock, declared here and nowhere
+# else:
+#
+#   app    the application clock. Go stamps the column from a parameter and Go (or SQL,
+#          against a parameter) compares it. No SQL text, no definer function body and
+#          no column DEFAULT reads a database clock in a statement that names it.
+#   db     the database clock. SQL stamps it with now() and SQL decides on it, often
+#          inside a SECURITY DEFINER function. Go never decides on it: a statement does
+#          not hand it to Go as a time, write it from a Go value or compare it with one,
+#          unless the column is listed under `read` below with the reason.
+#   stamp  the database clock, kept as a record. Nothing compares it with a clock, and
+#          Go may read it to show it.
+#
+# Why: windows were open coded in Go and in SQL, so reauth_at, totp_verified_at, the ack
+# cutoff and the password expiry each crossed clocks in a different round, and a
+# skew between the application host and the database host opened a window early or
+# closed it late. A catalog check (24) requires every timestamp column of the tables
+# below to be listed (a new column fails until it has a clock), a lint over every SQL
+# constant in Go and over the live bodies of the definer functions and the column
+# defaults enforces the table, and a boundary test with the application clock three
+# hours ahead of and behind Postgres covers every app and db column.
+#
+# Tables: every table of guarded.yaml, plus the ones whose time decides an
+# authentication step.
+tables:
+  admin_sessions:
+    idle_expires_at: app
+    absolute_expires_at: app
+    totp_verified_at: app
+    created_at: app
+    revoked_at: stamp
+  admin_users:
+    disabled_at: stamp
+    created_at: stamp
+    updated_at: stamp
+    totp_enabled_at: stamp
+    password_changed_at: stamp
+    password_expires_at: db
+    last_login_at: stamp
+  api_tokens:
+    # expires_at is written by Go from the application clock and compared with it (P3 2.2 item 12, 6.2):
+    # the value of the token carries the same instant, so Screen and the row agree.
+    expires_at: app
+    # last_used_at is written from the application time of the request that used the token and compared with it (a write
+    # at most once in ten minutes, P3 6.3 step 7), so it is on the application clock like the expiry.
+    last_used_at: app
+    revoked_at: stamp
+    created_at: stamp
+    updated_at: stamp
+  audit_log:
+    # A record of when the row was made, which nothing compares with a clock: only the hash of the chain
+    # covers it. The admin writers hand Go's time in and hash that text (spec 13.1); the key tool's row is
+    # made by the definer function ctrlz_fn.keytool_audit_key_event with the database clock (0059, admin-r18-6),
+    # which catalog check 24 allows only for a `stamp` column.
+    at: stamp
+  auth_throttle:
+    window_start: db
+  auth_tickets:
+    expires_at: db
+    consumed_at: stamp
+    created_at: stamp
+  invites:
+    expires_at: db
+    used_at: stamp
+    revoked_at: stamp
+    created_at: stamp
+  notifications:
+    read_at: stamp
+    created_at: stamp
+    updated_at: stamp
+  otp_challenges:
+    expires_at: db
+    consumed_at: db
+    created_at: db
+    delivery_claimed_until: db
+  phone_change_requests:
+    expires_at: db
+    completed_at: stamp
+    created_at: db
+    updated_at: stamp
+  profile_download_tokens:
+    expires_at: app
+    created_at: stamp
+  # disabled_until is the end of a Disable (T-138): Go stamps it from the application clock
+  # (Tx.ProfileDisable) and the node compares it with its own. TestClockWindows has the case.
+  profiles:
+    disabled_until: app
+    locked_at: stamp
+    created_at: stamp
+    updated_at: stamp
+  recovery_codes:
+    used_at: stamp
+    created_at: stamp
+  refresh_tokens:
+    rotated_at: app
+    reuse_grace_until: app
+    expires_at: app
+    revoked_at: stamp
+    created_at: stamp
+    updated_at: stamp
+  sessions:
+    idle_expires_at: app
+    absolute_expires_at: app
+    reauth_at: app
+    last_seen_at: app
+    revoked_at: stamp
+    created_at: stamp
+    updated_at: stamp
+  setup_share_tokens:
+    expires_at: app
+    revoked_at: stamp
+    created_at: stamp
+  sms_counters:
+    day: db
+  sms_deliveries:
+    created_at: db
+  sms_gateways:
+    created_at: stamp
+    updated_at: stamp
+    last_ok_at: stamp
+    last_error_at: stamp
+    breaker_open_until: db
+  sms_outbox:
+    claimed_until: db
+    created_at: db
+    sent_at: stamp
+  tenant_audit_log:
+    at: db
+  tenants:
+    deleted_at: stamp
+    created_at: stamp
+    updated_at: stamp
+  users:
+    phone_verified_at: stamp
+    totp_enabled_at: stamp
+    totp_pending_at: db
+    last_login_at: stamp
+    created_at: stamp
+    updated_at: stamp
+    password_changed_at: stamp
+    password_expires_at: db
+    enforce_lift_at: app
+    passkey_review_at: stamp
+  webauthn_credentials:
+    stale_at: stamp
+    last_used_at: stamp
+    created_at: stamp
+    updated_at: stamp
+
+# db columns Go may select. Each is a time to show, or a value Go hands back to SQL
+# unchanged, or an identity token compared for equality; none is compared with a clock
+# in Go. The decision is a boolean the same call computes in SQL (OneTimeLive,
+# PasswordExpired, Expired, TOTPPendingStale, BreakerOpenFor).
+read:
+  users.password_expires_at: "the end of a one-time password, shown by the admin Users list through ctrlz.one_time_expiry; the decision is ctrlz.credential_state, made in SQL"
+  invites.expires_at: "shown to the invitee and in the admin list; the decision is Expired / the state column, made in SQL"
+  sms_gateways.breaker_open_until: "shown in the admin list; the worker reads BreakerOpenFor, a length of time"
+  sms_counters.day: "the day the admin statistics chart is drawn for, and the day a refund returns to"
+  otp_challenges.created_at: "handed back to the counter refund, which derives the Tehran day of the counted message; never compared with a clock"
+  sms_outbox.created_at: "handed back to the counter refund, which derives the Tehran day of the counted message; never compared with a clock"
+
+# db columns SQL may compare with, or write from, a value Go read from the database and
+# hands back unchanged. The value is never the application clock.
+carry:
+  sms_counters.day: "the refund addresses the counter row of the day the message was counted on, derived from the message's own created_at"
+
+# Every timestamp column a SECURITY DEFINER function returns, mapped to the column it
+# is read from ("none" for a value the function computes or of a table outside this
+# file). A db column handed to Go raw must also be listed under `read`. Catalog check 24
+# requires an entry for every timestamp column of every definer function.
+functions:
+  admin_reissue_one_time_password.expires_at: users.password_expires_at
+  admin_sms_stats.day: sms_counters.day
+  announcements_for_tenant.starts_at: none
+  announcements_for_tenant.ends_at: none
+  auth_download_by_hash.expires_at: profile_download_tokens.expires_at
+  auth_invite_by_hash.expires_at: invites.expires_at
+  auth_invite_by_hash.used_at: invites.used_at
+  auth_invite_by_hash.revoked_at: invites.revoked_at
+  auth_passkey_by_credential.stale_at: webauthn_credentials.stale_at
+  auth_refresh_by_hash.rotated_at: refresh_tokens.rotated_at
+  auth_refresh_by_hash.reuse_grace_until: refresh_tokens.reuse_grace_until
+  auth_refresh_by_hash.expires_at: refresh_tokens.expires_at
+  auth_refresh_by_hash.revoked_at: refresh_tokens.revoked_at
+  auth_session_by_hash.idle_expires_at: sessions.idle_expires_at
+  auth_session_by_hash.absolute_expires_at: sessions.absolute_expires_at
+  auth_session_by_hash.revoked_at: sessions.revoked_at
+  auth_session_by_hash.reauth_at: sessions.reauth_at
+  auth_share_by_hash.expires_at: setup_share_tokens.expires_at
+  auth_token_by_hash.revoked_at: api_tokens.revoked_at
+  auth_user_by_phone.enforce_lift_at: users.enforce_lift_at
+  auth_user_by_phone.password_changed_at: users.password_changed_at
+  ip_claim_open_challenge.expires_at: none
