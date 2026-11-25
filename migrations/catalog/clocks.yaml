@@ -194,5 +194,3 @@ functions:
   ip_claim_open_challenge.expires_at: none
   # P4: the time a claim was taken, shown to the admin in the review of a node's reports (4.5); never compared with a clock.
   node_taken_claims.consumed_at: none
-  # P4: the time a claim was taken, shown to the admin in the review of a node's reports (4.5); never compared with a clock.
-  node_taken_claims.consumed_at: none

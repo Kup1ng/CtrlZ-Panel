@@ -4075,9 +4075,9 @@ mutants:
     edits:
       - file: deploy/compose/docker-compose.yml
         old: |-
-          secrets: [pg_hub_password, proof_key]
+          secrets: [pg_hub_password, proof_key, policy_key, node_ca_key, node_ca_pem, hub_tls_key, zone_ca_key, wildcard_intake_key, spool_key]
         new: |-
-          secrets: [pg_hub_password, proof_key]
+          secrets: [pg_hub_password, proof_key, policy_key, node_ca_key, node_ca_pem, hub_tls_key, zone_ca_key, wildcard_intake_key, spool_key]
               ports:
                 - "7443:7443"
     must_fail:
@@ -5894,7 +5894,7 @@ mutants:
     docker: true
     why: auth_public_config ignores unusable_now (round 18 moved the public flag to configuration alone, 0055), so the login page offers the one-time code for gateways whose credentials no key opens or that have none.
     edits:
-      - file: migrations/postgres/0057_review_round18_sms.sql
+      - file: migrations/postgres/0100_p4_nodes.sql
         old: |-
           AND NOT g.unusable_now
         new: |-
@@ -15621,7 +15621,7 @@ mutants:
           REVOKE SELECT (breaker_open_until, blocked_now) ON ctrlz.sms_gateways FROM ctrlz_auth;
         new: |-
           SELECT 1;
-      - file: migrations/postgres/0057_review_round18_sms.sql
+      - file: migrations/postgres/0100_p4_nodes.sql
         old: |-
           AND NOT g.unusable_now
         new: |-
@@ -15635,7 +15635,7 @@ mutants:
     docker: true
     why: auth_public_config counts a gateway whatever its role, so a gateway the admin disabled keeps the login page offering a code.
     edits:
-      - file: migrations/postgres/0057_review_round18_sms.sql
+      - file: migrations/postgres/0100_p4_nodes.sql
         old: |-
           WHERE g.role IN ('primary', 'fallback')
         new: |-
