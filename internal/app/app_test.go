@@ -218,6 +218,7 @@ func TestRolesAgainstARealDatabase(t *testing.T) {
 			if role == app.RoleWorker {
 				// The compiler job runs on its own pool and credentials.
 				vars["CTRLZ_DB_COMPILER_PASSWORD_FILE"] = writeSecret(t, "cpw", d.Password("ctrlz_compiler").Reveal())
+				vars["CTRLZ_ARTIFACTS_DIR"] = t.TempDir() // the compiler needs both, or the worker does not start
 			}
 			addr, stop, log := start(t, role, vars)
 			if code, body := get(t, "http://"+addr+"/readyz"); code != 200 {

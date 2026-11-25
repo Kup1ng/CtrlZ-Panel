@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/testpg"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 // Tests of migration 0100 (P4 W2, docs/specs/p4-nodes.md 3.2): the node tables, the triggers, the policies of
@@ -579,10 +580,16 @@ func TestP4ConfigLogLock(t *testing.T) {
 		_, err := second.Exec(h.ctx, `SELECT ctrlz_fn.config_log_lock()`)
 		done <- err
 	}()
+	// The worker is blocked when the server says a backend waits for an advisory lock, not when some time has passed.
+	watcher := h.fresh()
+	testwait.Until(t, 10*time.Second, "the worker to wait for the advisory lock", func() bool {
+		var n int
+		return watcher.QueryRow(h.ctx, `SELECT count(*) FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND NOT granted`).Scan(&n) == nil && n > 0
+	})
 	select {
 	case err := <-done:
 		t.Fatalf("the worker took the lock while the compiler held it (%v)", err)
-	case <-time.After(500 * time.Millisecond):
+	default:
 	}
 	if err := first.Commit(h.ctx); err != nil {
 		t.Fatal(err)

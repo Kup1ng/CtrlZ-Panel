@@ -72,6 +72,7 @@ func notKeyCommands() map[string]string {
 		"ctrlz-admin reset-totp":     "clears an admin's authenticator column; it opens nothing and judges no key",
 		"ctrlz-admin unlock":         "clears throttle rows",
 		"ctrlz-admin audit":          "walks the audit hash chain",
+		"ctrlz catalog":              "the lab command that loads a catalog fixture: it reads no key file and judges no sealed value (the catalog key is data of the fixture)",
 		"ctrlz-admin sms":            "copies pending sealed SMS credentials over the active ones without opening them; a rekey re-seals both",
 	}
 }

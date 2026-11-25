@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 )
 
 // Artifacts is the content-addressed store behind policy_artifacts (P4 6.5, R37). A file is named by the hex SHA-256 of
@@ -115,22 +114,6 @@ func (d *DirArtifacts) write(p string, data []byte) error {
 	// The rename is in the directory until the directory is synced: after a power loss the entry may name a hash whose
 	// file never reached the disk, while Postgres has committed the entry.
 	return syncDir(d.dir)
-}
-
-// syncDir flushes a directory. Windows has no such call for a directory, and the store runs on Linux in production.
-func syncDir(dir string) error {
-	if runtime.GOOS == "windows" {
-		return nil
-	}
-	f, err := os.Open(dir)
-	if err != nil {
-		return fmt.Errorf("compiler: artifact directory: %w", err)
-	}
-	defer f.Close()
-	if err := f.Sync(); err != nil {
-		return fmt.Errorf("compiler: artifact directory sync: %w", err)
-	}
-	return nil
 }
 
 // Size is the size of the stored file, -1 for none. A link, a directory or anything else that is not a regular file

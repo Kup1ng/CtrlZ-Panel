@@ -169,8 +169,11 @@ func TestTheCompilerWritesWhatTheRealTablesHold(t *testing.T) {
 	if n := w.count(t, `SELECT count(*) FROM ctrlz.config_log`); n != before {
 		t.Fatalf("a restart wrote %d entries", n-before)
 	}
-	if err := w.db.Exec(w.ctx, `INSERT INTO ctrlz.rules (tenant_id, profile_id, rule_key, match_kind, action) VALUES ($1, $2, 'new.example.test', 'domain', 'block');
-INSERT INTO ctrlz.policy_outbox (tenant_id, aggregate_type, aggregate_id, batch_id) VALUES ($1, 'profile', $2, gen_random_uuid())`, w.A.Tenant, w.A.Profile); err != nil {
+	if err := w.db.Exec(w.ctx, `INSERT INTO ctrlz.rules (tenant_id, profile_id, rule_key, match_kind, action) VALUES ($1, $2, 'new.example.test', 'domain', 'block')`, w.A.Tenant, w.A.Profile); err != nil {
+		t.Fatal(err)
+	}
+	// One statement each: a prepared statement holds one command.
+	if err := w.db.Exec(w.ctx, `INSERT INTO ctrlz.policy_outbox (tenant_id, aggregate_type, aggregate_id, batch_id) VALUES ($1, 'profile', $2, gen_random_uuid())`, w.A.Tenant, w.A.Profile); err != nil {
 		t.Fatal(err)
 	}
 	w.run(t, c2)

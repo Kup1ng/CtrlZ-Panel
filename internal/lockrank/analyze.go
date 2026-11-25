@@ -57,6 +57,9 @@ func advisoryKeys() map[string]string {
 		// rows they then read are in the node band, so the lock takes that rank.
 		"ctrlz.node_pairs_one_peer":    "node_pairs",
 		"ctrlz.node_upstreams_no_loop": "node_upstreams",
+		// The single writer of config_log.seq (PS 10): the compiler's write and the worker's pruning, which then read and
+		// write the log's rows (the node band).
+		"ctrlz.config_log": "config_log",
 	}
 }
 

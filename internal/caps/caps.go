@@ -256,6 +256,7 @@ func Bounds() []Bound {
 		{"MaxPrefixesPerAdd", "prefixes in one authorized-IP add (D31): the items of one request, checked on the value in hand; max_authorized_ips is the cap"},
 		{"MaxHostnameBytes", "longest DDNS hostname DNS allows, checked on the one value in hand; a format limit, nothing shared that racing actors could spend"},
 		{"MaxShareHours", "range of one request field (ttl_hours of a share link, 1 to 168): checked on the value in hand; nothing is shared between requests that racing actors could spend (the live links of an Endpoint are capped by MaxShareLinksPerEndpoint)"},
+		{"MaxFixture", "size of the one fixture file the lab command reads (ctrlz catalog load-fixture): checked on the file in hand; nothing is shared between requests that racing actors could spend"},
 		{"MaxClientsPerSelector", "clients one selector write resolves (spec 9.3): the write applies to the rows it locked and says whether more remain, so the caller repeats; a size of one request, not an amount racing actors spend"},
 	}
 }
