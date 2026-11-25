@@ -1,0 +1,18 @@
+{
+"table": "catalog_service_category",
+"columns": ["id","name_en","name_fa"],
+"rows": [
+  ["audio","Audio","صوتی"],
+  ["career","Career","کار و آموزش"],
+  ["finance","Finance","مالی"],
+  ["gaming","Gaming","بازی"],
+  ["hosting","Hosting","میزبانی و ابر"],
+  ["news","News","خبر"],
+  ["recreation","Recreation","سفر و تفریح"],
+  ["shop","Shop","خرید"],
+  ["social","Social","اجتماعی و پیام‌رسان"],
+  ["tools","Tools","ابزارها"],
+  ["vendors","Vendors","تولیدکنندگان"],
+  ["video","Video","ویدیو"]
+]
+}
