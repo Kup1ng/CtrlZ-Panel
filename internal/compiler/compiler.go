@@ -65,7 +65,7 @@ type Config struct {
 	Reconcile time.Duration
 	// AlertEvery is the least time between two writes of the same alert.
 	AlertEvery time.Duration
-	// Slice is the compile time of a pass after which the units that are finished are written and their marks deleted, and
+	// Slice is the time (by Clock) of a pass after which the units that are finished are written and their marks deleted, and
 	// the pass goes on with the rest (5 s). Without it nothing of a pass is visible until the last tenant is compiled, and a
 	// revocation waits behind every large tenant of the fleet (W4-r3-7).
 	Slice time.Duration
@@ -877,7 +877,7 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 	}
 
 	deferred := false
-	sliceStart := time.Now()
+	sliceStart := c.cfg.Clock()
 	for gi, r := range reps {
 		for _, id := range groupOf[r] {
 			// A tenant past its share of new blob files waits for its window to end; its marks stay. A full pass learns every
@@ -949,11 +949,11 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 				}
 			}
 		}
-		if gi < len(reps)-1 && time.Since(sliceStart) >= c.cfg.Slice {
+		if gi < len(reps)-1 && c.cfg.Clock().Sub(sliceStart) >= c.cfg.Slice {
 			if err := flush(false); err != nil {
 				return err
 			}
-			sliceStart = time.Now()
+			sliceStart = c.cfg.Clock()
 		}
 	}
 	// A tenant that is gone and had an Endpoint that was kept (no record in the log) left an owner behind that nothing deletes:

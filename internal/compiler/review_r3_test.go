@@ -111,7 +111,7 @@ func TestAPassHoldsNoBlobBytesOfTheTenantsItHasCompiled(t *testing.T) {
 // W4-r3-7: what is finished is written once a slice of compile time has passed, with the marks of those tenants only, and the
 // tenants that compiled to the most go last.
 func TestFinishedTenantsAreWrittenInSlicesSmallOnesFirst(t *testing.T) {
-	e := newEnv(t, func(c *Config) { c.Slice = time.Nanosecond })
+	e := newEnv(t, func(c *Config) { c.Slice = time.Second })
 	a, b, c := uid(1, 1), uid(1, 2), uid(1, 3)
 	for i, id := range []uuid.UUID{a, b, c} {
 		in := newTenantInput()
@@ -124,6 +124,7 @@ func TestFinishedTenantsAreWrittenInSlicesSmallOnesFirst(t *testing.T) {
 	real := e.c.compile
 	e.c.compile = func(in *TenantInput, now time.Time, prev func(string) *policyv1.EndpointRecord) *Output {
 		order = append(order, e.tenantOf(in))
+		e.clk.add(2 * time.Second) // a compile that takes longer than the slice
 		return real(in, now, prev)
 	}
 	compiledAtCommit, outboxAtCommit := []int{}, []int{}
