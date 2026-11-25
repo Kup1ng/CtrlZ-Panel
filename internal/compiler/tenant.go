@@ -348,9 +348,10 @@ func compileEndpoint(e *store.CompilerEndpoint, in *TenantInput, compiled map[uu
 				if old == nil {
 					return nil, false
 				}
-				// The stack the log had for this client, and with none (a new client) no record of the client: it is
-				// served the Endpoint's base, as an unknown client is.
-				if cr.Stack = oldStack[string(c.ID[:])]; cr.Stack == nil {
+				// The stack the log had for this client. With none (a new client) the client is served the Endpoint's base, as an
+				// unknown client is, and its record stays only when it carries an analytics override: dropping that would log the
+				// client at the Endpoint's level for as long as the stack does not compile (W4-r5-8).
+				if cr.Stack = oldStack[string(c.ID[:])]; cr.Stack == nil && c.Analytics == "" {
 					continue
 				}
 			}

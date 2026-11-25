@@ -641,10 +641,37 @@ type tenantResult struct {
 	known bool
 	// written is the bytes of new blob files the sink put in the store.
 	written uint64
+	// wrote is those files. The sink puts the file of every profile it builds, before the compile knows whether a record will
+	// bind it, so the caller removes the ones the diff does not bind (W4-r5-4).
+	wrote []wroteFile
 	// storeFailed says the artifact store refused a file: the tenant is compiled again with no new blob.
 	storeFailed bool
 	// compileFailed says the compile itself panicked or could not read the rules, which a compile with no blob does not do.
 	compileFailed bool
+}
+
+// wroteFile is a blob file a compile put in the store because it was not there.
+type wroteFile struct {
+	hash []byte
+	size uint64
+}
+
+// discard removes the files a compile wrote that nothing binds: not the diff it produced (bound), and not a blob the log already
+// names (the file of a bound blob is repaired and kept). A file with no row, no binding and no gc_after_seq is one that
+// collection by rows can never reach, and a tenant could write one with every edit (W4-r5-4). A file that was there before the
+// compile is never in the list, so no entry that names it loses it.
+func (c *Compiler) discard(files []wroteFile, bound map[string]int) {
+	for _, f := range files {
+		if _, ok := bound[string(f.hash)]; ok {
+			continue
+		}
+		if _, ok := c.view.blobs[string(f.hash)]; ok {
+			continue
+		}
+		if err := c.cfg.Artifacts.Delete(f.hash); err != nil {
+			c.cfg.Log.Warn("compiler: an unbound blob file could not be removed", logattr.Enum("class", classOf2(err)))
+		}
+	}
 }
 
 // compileOne reads and compiles one tenant. A tenant whose read fails for its own reasons, or whose compile panics, is
@@ -669,8 +696,15 @@ func (c *Compiler) compileOne(ctx context.Context, id uuid.UUID, alive bool, now
 		// the store would not take only costs the tenant its new blobs.
 		fenceErr, putErr error
 		written          uint64
+		wrote            []wroteFile
 		fenced           bool
 	)
+	// A compile that ends the pass binds nothing, so the files it put are removed here.
+	defer func() {
+		if err != nil {
+			c.discard(wrote, nil)
+		}
+	}()
 	sink := func(p *Profile) error {
 		had := c.cfg.Artifacts.Has(p.Hash, int64(len(p.Bytes)))
 		if !fenced && (full || !had) {
@@ -694,6 +728,7 @@ func (c *Compiler) compileOne(ctx context.Context, id uuid.UUID, alive bool, now
 		}
 		if !had {
 			written += uint64(len(p.Bytes))
+			wrote = append(wrote, wroteFile{hash: append([]byte(nil), p.Hash...), size: uint64(len(p.Bytes))})
 		}
 		return nil
 	}
@@ -722,6 +757,7 @@ func (c *Compiler) compileOne(ctx context.Context, id uuid.UUID, alive bool, now
 			return c.compile(in, now, func(k string) *policyv1.EndpointRecord { return v.Endpoints[k] })
 		})
 	})
+	res.written, res.wrote = written, wrote
 	if renewErr != nil {
 		return res, renewErr
 	}
@@ -738,10 +774,14 @@ func (c *Compiler) compileOne(ctx context.Context, id uuid.UUID, alive bool, now
 		res.storeFailed = true
 		return res, nil
 	}
+	// The backend may hand the read error back as its own error (the database does, since the transaction's error is the rules
+	// read's) or only in the output: both are a compile that could not read the rules (W4-r5-5).
 	fromCompile := panicked
-	if rerr == nil && out != nil {
-		rerr = out.readErr
-		fromCompile = fromCompile || rerr != nil
+	if out != nil && out.readErr != nil {
+		fromCompile = true
+		if rerr == nil {
+			rerr = out.readErr
+		}
 	}
 	res.compileFailed = fromCompile
 	switch {
@@ -769,7 +809,7 @@ func (c *Compiler) compileOne(ctx context.Context, id uuid.UUID, alive bool, now
 	case !found:
 		return tenantResult{out: emptyOutput()}, nil
 	}
-	res.out, res.written = out, written
+	res.out = out
 	return res, nil
 }
 
@@ -780,7 +820,11 @@ func retriable(r Reason) bool {
 
 // markRetry puts a tenant in the retry set at once, and not when the pass ends: the marks of a tenant go with the slice that
 // meets it, and a pass that fails after that slice would otherwise leave the tenant with neither a mark nor a retry (W4-r4-1).
+//
+// The retry set then owns the tenant, so it leaves the waiting set: a window that has ended must not bring a tenant that cannot be
+// compiled back every debounce (W4-r5-6).
 func (c *Compiler) markRetry(id uuid.UUID, now time.Time) {
+	delete(c.waiting, id)
 	c.retry[id] = true
 	if c.retryDue.IsZero() {
 		c.retryDue = now.Add(c.cfg.Reconcile)
@@ -938,6 +982,11 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 		pendingMarks []uuid.UUID
 		pendingBytes int
 		problems     []Alert
+		// What a tenant's compile changes in the compiler's memory but is only true once its entry is committed: its charge
+		// against the blob budget, and its leaving the waiting and retry sets. A flush that fails leaves them as they were, so
+		// the tenant is compiled again (W4-r5-3).
+		pendingUse   []blobCharge
+		pendingClear []uuid.UUID
 	)
 	// flush writes the diffs of the slice and deletes the marks of the tenants in it. final also carries what belongs to the
 	// whole pass and not to a tenant: the catalog entry and the bump.
@@ -1002,7 +1051,15 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 				return err
 			}
 		}
-		pending, pendingMarks, pendingBytes = nil, nil, 0
+		for _, u := range pendingUse {
+			c.addBlobUse(u.id, u.bytes, now)
+			c.sinceSnap += u.snap
+		}
+		for _, id := range pendingClear {
+			delete(c.waiting, id)
+			delete(c.retry, id)
+		}
+		pending, pendingMarks, pendingBytes, pendingUse, pendingClear = nil, nil, 0, nil, nil
 		return nil
 	}
 
@@ -1036,6 +1093,9 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 			// A compile that panics, or a file the store would not take, costs the tenant its new blobs and not its revocations
 			// (W4-r4-5, W4-r4-9).
 			if !degraded && (res.storeFailed || (res.out == nil && res.compileFailed)) {
+				// The files this compile put are not used: remove them, and charge the work they were (W4-r5-4).
+				c.discard(res.wrote, nil)
+				c.addBlobUse(id, res.written, now)
 				degraded, fallback = true, ReasonProfile
 				if res.storeFailed {
 					fallback = ReasonArtifacts
@@ -1043,19 +1103,25 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 				continue
 			}
 			if res.out == nil {
+				c.discard(res.wrote, nil)
+				c.addBlobUse(id, res.written, now)
 				break
 			}
 			sort.Strings(byOwner[id])
 			d = diffTenant(v, id, res.out, byOwner[id], claimsOf)
 			var perr error
 			if n, perr = c.putBlobs(ctx, d, res.out, full); perr != nil {
+				c.discard(res.wrote, nil)
 				var ae *artifactError
 				if errors.As(perr, &ae) && !degraded {
+					c.addBlobUse(id, res.written, now)
 					degraded, fallback = true, ReasonArtifacts
 					continue
 				}
 				return perr
 			}
+			// What the sink put and no record binds goes (W4-r5-4).
+			c.discard(res.wrote, d.blobs)
 			break
 		}
 		// Its marks go with the slice, as every tenant's do, and the retry set brings a failed one back.
@@ -1091,9 +1157,7 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 			problems = append(problems, Alert{Reason: fallback, Tenant: id})
 		default:
 			n += res.written
-			c.addBlobUse(id, n+uint64(d.bytes), now)
-			c.sinceSnap += n
-			delete(c.waiting, id)
+			pendingUse = append(pendingUse, blobCharge{id: id, bytes: n + uint64(d.bytes), snap: n})
 			failed := false
 			for _, r := range out.Problems {
 				failed = failed || retriable(r)
@@ -1101,7 +1165,7 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 			if failed {
 				c.markRetry(id, now)
 			} else {
-				delete(c.retry, id)
+				pendingClear = append(pendingClear, id)
 			}
 		}
 		return nil
@@ -1123,20 +1187,68 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 		}
 		sliceStart = c.cfg.Clock()
 		// A change marked while the pass worked is served before the large tenants that are left. A mark of a tenant that is done
-		// stays for the next pass: it came after the compile.
+		// stays for the next pass: it came after the compile. So does a mark that shares its batch with one of a done tenant, or
+		// with a tenant that waits for one: a batch is one entry (6.1), and half of it written now would put a taker's claim and its
+		// victim's apart (W4-r5-7).
 		fresh, err := be.Marks(ctx, 5000)
 		if err != nil {
 			return err
 		}
+		inBatch := map[uuid.UUID]map[uuid.UUID]bool{}
+		note := func(m store.OutboxMark) {
+			if inBatch[m.Batch] == nil {
+				inBatch[m.Batch] = map[uuid.UUID]bool{}
+			}
+			inBatch[m.Batch][m.Tenant] = true
+		}
+		for _, m := range marks {
+			note(m)
+		}
+		for _, m := range fresh {
+			note(m)
+		}
+		blocked := map[uuid.UUID]bool{}
+		for grew := true; grew; {
+			grew = false
+			for _, ts := range inBatch {
+				hit := false
+				for t := range ts {
+					hit = hit || done[t] || blocked[t]
+				}
+				if !hit {
+					continue
+				}
+				for t := range ts {
+					if !done[t] && !blocked[t] {
+						blocked[t], grew = true, true
+					}
+				}
+			}
+		}
 		var added []store.OutboxMark
 		for _, m := range fresh {
-			if knownMark[m.ID] || done[m.Tenant] {
+			if knownMark[m.ID] || done[m.Tenant] || blocked[m.Tenant] {
 				continue
 			}
 			knownMark[m.ID] = true
 			markIDs[m.Tenant] = append(markIDs[m.Tenant], m.ID)
 			tenants[m.Tenant] = true
 			added = append(added, m)
+		}
+		// A tenant that registered after the pass listed the tenants is not in alive, and would be taken for a gone one, its marks
+		// consumed with nothing compiled (W4-r5-1).
+		unknown := false
+		for _, m := range added {
+			unknown = unknown || !alive[m.Tenant]
+		}
+		if unknown {
+			now2, err := be.Tenants(ctx)
+			if err != nil {
+				return err
+			}
+			for _, id := range now2 {
+				alive[id] = true
+			}
 		}
 		if len(added) != 0 {
 			join(added)
@@ -1199,6 +1311,13 @@ func (c *Compiler) fire(ctx context.Context, now time.Time) error {
 		c.alert(ctx, a, now)
 	}
 	return nil
+}
+
+// blobCharge is what a tenant's finished compile adds to its blob budget once its entry is written: the bytes of the files it put
+// and of the records (bytes), of which the files alone count toward the next snapshot (snap).
+type blobCharge struct {
+	id          uuid.UUID
+	bytes, snap uint64
 }
 
 // artifactError is a refusal of the artifact store (a full volume, an I/O error), told from a lease or a head that moved: the

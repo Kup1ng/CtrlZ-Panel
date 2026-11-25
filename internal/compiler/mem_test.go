@@ -163,7 +163,12 @@ func (m *memBackend) Tenant(_ context.Context, id uuid.UUID, compile func(*Tenan
 		cp.RulesOf = func(uuid.UUID) ([]store.RuleRow, error) { return nil, rerr }
 		in = &cp
 	}
-	return compile(in), true, nil
+	out := compile(in)
+	// As DB.Tenant does: the error of a read of rules is the transaction's error, and the output comes with it (W4-r5-5).
+	if out != nil {
+		return out, true, out.readErr
+	}
+	return out, true, nil
 }
 
 func (m *memBackend) Membership(context.Context) (*Membership, error) {
