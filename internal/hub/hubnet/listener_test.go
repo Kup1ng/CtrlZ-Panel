@@ -166,30 +166,15 @@ func TestHandshakeBytesAndCertificatesAreBounded(t *testing.T) {
 		_ = c.Close()
 		return nil, errors.New("closed by the hub")
 	}
-	accepted := func() bool {
-		type res struct{ ok bool }
-		ch := make(chan res, 1)
-		go func() {
-			c, err := l.Accept()
-			if err == nil {
-				_ = c.Close()
-			}
-			ch <- res{err == nil}
-		}()
-		select {
-		case r := <-ch:
-			return r.ok
-		case <-time.After(500 * time.Millisecond):
-			return false
-		}
-	}
-
 	// Control: the node's own handshake is admitted.
 	c, err := dial(0)
 	if err != nil {
 		t.Fatalf("a node: %v", err)
 	}
-	if !accepted() {
+	select {
+	case dc := <-l.ready:
+		_ = dc.Close()
+	case <-time.After(10 * time.Second):
 		t.Fatal("a node connection was not delivered")
 	}
 	_ = c.Close()
@@ -204,8 +189,9 @@ func TestHandshakeBytesAndCertificatesAreBounded(t *testing.T) {
 		_ = c.Close()
 		t.Fatal("a handshake of six certificates stayed open")
 	}
-	if accepted() {
-		t.Fatal("a refused handshake was delivered")
+	// Both were closed by the hub inside the handshake, so nothing of them can be waiting to be served.
+	if n := len(l.ready); n != 0 {
+		t.Fatalf("%d refused handshakes were delivered", n)
 	}
 }
 

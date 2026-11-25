@@ -264,6 +264,8 @@ func Bounds() []Bound {
 		{"MaxTransfers", "transfer RPCs one node holds open (SC 12), counted in the hub's process, decided under the limiter's own mutex before any database read (p4-nodes 5.1, 5.7); no statement of a transaction decides it, so no racing actors overspend it"},
 		{"MaxRequestsPerConn", "requests that are not a node's call in progress on one connection, counted in the hub's process, decided under the limiter's own mutex before any database read (p4-nodes 5.1, 5.7); no statement of a transaction decides it, so no racing actors overspend it"},
 		{"MaxUnreadBytes", "bytes of one request body read and not yet taken by a handler, counted in the hub's process, decided under the limiter's own mutex before any database read (p4-nodes 5.1, 5.7); no statement of a transaction decides it, so no racing actors overspend it"},
+		{"MaxHandshakeBytes", "bytes one peer may send before its TLS handshake is done, counted on that one connection by its own read loop (p4-nodes 5.1); a bound of one connection, nothing shared that racing actors could spend"},
+		{"maxPeerCerts", "certificates read from one client's handshake, checked on the value in hand in the listener (p4-nodes 5.1); a format limit, nothing shared that racing actors could spend"},
 		{"MaxCSR", "length of one CSR in a request, checked on the value in hand (hubnodes)"},
 		{"MaxHostname", "length of one hostname field of an enrolment, checked on the value in hand (hubenroll)"},
 		{"MaxFreeText", "length of one free text field of an enrolment, checked on the value in hand (hubenroll)"},
