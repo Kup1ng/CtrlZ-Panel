@@ -48,7 +48,7 @@ func (l *Loop) resetState() {
 	// node only for a drain it has seen (drainSeen): the drain lives in memory, so a restart cannot tell a withdrawn node that was
 	// draining from one that never drained, and must not overwrite the stored answer with a quiet "none" (GP-r1-1).
 	l.written = map[uuid.UUID]store.HubNodeState{}
-	l.fullAt = time.Time{}
+	l.fullAt = stamp{}
 }
 
 // rememberTable keeps the table an event just signed (flags after the event) as the one nodes are asked to apply: the drain of a
@@ -174,7 +174,7 @@ func (l *Loop) publishState(ctx context.Context, now time.Time) {
 	if l.cfg.Lease == nil || !l.cfg.Lease.Held() {
 		return
 	}
-	full := now.Sub(l.fullAt) >= stateRefresh
+	full := now.Sub(l.fullAt.t) >= stateRefresh
 	var batch []store.HubNodeState
 	for _, t := range l.Targets() {
 		st := l.nodeState(now, t.ID)
@@ -198,6 +198,6 @@ func (l *Loop) publishState(ctx context.Context, now time.Time) {
 		l.written[st.Node] = st
 	}
 	if full {
-		l.fullAt = now
+		l.fullAt = stamp{now}
 	}
 }

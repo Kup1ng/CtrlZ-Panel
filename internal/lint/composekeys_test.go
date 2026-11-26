@@ -42,7 +42,7 @@ import (
 //     shm_size, profiles and volumes (the entries of each service). A service that is not in a table may have
 //     none of that key.
 //  4. Whatever the tables say, no volume source may be the secrets directory (or hold the word), the Docker
-//     socket or a path outside the repository, and every bind mount of a host path is read-only. These hold if
+//     socket or a path outside the repository, and every bind mount of a host path is read-only (the one exception is the hub's NTS directory, composeNTSBind). These hold if
 //     someone edits the tables.
 //  5. Every named volume, network, secret and dependency a service uses is declared, and every secret entry of
 //     a service is a plain name (the long form can name a target path or a mode).
@@ -117,7 +117,7 @@ func realComposeTables() composeTables {
 				"./postgres/watchdog.sh:/ctrlz-postgres/watchdog.sh:ro",
 			},
 			// P4 3.3: the hub writes hub_tls.spki to hub_public, admin reads it; both read the signed bundles and root.json.
-			"hub": {"hub_public:/var/lib/ctrlz/hub_public", "../../deploy/bundles:/var/lib/ctrlz/bundles:ro", "artifacts:/var/lib/ctrlz/artifacts:ro"},
+			"hub": {"hub_public:/var/lib/ctrlz/hub_public", "../../deploy/bundles:/var/lib/ctrlz/bundles:ro", "artifacts:/var/lib/ctrlz/artifacts:ro", composeNTSBind},
 			// P4 6.5: the compiler, which runs in the worker, writes the artifact store; the hub reads it.
 			"worker":       {"artifacts:/var/lib/ctrlz/artifacts"},
 			"admin":        {"hub_public:/var/lib/ctrlz/hub_public:ro", "../../deploy/bundles:/var/lib/ctrlz/bundles:ro"},
@@ -272,6 +272,15 @@ func composeTopLevelProblems(doc map[string]any) (problems []string, volumes, ne
 	return problems, volumes, networks, secrets
 }
 
+// composeNTSBind is the one writable bind mount of the file, and it is the hub's: the hub writes the NTS leaf and key of the panel host's
+// chrony into deploy/chrony/nts, a directory of the repository that the host's chrony reads by path (p4-nodes 12, T-411). A named
+// volume would put the files where only the container runtime sees them. It is one directory, named in full, so the clause "a bind
+// mount is read-only" still holds for every other entry and for this one under any other service or any other mode.
+const composeNTSBind = "../../deploy/chrony/nts:/var/lib/ctrlz/nts"
+
+// composeWritableBinds names, per service, the entry that may be a writable bind mount.
+var composeWritableBinds = map[string]string{"hub": composeNTSBind}
+
 // composeVolumeProblems judges the volume entries of one service: the exact table, then the clauses that hold
 // whatever the table says (rule point 4 and the declared-volume half of point 5).
 func composeVolumeProblems(name string, vols []string, table []string, named map[string]bool) []string {
@@ -292,7 +301,7 @@ func composeVolumeProblems(name string, vols []string, table []string, named map
 				out = append(out, fmt.Sprintf("%s mounts the volume %s, which the file does not declare", name, src))
 			}
 		default:
-			if len(parts) < 3 || parts[len(parts)-1] != "ro" {
+			if (len(parts) < 3 || parts[len(parts)-1] != "ro") && composeWritableBinds[name] != v {
 				out = append(out, fmt.Sprintf("%s mounts the host path %s writable: a bind mount is read-only", name, v))
 			}
 			// One of two homes only: the compose directory, or a directory of the repository two levels up.
@@ -611,6 +620,20 @@ func TestComposeVolumeClausesHoldWhateverTheTableSays(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("%s: no problem says %q although the table allows it; got %v", tc.entry, tc.want, p)
+		}
+	}
+	// The hub's NTS directory is the one writable bind, under that service and in that exact form.
+	if p := composeVolumeProblems("hub", []string{composeNTSBind}, []string{composeNTSBind}, declared); len(p) != 0 {
+		t.Errorf("the hub's NTS bind is refused: %v", p)
+	}
+	for _, c := range []struct{ service, entry string }{
+		{"worker", composeNTSBind},
+		{"hub", composeNTSBind + ":rw"},
+		{"hub", "../../deploy/chrony:/var/lib/ctrlz/nts"},
+	} {
+		p := composeVolumeProblems(c.service, []string{c.entry}, []string{c.entry}, declared)
+		if len(p) == 0 || !strings.Contains(strings.Join(p, ";"), "writable") {
+			t.Errorf("%s %s: the writable clause did not fire: %v", c.service, c.entry, p)
 		}
 	}
 	for _, ok := range []string{"pgdata:/var/lib/postgresql", "./a/b:/c:ro", "../../migrations/x:/c:ro"} {

@@ -17,9 +17,9 @@ func (c countingApply) Start(cs *ApplyCase) (ApplyNode, error) {
 type plainHarness struct{ Harness }
 
 // GP-r1-11: Run sends pair-table-apply through the harness it was given. A harness with an apply side is used for every case; one
-// without is skipped and never reported green by the panel's own model.
+// without does not run it, and the panel's own model never reports it green.
 //
-// Fails if: runPairTableApplyGroup ignores h (the counter stays 0, and the plain harness runs and does not skip).
+// Fails if: runPairTableApplyGroup ignores h (the counter stays 0, and the plain harness runs the group).
 func TestRunSendsThePairTableApplyGroupThroughTheHarness(t *testing.T) {
 	g, err := ReadGroup("pair-table-apply")
 	if err != nil {
@@ -30,12 +30,9 @@ func TestRunSendsThePairTableApplyGroupThroughTheHarness(t *testing.T) {
 	if n != requiredGroups["pair-table-apply"] {
 		t.Errorf("the harness started %d nodes, want one per case (%d)", n, requiredGroups["pair-table-apply"])
 	}
-	skipped := false
-	t.Run("plain harness", func(t *testing.T) {
-		defer func() { skipped = t.Skipped() }()
-		runPairTableApplyGroup(t, g, plainHarness{Reference{}})
-	})
-	if !skipped {
-		t.Error("a harness with no apply side ran the group instead of skipping it")
+	ran := true
+	t.Run("plain harness", func(t *testing.T) { ran = runPairTableApplyGroup(t, g, plainHarness{Reference{}}) })
+	if ran {
+		t.Error("a harness with no apply side ran the group instead of leaving it to RunPairTableApply")
 	}
 }

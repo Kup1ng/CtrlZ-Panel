@@ -79,12 +79,18 @@ func (n *NTS) Ensure(ctx context.Context) (bool, error) {
 	// The key goes first: a reader that finds the new certificate always finds its key, and a crash between the two leaves the
 	// old certificate over a new key, which usable() sees as a mismatch and replaces on the next pass.
 	// The debt is recorded first: if this is the file that cannot be written nothing else was, and no alert is wanted.
+	// A marker an earlier pass left is a debt for a leaf that is already on disk (its alert insert failed); this call may remove
+	// only a marker it made itself, or a disk error here would erase that debt and nobody would be told to restart chrony (GP-r1-3).
 	owed := filepath.Join(n.Dir, ntsOwedFile)
+	_, statErr := os.Stat(owed)
+	hadDebt := statErr == nil
 	if err := os.WriteFile(owed, nil, 0o600); err != nil {
 		return false, err
 	}
 	if err := writeAtomic(filepath.Join(n.Dir, NTSKeyFile), keyPEM, 0o640); err != nil {
-		_ = os.Remove(owed)
+		if !hadDebt {
+			_ = os.Remove(owed)
+		}
 		return false, err
 	}
 	if err := writeAtomic(filepath.Join(n.Dir, NTSCertFile), chain, 0o644); err != nil {

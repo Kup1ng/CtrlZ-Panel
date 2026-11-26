@@ -176,7 +176,7 @@ type Loop struct {
 	drainSince map[uuid.UUID]time.Time
 	drainFed   map[uuid.UUID]uint64
 	drainSeen  map[uuid.UUID]bool
-	fullAt     time.Time
+	fullAt     stamp
 	written    map[uuid.UUID]store.HubNodeState
 	stateFail  stamp
 	ctx        context.Context

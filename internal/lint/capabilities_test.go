@@ -275,7 +275,7 @@ var osMembers = map[string][]string{
 	"internal/app":                         {"DirFS", "Getenv", "Open", "ReadFile", "Stderr", "Stdout"},                                                                                                                    // the roles read their environment and log to stdout; load-fixture reads a lab file and prints its result; the hub reads its key files (CTRLZ_HUB_HOST and the secrets of 3.2) from the paths Compose mounts
 	"internal/domainapply":                 {"ErrNotExist", "FileMode", "Getenv", "MkdirAll", "O_CREATE", "O_EXCL", "O_WRONLY", "Open", "OpenFile", "ReadDir", "ReadFile", "Remove", "Rename", "Stat", "Stderr", "Stdout"}, // the apply step writes the Caddy certificate files by temp file and rename, reads the .env, and prints the new one
 	"internal/hub/hubinstall":              {"File", "O_RDONLY", "Open", "OpenRoot", "ReadDir"},                                                                                                                            // GET /install/* serves the signed bundles under one directory: OpenRoot confines every open to it (a name that escapes is refused by the root), ReadDir lists the versions and Open reads root.json and the manifests, each capped
-	"internal/hub/hubtrust":                {"Chmod", "CreateTemp", "Remove", "Rename"},                                                                                                                                    // the pin file hub_tls.spki goes by a temporary file in its own directory and a rename, so the admin never reads half of it
+	"internal/hub/hubtrust":                {"Chmod", "Chown", "CreateTemp", "FileMode", "ReadFile", "Remove", "Rename", "Stat", "WriteFile"},                                                                              // the pin file hub_tls.spki and the NTS key and leaf go by a temporary file in their own directory and a rename, so nobody reads half of one; the NTS leaf is read back to judge it, the debt marker is an empty file, and a renewed key keeps the group of the one it replaces (Stat, Chown)
 	"internal/admincli":                    {"ErrExist", "ErrNotExist", "FileMode", "Getenv", "O_CREATE", "O_EXCL", "O_WRONLY", "OpenFile", "Remove", "Rename", "Stderr", "Stdin", "Stdout"},                               // the console writes secret files exclusively and prints to the terminal
 	"internal/testpg":                      {"ReadFile", "Stderr"},                                                                                                                                                         // a harness: the wiring test reads the Compose scripts it copies in
 	"deploy":                               {"Environ", "Getenv", "IsNotExist", "ReadFile", "UserHomeDir"},                                                                                                                 // the image reference a developer may override, and only with a pinned one
@@ -296,7 +296,8 @@ var osMembers = map[string][]string{
 // the scheduler to whoever imports them, judged by member like os (a bare syscall.Syscall, Mmap or
 // LoadLibrary is as good as unsafe).
 var syscallMembers = map[string][]string{
-	"cmd/ctrlz": {"SIGTERM"}, // the stop signal of the service
+	"cmd/ctrlz":             {"SIGTERM"}, // the stop signal of the service
+	"internal/hub/hubtrust": {"Stat_t"},  // the group id of the NTS key file, so a renewed key (a new inode) keeps the group chrony reads it by
 }
 
 var runtimeMembers = map[string][]string{

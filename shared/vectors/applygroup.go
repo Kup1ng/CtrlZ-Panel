@@ -180,17 +180,21 @@ func (c *ApplyCase) Names() (nodes, pairs []string) {
 
 // runPairTableApplyGroup is the group inside Run. The apply rules are the node's table writer, which no evaluator Harness has, so
 // the group runs through h only when h is an ApplyHarness. The reference harness runs the reference model, which is what the
-// panel's own test of the model is. Any other harness skips the group: running the panel's model for it and reporting green
-// would say a node conforms that nobody tested (GP-r1-11). A node runs the group itself with RunPairTableApply.
-func runPairTableApplyGroup(t *testing.T, g *GroupFile, h Harness) {
+// panel's own test of the model is. Any other harness does not run it, and says so: running the panel's model for it and
+// reporting green would say a node conforms that nobody tested (GP-r1-11). A node runs the group itself with RunPairTableApply.
+// It is not a t.Skip, because a skip in a node's Run would fail the skip check of CI for a group that node runs on its own.
+// It reports whether the group ran.
+func runPairTableApplyGroup(t *testing.T, g *GroupFile, h Harness) bool {
 	switch hh := h.(type) {
 	case ApplyHarness:
 		RunPairTableApplyGroup(t, g, hh)
 	case Reference:
 		RunPairTableApplyGroup(t, g, ReferenceApply{})
 	default:
-		t.Skip("this harness does not implement ApplyHarness: run the group with vectors.RunPairTableApply")
+		t.Log("pair-table-apply is not run by this harness (no ApplyHarness): run the group with vectors.RunPairTableApply")
+		return false
 	}
+	return true
 }
 
 // RunPairTableApply runs the group through a harness that is not the reference

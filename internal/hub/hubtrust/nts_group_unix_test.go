@@ -5,7 +5,6 @@ package hubtrust_test
 import (
 	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
 	"time"
 
@@ -14,11 +13,11 @@ import (
 
 func gidOf(t *testing.T, path string) int {
 	t.Helper()
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
+	gid, ok := hubtrust.GroupOf(path)
+	if !ok {
+		t.Fatal("the group of the file cannot be read")
 	}
-	return int(fi.Sys().(*syscall.Stat_t).Gid)
+	return gid
 }
 
 // GP-r1-8: the key is replaced by a rename, a new inode, so the group an operator gave chrony must be carried over or chrony

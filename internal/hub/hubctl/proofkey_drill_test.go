@@ -21,16 +21,17 @@ func reopen(n *node) *node {
 	return &node{id: n.id, key: n.key, peer: &peer{ctx: ctx, cancel: cancel, in: make(chan *hubv1.NodeMessage, 16), out: make(chan *hubv1.HubMessage, 64)}}
 }
 
-// configOf reads the stream until a NodeConfig comes, and returns it; nil when none came within the wait.
-func configOf(n *node) *hubv1.NodeConfig {
-	deadline := time.After(2 * time.Second)
+// configOf reads the stream until a NodeConfig comes and returns it; the test fails when none comes within the wait.
+func configOf(t *testing.T, n *node) *hubv1.NodeConfig {
+	t.Helper()
 	for {
 		select {
 		case m := <-n.out:
 			if c := m.GetNodeConfig(); c != nil {
 				return c
 			}
-		case <-deadline:
+		case <-time.After(wait):
+			t.Fatal("no NodeConfig came on the stream")
 			return nil
 		}
 	}
@@ -57,9 +58,9 @@ func TestProofKeyRotationAcrossAHubRestartReachesEveryActiveNodeAndNoRevokedOne(
 	}
 	reported := map[uuid.UUID]uint64{}
 	for _, n := range []*node{a, b, revoked} {
-		c := configOf(n)
-		if c == nil || !bytes.Equal(c.ProofKey, oldKey) {
-			t.Fatalf("before the rotation the node did not get the old key (config %v)", c != nil)
+		c := configOf(t, n)
+		if !bytes.Equal(c.ProofKey, oldKey) {
+			t.Fatal("before the rotation the node did not get the old key")
 		}
 		reported[n.id] = c.Version
 		n.in <- heartbeat(c.Version) // the node applied it
@@ -88,10 +89,7 @@ func TestProofKeyRotationAcrossAHubRestartReachesEveryActiveNodeAndNoRevokedOne(
 		again := reopen(n)
 		hub2.open(again)
 		again.in <- heartbeat(reported[n.id])
-		c := configOf(again)
-		if c == nil {
-			t.Fatal("an active node was given no NodeConfig by the restarted hub")
-		}
+		c := configOf(t, again) // fails the test when the restarted hub gives an active node no NodeConfig
 		if !bytes.Equal(c.ProofKey, newKey) || bytes.Equal(c.ProofKey, oldKey) {
 			t.Fatal("an active node did not get the new proof_key")
 		}
