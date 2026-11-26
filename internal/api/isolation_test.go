@@ -232,6 +232,8 @@ func (e *isoEnv) fixtures() map[string]isolation.Fixture {
 	fixes := map[string]isolation.Fixture{
 		"getAuthConfig": {Effect: isolation.Shows, Status: 200, Arrange: nothing,
 			Call: func() isolation.Result { return result(anon().get("/auth/config")) }},
+		"getPublicFreeDns": {Effect: isolation.Shows, Status: 200, Arrange: nothing,
+			Call: func() isolation.Result { return result(anon().get("/public/free-dns")) }},
 		"loginPassword": {Effect: isolation.Changes, Status: 200, Arrange: nothing,
 			Call: func() isolation.Result {
 				return result(anon().post("/auth/login/password", e.forged(map[string]any{"phone": bPhone(), "password": pwB})))

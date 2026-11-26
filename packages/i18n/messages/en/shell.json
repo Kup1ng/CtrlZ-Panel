@@ -131,6 +131,18 @@
       "passkey_enforce_cleared": {
         "title": "Passkey-only sign-in was lifted",
         "text": "{users, plural, one {# user was} other {# users were}} left with no working passkey, so the passkey-only requirement was lifted for them. They can sign in with a password again and should add a new passkey."
+      },
+      "pair_changed": {
+        "title": "The DNS server addresses changed",
+        "text": "Devices and routers that use plain DNS must now use {primary} and {fallback}. Update each one that still has the old addresses."
+      },
+      "domain_changed": {
+        "title": "The service domain changed",
+        "text": "{reinstall, select, yes {The service domain is now {zone}. If you installed our certificate authority on a device, remove the old one and install the new one from the setup page.} other {The service domain is now {zone}. New setup links and files use it from now on.}}"
+      },
+      "authorized_review": {
+        "title": "Review your authorized addresses",
+        "text": "{endpoints, plural, one {# endpoint kept} other {# endpoints kept}} an address our network added automatically, because it needs at least one authorized address. Check the list and remove any address you do not recognize."
       }
     },
     "moreUnread": "More unread notices are further back than the panel has loaded. Open the notifications and press Show older notifications."

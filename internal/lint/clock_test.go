@@ -124,6 +124,7 @@ func wallClockAllowed() map[string]wallUse {
 		"internal/ratelimit/limiter.go::New":               {1, injected + " (the bucket refill of the limiter, which stamps its own keys)"},
 		"internal/sms/router.go::NewRouter":                {1, injected + " (the breaker pause)"},
 		"internal/sms/router.go::Router.try":               {1, "a length: the time left of the caller's deadline"},
+		"internal/worker/periodic/ddns.go::hasRoom":        {1, "a length: the time left of the pass's context deadline, as in Router.try; the deadline is the context's own and no stored stamp is compared"},
 		"internal/worker/adminjobs/adminjobs.go::New":      {1, injected + " (the retry backoff of a job)"},
 		"internal/worker/smssend/worker.go::New":           {1, injected},
 		"internal/worker/smssend/worker.go::Worker.claim":  {1, "a length: the reading before the claim, plus the lease the database reports, is the end of the send budget (a database length, never a stamp compared with the clock)"},

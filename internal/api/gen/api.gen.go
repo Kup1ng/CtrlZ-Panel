@@ -3663,6 +3663,13 @@ type PublicConfig struct {
 // PublicConfigRegistrationMode defines model for PublicConfig.RegistrationMode.
 type PublicConfigRegistrationMode string
 
+// PublicFreeDns defines model for PublicFreeDns.
+type PublicFreeDns struct {
+	Enabled       bool    `json:"enabled"`
+	FallbackDnsIp *string `json:"fallback_dns_ip,omitempty"`
+	PrimaryDnsIp  *string `json:"primary_dns_ip,omitempty"`
+}
+
 // ReauthRequest defines model for ReauthRequest.
 type ReauthRequest struct {
 	OtpChallengeId *openapi_types.UUID `json:"otp_challenge_id,omitempty"`
@@ -4947,6 +4954,9 @@ type ServerInterface interface {
 	// DownloadAppleProfile Download an Apple DNS profile
 	// (GET /public/apple-profile/{link})
 	DownloadAppleProfile(w http.ResponseWriter, r *http.Request, link string)
+	// GetPublicFreeDns Whether free DNS is on, and the addresses to type (p4-nodes 9.3, Plan T-556)
+	// (GET /public/free-dns)
+	GetPublicFreeDns(w http.ResponseWriter, r *http.Request)
 	// OpenShare Open a share link
 	// (POST /public/share)
 	OpenShare(w http.ResponseWriter, r *http.Request)
@@ -5706,6 +5716,12 @@ func (_ Unimplemented) ImportProfile(w http.ResponseWriter, r *http.Request, par
 // DownloadAppleProfile Download an Apple DNS profile
 // (GET /public/apple-profile/{link})
 func (_ Unimplemented) DownloadAppleProfile(w http.ResponseWriter, r *http.Request, link string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetPublicFreeDns Whether free DNS is on, and the addresses to type (p4-nodes 9.3, Plan T-556)
+// (GET /public/free-dns)
+func (_ Unimplemented) GetPublicFreeDns(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -9169,6 +9185,20 @@ func (siw *ServerInterfaceWrapper) DownloadAppleProfile(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// GetPublicFreeDns operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicFreeDns(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicFreeDns(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // OpenShare operation middleware
 func (siw *ServerInterfaceWrapper) OpenShare(w http.ResponseWriter, r *http.Request) {
 
@@ -9690,6 +9720,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/feedback", wrapper.CreateFeedback)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/public/free-dns", wrapper.GetPublicFreeDns)
 	})
 
 	return r
@@ -15128,6 +15161,66 @@ func (response DownloadAppleProfiledefaultJSONResponse) VisitDownloadAppleProfil
 	return err
 }
 
+type GetPublicFreeDnsRequestObject struct {
+}
+
+type GetPublicFreeDnsResponseObject interface {
+	VisitGetPublicFreeDnsResponse(w http.ResponseWriter) error
+}
+
+type GetPublicFreeDns200ResponseHeaders struct {
+	CacheControl string
+}
+
+type GetPublicFreeDns200JSONResponse struct {
+	Body    PublicFreeDns
+	Headers GetPublicFreeDns200ResponseHeaders
+}
+
+func (response GetPublicFreeDns200JSONResponse) VisitGetPublicFreeDnsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", fmt.Sprint(response.Headers.CacheControl))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicFreeDns429JSONResponse struct{ RateLimitedJSONResponse }
+
+func (response GetPublicFreeDns429JSONResponse) VisitGetPublicFreeDnsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicFreeDns503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response GetPublicFreeDns503JSONResponse) VisitGetPublicFreeDnsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type OpenShareRequestObject struct {
 	Body *OpenShareJSONRequestBody
 }
@@ -15591,6 +15684,9 @@ type StrictServerInterface interface {
 	// DownloadAppleProfile Download an Apple DNS profile
 	// (GET /public/apple-profile/{link})
 	DownloadAppleProfile(ctx context.Context, request DownloadAppleProfileRequestObject) (DownloadAppleProfileResponseObject, error)
+	// GetPublicFreeDns Whether free DNS is on, and the addresses to type (p4-nodes 9.3, Plan T-556)
+	// (GET /public/free-dns)
+	GetPublicFreeDns(ctx context.Context, request GetPublicFreeDnsRequestObject) (GetPublicFreeDnsResponseObject, error)
 	// OpenShare Open a share link
 	// (POST /public/share)
 	OpenShare(ctx context.Context, request OpenShareRequestObject) (OpenShareResponseObject, error)
@@ -19323,6 +19419,30 @@ func (sh *strictHandler) DownloadAppleProfile(w http.ResponseWriter, r *http.Req
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(DownloadAppleProfileResponseObject); ok {
 		if err := validResponse.VisitDownloadAppleProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicFreeDns operation middleware
+func (sh *strictHandler) GetPublicFreeDns(w http.ResponseWriter, r *http.Request) {
+	var request GetPublicFreeDnsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicFreeDns(ctx, request.(GetPublicFreeDnsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicFreeDns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicFreeDnsResponseObject); ok {
+		if err := validResponse.VisitGetPublicFreeDnsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

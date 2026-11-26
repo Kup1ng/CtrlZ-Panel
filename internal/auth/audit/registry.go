@@ -34,5 +34,9 @@ func AdminEvents() []AdminEvent {
 		RegistrationModeChange{}, WebauthnConfigChange{},
 		SMSGatewayChange{}, SMSRoutingChange{}, SMSTemplateChange{}, SMSLimitsChange{}, SMSTestSend{},
 		KeyRotated{}, KeyDeclaredLost{}, KeyRekeyed{}, AlertAck{},
+		NodeEnrollmentCreate{}, NodeEnrollmentConfirm{}, NodeEnrollmentReject{},
+		NodeApprove{}, NodeRevoke{}, NodeRemove{}, NodeAddressesChange{}, NodeUpdate{}, NodeDNSRequest{},
+		PairCreate{}, PairUpdate{}, PairDelete{}, GlobalPairSet{},
+		FreeDNSChange{}, DomainChange{}, CertificateUpload{}, CertificateRetire{},
 	}
 }

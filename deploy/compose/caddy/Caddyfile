@@ -10,8 +10,9 @@
 {
 	# The admin endpoint would be a second door into the process.
 	admin off
-	# Never fetch a certificate from outside. P4 replaces this with the
-	# certificates the Panel manages itself.
+	# Never fetch a certificate from outside: a host with no certificate of its own is served from Caddy's private CA.
+	# A host that has one (an uploaded, public certificate chosen by `ctrlz domain-apply`, P4 10.4) loads it through the
+	# snippet imported in its site block below; that is the only "tls" line of the site, so the two never meet.
 	local_certs
 	# Port 80 has a site of its own at the end of the file. Caddy's automatic redirect builds its Location from {http.request.uri} with no
 	# check, so an opaque request target (`x:@evil.example/`) became `https://panel.localhost@evil.example/` under the app's own Host
@@ -31,6 +32,8 @@
 			read_body 15s
 		}
 	}
+	# No OCSP request leaves the machine (rule 9): Caddy would otherwise ask the responder named in a public certificate.
+	ocsp_stapling off
 
 	# The per-site filter below (quiet_log) covers the access logger only. When
 	# the upstream is down or resets a connection, Caddy writes a second kind
@@ -248,7 +251,10 @@
 }
 
 {$CTRLZ_PANEL_HOST:panel.localhost} {
-	tls internal
+	# Written by domain-apply (P4 10.4): "tls <chain> <key>" for this host. The ? makes the pattern a glob (one wildcard; Caddy
+	# refuses a pattern with a character class), and a glob may match nothing, so a host with no snippet runs on the
+	# private CA from local_certs above.
+	import /data/ctrlz-tls/{$CTRLZ_PANEL_HOST:panel.localhost}.cadd?
 	import quiet_log
 	import hardening "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self), publickey-credentials-create=(self), clipboard-write=(self)"
 	handle /api/* {
@@ -288,7 +294,8 @@
 
 # The admin dashboard has its own hostname, its own cookie and its own container.
 {$CTRLZ_ADMIN_HOST:admin.localhost} {
-	tls internal
+	# As for the panel host above.
+	import /data/ctrlz-tls/{$CTRLZ_ADMIN_HOST:admin.localhost}.cadd?
 	import quiet_log
 	import hardening "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(), publickey-credentials-create=(), clipboard-write=(self)"
 	handle /api/* {

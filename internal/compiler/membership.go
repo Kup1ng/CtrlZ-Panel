@@ -2,7 +2,7 @@ package compiler
 
 import (
 	"bytes"
-	"fmt"
+	"errors"
 	"slices"
 	"sort"
 
@@ -30,12 +30,20 @@ type Membership struct {
 //   - a pair is carried only when both of its nodes are, and the global pair only when it is among them.
 //
 // It checks nothing: ValidateTable is the judge, and a refusal falls back to the last table (6.2).
-func BuildPairTable(m *Membership) *policyv1.PairTable {
+func BuildPairTable(m *Membership) *policyv1.PairTable { return BuildPairTableAs(m, uuid.Nil) }
+
+// BuildPairTableAs is BuildPairTable with the node activate counted as active, whatever its row says. The node routes use
+// it to judge the table a confirmation or an approval would produce before they commit it (internal/nodeadmin), so the
+// rows are read by one rule, the compiler's, and a table the route accepts is one the compiler would write.
+func BuildPairTableAs(m *Membership, activate uuid.UUID) *policyv1.PairTable {
 	pt := &policyv1.PairTable{}
 	in := map[uuid.UUID]bool{}
 	nodes := slices.Clone(m.Nodes)
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].Slot < nodes[j].Slot })
 	for _, n := range nodes {
+		if n.ID == activate {
+			n.Status = "active"
+		}
 		if n.Status != "active" && n.Status != "revoked" {
 			continue
 		}
@@ -69,20 +77,24 @@ func BuildPairTable(m *Membership) *policyv1.PairTable {
 // ValidateTable is the validity of a table by itself: wire.ValidatePairTable accepts it and zone.Build builds a table from
 // it with no error and no panic. It cannot see a missing SPKI, since an empty one is how a revoked node is written; that
 // refusal (SC 8a.4, invariant 6) needs the rows and is made by activeWithoutSPKI.
+//
+// Both judges run, and the error is the builder's when it refused (a *zone.BuildError names the field and the rule in a stable
+// phrase, which the node routes return to the admin), else the wire validator's.
 func ValidateTable(pt *policyv1.PairTable) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("compiler: pair table panics the builder")
+			err = ErrBuilderPanic
 		}
 	}()
-	if err := wire.ValidatePairTable(pt); err != nil {
-		return err
+	werr := wire.ValidatePairTable(pt)
+	if _, berr := zone.Build(wire.ZoneInput(pt)); berr != nil {
+		return berr
 	}
-	if _, err := zone.Build(wire.ZoneInput(pt)); err != nil {
-		return err
-	}
-	return nil
+	return werr
 }
+
+// ErrBuilderPanic is what ValidateTable returns for a table that panics the builder: a refusal, as for the nodes.
+var ErrBuilderPanic = errors.New("compiler: pair table panics the builder")
 
 // emptyTable is a table that says nothing: no node and no pair. An entry without a table leaves the membership as it
 // is, so an empty one need not be written.
@@ -117,9 +129,14 @@ func NextPairTable(m *Membership, last *policyv1.PairTable) (next *policyv1.Pair
 
 // activeWithoutSPKI says a row is active and has no SPKI of 32 bytes. nodes.spki_sha256 is nullable and no constraint ties it to
 // the status, so the compiler is the one that must not read the gap as a revocation.
-func activeWithoutSPKI(m *Membership) bool {
+func activeWithoutSPKI(m *Membership) bool { return ActiveWithoutSPKI(m, uuid.Nil) }
+
+// ActiveWithoutSPKI is activeWithoutSPKI with the node activate counted as active. The node routes refuse such a table
+// before they commit, by the rule the compiler refuses it with, so a change is never answered with success and then left
+// unpublished.
+func ActiveWithoutSPKI(m *Membership, activate uuid.UUID) bool {
 	for _, n := range m.Nodes {
-		if n.Status == "active" && len(n.SPKI) != 32 {
+		if (n.Status == "active" || n.ID == activate) && len(n.SPKI) != 32 {
 			return true
 		}
 	}

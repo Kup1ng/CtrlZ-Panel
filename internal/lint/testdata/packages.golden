@@ -43,11 +43,13 @@ internal/budget
 internal/cachex
 internal/caps
 internal/catalogfx
+internal/certcheck
 internal/clockrule
 internal/closed
 internal/compiler
 internal/compiler/rollout
 internal/credgen
+internal/domainapply
 internal/endpoints
 internal/httpx
 internal/hub
@@ -68,6 +70,7 @@ internal/hub/hubtoken
 internal/hub/hubtrust
 internal/hub/hubview
 internal/hub/hubxfer
+internal/intakeseal
 internal/iso3166
 internal/keyring
 internal/locations
@@ -78,6 +81,7 @@ internal/migrategen
 internal/mobileconfig
 internal/mutant
 internal/netkey
+internal/nodeadmin
 internal/profiles
 internal/publicapi
 internal/ratelimit
@@ -98,6 +102,7 @@ internal/sweepbatch
 internal/toolcmd
 internal/worker/adminjobs
 internal/worker/batchjobs
+internal/worker/periodic
 internal/worker/smssend
 internal/worker/sweep
 migrations/catalog

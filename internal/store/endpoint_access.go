@@ -294,6 +294,21 @@ func (t Tx) DDNSHostDelete(endpoint, id uuid.UUID) (bool, error) {
 	return notFound(err)
 }
 
+const qDDNSHostClaims = `SELECT c.id FROM ctrlz.ip_claims c
+WHERE c.tenant_id = $1 AND c.endpoint_id = $2 AND c.source = 'ddns' AND c.state IN ('active', 'grace', 'pending_proof')
+  AND EXISTS (SELECT 1 FROM ctrlz.endpoint_ddns_hosts h WHERE h.tenant_id = $1 AND h.endpoint_id = $2 AND h.id = $3
+                AND c.cidr::inet = ANY (h.last_ips))
+  AND NOT EXISTS (SELECT 1 FROM ctrlz.endpoint_ddns_hosts o WHERE o.tenant_id = $1 AND o.endpoint_id = $2 AND o.id <> $3
+                AND c.cidr::inet = ANY (o.last_ips))
+ORDER BY c.id`
+
+// DDNSHostClaims lists the live DDNS claims of the Endpoint that only this host's last answer holds: the ones its delete
+// releases, because the worker would release them on its next pass as an address no host answers with (J12-r4-4). The caller
+// holds the Endpoint's row. A suspended claim is not listed: it is the admin's, and the release function leaves it alone.
+func (t Tx) DDNSHostClaims(endpoint, host uuid.UUID) ([]uuid.UUID, error) {
+	return idRows(t.tx.Query(t.ctx, qDDNSHostClaims, t.tenant, endpoint, host))
+}
+
 // ---------------------------------------------------------------------------
 // Plain DNS claims.
 

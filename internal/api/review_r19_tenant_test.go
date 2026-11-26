@@ -196,6 +196,7 @@ func TestEveryAuthClassOperationHasItsProofDecided(t *testing.T) {
 		"passkeyLoginBegin":  "no subject before the assertion",
 		"passkeyLoginFinish": "the sealed ceremony ticket names no account before the assertion verifies",
 		"getAuthConfig":      "public-read class",
+		"getPublicFreeDns":   "public-free-dns class",
 		"requestOtp":         "otp-send class",
 		"reauthOtpRequest":   "session class",
 	}

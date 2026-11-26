@@ -41,6 +41,7 @@ func Verifies() []Verify {
 	return []Verify{
 		// ---- tenant, public ----
 		{Service: Tenant, Op: "getAuthConfig", Bound: BoundNone, Why: "reads a public document"},
+		{Service: Tenant, Op: "getPublicFreeDns", Bound: BoundNone, Why: "reads the free DNS switch and two install addresses; no secret is checked"},
 		{Service: Tenant, Op: "loginPassword", Bound: BoundScope, Scope: "login_phone"},
 		{Service: Tenant, Op: "requestOtp", Bound: BoundNone, Why: "sends a code and checks none; the sms_counters caps bound it"},
 		{Service: Tenant, Op: "loginOtp", Bound: BoundRow, Why: otpRow},

@@ -77,13 +77,14 @@ var composeEnvTable = map[string]map[string]string{
 	"admin": {
 		"CTRLZ_ADMIN_HOST": "${CTRLZ_ADMIN_HOST:-admin.localhost}", "CTRLZ_ARGON2_BUDGET_MIB": "${CTRLZ_ADMIN_ARGON2_BUDGET_MIB:-64}",
 		"CTRLZ_ARGON2_CONCURRENCY": "1", "CTRLZ_DB_MAX_CONNS": "${CTRLZ_ADMIN_DB_MAX_CONNS:-5}", "CTRLZ_DB_PASSWORD_FILE": composeEnvFile,
-		"CTRLZ_HUB_HOST": "${CTRLZ_HUB_HOST:-localhost}",
-		"CTRLZ_LISTEN":   ":8081", "CTRLZ_PANEL_HOST": "${CTRLZ_PANEL_HOST:-panel.localhost}", "CTRLZ_TRUSTED_PROXY": "10.213.78.200",
+		"CTRLZ_LISTEN": ":8081", "CTRLZ_PANEL_HOST": "${CTRLZ_PANEL_HOST:-panel.localhost}", "CTRLZ_TRUSTED_PROXY": "10.213.78.200",
+		"CTRLZ_HUB_HOST": "${CTRLZ_HUB_HOST:-localhost}", "CTRLZ_HUB_PUBLIC_DIR": "/var/lib/ctrlz/hub_public", "CTRLZ_BUNDLES_DIR": "/var/lib/ctrlz/bundles",
+		"CTRLZ_WILDCARD_INTAKE_PUB_FILE": composeEnvFile, "CTRLZ_WEB_INTAKE_PUB_FILE": composeEnvFile,
 		"CTRLZ_VALKEY_ADDR": "valkey-admin:6379", "CTRLZ_VALKEY_PASSWORD_FILE": composeEnvFile, "CTRLZ_VALKEY_USER": "admin",
 		"GOMEMLIMIT": "${GOMEMLIMIT_ADMIN:-96MiB}",
 	},
 	"worker": {
-		"CTRLZ_ARTIFACTS_DIR": "/var/lib/ctrlz/artifacts", "CTRLZ_DB_COMPILER_PASSWORD_FILE": composeEnvFile, "CTRLZ_DB_MAX_CONNS": "${CTRLZ_WORKER_DB_MAX_CONNS:-4}",
+		"CTRLZ_ARTIFACTS_DIR": "/var/lib/ctrlz/artifacts", "CTRLZ_DDNS_RESOLVER": "${CTRLZ_DDNS_RESOLVER:-}", "CTRLZ_DB_COMPILER_PASSWORD_FILE": composeEnvFile, "CTRLZ_DB_MAX_CONNS": "${CTRLZ_WORKER_DB_MAX_CONNS:-4}",
 		"CTRLZ_DB_PASSWORD_FILE": composeEnvFile, "CTRLZ_LISTEN": "127.0.0.1:8083",
 		"GOMEMLIMIT": "${GOMEMLIMIT_WORKER:-200MiB}",
 	},
@@ -96,9 +97,13 @@ var composeEnvTable = map[string]map[string]string{
 		"CTRLZ_POLICY_KEY_FILE": composeEnvFile, "CTRLZ_HUB_ARTIFACTS_DIR": "/var/lib/ctrlz/artifacts",
 		"GOMEMLIMIT": "${GOMEMLIMIT_HUB:-320MiB}",
 	},
-	"migrate":      {"CTRLZ_DB_PASSWORD_FILE": composeEnvFile},
-	"rekey":        {"CTRLZ_DB_PASSWORD_FILE": composeEnvFile},
-	"domain-apply": {"CTRLZ_DB_PASSWORD_FILE": composeEnvFile},
+	"migrate": {"CTRLZ_DB_PASSWORD_FILE": composeEnvFile},
+	"rekey":   {"CTRLZ_DB_PASSWORD_FILE": composeEnvFile},
+	"domain-apply": {
+		"CTRLZ_DB_PASSWORD_FILE": composeEnvFile, "CTRLZ_WEB_INTAKE_KEY_FILE": composeEnvFile,
+		"CTRLZ_DOMAIN_ENV_FILE": "/compose/.env", "CTRLZ_CADDY_TLS_DIR": "/caddy-data/ctrlz-tls",
+	},
+	"web-panel": {"CTRLZ_VERIFY_ORIGIN": "${CTRLZ_VERIFY_ORIGIN:-}"},
 	"caddy": {
 		"CTRLZ_ADMIN_HOST": "${CTRLZ_ADMIN_HOST:-admin.localhost}", "CTRLZ_PANEL_HOST": "${CTRLZ_PANEL_HOST:-panel.localhost}",
 	},
@@ -127,7 +132,7 @@ var composeEnvTable = map[string]map[string]string{
 var composeHostVariables = map[string]string{
 	"CTRLZ_IMAGE": "the name of the Panel image under test", "CTRLZ_WEB_PANEL_IMAGE": "the name of the web-panel image built on this machine", "CTRLZ_WEB_ADMIN_IMAGE": "the name of the web-admin image built on this machine",
 	"CTRLZ_ENV":        "production, or test for the smoke",
-	"CTRLZ_PANEL_HOST": "a host name", "CTRLZ_ADMIN_HOST": "a host name", "CTRLZ_HUB_HOST": "host names and addresses, the SANs of the hub leaf; no credential", "CTRLZ_HTTP_PORT": "a port", "CTRLZ_HTTPS_PORT": "a port",
+	"CTRLZ_PANEL_HOST": "a host name", "CTRLZ_ADMIN_HOST": "a host name", "CTRLZ_DDNS_RESOLVER": "empty, or a tls:// or https:// URL that the worker parses strictly (port 853 or 443)", "CTRLZ_VERIFY_ORIGIN": "origins https://*.verify.<zone>, written by domain-apply; no credential", "CTRLZ_HUB_HOST": "host names and addresses, the SANs of the hub leaf; no credential", "CTRLZ_HTTP_PORT": "a port", "CTRLZ_HTTPS_PORT": "a port",
 	"CTRLZ_SECRETS_DIR":           "the directory of the secret files, a path and no content",
 	"CTRLZ_ENV_FORMAT_2":          "the marker of the .env layout",
 	"CTRLZ_API_ARGON2_BUDGET_MIB": "a number", "CTRLZ_API_ARGON2_CONCURRENCY": "a number", "CTRLZ_ADMIN_ARGON2_BUDGET_MIB": "a number",
@@ -347,7 +352,7 @@ func TestComposeEnvironmentLintCanFail(t *testing.T) {
 		"a variable the table lists and the file lost":  {plant("      CTRLZ_VALKEY_USER: api\n", ""), "the table lists CTRLZ_VALKEY_USER"},
 		"an environment in the list form":               {plant("    environment:\n      VK_ZONE: api\n      VK_MAXMEMORY: ${VALKEY_MAXMEMORY:-64mb}\n", "    environment:\n      - VK_ZONE=api\n      - VK_MAXMEMORY=${VALKEY_MAXMEMORY:-64mb}\n"), "as a list or a scalar"},
 		"a nested value":                                {plant("      VK_ZONE: api\n", "      VK_ZONE: {a: b}\n"), "not a scalar"},
-		"an environment for a service with no row":      {plant("  web-panel:\n", "  web-panel:\n    environment:\n      A: b\n"), "has an environment and no row"},
+		"an environment for a service with no row":      {plant("  web-admin:\n", "  web-admin:\n    environment:\n      A: b\n"), "has an environment and no row"},
 		"a host variable in a command":                  {plant(`test: ["CMD", "node", "-e", "fetch(`, `test: ["CMD", "node", "-e", "${SMS_API_PASS}fetch(`), "SMS_API_PASS"},
 		"a bare host variable in a limit":               {plant("mem_limit: ${MEM_WEB:-128m}", "mem_limit: $SMS_API_PASS"), "SMS_API_PASS"},
 	}

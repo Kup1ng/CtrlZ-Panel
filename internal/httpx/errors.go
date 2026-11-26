@@ -74,6 +74,31 @@ const (
 	CodeIPSuspended          = "ip_suspended"
 	CodeNeedsAdminApproval   = "needs_admin_approval"
 	CodeSetupUnavailable     = "setup_unavailable"
+
+	// P4 nodes (p4-nodes 9.4). CodeNodeKeyReused is `key_reused`; CodeKeyReused above is the idempotency key's.
+	CodeFingerprintMismatch = "fingerprint_mismatch"
+	CodeEnrollmentState     = "enrollment_state"
+	CodeNodeKeyReused       = "key_reused"
+	CodeNodeLimitReached    = "node_limit_reached"
+	CodeAddressRefused      = "address_refused"
+	CodeTableInvalid        = "table_invalid"
+	// The state and pair codes of the node routes (p4-nodes 9.4).
+	CodeNodeState        = "node_state"
+	CodeNodePaired       = "node_paired"
+	CodeNodeInTable      = "node_in_table"
+	CodeSecondPeer       = "second_peer"
+	CodeGlobalPairNeeded = "global_pair_required"
+	CodePairInUse        = "pair_in_use"
+	CodeUpstreamLoop     = "upstream_loop"
+
+	// The settings and certificate codes (p4-nodes 9.4).
+	CodeQPSOutOfRange    = "qps_out_of_range"
+	CodeDomainInvalid    = "domain_invalid"
+	CodeTransitionActive = "transition_active"
+	CodeCertInvalid      = "cert_invalid"
+	CodeCertKeyMismatch  = "cert_key_mismatch"
+	CodeCertNotPublic    = "cert_not_public"
+	CodeCertExpiring     = "cert_expiring"
 )
 
 // FieldError names one invalid field. The code is a stable machine value, never

@@ -114,6 +114,13 @@ func p2Location(at string) bool {
 	return false
 }
 
+// pemFieldNames are the request fields that carry a PEM text (p4-nodes 4.3): a certificate chain and its private key. A PEM
+// is lines, so these two may accept the line feed and the carriage return and nothing else of the probes; their pattern
+// (`pem` in the admin document) starts with a BEGIN line, so empty and blank values are still refused.
+var pemFieldNames = map[string]bool{"chain_pem": true, "key_pem": true}
+
+func pemField(at string) bool { return pemFieldNames[fieldName(at)] }
+
 // halfSpaceFieldNames are the request fields a person types on a Persian keyboard that types U+200C
 // inside words and that the server drops it from (round 18, primitives-r18-3, D64 zwnj-fields): a password
 // (password.Normalize, the one function every hash and every check goes through) and the name of a
@@ -538,6 +545,9 @@ func (c *boundsCheck) str(at string, s *openapi3.Schema) {
 				continue
 			}
 			if multilineField(at, s.Pattern) && httpx.MultilineMark(p) {
+				continue
+			}
+			if pemField(at) && (p == 0x0a || p == 0x0d) {
 				continue
 			}
 			for _, probe := range []string{"a" + string(p) + "a", "1" + string(p) + "1", string(p)} {

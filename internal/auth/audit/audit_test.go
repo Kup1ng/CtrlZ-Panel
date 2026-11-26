@@ -90,7 +90,7 @@ func TestEveryEventFieldIsClosed(t *testing.T) {
 	// shape check and defeat the rule.
 	probe := "x_not_a_member_9"
 	for _, ty := range []reflect.Type{reflect.TypeOf(audit.Method("")), reflect.TypeOf(audit.Via("")), reflect.TypeOf(audit.RegMode("")),
-		reflect.TypeOf(audit.KeyDomain("")), reflect.TypeOf(audit.AlertKind("")), reflect.TypeOf(audit.Field("")), reflect.TypeOf(audit.Host("")),
+		reflect.TypeOf(audit.KeyDomain("")), reflect.TypeOf(audit.AlertKind("")), reflect.TypeOf(audit.Field("")), reflect.TypeOf(audit.Host("")), reflect.TypeOf(audit.NodeName("")), reflect.TypeOf(audit.NodeAddr("")), reflect.TypeOf(audit.DNSRequestKind("")), reflect.TypeOf(audit.CertKind("")), reflect.TypeOf(audit.DomainName("")),
 		reflect.TypeOf(sms.TemplateKey("")), reflect.TypeOf(sms.Locale(""))} {
 		v := reflect.New(ty).Elem()
 		v.SetString(probe)

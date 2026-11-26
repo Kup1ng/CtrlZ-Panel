@@ -157,6 +157,7 @@ func LimitStatements() []LimitStatement {
 		{"qPublicConfig", "internal/store", "fd5c01fd314aacc0", "reads the public configuration for the login page (the cooldown is shown to the client); compares nothing"},
 		{"qCompilerTenant", "internal/store", "dac278b07b043f35", "reads the client cap of the tenant (its override, else its plan's value) to write it into the Endpoint records; compares nothing"},
 		{"qLimits", "internal/store", "df5727c3f0103ebf", "reads the effective limits (the tenant override, else the value of its plan) for the account page; enforces nothing"},
+		{"qCompilerTenant", "internal/store", "dac278b07b043f35", "reads the effective per-Endpoint client cap (the tenant override, else its plan's value) for the compiler to write into each record (P4 6.2); enforces nothing, the cap is spent by Tx.ClientInsert"},
 	}
 }
 

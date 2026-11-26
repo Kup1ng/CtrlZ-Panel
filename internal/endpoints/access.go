@@ -365,6 +365,28 @@ func (e *Env) DeleteDDNSHost(ctx context.Context, st *store.Store, tenant uuid.U
 			return err
 		}
 		removeHost := func() error {
+			// The claims only this host holds go with it, here, under the guard: the worker would release them on its next pass
+			// as a system change with no password, and a claim is a Plain DNS identity whose profile may be locked (3.3). The
+			// guard's after-snapshot then sees them gone and asks for the passwords (J12-r4-4).
+			claims, err := tx.DDNSHostClaims(endpoint, host)
+			if err != nil {
+				return err
+			}
+			for _, c := range claims {
+				outcome, err := tx.IPClaimRelease(c)
+				if err != nil {
+					return err
+				}
+				if outcome != "released" && outcome != "suspended" {
+					return errUnexpected()
+				}
+			}
+			if len(claims) > 0 {
+				// The nodes serve the claim until the record says it is gone; deleteRows marks only for rows.
+				if err := store.MarkDirty(tx, store.AggregateEndpointSet, tx.TenantID()); err != nil {
+					return err
+				}
+			}
 			ok, err := tx.DDNSHostDelete(endpoint, host)
 			if err != nil {
 				return err

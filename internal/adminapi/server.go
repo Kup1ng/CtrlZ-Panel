@@ -2,6 +2,7 @@ package adminapi
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -20,7 +21,9 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/throttle"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/budget"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/intakeseal"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/keyring"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/nodeadmin"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/ratelimit"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
@@ -34,6 +37,13 @@ const (
 	EnvDev        = "dev"
 	EnvTest       = "test"
 )
+
+// Intake is the two public keys of the intake: a wildcard certificate's private key is sealed to the first and the hub
+// opens it; a panel or admin certificate's to the second and domain-apply opens it. The admin holds no private half.
+type Intake struct {
+	Wildcard intakeseal.PublicKey
+	Web      intakeseal.PublicKey
+}
 
 // Deps is what the admin API needs.
 type Deps struct {
@@ -63,11 +73,21 @@ type Deps struct {
 	// PlainHTTPOrigin accepts an http Origin on the service's own host: a development run over plain http only
 	// (tenant-r18-18). The zero value is the strict one.
 	PlainHTTPOrigin bool
+	// Install makes the install command of a node enrolment (p4-nodes 4.2 step 1). Nil when the deployment has
+	// no hub host or mounts no hub volumes; POST /node-enrollments then answers service_unavailable.
+	Install *nodeadmin.Installer
+	// Intake holds the public intake keys an uploaded certificate's private key is sealed to (p4-nodes 3.3). Nil when the
+	// deployment mounts none; POST /certificates then answers service_unavailable.
+	Intake *Intake
 	// TrustedProxies are the peers that may set X-Forwarded-For (CTRLZ_TRUSTED_PROXY).
 	TrustedProxies []netip.Prefix
 	// NewOneTime replaces password.NewOneTime; only tests set it, to plant a
 	// canary and prove the generated password reaches no log (18.4).
 	NewOneTime func() (secret.String, error)
+
+	// certRoots replaces the embedded public roots the upload route verifies a chain against. Only tests set it, with a
+	// private root of their own; production leaves it nil.
+	certRoots *x509.CertPool
 
 	// between is a seam for tests: it runs after a settings route has decided from a lock-free read
 	// and before it takes the row lock, the one gap where another admin can commit (admin-r7-2).

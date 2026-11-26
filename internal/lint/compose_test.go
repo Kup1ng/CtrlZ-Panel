@@ -202,7 +202,7 @@ func TestComposeSecretsAreFiles(t *testing.T) {
 	// leaked worker password cannot reach the second factor.
 	owner := map[string][]string{
 		"pg_tenant_password": {"api"}, "pg_admin_password": {"admin"}, "pg_hub_password": {"hub"},
-		"pg_worker_password": {"worker"}, "pg_keytool_password": {"rekey"}, "pg_compiler_password": {"worker"}, "pg_migrator_password": {"migrate"},
+		"pg_worker_password": {"worker"}, "pg_keytool_password": {"rekey"}, "pg_domain_apply_password": {"domain-apply"}, "pg_compiler_password": {"worker"}, "pg_migrator_password": {"migrate"},
 	}
 	for sec, holders := range owner {
 		for name, s := range c.Services {

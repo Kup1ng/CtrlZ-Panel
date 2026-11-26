@@ -97,10 +97,12 @@ type Deps struct {
 
 // Server implements the generated strict interface.
 type Server struct {
-	d    Deps
-	cfg  *cachex.Loader[store.PublicConfig]
-	auth store.AuthLookups
-	now  func() time.Time
+	d   Deps
+	cfg *cachex.Loader[store.PublicConfig]
+	// freeDNS is the 5 s cache of the route without a login that tells whether free DNS is on (p4-nodes 9.3).
+	freeDNS *cachex.Loader[store.PublicFreeDNS]
+	auth    store.AuthLookups
+	now     func() time.Time
 
 	keys         *keyring.Ring
 	hasher       *password.Hasher
@@ -222,7 +224,7 @@ func build(d Deps, health httpx.Health) (http.Handler, *Server, error) {
 	s := &Server{
 		after: after,
 		prof:  &profiles.Env{Catalog: cat, Clock: d.Now}, ep: &endpoints.Env{Clock: d.Now, Keys: d.Keys, Catalog: cat, Bearer: br, Turn: publicTurn(adm)}, bearer: br, cat: cat, docs: docs,
-		d: d, cfg: cfg, auth: auth, now: d.Now, keys: d.Keys, hasher: d.Hasher, strength: strength, strengthAnon: strengthAnon,
+		d: d, cfg: cfg, freeDNS: newFreeDNSCache(auth.FreeDNSPublic, d.Now, d.Log), auth: auth, now: d.Now, keys: d.Keys, hasher: d.Hasher, strength: strength, strengthAnon: strengthAnon,
 		throttle: throttle.NewUser(auth, d.Keys).WithCeilingHook(throttle.CeilingLog(d.Log)).WithRefusalHook(throttle.RefusalLog(d.Log, refusals)), tickets: tickets, otp: otpSvc, markers: markers,
 		login: &login.Service{
 			DB: d.Store, Auth: auth, OTP: otpSvc, Sessions: d.Sessions, Tickets: tickets, Markers: markers, Config: cfg.Get, Now: d.Now,

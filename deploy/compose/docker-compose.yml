@@ -244,10 +244,16 @@ services:
       CTRLZ_DB_PASSWORD_FILE: /run/secrets/pg_admin_password
       CTRLZ_DB_MAX_CONNS: ${CTRLZ_ADMIN_DB_MAX_CONNS:-5}
       CTRLZ_ADMIN_HOST: ${CTRLZ_ADMIN_HOST:-admin.localhost}
-      # The install command of a node enrolment carries the hub's host (p4-nodes 4.2 step 1).
-      CTRLZ_HUB_HOST: ${CTRLZ_HUB_HOST:-localhost}
       # Invite links and the Passkey origin check read the panel host (spec 7.2).
       CTRLZ_PANEL_HOST: ${CTRLZ_PANEL_HOST:-panel.localhost}
+      # The install command of a node enrolment (P4 4.2 step 1): the host the nodes call and the two read-only
+      # volumes below, which hold the pin the hub writes and the signed bundles.
+      CTRLZ_HUB_HOST: ${CTRLZ_HUB_HOST:-localhost}
+      CTRLZ_HUB_PUBLIC_DIR: /var/lib/ctrlz/hub_public
+      CTRLZ_BUNDLES_DIR: /var/lib/ctrlz/bundles
+      # The public halves of the intake keys: an uploaded certificate's private key is sealed to them (spec P4 3.3, 4.3).
+      CTRLZ_WILDCARD_INTAKE_PUB_FILE: /run/secrets/wildcard_intake_pub
+      CTRLZ_WEB_INTAKE_PUB_FILE: /run/secrets/web_intake_pub
       CTRLZ_VALKEY_ADDR: valkey-admin:6379
       CTRLZ_VALKEY_USER: admin
       CTRLZ_VALKEY_PASSWORD_FILE: /run/secrets/valkey_password_admin
@@ -288,6 +294,8 @@ services:
       # container limit so the collector works before the cgroup kill, which would also stop the SMS sender and the sweeps
       # of every tenant.
       GOMEMLIMIT: ${GOMEMLIMIT_WORKER:-200MiB}
+      # The resolver of the DDNS job (P4 8): empty is the host's own, or tls://host or https://host/path (a DoT or DoH server).
+      CTRLZ_DDNS_RESOLVER: ${CTRLZ_DDNS_RESOLVER:-}
     secrets: [pg_worker_password, pg_compiler_password, kek_sms_cred, kek_otp_delivery]
     volumes:
       - artifacts:/var/lib/ctrlz/artifacts
@@ -406,12 +414,16 @@ services:
       backend:
         ipv4_address: 10.213.77.201
 
-  # One-shot: applies a domain change on the server (spec P4 10.4):
-  #   docker compose --profile tools run --rm domain-apply
-  # It runs as ctrlz_domain_apply, a login of its own that reads domain_settings and the panel and admin
-  # certificates and writes the applied_* columns, with the one secret web_intake_key that opens the sealed keys
-  # of those two certificates and that no other container holds. The subcommand and the files it writes (.env and
-  # the Caddy data volume) arrive with scripts/domain-apply.sh.
+  # One-shot: applies a domain change on the server (spec P4 10.4), run through the host script
+  #   scripts/domain-apply.sh
+  # which runs this service, puts the .env it prints in place and recreates caddy, web-panel, api and admin. It runs
+  # as ctrlz_domain_apply, a login of its own that reads domain_settings and the panel and admin certificates and
+  # writes the applied_* columns, with the one secret web_intake_key that opens the sealed keys of those two
+  # certificates and that no other container holds. It reads the current .env (mounted read-only: a container that
+  # runs as the Caddy user must not hold write access to the compose directory, so it prints the new .env on stdout
+  # and the script renames it into place) and fills ctrlz-tls in the Caddy data volume with each host's certificate
+  # pair and the snippet the Caddyfile imports. The volume is /caddy-data here and /data in caddy; the snippet names
+  # the path caddy sees.
   domain-apply:
     <<: *go-service
     profiles: [tools]
@@ -420,7 +432,13 @@ services:
     environment:
       <<: *go-env
       CTRLZ_DB_PASSWORD_FILE: /run/secrets/pg_domain_apply_password
+      CTRLZ_WEB_INTAKE_KEY_FILE: /run/secrets/web_intake_key
+      CTRLZ_DOMAIN_ENV_FILE: /compose/.env
+      CTRLZ_CADDY_TLS_DIR: /caddy-data/ctrlz-tls
     secrets: [pg_domain_apply_password, web_intake_key]
+    volumes:
+      - ./.env:/compose/.env:ro
+      - caddy_data:/caddy-data
     mem_limit: 128m
     # The only address pg_hba.conf lets ctrlz_domain_apply log in from. Keep this address and the one in
     # postgres/pg_hba.conf in step.
@@ -437,6 +455,10 @@ services:
     # way to name another build, as for CTRLZ_IMAGE.
     image: ${CTRLZ_WEB_PANEL_IMAGE:-ctrlz/web-panel:dev}
     pull_policy: never
+    # The origins of the verify probe the page may connect to (10.3): written to the .env by domain-apply, read when
+    # this service is recreated, and used by the Next.js app for connect-src.
+    environment:
+      CTRLZ_VERIFY_ORIGIN: ${CTRLZ_VERIFY_ORIGIN:-}
     user: "65532:65532"
     # Next's standalone server writes nothing under its own folder at run time (images are unoptimised and
     # no page is cached on disk), so a read-only root holds with the one scratch directory below.

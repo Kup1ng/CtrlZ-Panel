@@ -98,7 +98,18 @@ func serviceHandler(cfg Config, rt *Runtime, st *store.Store, log *slog.Logger, 
 		}
 		h, err = api.New(api.Deps{Log: log, Store: st, Sessions: sessions, Limiter: limiter, Keys: rt.Keys, Invites: rt.Public, Hasher: rt.Hasher, PanelHost: cfg.PanelHost, Strict: strict, PlainHTTPOrigin: plainHTTPOrigin(cfg.Env), TrustedProxies: cfg.TrustedProxies, After: after, SpoolDir: cfg.SpoolDir}, health)
 	} else {
+		install, ierr := newInstaller(cfg)
+		if ierr != nil {
+			closeFn()
+			return nil, func() {}, ierr
+		}
+		intake, ierr := newIntake(cfg)
+		if ierr != nil {
+			closeFn()
+			return nil, func() {}, ierr
+		}
 		h, err = adminapi.New(adminapi.Deps{
+			Install: install, Intake: intake,
 			Log: log, Store: st, Sessions: sessions, Limiter: limiter, Keys: rt.Keys, Hasher: rt.Hasher,
 			AdminHost: cfg.AdminHost, PanelHost: cfg.PanelHost, Env: string(cfg.Env), Strict: strict, PlainHTTPOrigin: plainHTTPOrigin(cfg.Env), TrustedProxies: cfg.TrustedProxies,
 		}, health)

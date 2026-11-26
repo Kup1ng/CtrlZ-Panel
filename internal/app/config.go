@@ -112,6 +112,10 @@ type Config struct {
 	// volume under Compose. Worker only; the compiler job needs it and the compiler pool both.
 	ArtifactsDir string
 
+	// DDNSResolver is the DoT or DoH server of the DDNS job (P4 8), a tls:// or https:// URL; empty is the host's own resolver.
+	// Worker only. It is parsed strictly where it is used (internal/worker/periodic).
+	DDNSResolver string
+
 	// ProofKey is the key the hub derives UDP proof codes from (contract 3.5).
 	// Hub only: it lives in a Docker secret mounted into that one service, and
 	// is never in Postgres or in another role, so a tenant that reads any table
@@ -164,6 +168,13 @@ type Config struct {
 	// CTRLZ_HUB_HOST.
 	Hub HubConfig
 
+	// Install is the admin's view of the hub: the host and the two read-only volumes the install command is made
+	// from. Zero for every other role.
+	Install InstallConfig
+
+	// Intake is the admin's view of the two intake public keys an uploaded certificate key is sealed to. Zero for every other role.
+	Intake IntakeConfig
+
 	ShutdownTimeout time.Duration
 }
 
@@ -188,6 +199,7 @@ type Getenv func(string) string
 //	CTRLZ_DB_PASSWORD_FILE         file holding this role's password
 //	CTRLZ_DB_COMPILER_PASSWORD_FILE  worker only: the compiler role's password
 //	CTRLZ_ARTIFACTS_DIR              worker only: the directory of the artifact store the compiler writes
+//	CTRLZ_DDNS_RESOLVER              worker only: tls://host or https://host/path, the resolver of the DDNS job (default: the host's)
 //	CTRLZ_PROOF_KEY_FILE           hub only: the proof_key secret
 //	CTRLZ_DB_MAX_CONNS             pool size
 //	CTRLZ_ENV                      production (default), dev or test
@@ -277,6 +289,12 @@ func LoadConfig(role Role, getenv Getenv) (Config, error) {
 		}
 		c.ArtifactsDir = d
 	}
+	if d := getenv("CTRLZ_DDNS_RESOLVER"); d != "" {
+		if role != RoleWorker {
+			return Config{}, errors.New("CTRLZ_DDNS_RESOLVER is for the worker only")
+		}
+		c.DDNSResolver = d
+	}
 	if f := getenv("CTRLZ_PROOF_KEY_FILE"); f != "" {
 		if role != RoleHub {
 			return Config{}, errors.New("CTRLZ_PROOF_KEY_FILE is for the hub only")
@@ -292,6 +310,9 @@ func LoadConfig(role Role, getenv Getenv) (Config, error) {
 	}
 	if role == RoleMigrate && c.DBHost == "" {
 		return Config{}, errors.New("migrate needs CTRLZ_DB_HOST")
+	}
+	if err := loadIntakeConfig(role, getenv, &c); err != nil {
+		return Config{}, err
 	}
 	if err := loadHubConfig(role, getenv, &c); err != nil {
 		return Config{}, err

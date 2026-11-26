@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/Kup1ng/CtrlZ-Panel/internal/certcheck"
 )
 
 // ZoneCA is the private zone CA of p4-nodes 4.3: self-signed, ten years, pathlen 0, EKU serverAuth,
@@ -168,10 +170,9 @@ func (z *ZoneCA) Reusable(key *ecdsa.PrivateKey, zones []string, now time.Time) 
 }
 
 // ZoneNames are the three names a zone certificate covers (4.3): the zone, every name directly under
-// it, and every name directly under verify.<zone>.
-func ZoneNames(zone string) []string {
-	return []string{zone, "*." + zone, "*.verify." + zone}
-}
+// it, and every name directly under verify.<zone>. The list is certcheck.ZoneNames, the one the admin's upload check and
+// the hub's leaves are both judged by.
+func ZoneNames(zone string) []string { return certcheck.ZoneNames(zone) }
 
 // ZoneLeaf is a zone certificate and the key made for it. The key is the caller's to seal for one
 // node and drop: it is generated per issue and the hub never stores it.

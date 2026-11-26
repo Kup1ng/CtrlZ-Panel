@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/authtest/isolation"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
@@ -247,6 +248,117 @@ func (e *admIso) fixtures() map[string]isolation.Fixture {
 		"getSmsStats": e.reads(login, "/sms/stats?days=3", nil),
 		"listAudit":   e.reads(login, "/audit?limit=5", nil),
 		"listAlerts":  e.reads(func() { e.login(); e.alert() }, "/alerts", nil),
+		// The node routes (P4). A node is no tenant's: every case succeeds, leaves both tenants' digests as they were
+		// and the write it claims is there. The reports route reads claims of both tenants, which is its purpose.
+		"listNodeEnrollments": e.reads(login, "/node-enrollments", nil),
+		"createNodeEnrollment": e.elsewhere(201, "makes an enrolment token, which belongs to no tenant", `SELECT count(*) FROM ctrlz.node_enrollments`,
+			func() { e.login(); r.withInstall(t) },
+			func() *aresp { return e.b.post("/node-enrollments", enrollBody) }),
+		"confirmNodeEnrollment": e.elsewhere(201, "makes a pending node", `SELECT count(*) FROM ctrlz.nodes`,
+			func() {
+				e.login()
+				r.seedRealNodes(t)
+				var fp string
+				e.id, fp = r.goodRecord(t, "isolation-confirm", 40)
+				e.body = map[string]any{"fingerprint": fp, "name": "isolation"}
+			},
+			func() *aresp { return e.b.post("/node-enrollments/"+e.id+":confirm", e.body) }),
+		"rejectNodeEnrollment": e.elsewhere(204, "rejects an enrolment record", `SELECT count(*) FROM ctrlz.node_enrollments WHERE state = 'rejected'`,
+			func() {
+				e.login()
+				e.id, _ = r.goodRecord(t, "isolation-reject", 41)
+			},
+			func() *aresp { return e.b.post("/node-enrollments/"+e.id+":reject", nil) }),
+		"listNodes":            e.reads(login, "/nodes", nil),
+		"getNode":              e.reads(func() { e.login(); e.id = seedNode1 }, "/nodes/{id}", nil),
+		"listAddressesGivenUp": e.reads(login, "/nodes/addresses-given-up", nil),
+		"getNodeReports":       e.reads(func() { e.login(); e.id = seedNode1 }, "/nodes/{id}/reports", nil),
+		// The routes that change membership (P4 R2). Each makes its own nodes with isoNode, which clears the ones an
+		// earlier case left, so the four slots are never the reason a case fails.
+		"approveNode": e.elsewhere(200, "moves a pending node to active, which no tenant owns", `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'node.approve'`,
+			func() { e.login(); r.seedRealNodes(t); e.id = r.isoNode(t, "pending") },
+			func() *aresp { return e.b.post("/nodes/"+e.id+":approve", nil) }),
+		"revokeNode": e.elsewhere(200, "revokes a node and queues the node_revoked job, which cleans rows by the nodes' own ids", `SELECT count(*) FROM ctrlz.admin_jobs WHERE kind = 'node_revoked'`,
+			func() { e.login(); r.seedRealNodes(t); e.id = r.isoNode(t, "active") },
+			func() *aresp { return e.b.post("/nodes/"+e.id+":revoke", nil) }),
+		"removeNode": e.elsewhere(204, "removes a node row", `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'node.remove'`,
+			func() { e.login(); r.seedRealNodes(t); e.id = r.isoNode(t, "active") },
+			func() *aresp { return e.b.call("DELETE", "/nodes/"+e.id, nil) }),
+		"patchNode": e.elsewhere(200, "renames a node", `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'node.update'`,
+			func() { e.login(); r.seedRealNodes(t); e.id = r.isoNode(t, "active") },
+			func() *aresp {
+				return e.b.call("PATCH", "/nodes/"+e.id, map[string]any{"name": "iso-renamed", "proxy_blocked": true})
+			}),
+		"putNodeAddresses": e.elsewhere(200, "moves a node's advertised addresses", `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'node.addresses_change'`,
+			func() { e.login(); r.seedRealNodes(t); e.id = r.isoNode(t, "active") },
+			func() *aresp {
+				return e.b.put("/nodes/"+e.id+"/addresses", map[string]any{"dns_advertised_ip": "93.184.231.77", "proxy_advertised_ip": "93.184.231.78"})
+			}),
+		"createNodeDnsRequest": e.elsewhere(202, "asks the hub to hold a node", `SELECT count(*) FROM ctrlz.node_dns_requests`,
+			func() { e.login(); r.seedRealNodes(t); e.id = r.isoNode(t, "active") },
+			func() *aresp { return e.b.post("/nodes/"+e.id+"/dns-requests", map[string]any{"kind": "hold"}) }),
+		"listPairs": e.reads(login, "/pairs", nil),
+		"createPair": e.elsewhere(201, "makes a pair of two nodes", `SELECT count(*) FROM ctrlz.node_pairs`,
+			func() {
+				e.login()
+				r.seedRealNodes(t)
+				a, b := r.isoNodes(t)
+				e.body = map[string]any{"primary_node_id": a, "fallback_node_id": b}
+			},
+			func() *aresp { return e.b.post("/pairs", e.body) }),
+		"updatePair": e.elsewhere(200, "swaps the roles of a pair", `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'pair.update'`,
+			func() {
+				e.login()
+				r.seedRealNodes(t)
+				a, b := r.isoNodes(t)
+				r.env.Scan(t, `INSERT INTO ctrlz.node_pairs (primary_node_id, fallback_node_id) VALUES ($1, $2) RETURNING id::text`, []any{a, b}, &e.id)
+				e.body = map[string]any{"primary_node_id": b, "fallback_node_id": a}
+			},
+			func() *aresp { return e.b.put("/pairs/"+e.id, e.body) }),
+		"deletePair": e.elsewhere(204, "dissolves a pair no Endpoint uses", `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'pair.delete'`,
+			func() {
+				e.login()
+				r.seedRealNodes(t)
+				a, b := r.isoNodes(t)
+				r.env.Scan(t, `INSERT INTO ctrlz.node_pairs (primary_node_id, fallback_node_id) VALUES ($1, $2) RETURNING id::text`, []any{a, b}, &e.id)
+			},
+			func() *aresp { return e.b.call("DELETE", "/pairs/"+e.id, nil) }),
+		"putGlobalPair": e.elsewhere(200, "switches the global pair", `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'settings.global_pair'`,
+			func() {
+				e.login()
+				r.seedRealNodes(t)
+				a, b := r.isoNodes(t)
+				r.env.Scan(t, `INSERT INTO ctrlz.node_pairs (primary_node_id, fallback_node_id) VALUES ($1, $2) RETURNING id::text`, []any{a, b}, &e.id)
+			},
+			func() *aresp { return e.b.put("/settings/global-pair", map[string]any{"pair_id": e.id}) }),
+		// The overview, settings and certificate routes (P4 R3). None of them reads or writes a tenant's rows: the one read that
+		// crosses tenants is the impact count, which is a number.
+		"getOverview":         e.reads(login, "/overview", nil),
+		"listFreeDnsCounters": e.reads(login, "/free-dns/counters", nil),
+		"getFreeDnsSettings":  e.reads(login, "/settings/free-dns", nil),
+		"getDomainSettings":   e.reads(login, "/settings/domain", nil),
+		"getDomainImpact":     e.reads(login, "/settings/domain/impact", nil),
+		"listCertificates":    e.reads(login, "/certificates", nil),
+		"putFreeDnsSettings": e.elsewhere(200, "changes the free DNS switch", `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'settings.free_dns'`,
+			e.login,
+			func() *aresp { return e.b.put("/settings/free-dns", map[string]any{"enabled": false, "qps": 500}) }),
+		"putDomainSettings": e.elsewhere(200, "sets the zone of the service", `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'settings.domain'`,
+			e.login,
+			func() *aresp { return e.b.put("/settings/domain", map[string]any{"dns_zone": "dns.isolation.example"}) }),
+		"uploadCertificate": e.elsewhere(201, "stores an uploaded certificate, which belongs to no tenant", `SELECT count(*) FROM ctrlz.certificates WHERE source = 'uploaded'`,
+			func() {
+				e.login()
+				ca, _, _ := r.withIntake(t)
+				chain, key := ca.leaf(t, 60*24*time.Hour, panelHost)
+				e.body = map[string]any{"kind": "panel", "chain_pem": chain, "key_pem": key}
+			},
+			func() *aresp { return e.b.post("/certificates", e.body) }),
+		"retireCertificate": e.elsewhere(204, "retires an uploaded certificate", `SELECT count(*) FROM ctrlz.audit_log WHERE action = 'certificate.retire'`,
+			func() {
+				e.login()
+				r.env.Scan(t, `INSERT INTO ctrlz.certificates (kind, chain_pem, not_before, not_after, state, source) VALUES ('panel', 'x', now(), now() + interval '30 days', 'active', 'uploaded') RETURNING id::text`, nil, &e.id)
+			},
+			func() *aresp { return e.b.post("/certificates/"+e.id+":retire", nil) }),
 		"ackAlert": e.elsewhere(204, "acknowledges an alert", auditRows,
 			func() { e.login(); e.alert() },
 			func() *aresp { return e.b.post("/alerts/"+e.id+"/ack", nil) }),

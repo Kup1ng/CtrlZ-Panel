@@ -76,3 +76,23 @@ func ConnectRekey(ctx context.Context, getenv Getenv) (Config, *keyring.Ring, *s
 	}
 	return cfg, ring, st, nil
 }
+
+// ConnectDomainApply opens a one-connection store as ctrlz_domain_apply for `ctrlz domain-apply` (p4-nodes 10.4). It
+// loads the database variables every role has and nothing else: the key that opens the sealed certificate keys is a file of
+// its own, read by the command.
+func ConnectDomainApply(ctx context.Context, getenv Getenv) (*store.Store, error) {
+	cfg, err := LoadConfig(RoleWorker, getenv)
+	if err != nil {
+		return nil, fmt.Errorf("config: %w", err)
+	}
+	if cfg.DBHost == "" {
+		return nil, errors.New("config: CTRLZ_DB_HOST is not set")
+	}
+	cfg.DBMaxConns = 1
+	cfg.Role = "domain-apply" // only the application_name of the connection
+	st, err := store.Open(ctx, cfg.storeConfig(store.RoleDomainApply, cfg.DBPassword))
+	if err != nil {
+		return nil, fmt.Errorf("database: %w", err)
+	}
+	return st, nil
+}

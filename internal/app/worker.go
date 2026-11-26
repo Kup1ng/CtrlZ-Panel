@@ -18,6 +18,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/worker/adminjobs"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/worker/batchjobs"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/worker/periodic"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/worker/smssend"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/worker/sweep"
 
@@ -57,10 +58,33 @@ func startWorker(ctx context.Context, cfg Config, rt *Runtime, st, compilerStore
 		return nil, err
 	}
 
+	// The periodic jobs of P4 (8): DDNS, expired rules, counters, the schedule horizon, enrolment expiry and log pruning. A
+	// malformed CTRLZ_DDNS_RESOLVER stops the process, like the compiler's half configuration below.
+	resolver, err := periodic.NewResolver(cfg.DDNSResolver)
+	if err != nil {
+		return nil, err
+	}
+	budget, err := newIPClaimBudget()
+	if err != nil {
+		return nil, err
+	}
+	pcfg := periodic.Config{Store: st, Log: log, Resolver: resolver, Claims: budget}
+	if cfg.ArtifactsDir != "" {
+		blobs, err := compiler.NewDirArtifacts(cfg.ArtifactsDir)
+		if err != nil {
+			return nil, err
+		}
+		pcfg.Blobs = blobs
+	}
+	periodicJobs, err := periodic.New(pcfg)
+	if err != nil {
+		return nil, err
+	}
+
 	// The compiler (P4 6): run under its lease with the compiler pool, and only when the role and the artifact directory are
 	// both configured. A half configuration stops the process, so a worker that cannot compile is never healthy by mistake.
 	loops := map[workerLoop]func(context.Context) error{
-		loopSMS: sender.Run, loopSweep: sweeper.Run, loopAdminJobs: jobs.Run, loopBatchJobs: batch.Run,
+		loopSMS: sender.Run, loopSweep: sweeper.Run, loopAdminJobs: jobs.Run, loopBatchJobs: batch.Run, loopPeriodic: periodicJobs.Run,
 	}
 	if compilerStore != nil || cfg.ArtifactsDir != "" {
 		if compilerStore == nil || cfg.ArtifactsDir == "" {
@@ -113,10 +137,11 @@ const (
 	loopAdminJobs workerLoop = "admin_jobs"
 	loopBatchJobs workerLoop = "batch_jobs"
 	loopCompiler  workerLoop = "compiler"
+	loopPeriodic  workerLoop = "periodic"
 	loopStop      workerLoop = "stop" // the goroutine that waits for the loops at shutdown
 )
 
 // Valid reports membership.
 func (l workerLoop) Valid() bool {
-	return l == loopSMS || l == loopSweep || l == loopAdminJobs || l == loopBatchJobs || l == loopCompiler || l == loopStop
+	return l == loopSMS || l == loopSweep || l == loopAdminJobs || l == loopBatchJobs || l == loopCompiler || l == loopPeriodic || l == loopStop
 }

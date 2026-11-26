@@ -312,6 +312,10 @@ func All() []Bucket {
 		// ---- tenant rate classes (spec 14.1) ----
 		{Layer: RateClass, Service: Tenant, Name: "public-read", Source: Network, Parts: []Part{PartNetwork, PartWide}, Limits: perMin(60),
 			NoProof: "GET /auth/config is public and asks for nothing, so there is nothing a request could prove"},
+		// The page without a login reads it from the browser, behind carrier NAT where a /24 is shared by many people, so it
+		// has a class of its own at ten times public-read's number (p4-nodes 9.3, Plan T-556). Open, like every read class.
+		{Layer: RateClass, Service: Tenant, Name: "public-free-dns", Source: Network, Parts: []Part{PartNetwork, PartWide}, Limits: perMin(600),
+			NoProof: "GET /public/free-dns is public and asks for nothing, so there is nothing a request could prove"},
 		{Layer: RateClass, Service: Tenant, Name: "auth", Source: Network, Parts: []Part{PartNetwork, PartWide}, Limits: perMin(20),
 			ProofPart: PartMarker},
 		{Layer: RateClass, Service: Tenant, Name: "otp-send", Source: Network, Parts: []Part{PartNetwork, PartWide},

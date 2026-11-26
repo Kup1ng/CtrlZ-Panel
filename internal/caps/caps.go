@@ -305,5 +305,10 @@ func Bounds() []Bound {
 		{"maxCarriers", "pair tables the hub's view keeps in memory (hubview): one process, a guard on memory against a runaway log, nothing in the database that racing actors could spend"},
 		{"maxHealthItems", "health items of one Heartbeat kept in version_info (hubtel): the items of one message in hand, nothing shared that racing actors could spend"},
 		{"MaxClientsPerSelector", "clients one selector write resolves (spec 9.3): the write applies to the rows it locked and says whether more remain, so the caller repeats; a size of one request, not an amount racing actors spend"},
+		{"ddnsMaxAddrs", "public addresses one DDNS host may resolve to (D31), checked on the one answer in hand; a pass writes under the Endpoint's row, and the rows of an Endpoint are bounded by this times the five hosts of MaxDDNSHostsPerEndpoint"},
+		{"maxDoHBody", "length of one DoH response the DDNS job reads, checked on the value in hand"},
+		{"maxDomainPasses", "restarts of one domain_change run, a work limit of one job in hand; nothing shared that racing actors could spend"},
+		{"maxKeptListed", "rows listed in the progress of one node_revoked job (the count is exact); a size of one job's own record, nothing shared that racing actors could spend"},
+		{"MaxFixture", "length of the fixture file ctrlz catalog load-fixture reads, checked on the value in hand"},
 	}
 }

@@ -39,7 +39,7 @@ import (
 // Role is the database role a service logs in as.
 type Role string
 
-// The six roles a service may log in as. ctrlz_migrator belongs to
+// The seven roles a service may log in as. ctrlz_migrator belongs to
 // internal/migrate, and ctrlz_auth and ctrlz_backfill cannot log in.
 const (
 	RoleTenant   Role = "ctrlz_tenant"
@@ -51,11 +51,14 @@ const (
 	// It has a login of its own so that the long-running worker, which reads login
 	// codes, holds nothing that can rewrite or switch off a second factor.
 	RoleKeytool Role = "ctrlz_keytool"
+	// RoleDomainApply is the one-shot `ctrlz domain-apply` (p4-nodes 10.4): it reads the domain settings and the two
+	// web certificates and writes the applied_* columns, so the hub and the admin never hold a web key.
+	RoleDomainApply Role = "ctrlz_domain_apply"
 )
 
 func (r Role) valid() bool {
 	switch r {
-	case RoleTenant, RoleHub, RoleCompiler, RoleWorker, RoleAdmin, RoleKeytool:
+	case RoleTenant, RoleHub, RoleCompiler, RoleWorker, RoleAdmin, RoleKeytool, RoleDomainApply:
 		return true
 	}
 	return false

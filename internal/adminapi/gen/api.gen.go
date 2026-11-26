@@ -18,6 +18,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AddressGivenUpKind.
+const (
+	Dns   AddressGivenUpKind = "dns"
+	Proxy AddressGivenUpKind = "proxy"
+)
+
+// Valid indicates whether the value is a known member of the AddressGivenUpKind enum.
+func (e AddressGivenUpKind) Valid() bool {
+	switch e {
+	case Dns:
+		return true
+	case Proxy:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AdminLoginResultState.
 const (
 	Ready         AdminLoginResultState = "ready"
@@ -78,6 +96,99 @@ func (e AlertRowSeverity) Valid() bool {
 	}
 }
 
+// Defines values for CertificateViewKind.
+const (
+	CertificateViewKindAdmin             CertificateViewKind = "admin"
+	CertificateViewKindBlockIntermediate CertificateViewKind = "block_intermediate"
+	CertificateViewKindBlockRoot         CertificateViewKind = "block_root"
+	CertificateViewKindNodeCa            CertificateViewKind = "node_ca"
+	CertificateViewKindPanel             CertificateViewKind = "panel"
+	CertificateViewKindWildcard          CertificateViewKind = "wildcard"
+	CertificateViewKindZoneCa            CertificateViewKind = "zone_ca"
+)
+
+// Valid indicates whether the value is a known member of the CertificateViewKind enum.
+func (e CertificateViewKind) Valid() bool {
+	switch e {
+	case CertificateViewKindAdmin:
+		return true
+	case CertificateViewKindBlockIntermediate:
+		return true
+	case CertificateViewKindBlockRoot:
+		return true
+	case CertificateViewKindNodeCa:
+		return true
+	case CertificateViewKindPanel:
+		return true
+	case CertificateViewKindWildcard:
+		return true
+	case CertificateViewKindZoneCa:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CertificateViewSource.
+const (
+	CertificateViewSourceIssued   CertificateViewSource = "issued"
+	CertificateViewSourceUploaded CertificateViewSource = "uploaded"
+)
+
+// Valid indicates whether the value is a known member of the CertificateViewSource enum.
+func (e CertificateViewSource) Valid() bool {
+	switch e {
+	case CertificateViewSourceIssued:
+		return true
+	case CertificateViewSourceUploaded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CertificateViewState.
+const (
+	CertificateViewStateActive  CertificateViewState = "active"
+	CertificateViewStatePending CertificateViewState = "pending"
+	CertificateViewStateRetired CertificateViewState = "retired"
+	CertificateViewStateRevoked CertificateViewState = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the CertificateViewState enum.
+func (e CertificateViewState) Valid() bool {
+	switch e {
+	case CertificateViewStateActive:
+		return true
+	case CertificateViewStatePending:
+		return true
+	case CertificateViewStateRetired:
+		return true
+	case CertificateViewStateRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FreeCounterRowTransport.
+const (
+	Tcp FreeCounterRowTransport = "tcp"
+	Udp FreeCounterRowTransport = "udp"
+)
+
+// Valid indicates whether the value is a known member of the FreeCounterRowTransport enum.
+func (e FreeCounterRowTransport) Valid() bool {
+	switch e {
+	case Tcp:
+		return true
+	case Udp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InviteRowState.
 const (
 	InviteRowStateExpired InviteRowState = "expired"
@@ -114,6 +225,96 @@ func (e LocaleCode) Valid() bool {
 	case LocaleCodeEn:
 		return true
 	case LocaleCodeFa:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NodeDnsRequestBodyKind.
+const (
+	ForceFailback NodeDnsRequestBodyKind = "force_failback"
+	Hold          NodeDnsRequestBodyKind = "hold"
+	Release       NodeDnsRequestBodyKind = "release"
+)
+
+// Valid indicates whether the value is a known member of the NodeDnsRequestBodyKind enum.
+func (e NodeDnsRequestBodyKind) Valid() bool {
+	switch e {
+	case ForceFailback:
+		return true
+	case Hold:
+		return true
+	case Release:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NodeEnrollmentRowState.
+const (
+	NodeEnrollmentRowStateApproved        NodeEnrollmentRowState = "approved"
+	NodeEnrollmentRowStateExpired         NodeEnrollmentRowState = "expired"
+	NodeEnrollmentRowStateIssued          NodeEnrollmentRowState = "issued"
+	NodeEnrollmentRowStatePendingApproval NodeEnrollmentRowState = "pending_approval"
+	NodeEnrollmentRowStateRejected        NodeEnrollmentRowState = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the NodeEnrollmentRowState enum.
+func (e NodeEnrollmentRowState) Valid() bool {
+	switch e {
+	case NodeEnrollmentRowStateApproved:
+		return true
+	case NodeEnrollmentRowStateExpired:
+		return true
+	case NodeEnrollmentRowStateIssued:
+		return true
+	case NodeEnrollmentRowStatePendingApproval:
+		return true
+	case NodeEnrollmentRowStateRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NodeViewResolveMode.
+const (
+	Mixed     NodeViewResolveMode = "mixed"
+	Recursive NodeViewResolveMode = "recursive"
+	Upstream  NodeViewResolveMode = "upstream"
+)
+
+// Valid indicates whether the value is a known member of the NodeViewResolveMode enum.
+func (e NodeViewResolveMode) Valid() bool {
+	switch e {
+	case Mixed:
+		return true
+	case Recursive:
+		return true
+	case Upstream:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NodeViewStatus.
+const (
+	NodeViewStatusActive  NodeViewStatus = "active"
+	NodeViewStatusPending NodeViewStatus = "pending"
+	NodeViewStatusRevoked NodeViewStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the NodeViewStatus enum.
+func (e NodeViewStatus) Valid() bool {
+	switch e {
+	case NodeViewStatusActive:
+		return true
+	case NodeViewStatusPending:
+		return true
+	case NodeViewStatusRevoked:
 		return true
 	default:
 		return false
@@ -204,6 +405,27 @@ func (e SmsProvider) Valid() bool {
 	}
 }
 
+// Defines values for UploadCertificateRequestKind.
+const (
+	UploadCertificateRequestKindAdmin    UploadCertificateRequestKind = "admin"
+	UploadCertificateRequestKindPanel    UploadCertificateRequestKind = "panel"
+	UploadCertificateRequestKindWildcard UploadCertificateRequestKind = "wildcard"
+)
+
+// Valid indicates whether the value is a known member of the UploadCertificateRequestKind enum.
+func (e UploadCertificateRequestKind) Valid() bool {
+	switch e {
+	case UploadCertificateRequestKindAdmin:
+		return true
+	case UploadCertificateRequestKindPanel:
+		return true
+	case UploadCertificateRequestKindWildcard:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Locale.
 const (
 	LocaleEn Locale = "en"
@@ -256,6 +478,24 @@ func (e PutSmsTemplateParamsLocale) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// AddressGivenUp defines model for AddressGivenUp.
+type AddressGivenUp struct {
+	Address   string              `json:"address"`
+	GivenUpAt time.Time           `json:"given_up_at"`
+	Kind      AddressGivenUpKind  `json:"kind"`
+	NodeId    *openapi_types.UUID `json:"node_id,omitempty"`
+	NodeName  *string             `json:"node_name,omitempty"`
+	SafeFrom  time.Time           `json:"safe_from"`
+}
+
+// AddressGivenUpKind defines model for AddressGivenUp.Kind.
+type AddressGivenUpKind string
+
+// AddressesGivenUp defines model for AddressesGivenUp.
+type AddressesGivenUp struct {
+	Items []AddressGivenUp `json:"items"`
 }
 
 // AdminLoginRequest defines model for AdminLoginRequest.
@@ -366,6 +606,46 @@ type AuditRow struct {
 	Target *string   `json:"target,omitempty"`
 }
 
+// CertificateCreated defines model for CertificateCreated.
+type CertificateCreated struct {
+	Id       openapi_types.UUID `json:"id"`
+	Names    []string           `json:"names"`
+	NotAfter time.Time          `json:"not_after"`
+}
+
+// CertificatePage defines model for CertificatePage.
+type CertificatePage struct {
+	Items      []CertificateView `json:"items"`
+	NextCursor *string           `json:"next_cursor,omitempty"`
+}
+
+// CertificateView defines model for CertificateView.
+type CertificateView struct {
+	CreatedAt time.Time             `json:"created_at"`
+	Id        openapi_types.UUID    `json:"id"`
+	Kind      CertificateViewKind   `json:"kind"`
+	Names     []string              `json:"names"`
+	NotAfter  time.Time             `json:"not_after"`
+	NotBefore time.Time             `json:"not_before"`
+	Source    CertificateViewSource `json:"source"`
+	State     CertificateViewState  `json:"state"`
+}
+
+// CertificateViewKind defines model for CertificateView.Kind.
+type CertificateViewKind string
+
+// CertificateViewSource defines model for CertificateView.Source.
+type CertificateViewSource string
+
+// CertificateViewState defines model for CertificateView.State.
+type CertificateViewState string
+
+// ConfirmNodeEnrollmentRequest defines model for ConfirmNodeEnrollmentRequest.
+type ConfirmNodeEnrollmentRequest struct {
+	Fingerprint string `json:"fingerprint"`
+	Name        string `json:"name"`
+}
+
 // CreateInviteRequest defines model for CreateInviteRequest.
 type CreateInviteRequest struct {
 	Locale   *LocaleCode `json:"locale,omitempty"`
@@ -373,10 +653,46 @@ type CreateInviteRequest struct {
 	TtlHours *int        `json:"ttl_hours,omitempty"`
 }
 
+// CreateNodeEnrollmentRequest defines model for CreateNodeEnrollmentRequest.
+type CreateNodeEnrollmentRequest struct {
+	// BoundIp Only this source address may enrol with the token.
+	BoundIp           *string `json:"bound_ip,omitempty"`
+	DnsAdvertisedIp   string  `json:"dns_advertised_ip"`
+	DnsBindIp         string  `json:"dns_bind_ip"`
+	ProxyAdvertisedIp string  `json:"proxy_advertised_ip"`
+	ProxyBindIp       string  `json:"proxy_bind_ip"`
+}
+
 // CreateUserRequest defines model for CreateUserRequest.
 type CreateUserRequest struct {
 	Locale *LocaleCode `json:"locale,omitempty"`
 	Phone  string      `json:"phone"`
+}
+
+// DomainImpact defines model for DomainImpact.
+type DomainImpact struct {
+	AppleProfiles int64 `json:"apple_profiles"`
+	Endpoints     int64 `json:"endpoints"`
+}
+
+// DomainRequest defines model for DomainRequest.
+type DomainRequest struct {
+	AdminHost      *string `json:"admin_host,omitempty"`
+	DnsZone        string  `json:"dns_zone"`
+	PanelHost      *string `json:"panel_host,omitempty"`
+	TransitionDays *int    `json:"transition_days,omitempty"`
+}
+
+// DomainSettings defines model for DomainSettings.
+type DomainSettings struct {
+	AdminHost        *string    `json:"admin_host,omitempty"`
+	AppliedAdminHost *string    `json:"applied_admin_host,omitempty"`
+	AppliedPanelHost *string    `json:"applied_panel_host,omitempty"`
+	ApplyPending     bool       `json:"apply_pending"`
+	DnsZone          *string    `json:"dns_zone,omitempty"`
+	PanelHost        *string    `json:"panel_host,omitempty"`
+	PrevDnsZone      *string    `json:"prev_dns_zone,omitempty"`
+	TransitionUntil  *time.Time `json:"transition_until,omitempty"`
 }
 
 // Empty defines model for Empty.
@@ -393,9 +709,51 @@ type Error struct {
 	RetryAfterS *int    `json:"retry_after_s,omitempty"`
 }
 
+// FreeCounterPage defines model for FreeCounterPage.
+type FreeCounterPage struct {
+	Items      []FreeCounterRow `json:"items"`
+	NextCursor *string          `json:"next_cursor,omitempty"`
+}
+
+// FreeCounterRow defines model for FreeCounterRow.
+type FreeCounterRow struct {
+	BucketStart time.Time               `json:"bucket_start"`
+	Count       int64                   `json:"count"`
+	NodeId      openapi_types.UUID      `json:"node_id"`
+	Outcome     string                  `json:"outcome"`
+	Rcode       int                     `json:"rcode"`
+	Transport   FreeCounterRowTransport `json:"transport"`
+}
+
+// FreeCounterRowTransport defines model for FreeCounterRow.Transport.
+type FreeCounterRowTransport string
+
+// FreeDnsRequest defines model for FreeDnsRequest.
+type FreeDnsRequest struct {
+	Enabled bool `json:"enabled"`
+	Qps     int  `json:"qps"`
+}
+
+// FreeDnsSettings defines model for FreeDnsSettings.
+type FreeDnsSettings struct {
+	Enabled bool  `json:"enabled"`
+	Qps     int   `json:"qps"`
+	Version int64 `json:"version"`
+}
+
 // FreshWindow defines model for FreshWindow.
 type FreshWindow struct {
 	FreshUntil time.Time `json:"fresh_until"`
+}
+
+// GlobalPairRequest defines model for GlobalPairRequest.
+type GlobalPairRequest struct {
+	PairId openapi_types.UUID `json:"pair_id"`
+}
+
+// GlobalPairView defines model for GlobalPairView.
+type GlobalPairView struct {
+	PairId openapi_types.UUID `json:"pair_id"`
 }
 
 // InviteCreated defines model for InviteCreated.
@@ -425,8 +783,135 @@ type InviteRow struct {
 // InviteRowState defines model for InviteRow.State.
 type InviteRowState string
 
+// KeptRow defines model for KeptRow.
+type KeptRow struct {
+	EndpointId openapi_types.UUID `json:"endpoint_id"`
+	TenantId   openapi_types.UUID `json:"tenant_id"`
+}
+
 // LocaleCode defines model for LocaleCode.
 type LocaleCode string
+
+// NodeAddressesRequest defines model for NodeAddressesRequest.
+type NodeAddressesRequest struct {
+	DnsAdvertisedIp   string `json:"dns_advertised_ip"`
+	ProxyAdvertisedIp string `json:"proxy_advertised_ip"`
+}
+
+// NodeDnsRequestAccepted defines model for NodeDnsRequestAccepted.
+type NodeDnsRequestAccepted struct {
+	RequestId openapi_types.UUID `json:"request_id"`
+}
+
+// NodeDnsRequestBody defines model for NodeDnsRequestBody.
+type NodeDnsRequestBody struct {
+	Kind NodeDnsRequestBodyKind `json:"kind"`
+}
+
+// NodeDnsRequestBodyKind defines model for NodeDnsRequestBody.Kind.
+type NodeDnsRequestBodyKind string
+
+// NodeEnrollmentConfirmed defines model for NodeEnrollmentConfirmed.
+type NodeEnrollmentConfirmed struct {
+	NodeId openapi_types.UUID `json:"node_id"`
+	Slot   int                `json:"slot"`
+}
+
+// NodeEnrollmentCreated defines model for NodeEnrollmentCreated.
+type NodeEnrollmentCreated struct {
+	ExpiresAt time.Time          `json:"expires_at"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// InstallCommand Shown once. It holds the token.
+	InstallCommand string `json:"install_command"`
+}
+
+// NodeEnrollmentPage defines model for NodeEnrollmentPage.
+type NodeEnrollmentPage struct {
+	Items      []NodeEnrollmentRow `json:"items"`
+	NextCursor *string             `json:"next_cursor,omitempty"`
+}
+
+// NodeEnrollmentRow defines model for NodeEnrollmentRow.
+type NodeEnrollmentRow struct {
+	ApprovedAt        *time.Time             `json:"approved_at,omitempty"`
+	BoundIp           *string                `json:"bound_ip,omitempty"`
+	CreatedAt         time.Time              `json:"created_at"`
+	DnsAdvertisedIp   *string                `json:"dns_advertised_ip,omitempty"`
+	DnsBindIp         *string                `json:"dns_bind_ip,omitempty"`
+	EnrolledAt        *time.Time             `json:"enrolled_at,omitempty"`
+	EnrolledFrom      *string                `json:"enrolled_from,omitempty"`
+	ExpiresAt         time.Time              `json:"expires_at"`
+	Hostname          *string                `json:"hostname,omitempty"`
+	Id                openapi_types.UUID     `json:"id"`
+	KeyFingerprint    *string                `json:"key_fingerprint,omitempty"`
+	NodeId            *openapi_types.UUID    `json:"node_id,omitempty"`
+	NodeVersion       *string                `json:"node_version,omitempty"`
+	OsRelease         *string                `json:"os_release,omitempty"`
+	ProxyAdvertisedIp *string                `json:"proxy_advertised_ip,omitempty"`
+	ProxyBindIp       *string                `json:"proxy_bind_ip,omitempty"`
+	RejectedAt        *time.Time             `json:"rejected_at,omitempty"`
+	State             NodeEnrollmentRowState `json:"state"`
+}
+
+// NodeEnrollmentRowState defines model for NodeEnrollmentRow.State.
+type NodeEnrollmentRowState string
+
+// NodePage defines model for NodePage.
+type NodePage struct {
+	Items      []NodeView `json:"items"`
+	NextCursor *string    `json:"next_cursor,omitempty"`
+}
+
+// NodeReports defines model for NodeReports.
+type NodeReports struct {
+	Claims          []TakenClaim `json:"claims"`
+	ClaimsTruncated bool         `json:"claims_truncated"`
+	KeptRows        []KeptRow    `json:"kept_rows"`
+	KeptTruncated   bool         `json:"kept_truncated"`
+}
+
+// NodeView What the database holds of a node and of its latest Heartbeat. The parts that live only in the memory
+// of the hub (the failover conditions, the drain state and a revocation still pending) are not here until
+// the hub writes them (p4-nodes 5.3 to 5.6).
+type NodeView struct {
+	AppliedSeq        int64               `json:"applied_seq"`
+	AppliedSeqLag     int64               `json:"applied_seq_lag"`
+	BlobMajorMax      *int                `json:"blob_major_max,omitempty"`
+	CacheHitPermille  *int                `json:"cache_hit_permille,omitempty"`
+	CatalogVersion    *string             `json:"catalog_version,omitempty"`
+	ConfigHead        int64               `json:"config_head"`
+	CreatedAt         time.Time           `json:"created_at"`
+	DnsAdvertisedIp   *string             `json:"dns_advertised_ip,omitempty"`
+	DnsBindIp         *string             `json:"dns_bind_ip,omitempty"`
+	DnsFlapUntil      *time.Time          `json:"dns_flap_until,omitempty"`
+	DnsHold           bool                `json:"dns_hold"`
+	DnsLastFailbackAt *time.Time          `json:"dns_last_failback_at,omitempty"`
+	DnsWithdrawn      bool                `json:"dns_withdrawn"`
+	Id                openapi_types.UUID  `json:"id"`
+	Isolated          *bool               `json:"isolated,omitempty"`
+	KeyFingerprint    *string             `json:"key_fingerprint,omitempty"`
+	LastHeartbeatAt   *time.Time          `json:"last_heartbeat_at,omitempty"`
+	Name              string              `json:"name"`
+	NodeVersion       *string             `json:"node_version,omitempty"`
+	PairPeerId        *openapi_types.UUID `json:"pair_peer_id,omitempty"`
+	PendingRequests   int                 `json:"pending_requests"`
+	ProxyAdvertisedIp *string             `json:"proxy_advertised_ip,omitempty"`
+	ProxyBindIp       *string             `json:"proxy_bind_ip,omitempty"`
+	ProxyBlocked      bool                `json:"proxy_blocked"`
+	Qps               *int                `json:"qps,omitempty"`
+	Quarantined       *int                `json:"quarantined,omitempty"`
+	ResolveMode       NodeViewResolveMode `json:"resolve_mode"`
+	Slot              int                 `json:"slot"`
+	Status            NodeViewStatus      `json:"status"`
+	UnboundVersion    *string             `json:"unbound_version,omitempty"`
+}
+
+// NodeViewResolveMode defines model for NodeView.ResolveMode.
+type NodeViewResolveMode string
+
+// NodeViewStatus defines model for NodeView.Status.
+type NodeViewStatus string
 
 // OneTimePasswordIssued defines model for OneTimePasswordIssued.
 type OneTimePasswordIssued struct {
@@ -435,6 +920,43 @@ type OneTimePasswordIssued struct {
 	// OneTimePassword Shown once.
 	OneTimePassword string `json:"one_time_password"`
 	RevokedSessions int    `json:"revoked_sessions"`
+}
+
+// Overview defines model for Overview.
+type Overview struct {
+	CacheHitPermille *int            `json:"cache_hit_permille,omitempty"`
+	ConfigHead       int64           `json:"config_head"`
+	FreeDns          FreeDnsSettings `json:"free_dns"`
+	Nodes            []NodeView      `json:"nodes"`
+	Qps              *int            `json:"qps,omitempty"`
+}
+
+// PairPage defines model for PairPage.
+type PairPage struct {
+	Items      []PairView `json:"items"`
+	NextCursor *string    `json:"next_cursor,omitempty"`
+}
+
+// PairRequest defines model for PairRequest.
+type PairRequest struct {
+	FallbackNodeId openapi_types.UUID `json:"fallback_node_id"`
+	MakeGlobal     *bool              `json:"make_global,omitempty"`
+	PrimaryNodeId  openapi_types.UUID `json:"primary_node_id"`
+}
+
+// PairView defines model for PairView.
+type PairView struct {
+	CreatedAt      time.Time          `json:"created_at"`
+	FallbackNodeId openapi_types.UUID `json:"fallback_node_id"`
+	Id             openapi_types.UUID `json:"id"`
+	IsGlobal       bool               `json:"is_global"`
+	PrimaryNodeId  openapi_types.UUID `json:"primary_node_id"`
+}
+
+// PatchNodeRequest defines model for PatchNodeRequest.
+type PatchNodeRequest struct {
+	Name         *string `json:"name,omitempty"`
+	ProxyBlocked *bool   `json:"proxy_blocked,omitempty"`
 }
 
 // RegistrationImpact defines model for RegistrationImpact.
@@ -597,10 +1119,29 @@ type SmsTestRequest struct {
 	Template string      `json:"template"`
 }
 
+// TakenClaim defines model for TakenClaim.
+type TakenClaim struct {
+	Cidr       string             `json:"cidr"`
+	ClaimId    openapi_types.UUID `json:"claim_id"`
+	ConsumedAt time.Time          `json:"consumed_at"`
+	EndpointId openapi_types.UUID `json:"endpoint_id"`
+	TenantId   openapi_types.UUID `json:"tenant_id"`
+}
+
 // TotpCodeRequest defines model for TotpCodeRequest.
 type TotpCodeRequest struct {
 	Code string `json:"code"`
 }
+
+// UploadCertificateRequest defines model for UploadCertificateRequest.
+type UploadCertificateRequest struct {
+	ChainPem string                       `json:"chain_pem"`
+	KeyPem   string                       `json:"key_pem"`
+	Kind     UploadCertificateRequestKind `json:"kind"`
+}
+
+// UploadCertificateRequestKind defines model for UploadCertificateRequest.Kind.
+type UploadCertificateRequestKind string
 
 // UserCreated defines model for UserCreated.
 type UserCreated struct {
@@ -677,8 +1218,53 @@ type ListAuditParams struct {
 	Action *string `form:"action,omitempty" json:"action,omitempty"`
 }
 
+// ListCertificatesParams defines parameters for ListCertificates.
+type ListCertificatesParams struct {
+	// Cursor Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListFreeDnsCountersParams defines parameters for ListFreeDnsCounters.
+type ListFreeDnsCountersParams struct {
+	From   *time.Time          `form:"from,omitempty" json:"from,omitempty"`
+	To     *time.Time          `form:"to,omitempty" json:"to,omitempty"`
+	NodeId *openapi_types.UUID `form:"node_id,omitempty" json:"node_id,omitempty"`
+
+	// Cursor Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListInvitesParams defines parameters for ListInvites.
 type ListInvitesParams struct {
+	// Cursor Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListNodeEnrollmentsParams defines parameters for ListNodeEnrollments.
+type ListNodeEnrollmentsParams struct {
+	// Cursor Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListNodesParams defines parameters for ListNodes.
+type ListNodesParams struct {
+	// Cursor Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetNodeReportsParams defines parameters for GetNodeReports.
+type GetNodeReportsParams struct {
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
+	To   *time.Time `form:"to,omitempty" json:"to,omitempty"`
+}
+
+// ListPairsParams defines parameters for ListPairs.
+type ListPairsParams struct {
 	// Cursor Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -721,6 +1307,9 @@ type AdminLoginJSONRequestBody = AdminLoginRequest
 // AdminTotpFreshJSONRequestBody defines body for AdminTotpFresh for application/json ContentType.
 type AdminTotpFreshJSONRequestBody = TotpCodeRequest
 
+// UploadCertificateJSONRequestBody defines body for UploadCertificate for application/json ContentType.
+type UploadCertificateJSONRequestBody = UploadCertificateRequest
+
 // CreateInviteJSONRequestBody defines body for CreateInvite for application/json ContentType.
 type CreateInviteJSONRequestBody = CreateInviteRequest
 
@@ -732,6 +1321,45 @@ type AdminTotpConfirmJSONRequestBody = TotpCodeRequest
 
 // AdminTotpSetupJSONRequestBody defines body for AdminTotpSetup for application/json ContentType.
 type AdminTotpSetupJSONRequestBody = Empty
+
+// CreateNodeEnrollmentJSONRequestBody defines body for CreateNodeEnrollment for application/json ContentType.
+type CreateNodeEnrollmentJSONRequestBody = CreateNodeEnrollmentRequest
+
+// ConfirmNodeEnrollmentJSONRequestBody defines body for ConfirmNodeEnrollment for application/json ContentType.
+type ConfirmNodeEnrollmentJSONRequestBody = ConfirmNodeEnrollmentRequest
+
+// RejectNodeEnrollmentJSONRequestBody defines body for RejectNodeEnrollment for application/json ContentType.
+type RejectNodeEnrollmentJSONRequestBody = Empty
+
+// PatchNodeJSONRequestBody defines body for PatchNode for application/json ContentType.
+type PatchNodeJSONRequestBody = PatchNodeRequest
+
+// PutNodeAddressesJSONRequestBody defines body for PutNodeAddresses for application/json ContentType.
+type PutNodeAddressesJSONRequestBody = NodeAddressesRequest
+
+// CreateNodeDnsRequestJSONRequestBody defines body for CreateNodeDnsRequest for application/json ContentType.
+type CreateNodeDnsRequestJSONRequestBody = NodeDnsRequestBody
+
+// ApproveNodeJSONRequestBody defines body for ApproveNode for application/json ContentType.
+type ApproveNodeJSONRequestBody = Empty
+
+// RevokeNodeJSONRequestBody defines body for RevokeNode for application/json ContentType.
+type RevokeNodeJSONRequestBody = Empty
+
+// CreatePairJSONRequestBody defines body for CreatePair for application/json ContentType.
+type CreatePairJSONRequestBody = PairRequest
+
+// UpdatePairJSONRequestBody defines body for UpdatePair for application/json ContentType.
+type UpdatePairJSONRequestBody = PairRequest
+
+// PutDomainSettingsJSONRequestBody defines body for PutDomainSettings for application/json ContentType.
+type PutDomainSettingsJSONRequestBody = DomainRequest
+
+// PutFreeDnsSettingsJSONRequestBody defines body for PutFreeDnsSettings for application/json ContentType.
+type PutFreeDnsSettingsJSONRequestBody = FreeDnsRequest
+
+// PutGlobalPairJSONRequestBody defines body for PutGlobalPair for application/json ContentType.
+type PutGlobalPairJSONRequestBody = GlobalPairRequest
 
 // PutRegistrationJSONRequestBody defines body for PutRegistration for application/json ContentType.
 type PutRegistrationJSONRequestBody = RegistrationRequest
@@ -783,6 +1411,18 @@ type ServerInterface interface {
 	// AdminTotpFresh Prove the authenticator again, for the next five minutes
 	// (POST /auth/totp/fresh)
 	AdminTotpFresh(w http.ResponseWriter, r *http.Request)
+	// ListCertificates Certificate rows, newest first (p4-nodes 4.3, 9.2)
+	// (GET /certificates)
+	ListCertificates(w http.ResponseWriter, r *http.Request, params ListCertificatesParams)
+	// UploadCertificate Upload a certificate chain and its key (p4-nodes 4.3, 9.2)
+	// (POST /certificates)
+	UploadCertificate(w http.ResponseWriter, r *http.Request)
+	// RetireCertificate Retire an uploaded certificate (p4-nodes 4.3, 9.2)
+	// (POST /certificates/{id}:retire)
+	RetireCertificate(w http.ResponseWriter, r *http.Request, id Id)
+	// ListFreeDnsCounters The free DNS counters, hourly, by node, transport, outcome and rcode (p4-nodes 9.2, T-339)
+	// (GET /free-dns/counters)
+	ListFreeDnsCounters(w http.ResponseWriter, r *http.Request, params ListFreeDnsCountersParams)
 	// ListInvites Invites, newest first
 	// (GET /invites)
 	ListInvites(w http.ResponseWriter, r *http.Request, params ListInvitesParams)
@@ -807,6 +1447,81 @@ type ServerInterface interface {
 	// AdminTotpSetup Make a TOTP secret, not yet enabled
 	// (POST /me/totp/setup)
 	AdminTotpSetup(w http.ResponseWriter, r *http.Request)
+	// ListNodeEnrollments Node enrolment records, newest first (p4-nodes 4.2 step 4)
+	// (GET /node-enrollments)
+	ListNodeEnrollments(w http.ResponseWriter, r *http.Request, params ListNodeEnrollmentsParams)
+	// CreateNodeEnrollment Make an enrolment token and its install command (p4-nodes 4.2 step 1)
+	// (POST /node-enrollments)
+	CreateNodeEnrollment(w http.ResponseWriter, r *http.Request)
+	// ConfirmNodeEnrollment Confirm the key fingerprint of a record and make its pending node (p4-nodes 4.2 step 4)
+	// (POST /node-enrollments/{id}:confirm)
+	ConfirmNodeEnrollment(w http.ResponseWriter, r *http.Request, id Id)
+	// RejectNodeEnrollment Withdraw a token or reject a pending record (p4-nodes 4.2 step 4)
+	// (POST /node-enrollments/{id}:reject)
+	RejectNodeEnrollment(w http.ResponseWriter, r *http.Request, id Id)
+	// ListNodes Nodes (p4-nodes 9.2)
+	// (GET /nodes)
+	ListNodes(w http.ResponseWriter, r *http.Request, params ListNodesParams)
+	// ListAddressesGivenUp Addresses the panel gave up and that are not yet safe to give back (SC 8a.4)
+	// (GET /nodes/addresses-given-up)
+	ListAddressesGivenUp(w http.ResponseWriter, r *http.Request)
+	// RemoveNode Remove a node (p4-nodes 4.5, SC 8a.4)
+	// (DELETE /nodes/{id})
+	RemoveNode(w http.ResponseWriter, r *http.Request, id Id)
+	// GetNode One node (p4-nodes 9.2)
+	// (GET /nodes/{id})
+	GetNode(w http.ResponseWriter, r *http.Request, id Id)
+	// PatchNode Edit the name and the proxy block of a node (p4-nodes 9.2)
+	// (PATCH /nodes/{id})
+	PatchNode(w http.ResponseWriter, r *http.Request, id Id)
+	// PutNodeAddresses Change the advertised addresses of a node (p4-nodes 9.2, SC 8a.4)
+	// (PUT /nodes/{id}/addresses)
+	PutNodeAddresses(w http.ResponseWriter, r *http.Request, id Id)
+	// CreateNodeDnsRequest Ask the hub to hold, release or fail back a node's DNS answer (SC 8a.4, Requests)
+	// (POST /nodes/{id}/dns-requests)
+	CreateNodeDnsRequest(w http.ResponseWriter, r *http.Request, id Id)
+	// GetNodeReports What a node reported that other people relied on (p4-nodes 4.5)
+	// (GET /nodes/{id}/reports)
+	GetNodeReports(w http.ResponseWriter, r *http.Request, id Id, params GetNodeReportsParams)
+	// ApproveNode Move a pending node to active (p4-nodes 4.2 step 5)
+	// (POST /nodes/{id}:approve)
+	ApproveNode(w http.ResponseWriter, r *http.Request, id Id)
+	// RevokeNode Revoke an active node, which is terminal (p4-nodes 4.5)
+	// (POST /nodes/{id}:revoke)
+	RevokeNode(w http.ResponseWriter, r *http.Request, id Id)
+	// GetOverview The system and the nodes at a glance (p4-nodes 9.2, T-339)
+	// (GET /overview)
+	GetOverview(w http.ResponseWriter, r *http.Request)
+	// ListPairs Node pairs (p4-nodes 9.2)
+	// (GET /pairs)
+	ListPairs(w http.ResponseWriter, r *http.Request, params ListPairsParams)
+	// CreatePair Make a pair (p4-nodes 9.2)
+	// (POST /pairs)
+	CreatePair(w http.ResponseWriter, r *http.Request)
+	// DeletePair Dissolve a pair no Endpoint uses (p4-nodes 9.2, SC 8a.9 Replacement order)
+	// (DELETE /pairs/{id})
+	DeletePair(w http.ResponseWriter, r *http.Request, id Id)
+	// UpdatePair Change the members of a pair (p4-nodes 9.2)
+	// (PUT /pairs/{id})
+	UpdatePair(w http.ResponseWriter, r *http.Request, id Id)
+	// GetDomainSettings The domain settings (p4-nodes 9.2, 10.4)
+	// (GET /settings/domain)
+	GetDomainSettings(w http.ResponseWriter, r *http.Request)
+	// PutDomainSettings Change the zone and the hosts (p4-nodes 9.2, 10.4)
+	// (PUT /settings/domain)
+	PutDomainSettings(w http.ResponseWriter, r *http.Request)
+	// GetDomainImpact What a change of zone touches (p4-nodes 9.2)
+	// (GET /settings/domain/impact)
+	GetDomainImpact(w http.ResponseWriter, r *http.Request)
+	// GetFreeDnsSettings The free DNS switch and rate (p4-nodes 9.2, T-556)
+	// (GET /settings/free-dns)
+	GetFreeDnsSettings(w http.ResponseWriter, r *http.Request)
+	// PutFreeDnsSettings Switch free DNS on or off and set its rate (p4-nodes 9.2, T-556)
+	// (PUT /settings/free-dns)
+	PutFreeDnsSettings(w http.ResponseWriter, r *http.Request)
+	// PutGlobalPair Switch the global pair (p4-nodes 9.2)
+	// (PUT /settings/global-pair)
+	PutGlobalPair(w http.ResponseWriter, r *http.Request)
 	// GetRegistration The registration mode
 	// (GET /settings/registration)
 	GetRegistration(w http.ResponseWriter, r *http.Request)
@@ -909,6 +1624,30 @@ func (_ Unimplemented) AdminTotpFresh(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ListCertificates Certificate rows, newest first (p4-nodes 4.3, 9.2)
+// (GET /certificates)
+func (_ Unimplemented) ListCertificates(w http.ResponseWriter, r *http.Request, params ListCertificatesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UploadCertificate Upload a certificate chain and its key (p4-nodes 4.3, 9.2)
+// (POST /certificates)
+func (_ Unimplemented) UploadCertificate(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RetireCertificate Retire an uploaded certificate (p4-nodes 4.3, 9.2)
+// (POST /certificates/{id}:retire)
+func (_ Unimplemented) RetireCertificate(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListFreeDnsCounters The free DNS counters, hourly, by node, transport, outcome and rcode (p4-nodes 9.2, T-339)
+// (GET /free-dns/counters)
+func (_ Unimplemented) ListFreeDnsCounters(w http.ResponseWriter, r *http.Request, params ListFreeDnsCountersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListInvites Invites, newest first
 // (GET /invites)
 func (_ Unimplemented) ListInvites(w http.ResponseWriter, r *http.Request, params ListInvitesParams) {
@@ -954,6 +1693,156 @@ func (_ Unimplemented) AdminTotpConfirm(w http.ResponseWriter, r *http.Request) 
 // AdminTotpSetup Make a TOTP secret, not yet enabled
 // (POST /me/totp/setup)
 func (_ Unimplemented) AdminTotpSetup(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListNodeEnrollments Node enrolment records, newest first (p4-nodes 4.2 step 4)
+// (GET /node-enrollments)
+func (_ Unimplemented) ListNodeEnrollments(w http.ResponseWriter, r *http.Request, params ListNodeEnrollmentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateNodeEnrollment Make an enrolment token and its install command (p4-nodes 4.2 step 1)
+// (POST /node-enrollments)
+func (_ Unimplemented) CreateNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ConfirmNodeEnrollment Confirm the key fingerprint of a record and make its pending node (p4-nodes 4.2 step 4)
+// (POST /node-enrollments/{id}:confirm)
+func (_ Unimplemented) ConfirmNodeEnrollment(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RejectNodeEnrollment Withdraw a token or reject a pending record (p4-nodes 4.2 step 4)
+// (POST /node-enrollments/{id}:reject)
+func (_ Unimplemented) RejectNodeEnrollment(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListNodes Nodes (p4-nodes 9.2)
+// (GET /nodes)
+func (_ Unimplemented) ListNodes(w http.ResponseWriter, r *http.Request, params ListNodesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListAddressesGivenUp Addresses the panel gave up and that are not yet safe to give back (SC 8a.4)
+// (GET /nodes/addresses-given-up)
+func (_ Unimplemented) ListAddressesGivenUp(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RemoveNode Remove a node (p4-nodes 4.5, SC 8a.4)
+// (DELETE /nodes/{id})
+func (_ Unimplemented) RemoveNode(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetNode One node (p4-nodes 9.2)
+// (GET /nodes/{id})
+func (_ Unimplemented) GetNode(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PatchNode Edit the name and the proxy block of a node (p4-nodes 9.2)
+// (PATCH /nodes/{id})
+func (_ Unimplemented) PatchNode(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PutNodeAddresses Change the advertised addresses of a node (p4-nodes 9.2, SC 8a.4)
+// (PUT /nodes/{id}/addresses)
+func (_ Unimplemented) PutNodeAddresses(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateNodeDnsRequest Ask the hub to hold, release or fail back a node's DNS answer (SC 8a.4, Requests)
+// (POST /nodes/{id}/dns-requests)
+func (_ Unimplemented) CreateNodeDnsRequest(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetNodeReports What a node reported that other people relied on (p4-nodes 4.5)
+// (GET /nodes/{id}/reports)
+func (_ Unimplemented) GetNodeReports(w http.ResponseWriter, r *http.Request, id Id, params GetNodeReportsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ApproveNode Move a pending node to active (p4-nodes 4.2 step 5)
+// (POST /nodes/{id}:approve)
+func (_ Unimplemented) ApproveNode(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RevokeNode Revoke an active node, which is terminal (p4-nodes 4.5)
+// (POST /nodes/{id}:revoke)
+func (_ Unimplemented) RevokeNode(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetOverview The system and the nodes at a glance (p4-nodes 9.2, T-339)
+// (GET /overview)
+func (_ Unimplemented) GetOverview(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListPairs Node pairs (p4-nodes 9.2)
+// (GET /pairs)
+func (_ Unimplemented) ListPairs(w http.ResponseWriter, r *http.Request, params ListPairsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreatePair Make a pair (p4-nodes 9.2)
+// (POST /pairs)
+func (_ Unimplemented) CreatePair(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeletePair Dissolve a pair no Endpoint uses (p4-nodes 9.2, SC 8a.9 Replacement order)
+// (DELETE /pairs/{id})
+func (_ Unimplemented) DeletePair(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdatePair Change the members of a pair (p4-nodes 9.2)
+// (PUT /pairs/{id})
+func (_ Unimplemented) UpdatePair(w http.ResponseWriter, r *http.Request, id Id) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetDomainSettings The domain settings (p4-nodes 9.2, 10.4)
+// (GET /settings/domain)
+func (_ Unimplemented) GetDomainSettings(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PutDomainSettings Change the zone and the hosts (p4-nodes 9.2, 10.4)
+// (PUT /settings/domain)
+func (_ Unimplemented) PutDomainSettings(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetDomainImpact What a change of zone touches (p4-nodes 9.2)
+// (GET /settings/domain/impact)
+func (_ Unimplemented) GetDomainImpact(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetFreeDnsSettings The free DNS switch and rate (p4-nodes 9.2, T-556)
+// (GET /settings/free-dns)
+func (_ Unimplemented) GetFreeDnsSettings(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PutFreeDnsSettings Switch free DNS on or off and set its rate (p4-nodes 9.2, T-556)
+// (PUT /settings/free-dns)
+func (_ Unimplemented) PutFreeDnsSettings(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PutGlobalPair Switch the global pair (p4-nodes 9.2)
+// (PUT /settings/global-pair)
+func (_ Unimplemented) PutGlobalPair(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1259,6 +2148,177 @@ func (siw *ServerInterfaceWrapper) AdminTotpFresh(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// ListCertificates operation middleware
+func (siw *ServerInterfaceWrapper) ListCertificates(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCertificatesParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCertificates(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadCertificate operation middleware
+func (siw *ServerInterfaceWrapper) UploadCertificate(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadCertificate(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RetireCertificate operation middleware
+func (siw *ServerInterfaceWrapper) RetireCertificate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetireCertificate(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListFreeDnsCounters operation middleware
+func (siw *ServerInterfaceWrapper) ListFreeDnsCounters(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListFreeDnsCountersParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "node_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "node_id", r.URL.Query(), &params.NodeId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "node_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "node_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListFreeDnsCounters(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListInvites operation middleware
 func (siw *ServerInterfaceWrapper) ListInvites(w http.ResponseWriter, r *http.Request) {
 
@@ -1406,6 +2466,625 @@ func (siw *ServerInterfaceWrapper) AdminTotpSetup(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AdminTotpSetup(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNodeEnrollments operation middleware
+func (siw *ServerInterfaceWrapper) ListNodeEnrollments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListNodeEnrollmentsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNodeEnrollments(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNodeEnrollment operation middleware
+func (siw *ServerInterfaceWrapper) CreateNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNodeEnrollment(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmNodeEnrollment operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmNodeEnrollment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RejectNodeEnrollment operation middleware
+func (siw *ServerInterfaceWrapper) RejectNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectNodeEnrollment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNodes operation middleware
+func (siw *ServerInterfaceWrapper) ListNodes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListNodesParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNodes(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAddressesGivenUp operation middleware
+func (siw *ServerInterfaceWrapper) ListAddressesGivenUp(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAddressesGivenUp(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveNode operation middleware
+func (siw *ServerInterfaceWrapper) RemoveNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveNode(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNode operation middleware
+func (siw *ServerInterfaceWrapper) GetNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNode(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchNode operation middleware
+func (siw *ServerInterfaceWrapper) PatchNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchNode(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutNodeAddresses operation middleware
+func (siw *ServerInterfaceWrapper) PutNodeAddresses(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutNodeAddresses(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNodeDnsRequest operation middleware
+func (siw *ServerInterfaceWrapper) CreateNodeDnsRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNodeDnsRequest(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNodeReports operation middleware
+func (siw *ServerInterfaceWrapper) GetNodeReports(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNodeReportsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNodeReports(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveNode operation middleware
+func (siw *ServerInterfaceWrapper) ApproveNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveNode(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeNode operation middleware
+func (siw *ServerInterfaceWrapper) RevokeNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeNode(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOverview operation middleware
+func (siw *ServerInterfaceWrapper) GetOverview(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOverview(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPairs operation middleware
+func (siw *ServerInterfaceWrapper) ListPairs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPairsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPairs(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePair operation middleware
+func (siw *ServerInterfaceWrapper) CreatePair(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePair(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePair operation middleware
+func (siw *ServerInterfaceWrapper) DeletePair(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePair(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePair operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePair(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePair(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDomainSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetDomainSettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDomainSettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutDomainSettings operation middleware
+func (siw *ServerInterfaceWrapper) PutDomainSettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutDomainSettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDomainImpact operation middleware
+func (siw *ServerInterfaceWrapper) GetDomainImpact(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDomainImpact(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFreeDnsSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetFreeDnsSettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFreeDnsSettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutFreeDnsSettings operation middleware
+func (siw *ServerInterfaceWrapper) PutFreeDnsSettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutFreeDnsSettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutGlobalPair operation middleware
+func (siw *ServerInterfaceWrapper) PutGlobalPair(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutGlobalPair(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2120,6 +3799,93 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/alerts/{id}/ack", wrapper.AckAlert)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/node-enrollments", wrapper.ListNodeEnrollments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/node-enrollments", wrapper.CreateNodeEnrollment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/node-enrollments/{id}:confirm", wrapper.ConfirmNodeEnrollment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/node-enrollments/{id}:reject", wrapper.RejectNodeEnrollment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/nodes", wrapper.ListNodes)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/nodes/addresses-given-up", wrapper.ListAddressesGivenUp)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/nodes/{id}", wrapper.RemoveNode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/nodes/{id}", wrapper.GetNode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/nodes/{id}", wrapper.PatchNode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/nodes/{id}:approve", wrapper.ApproveNode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/nodes/{id}:revoke", wrapper.RevokeNode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/nodes/{id}/addresses", wrapper.PutNodeAddresses)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/nodes/{id}/dns-requests", wrapper.CreateNodeDnsRequest)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/pairs", wrapper.ListPairs)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/pairs", wrapper.CreatePair)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/pairs/{id}", wrapper.DeletePair)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/pairs/{id}", wrapper.UpdatePair)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/settings/global-pair", wrapper.PutGlobalPair)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/nodes/{id}/reports", wrapper.GetNodeReports)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/overview", wrapper.GetOverview)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/free-dns/counters", wrapper.ListFreeDnsCounters)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/settings/free-dns", wrapper.GetFreeDnsSettings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/settings/free-dns", wrapper.PutFreeDnsSettings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/settings/domain", wrapper.GetDomainSettings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/settings/domain", wrapper.PutDomainSettings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/settings/domain/impact", wrapper.GetDomainImpact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/certificates", wrapper.ListCertificates)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/certificates", wrapper.UploadCertificate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/certificates/{id}:retire", wrapper.RetireCertificate)
+	})
 
 	return r
 }
@@ -2418,6 +4184,172 @@ type AdminTotpFreshdefaultJSONResponse struct {
 }
 
 func (response AdminTotpFreshdefaultJSONResponse) VisitAdminTotpFreshResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCertificatesRequestObject struct {
+	Params ListCertificatesParams
+}
+
+type ListCertificatesResponseObject interface {
+	VisitListCertificatesResponse(w http.ResponseWriter) error
+}
+
+type ListCertificates200JSONResponse CertificatePage
+
+func (response ListCertificates200JSONResponse) VisitListCertificatesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCertificatesdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListCertificatesdefaultJSONResponse) VisitListCertificatesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadCertificateRequestObject struct {
+	Body *UploadCertificateJSONRequestBody
+}
+
+type UploadCertificateResponseObject interface {
+	VisitUploadCertificateResponse(w http.ResponseWriter) error
+}
+
+type UploadCertificate201JSONResponse CertificateCreated
+
+func (response UploadCertificate201JSONResponse) VisitUploadCertificateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadCertificatedefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response UploadCertificatedefaultJSONResponse) VisitUploadCertificateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RetireCertificateRequestObject struct {
+	Id Id `json:"id"`
+}
+
+type RetireCertificateResponseObject interface {
+	VisitRetireCertificateResponse(w http.ResponseWriter) error
+}
+
+type RetireCertificate204Response struct {
+}
+
+func (response RetireCertificate204Response) VisitRetireCertificateResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RetireCertificatedefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response RetireCertificatedefaultJSONResponse) VisitRetireCertificateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFreeDnsCountersRequestObject struct {
+	Params ListFreeDnsCountersParams
+}
+
+type ListFreeDnsCountersResponseObject interface {
+	VisitListFreeDnsCountersResponse(w http.ResponseWriter) error
+}
+
+type ListFreeDnsCounters200JSONResponse FreeCounterPage
+
+func (response ListFreeDnsCounters200JSONResponse) VisitListFreeDnsCountersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFreeDnsCountersdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListFreeDnsCountersdefaultJSONResponse) VisitListFreeDnsCountersResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -2736,6 +4668,1067 @@ type AdminTotpSetupdefaultJSONResponse struct {
 }
 
 func (response AdminTotpSetupdefaultJSONResponse) VisitAdminTotpSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNodeEnrollmentsRequestObject struct {
+	Params ListNodeEnrollmentsParams
+}
+
+type ListNodeEnrollmentsResponseObject interface {
+	VisitListNodeEnrollmentsResponse(w http.ResponseWriter) error
+}
+
+type ListNodeEnrollments200JSONResponse NodeEnrollmentPage
+
+func (response ListNodeEnrollments200JSONResponse) VisitListNodeEnrollmentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNodeEnrollmentsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListNodeEnrollmentsdefaultJSONResponse) VisitListNodeEnrollmentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNodeEnrollmentRequestObject struct {
+	Body *CreateNodeEnrollmentJSONRequestBody
+}
+
+type CreateNodeEnrollmentResponseObject interface {
+	VisitCreateNodeEnrollmentResponse(w http.ResponseWriter) error
+}
+
+type CreateNodeEnrollment201JSONResponse NodeEnrollmentCreated
+
+func (response CreateNodeEnrollment201JSONResponse) VisitCreateNodeEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNodeEnrollmentdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateNodeEnrollmentdefaultJSONResponse) VisitCreateNodeEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmNodeEnrollmentRequestObject struct {
+	Id   Id `json:"id"`
+	Body *ConfirmNodeEnrollmentJSONRequestBody
+}
+
+type ConfirmNodeEnrollmentResponseObject interface {
+	VisitConfirmNodeEnrollmentResponse(w http.ResponseWriter) error
+}
+
+type ConfirmNodeEnrollment201JSONResponse NodeEnrollmentConfirmed
+
+func (response ConfirmNodeEnrollment201JSONResponse) VisitConfirmNodeEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmNodeEnrollmentdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ConfirmNodeEnrollmentdefaultJSONResponse) VisitConfirmNodeEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectNodeEnrollmentRequestObject struct {
+	Id   Id `json:"id"`
+	Body *RejectNodeEnrollmentJSONRequestBody
+}
+
+type RejectNodeEnrollmentResponseObject interface {
+	VisitRejectNodeEnrollmentResponse(w http.ResponseWriter) error
+}
+
+type RejectNodeEnrollment204Response struct {
+}
+
+func (response RejectNodeEnrollment204Response) VisitRejectNodeEnrollmentResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RejectNodeEnrollmentdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response RejectNodeEnrollmentdefaultJSONResponse) VisitRejectNodeEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNodesRequestObject struct {
+	Params ListNodesParams
+}
+
+type ListNodesResponseObject interface {
+	VisitListNodesResponse(w http.ResponseWriter) error
+}
+
+type ListNodes200JSONResponse NodePage
+
+func (response ListNodes200JSONResponse) VisitListNodesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNodesdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListNodesdefaultJSONResponse) VisitListNodesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAddressesGivenUpRequestObject struct {
+}
+
+type ListAddressesGivenUpResponseObject interface {
+	VisitListAddressesGivenUpResponse(w http.ResponseWriter) error
+}
+
+type ListAddressesGivenUp200JSONResponse AddressesGivenUp
+
+func (response ListAddressesGivenUp200JSONResponse) VisitListAddressesGivenUpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAddressesGivenUpdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListAddressesGivenUpdefaultJSONResponse) VisitListAddressesGivenUpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveNodeRequestObject struct {
+	Id Id `json:"id"`
+}
+
+type RemoveNodeResponseObject interface {
+	VisitRemoveNodeResponse(w http.ResponseWriter) error
+}
+
+type RemoveNode204Response struct {
+}
+
+func (response RemoveNode204Response) VisitRemoveNodeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveNodedefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response RemoveNodedefaultJSONResponse) VisitRemoveNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNodeRequestObject struct {
+	Id Id `json:"id"`
+}
+
+type GetNodeResponseObject interface {
+	VisitGetNodeResponse(w http.ResponseWriter) error
+}
+
+type GetNode200JSONResponse NodeView
+
+func (response GetNode200JSONResponse) VisitGetNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNodedefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response GetNodedefaultJSONResponse) VisitGetNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchNodeRequestObject struct {
+	Id   Id `json:"id"`
+	Body *PatchNodeJSONRequestBody
+}
+
+type PatchNodeResponseObject interface {
+	VisitPatchNodeResponse(w http.ResponseWriter) error
+}
+
+type PatchNode200JSONResponse NodeView
+
+func (response PatchNode200JSONResponse) VisitPatchNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchNodedefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PatchNodedefaultJSONResponse) VisitPatchNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutNodeAddressesRequestObject struct {
+	Id   Id `json:"id"`
+	Body *PutNodeAddressesJSONRequestBody
+}
+
+type PutNodeAddressesResponseObject interface {
+	VisitPutNodeAddressesResponse(w http.ResponseWriter) error
+}
+
+type PutNodeAddresses200JSONResponse NodeView
+
+func (response PutNodeAddresses200JSONResponse) VisitPutNodeAddressesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutNodeAddressesdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PutNodeAddressesdefaultJSONResponse) VisitPutNodeAddressesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNodeDnsRequestRequestObject struct {
+	Id   Id `json:"id"`
+	Body *CreateNodeDnsRequestJSONRequestBody
+}
+
+type CreateNodeDnsRequestResponseObject interface {
+	VisitCreateNodeDnsRequestResponse(w http.ResponseWriter) error
+}
+
+type CreateNodeDnsRequest202JSONResponse NodeDnsRequestAccepted
+
+func (response CreateNodeDnsRequest202JSONResponse) VisitCreateNodeDnsRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNodeDnsRequestdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreateNodeDnsRequestdefaultJSONResponse) VisitCreateNodeDnsRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNodeReportsRequestObject struct {
+	Id     Id `json:"id"`
+	Params GetNodeReportsParams
+}
+
+type GetNodeReportsResponseObject interface {
+	VisitGetNodeReportsResponse(w http.ResponseWriter) error
+}
+
+type GetNodeReports200JSONResponse NodeReports
+
+func (response GetNodeReports200JSONResponse) VisitGetNodeReportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNodeReportsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response GetNodeReportsdefaultJSONResponse) VisitGetNodeReportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveNodeRequestObject struct {
+	Id   Id `json:"id"`
+	Body *ApproveNodeJSONRequestBody
+}
+
+type ApproveNodeResponseObject interface {
+	VisitApproveNodeResponse(w http.ResponseWriter) error
+}
+
+type ApproveNode200JSONResponse NodeView
+
+func (response ApproveNode200JSONResponse) VisitApproveNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveNodedefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ApproveNodedefaultJSONResponse) VisitApproveNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeNodeRequestObject struct {
+	Id   Id `json:"id"`
+	Body *RevokeNodeJSONRequestBody
+}
+
+type RevokeNodeResponseObject interface {
+	VisitRevokeNodeResponse(w http.ResponseWriter) error
+}
+
+type RevokeNode200JSONResponse NodeView
+
+func (response RevokeNode200JSONResponse) VisitRevokeNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeNodedefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response RevokeNodedefaultJSONResponse) VisitRevokeNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOverviewRequestObject struct {
+}
+
+type GetOverviewResponseObject interface {
+	VisitGetOverviewResponse(w http.ResponseWriter) error
+}
+
+type GetOverview200JSONResponse Overview
+
+func (response GetOverview200JSONResponse) VisitGetOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOverviewdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response GetOverviewdefaultJSONResponse) VisitGetOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPairsRequestObject struct {
+	Params ListPairsParams
+}
+
+type ListPairsResponseObject interface {
+	VisitListPairsResponse(w http.ResponseWriter) error
+}
+
+type ListPairs200JSONResponse PairPage
+
+func (response ListPairs200JSONResponse) VisitListPairsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPairsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response ListPairsdefaultJSONResponse) VisitListPairsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePairRequestObject struct {
+	Body *CreatePairJSONRequestBody
+}
+
+type CreatePairResponseObject interface {
+	VisitCreatePairResponse(w http.ResponseWriter) error
+}
+
+type CreatePair201JSONResponse PairView
+
+func (response CreatePair201JSONResponse) VisitCreatePairResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePairdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response CreatePairdefaultJSONResponse) VisitCreatePairResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePairRequestObject struct {
+	Id Id `json:"id"`
+}
+
+type DeletePairResponseObject interface {
+	VisitDeletePairResponse(w http.ResponseWriter) error
+}
+
+type DeletePair204Response struct {
+}
+
+func (response DeletePair204Response) VisitDeletePairResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeletePairdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response DeletePairdefaultJSONResponse) VisitDeletePairResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePairRequestObject struct {
+	Id   Id `json:"id"`
+	Body *UpdatePairJSONRequestBody
+}
+
+type UpdatePairResponseObject interface {
+	VisitUpdatePairResponse(w http.ResponseWriter) error
+}
+
+type UpdatePair200JSONResponse PairView
+
+func (response UpdatePair200JSONResponse) VisitUpdatePairResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePairdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response UpdatePairdefaultJSONResponse) VisitUpdatePairResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDomainSettingsRequestObject struct {
+}
+
+type GetDomainSettingsResponseObject interface {
+	VisitGetDomainSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetDomainSettings200JSONResponse DomainSettings
+
+func (response GetDomainSettings200JSONResponse) VisitGetDomainSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDomainSettingsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response GetDomainSettingsdefaultJSONResponse) VisitGetDomainSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutDomainSettingsRequestObject struct {
+	Body *PutDomainSettingsJSONRequestBody
+}
+
+type PutDomainSettingsResponseObject interface {
+	VisitPutDomainSettingsResponse(w http.ResponseWriter) error
+}
+
+type PutDomainSettings200JSONResponse DomainSettings
+
+func (response PutDomainSettings200JSONResponse) VisitPutDomainSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutDomainSettingsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PutDomainSettingsdefaultJSONResponse) VisitPutDomainSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDomainImpactRequestObject struct {
+}
+
+type GetDomainImpactResponseObject interface {
+	VisitGetDomainImpactResponse(w http.ResponseWriter) error
+}
+
+type GetDomainImpact200JSONResponse DomainImpact
+
+func (response GetDomainImpact200JSONResponse) VisitGetDomainImpactResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDomainImpactdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response GetDomainImpactdefaultJSONResponse) VisitGetDomainImpactResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFreeDnsSettingsRequestObject struct {
+}
+
+type GetFreeDnsSettingsResponseObject interface {
+	VisitGetFreeDnsSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetFreeDnsSettings200JSONResponse FreeDnsSettings
+
+func (response GetFreeDnsSettings200JSONResponse) VisitGetFreeDnsSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFreeDnsSettingsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response GetFreeDnsSettingsdefaultJSONResponse) VisitGetFreeDnsSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutFreeDnsSettingsRequestObject struct {
+	Body *PutFreeDnsSettingsJSONRequestBody
+}
+
+type PutFreeDnsSettingsResponseObject interface {
+	VisitPutFreeDnsSettingsResponse(w http.ResponseWriter) error
+}
+
+type PutFreeDnsSettings200JSONResponse FreeDnsSettings
+
+func (response PutFreeDnsSettings200JSONResponse) VisitPutFreeDnsSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutFreeDnsSettingsdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PutFreeDnsSettingsdefaultJSONResponse) VisitPutFreeDnsSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutGlobalPairRequestObject struct {
+	Body *PutGlobalPairJSONRequestBody
+}
+
+type PutGlobalPairResponseObject interface {
+	VisitPutGlobalPairResponse(w http.ResponseWriter) error
+}
+
+type PutGlobalPair200JSONResponse GlobalPairView
+
+func (response PutGlobalPair200JSONResponse) VisitPutGlobalPairResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutGlobalPairdefaultJSONResponse struct {
+	Body       Error
+	Headers    ProblemResponseHeaders
+	StatusCode int
+}
+
+func (response PutGlobalPairdefaultJSONResponse) VisitPutGlobalPairResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -3634,6 +6627,18 @@ type StrictServerInterface interface {
 	// AdminTotpFresh Prove the authenticator again, for the next five minutes
 	// (POST /auth/totp/fresh)
 	AdminTotpFresh(ctx context.Context, request AdminTotpFreshRequestObject) (AdminTotpFreshResponseObject, error)
+	// ListCertificates Certificate rows, newest first (p4-nodes 4.3, 9.2)
+	// (GET /certificates)
+	ListCertificates(ctx context.Context, request ListCertificatesRequestObject) (ListCertificatesResponseObject, error)
+	// UploadCertificate Upload a certificate chain and its key (p4-nodes 4.3, 9.2)
+	// (POST /certificates)
+	UploadCertificate(ctx context.Context, request UploadCertificateRequestObject) (UploadCertificateResponseObject, error)
+	// RetireCertificate Retire an uploaded certificate (p4-nodes 4.3, 9.2)
+	// (POST /certificates/{id}:retire)
+	RetireCertificate(ctx context.Context, request RetireCertificateRequestObject) (RetireCertificateResponseObject, error)
+	// ListFreeDnsCounters The free DNS counters, hourly, by node, transport, outcome and rcode (p4-nodes 9.2, T-339)
+	// (GET /free-dns/counters)
+	ListFreeDnsCounters(ctx context.Context, request ListFreeDnsCountersRequestObject) (ListFreeDnsCountersResponseObject, error)
 	// ListInvites Invites, newest first
 	// (GET /invites)
 	ListInvites(ctx context.Context, request ListInvitesRequestObject) (ListInvitesResponseObject, error)
@@ -3658,6 +6663,81 @@ type StrictServerInterface interface {
 	// AdminTotpSetup Make a TOTP secret, not yet enabled
 	// (POST /me/totp/setup)
 	AdminTotpSetup(ctx context.Context, request AdminTotpSetupRequestObject) (AdminTotpSetupResponseObject, error)
+	// ListNodeEnrollments Node enrolment records, newest first (p4-nodes 4.2 step 4)
+	// (GET /node-enrollments)
+	ListNodeEnrollments(ctx context.Context, request ListNodeEnrollmentsRequestObject) (ListNodeEnrollmentsResponseObject, error)
+	// CreateNodeEnrollment Make an enrolment token and its install command (p4-nodes 4.2 step 1)
+	// (POST /node-enrollments)
+	CreateNodeEnrollment(ctx context.Context, request CreateNodeEnrollmentRequestObject) (CreateNodeEnrollmentResponseObject, error)
+	// ConfirmNodeEnrollment Confirm the key fingerprint of a record and make its pending node (p4-nodes 4.2 step 4)
+	// (POST /node-enrollments/{id}:confirm)
+	ConfirmNodeEnrollment(ctx context.Context, request ConfirmNodeEnrollmentRequestObject) (ConfirmNodeEnrollmentResponseObject, error)
+	// RejectNodeEnrollment Withdraw a token or reject a pending record (p4-nodes 4.2 step 4)
+	// (POST /node-enrollments/{id}:reject)
+	RejectNodeEnrollment(ctx context.Context, request RejectNodeEnrollmentRequestObject) (RejectNodeEnrollmentResponseObject, error)
+	// ListNodes Nodes (p4-nodes 9.2)
+	// (GET /nodes)
+	ListNodes(ctx context.Context, request ListNodesRequestObject) (ListNodesResponseObject, error)
+	// ListAddressesGivenUp Addresses the panel gave up and that are not yet safe to give back (SC 8a.4)
+	// (GET /nodes/addresses-given-up)
+	ListAddressesGivenUp(ctx context.Context, request ListAddressesGivenUpRequestObject) (ListAddressesGivenUpResponseObject, error)
+	// RemoveNode Remove a node (p4-nodes 4.5, SC 8a.4)
+	// (DELETE /nodes/{id})
+	RemoveNode(ctx context.Context, request RemoveNodeRequestObject) (RemoveNodeResponseObject, error)
+	// GetNode One node (p4-nodes 9.2)
+	// (GET /nodes/{id})
+	GetNode(ctx context.Context, request GetNodeRequestObject) (GetNodeResponseObject, error)
+	// PatchNode Edit the name and the proxy block of a node (p4-nodes 9.2)
+	// (PATCH /nodes/{id})
+	PatchNode(ctx context.Context, request PatchNodeRequestObject) (PatchNodeResponseObject, error)
+	// PutNodeAddresses Change the advertised addresses of a node (p4-nodes 9.2, SC 8a.4)
+	// (PUT /nodes/{id}/addresses)
+	PutNodeAddresses(ctx context.Context, request PutNodeAddressesRequestObject) (PutNodeAddressesResponseObject, error)
+	// CreateNodeDnsRequest Ask the hub to hold, release or fail back a node's DNS answer (SC 8a.4, Requests)
+	// (POST /nodes/{id}/dns-requests)
+	CreateNodeDnsRequest(ctx context.Context, request CreateNodeDnsRequestRequestObject) (CreateNodeDnsRequestResponseObject, error)
+	// GetNodeReports What a node reported that other people relied on (p4-nodes 4.5)
+	// (GET /nodes/{id}/reports)
+	GetNodeReports(ctx context.Context, request GetNodeReportsRequestObject) (GetNodeReportsResponseObject, error)
+	// ApproveNode Move a pending node to active (p4-nodes 4.2 step 5)
+	// (POST /nodes/{id}:approve)
+	ApproveNode(ctx context.Context, request ApproveNodeRequestObject) (ApproveNodeResponseObject, error)
+	// RevokeNode Revoke an active node, which is terminal (p4-nodes 4.5)
+	// (POST /nodes/{id}:revoke)
+	RevokeNode(ctx context.Context, request RevokeNodeRequestObject) (RevokeNodeResponseObject, error)
+	// GetOverview The system and the nodes at a glance (p4-nodes 9.2, T-339)
+	// (GET /overview)
+	GetOverview(ctx context.Context, request GetOverviewRequestObject) (GetOverviewResponseObject, error)
+	// ListPairs Node pairs (p4-nodes 9.2)
+	// (GET /pairs)
+	ListPairs(ctx context.Context, request ListPairsRequestObject) (ListPairsResponseObject, error)
+	// CreatePair Make a pair (p4-nodes 9.2)
+	// (POST /pairs)
+	CreatePair(ctx context.Context, request CreatePairRequestObject) (CreatePairResponseObject, error)
+	// DeletePair Dissolve a pair no Endpoint uses (p4-nodes 9.2, SC 8a.9 Replacement order)
+	// (DELETE /pairs/{id})
+	DeletePair(ctx context.Context, request DeletePairRequestObject) (DeletePairResponseObject, error)
+	// UpdatePair Change the members of a pair (p4-nodes 9.2)
+	// (PUT /pairs/{id})
+	UpdatePair(ctx context.Context, request UpdatePairRequestObject) (UpdatePairResponseObject, error)
+	// GetDomainSettings The domain settings (p4-nodes 9.2, 10.4)
+	// (GET /settings/domain)
+	GetDomainSettings(ctx context.Context, request GetDomainSettingsRequestObject) (GetDomainSettingsResponseObject, error)
+	// PutDomainSettings Change the zone and the hosts (p4-nodes 9.2, 10.4)
+	// (PUT /settings/domain)
+	PutDomainSettings(ctx context.Context, request PutDomainSettingsRequestObject) (PutDomainSettingsResponseObject, error)
+	// GetDomainImpact What a change of zone touches (p4-nodes 9.2)
+	// (GET /settings/domain/impact)
+	GetDomainImpact(ctx context.Context, request GetDomainImpactRequestObject) (GetDomainImpactResponseObject, error)
+	// GetFreeDnsSettings The free DNS switch and rate (p4-nodes 9.2, T-556)
+	// (GET /settings/free-dns)
+	GetFreeDnsSettings(ctx context.Context, request GetFreeDnsSettingsRequestObject) (GetFreeDnsSettingsResponseObject, error)
+	// PutFreeDnsSettings Switch free DNS on or off and set its rate (p4-nodes 9.2, T-556)
+	// (PUT /settings/free-dns)
+	PutFreeDnsSettings(ctx context.Context, request PutFreeDnsSettingsRequestObject) (PutFreeDnsSettingsResponseObject, error)
+	// PutGlobalPair Switch the global pair (p4-nodes 9.2)
+	// (PUT /settings/global-pair)
+	PutGlobalPair(ctx context.Context, request PutGlobalPairRequestObject) (PutGlobalPairResponseObject, error)
 	// GetRegistration The registration mode
 	// (GET /settings/registration)
 	GetRegistration(ctx context.Context, request GetRegistrationRequestObject) (GetRegistrationResponseObject, error)
@@ -3923,6 +7003,115 @@ func (sh *strictHandler) AdminTotpFresh(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// ListCertificates operation middleware
+func (sh *strictHandler) ListCertificates(w http.ResponseWriter, r *http.Request, params ListCertificatesParams) {
+	var request ListCertificatesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCertificates(ctx, request.(ListCertificatesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCertificates")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCertificatesResponseObject); ok {
+		if err := validResponse.VisitListCertificatesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadCertificate operation middleware
+func (sh *strictHandler) UploadCertificate(w http.ResponseWriter, r *http.Request) {
+	var request UploadCertificateRequestObject
+
+	var body UploadCertificateJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadCertificate(ctx, request.(UploadCertificateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadCertificate")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadCertificateResponseObject); ok {
+		if err := validResponse.VisitUploadCertificateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RetireCertificate operation middleware
+func (sh *strictHandler) RetireCertificate(w http.ResponseWriter, r *http.Request, id Id) {
+	var request RetireCertificateRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RetireCertificate(ctx, request.(RetireCertificateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RetireCertificate")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RetireCertificateResponseObject); ok {
+		if err := validResponse.VisitRetireCertificateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListFreeDnsCounters operation middleware
+func (sh *strictHandler) ListFreeDnsCounters(w http.ResponseWriter, r *http.Request, params ListFreeDnsCountersParams) {
+	var request ListFreeDnsCountersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListFreeDnsCounters(ctx, request.(ListFreeDnsCountersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListFreeDnsCounters")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListFreeDnsCountersResponseObject); ok {
+		if err := validResponse.VisitListFreeDnsCountersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListInvites operation middleware
 func (sh *strictHandler) ListInvites(w http.ResponseWriter, r *http.Request, params ListInvitesParams) {
 	var request ListInvitesRequestObject
@@ -4143,6 +7332,737 @@ func (sh *strictHandler) AdminTotpSetup(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AdminTotpSetupResponseObject); ok {
 		if err := validResponse.VisitAdminTotpSetupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListNodeEnrollments operation middleware
+func (sh *strictHandler) ListNodeEnrollments(w http.ResponseWriter, r *http.Request, params ListNodeEnrollmentsParams) {
+	var request ListNodeEnrollmentsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListNodeEnrollments(ctx, request.(ListNodeEnrollmentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListNodeEnrollments")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListNodeEnrollmentsResponseObject); ok {
+		if err := validResponse.VisitListNodeEnrollmentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateNodeEnrollment operation middleware
+func (sh *strictHandler) CreateNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+	var request CreateNodeEnrollmentRequestObject
+
+	var body CreateNodeEnrollmentJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateNodeEnrollment(ctx, request.(CreateNodeEnrollmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateNodeEnrollment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateNodeEnrollmentResponseObject); ok {
+		if err := validResponse.VisitCreateNodeEnrollmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ConfirmNodeEnrollment operation middleware
+func (sh *strictHandler) ConfirmNodeEnrollment(w http.ResponseWriter, r *http.Request, id Id) {
+	var request ConfirmNodeEnrollmentRequestObject
+
+	request.Id = id
+
+	var body ConfirmNodeEnrollmentJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ConfirmNodeEnrollment(ctx, request.(ConfirmNodeEnrollmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ConfirmNodeEnrollment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ConfirmNodeEnrollmentResponseObject); ok {
+		if err := validResponse.VisitConfirmNodeEnrollmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RejectNodeEnrollment operation middleware
+func (sh *strictHandler) RejectNodeEnrollment(w http.ResponseWriter, r *http.Request, id Id) {
+	var request RejectNodeEnrollmentRequestObject
+
+	request.Id = id
+
+	var body RejectNodeEnrollmentJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RejectNodeEnrollment(ctx, request.(RejectNodeEnrollmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RejectNodeEnrollment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RejectNodeEnrollmentResponseObject); ok {
+		if err := validResponse.VisitRejectNodeEnrollmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListNodes operation middleware
+func (sh *strictHandler) ListNodes(w http.ResponseWriter, r *http.Request, params ListNodesParams) {
+	var request ListNodesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListNodes(ctx, request.(ListNodesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListNodes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListNodesResponseObject); ok {
+		if err := validResponse.VisitListNodesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAddressesGivenUp operation middleware
+func (sh *strictHandler) ListAddressesGivenUp(w http.ResponseWriter, r *http.Request) {
+	var request ListAddressesGivenUpRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAddressesGivenUp(ctx, request.(ListAddressesGivenUpRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAddressesGivenUp")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAddressesGivenUpResponseObject); ok {
+		if err := validResponse.VisitListAddressesGivenUpResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveNode operation middleware
+func (sh *strictHandler) RemoveNode(w http.ResponseWriter, r *http.Request, id Id) {
+	var request RemoveNodeRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveNode(ctx, request.(RemoveNodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveNode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveNodeResponseObject); ok {
+		if err := validResponse.VisitRemoveNodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNode operation middleware
+func (sh *strictHandler) GetNode(w http.ResponseWriter, r *http.Request, id Id) {
+	var request GetNodeRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNode(ctx, request.(GetNodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNodeResponseObject); ok {
+		if err := validResponse.VisitGetNodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchNode operation middleware
+func (sh *strictHandler) PatchNode(w http.ResponseWriter, r *http.Request, id Id) {
+	var request PatchNodeRequestObject
+
+	request.Id = id
+
+	var body PatchNodeJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchNode(ctx, request.(PatchNodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchNode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchNodeResponseObject); ok {
+		if err := validResponse.VisitPatchNodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutNodeAddresses operation middleware
+func (sh *strictHandler) PutNodeAddresses(w http.ResponseWriter, r *http.Request, id Id) {
+	var request PutNodeAddressesRequestObject
+
+	request.Id = id
+
+	var body PutNodeAddressesJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutNodeAddresses(ctx, request.(PutNodeAddressesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutNodeAddresses")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutNodeAddressesResponseObject); ok {
+		if err := validResponse.VisitPutNodeAddressesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateNodeDnsRequest operation middleware
+func (sh *strictHandler) CreateNodeDnsRequest(w http.ResponseWriter, r *http.Request, id Id) {
+	var request CreateNodeDnsRequestRequestObject
+
+	request.Id = id
+
+	var body CreateNodeDnsRequestJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateNodeDnsRequest(ctx, request.(CreateNodeDnsRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateNodeDnsRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateNodeDnsRequestResponseObject); ok {
+		if err := validResponse.VisitCreateNodeDnsRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNodeReports operation middleware
+func (sh *strictHandler) GetNodeReports(w http.ResponseWriter, r *http.Request, id Id, params GetNodeReportsParams) {
+	var request GetNodeReportsRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNodeReports(ctx, request.(GetNodeReportsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNodeReports")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNodeReportsResponseObject); ok {
+		if err := validResponse.VisitGetNodeReportsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApproveNode operation middleware
+func (sh *strictHandler) ApproveNode(w http.ResponseWriter, r *http.Request, id Id) {
+	var request ApproveNodeRequestObject
+
+	request.Id = id
+
+	var body ApproveNodeJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApproveNode(ctx, request.(ApproveNodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApproveNode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApproveNodeResponseObject); ok {
+		if err := validResponse.VisitApproveNodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeNode operation middleware
+func (sh *strictHandler) RevokeNode(w http.ResponseWriter, r *http.Request, id Id) {
+	var request RevokeNodeRequestObject
+
+	request.Id = id
+
+	var body RevokeNodeJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeNode(ctx, request.(RevokeNodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeNode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeNodeResponseObject); ok {
+		if err := validResponse.VisitRevokeNodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOverview operation middleware
+func (sh *strictHandler) GetOverview(w http.ResponseWriter, r *http.Request) {
+	var request GetOverviewRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOverview(ctx, request.(GetOverviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOverview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOverviewResponseObject); ok {
+		if err := validResponse.VisitGetOverviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPairs operation middleware
+func (sh *strictHandler) ListPairs(w http.ResponseWriter, r *http.Request, params ListPairsParams) {
+	var request ListPairsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPairs(ctx, request.(ListPairsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPairs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPairsResponseObject); ok {
+		if err := validResponse.VisitListPairsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreatePair operation middleware
+func (sh *strictHandler) CreatePair(w http.ResponseWriter, r *http.Request) {
+	var request CreatePairRequestObject
+
+	var body CreatePairJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreatePair(ctx, request.(CreatePairRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreatePair")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreatePairResponseObject); ok {
+		if err := validResponse.VisitCreatePairResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeletePair operation middleware
+func (sh *strictHandler) DeletePair(w http.ResponseWriter, r *http.Request, id Id) {
+	var request DeletePairRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeletePair(ctx, request.(DeletePairRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeletePair")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeletePairResponseObject); ok {
+		if err := validResponse.VisitDeletePairResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdatePair operation middleware
+func (sh *strictHandler) UpdatePair(w http.ResponseWriter, r *http.Request, id Id) {
+	var request UpdatePairRequestObject
+
+	request.Id = id
+
+	var body UpdatePairJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdatePair(ctx, request.(UpdatePairRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdatePair")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdatePairResponseObject); ok {
+		if err := validResponse.VisitUpdatePairResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDomainSettings operation middleware
+func (sh *strictHandler) GetDomainSettings(w http.ResponseWriter, r *http.Request) {
+	var request GetDomainSettingsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDomainSettings(ctx, request.(GetDomainSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDomainSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDomainSettingsResponseObject); ok {
+		if err := validResponse.VisitGetDomainSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutDomainSettings operation middleware
+func (sh *strictHandler) PutDomainSettings(w http.ResponseWriter, r *http.Request) {
+	var request PutDomainSettingsRequestObject
+
+	var body PutDomainSettingsJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutDomainSettings(ctx, request.(PutDomainSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutDomainSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutDomainSettingsResponseObject); ok {
+		if err := validResponse.VisitPutDomainSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDomainImpact operation middleware
+func (sh *strictHandler) GetDomainImpact(w http.ResponseWriter, r *http.Request) {
+	var request GetDomainImpactRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDomainImpact(ctx, request.(GetDomainImpactRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDomainImpact")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDomainImpactResponseObject); ok {
+		if err := validResponse.VisitGetDomainImpactResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFreeDnsSettings operation middleware
+func (sh *strictHandler) GetFreeDnsSettings(w http.ResponseWriter, r *http.Request) {
+	var request GetFreeDnsSettingsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFreeDnsSettings(ctx, request.(GetFreeDnsSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFreeDnsSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetFreeDnsSettingsResponseObject); ok {
+		if err := validResponse.VisitGetFreeDnsSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutFreeDnsSettings operation middleware
+func (sh *strictHandler) PutFreeDnsSettings(w http.ResponseWriter, r *http.Request) {
+	var request PutFreeDnsSettingsRequestObject
+
+	var body PutFreeDnsSettingsJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutFreeDnsSettings(ctx, request.(PutFreeDnsSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutFreeDnsSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutFreeDnsSettingsResponseObject); ok {
+		if err := validResponse.VisitPutFreeDnsSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutGlobalPair operation middleware
+func (sh *strictHandler) PutGlobalPair(w http.ResponseWriter, r *http.Request) {
+	var request PutGlobalPairRequestObject
+
+	var body PutGlobalPairJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutGlobalPair(ctx, request.(PutGlobalPairRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutGlobalPair")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutGlobalPairResponseObject); ok {
+		if err := validResponse.VisitPutGlobalPairResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

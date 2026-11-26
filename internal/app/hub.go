@@ -12,6 +12,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/appclock"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/logattr"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/nodeadmin"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/safego"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 )
@@ -49,20 +50,16 @@ const defaultHubListen = "0.0.0.0:9443"
 func loadHubConfig(role Role, getenv Getenv, c *Config) error {
 	names := []string{"CTRLZ_HUB_HOST", "CTRLZ_HUB_LISTEN", "CTRLZ_NODE_CA_KEY_FILE", "CTRLZ_NODE_CA_PEM_FILE", "CTRLZ_HUB_TLS_KEY_FILE",
 		"CTRLZ_ZONE_CA_KEY_FILE", "CTRLZ_HUB_PUBLIC_DIR", "CTRLZ_BUNDLES_DIR", "CTRLZ_POLICY_KEY_FILE", "CTRLZ_HUB_ARTIFACTS_DIR"}
+	// The admin has its own, smaller set (loadInstallConfig): the host and the two read-only volumes of the
+	// install command, and none of the hub's keys.
+	if role == RoleAdmin {
+		return loadInstallConfig(getenv, c)
+	}
 	if role != RoleHub {
-		// The admin builds the install command of POST /node-enrollments and so needs the host (4.2 step 1)
-		// and nothing else: no key file, no listen address. Host is then only the text of that command;
-		// the node port starts for the hub role alone (app.go).
 		for _, n := range names {
-			if role == RoleAdmin && n == "CTRLZ_HUB_HOST" {
-				continue
-			}
 			if getenv(n) != "" {
 				return fmt.Errorf("%s is for the hub only", n)
 			}
-		}
-		if role == RoleAdmin {
-			c.Hub = HubConfig{Host: getenv("CTRLZ_HUB_HOST")}
 		}
 		return nil
 	}
@@ -111,6 +108,51 @@ func loadHubConfig(role Role, getenv Getenv, c *Config) error {
 	}
 	c.Hub = h
 	return nil
+}
+
+// InstallConfig is what the admin role needs to print an install command (p4-nodes 3.3, 4.2 step 1): the host
+// the nodes call, and the two volumes it mounts read-only, hub_public (the pin the hub writes) and the signed
+// bundles with root.json. All three are set or none: a half set would print a command that cannot work.
+//
+//	CTRLZ_HUB_HOST         the names and addresses of the hub leaf; the first is the install host
+//	CTRLZ_HUB_PUBLIC_DIR   the volume hub_tls.spki is read from
+//	CTRLZ_BUNDLES_DIR      root.json and the signed bundles
+type InstallConfig struct {
+	Host, PublicDir, BundlesDir string
+}
+
+// Enabled says whether the admin can print install commands.
+func (i InstallConfig) Enabled() bool { return i.Host != "" }
+
+func loadInstallConfig(getenv Getenv, c *Config) error {
+	i := InstallConfig{Host: getenv("CTRLZ_HUB_HOST"), PublicDir: getenv("CTRLZ_HUB_PUBLIC_DIR"), BundlesDir: getenv("CTRLZ_BUNDLES_DIR")}
+	for n, v := range map[string]string{"CTRLZ_HUB_HOST": i.Host, "CTRLZ_HUB_PUBLIC_DIR": i.PublicDir, "CTRLZ_BUNDLES_DIR": i.BundlesDir} {
+		if v == "" && (i.Host != "" || i.PublicDir != "" || i.BundlesDir != "") {
+			return fmt.Errorf("the install command needs CTRLZ_HUB_HOST, CTRLZ_HUB_PUBLIC_DIR and CTRLZ_BUNDLES_DIR together, and %s is not set", n)
+		}
+	}
+	// The keys and the listen address are the hub's alone; the admin mounts no private key (N8).
+	for _, n := range []string{"CTRLZ_HUB_LISTEN", "CTRLZ_NODE_CA_KEY_FILE", "CTRLZ_NODE_CA_PEM_FILE", "CTRLZ_HUB_TLS_KEY_FILE", "CTRLZ_ZONE_CA_KEY_FILE", "CTRLZ_POLICY_KEY_FILE", "CTRLZ_HUB_ARTIFACTS_DIR"} {
+		if getenv(n) != "" {
+			return fmt.Errorf("%s is for the hub only", n)
+		}
+	}
+	c.Install = i
+	return nil
+}
+
+// newInstaller builds the install command maker of the admin role, or nil when the deployment has no hub host.
+// The directories are read through os.DirFS, which cannot leave its root, so a name in a manifest or a pin file
+// can never reach another file. A production admin refuses the lab test root, as the hub does.
+func newInstaller(cfg Config) (*nodeadmin.Installer, error) {
+	if !cfg.Install.Enabled() {
+		return nil, nil
+	}
+	ic := nodeadmin.InstallConfig{HubHost: cfg.Install.Host, Public: os.DirFS(cfg.Install.PublicDir), Bundles: os.DirFS(cfg.Install.BundlesDir)}
+	if cfg.Env == EnvProduction {
+		ic.DenyRootKeys = hub.LabRootKeyIDs()
+	}
+	return nodeadmin.NewInstaller(ic)
 }
 
 type hubUnit string

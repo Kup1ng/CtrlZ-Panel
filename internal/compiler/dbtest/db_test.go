@@ -318,3 +318,43 @@ func TestLoadFixtureMakesACatalogTheCompilerCarries(t *testing.T) {
 		t.Fatalf("the catalog in the log: %+v", cat)
 	}
 }
+
+// J12-r2-1: the backend looks at the files while it holds the log lock, after the fence, and an entry whose files are not
+// there is not written (the compiler's Files hook, W4-r3-1).
+func TestACommitChecksItsFilesUnderTheLogLock(t *testing.T) {
+	w := newWorld(t)
+	db := compiler.NewDB(w.st)
+	if ok, err := db.Lease(w.ctx, "a", 30); err != nil || !ok {
+		t.Fatalf("lease: %v %v", ok, err)
+	}
+	lockedWhileEnsuring := false
+	first := &compiler.Commit{Seq: 1, Class: "policy", PrevHash: make([]byte, 32), EntryHash: make([]byte, 32), Payload: []byte{1}, Holder: "a",
+		Files: func() error {
+			conn, err := w.db.Super(w.ctx)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = conn.Close(w.ctx) }()
+			var free bool
+			if err := conn.QueryRow(w.ctx, `SELECT pg_try_advisory_lock(hashtextextended('ctrlz.config_log', 0))`).Scan(&free); err != nil {
+				return err
+			}
+			lockedWhileEnsuring = !free
+			return nil
+		}}
+	if err := db.Commit(w.ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	if !lockedWhileEnsuring {
+		t.Error("the files were ensured without the log lock")
+	}
+	boom := errors.New("the volume refused")
+	second := &compiler.Commit{Seq: 2, Class: "policy", PrevHash: make([]byte, 32), EntryHash: make([]byte, 32), Payload: []byte{1}, Holder: "a",
+		Files: func() error { return boom }}
+	if err := db.Commit(w.ctx, second); !errors.Is(err, boom) {
+		t.Fatalf("a failed file write: %v", err)
+	}
+	if n := w.count(t, `SELECT count(*) FROM ctrlz.config_log`); n != 1 {
+		t.Fatalf("%d rows in the log, an entry without its files was written", n)
+	}
+}

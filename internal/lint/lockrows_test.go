@@ -72,6 +72,11 @@ func exemptFor(m map[string]stmtExempt, arg ast.Expr, table, text string) bool {
 // that is not here and is not keyed, ordered or skipping fails the lint, and so does an entry whose statement
 // no longer needs it.
 var rowOrderExempt = map[string]stmtExempt{
+	// P4 J2 (internal/store/p4_periodic.go): tables with no id column, so the one shape the lint reads (id or ctid) cannot name their rows.
+	"qConfigLogDelete":        {"config_log", "keyed by its primary key seq, which this table has in place of id, so the statement names one row; the worker holds S and D only, so no row lock can come first", "5dea886975ead195a3187594c9a42a3d5b7dbd38c55448810af5e8c9da24db67"},
+	"qArtifactDelete":         {"policy_artifacts", "keyed by its primary key hash, which this table has in place of id, so the statement names one row; the worker holds S and D only, so no row lock can come first", "8f9125d8b7922a24d9eb8c8d8beea68259ee7d5f2b12ec67656e27e4e0e8eba4"},
+	"qFreeCountersSweep":      {"free_dns_counters", "deletes only rows older than 30 days, which the hub never touches (it writes the rows of the last 25 hours); the worker can read only bucket_start of this table, so no keyed subselect is possible, and no second statement meets a row this old", "e4841665a0fd0e8050c15fd938fddcb2e61c1b9c9dd56f6e75e9129a97855e70"},
+	"qFreeBatchesSweep":       {"free_dns_counter_batches", "deletes only rows older than 30 days, which the hub never touches (it inserts the batch of the moment and only reads it back); the worker can read only received_at of this table, so no keyed subselect is possible, and no second statement meets a row this old", "6c13ac3d9b41b29110ad40aef15ce14ff80cda988b86c87eba275958a1c654b8"},
 	"qRegistrationSet":        {"system_settings", "one row by construction (a singleton table with a CHECK on its id)", "fc0f117409e94867d8df35b89f75aa33afd4bf008344e713566dbff76844c367"},
 	"qRegistrationGraceSet":   {"system_settings", "one row by construction (a singleton table with a CHECK on its id)", "4a6b074bf6fcbdc83f1231d708f5775c9484ca044c3d12f1d1417f9f8ea8324c"},
 	"qSMSLimitsSet":           {"system_settings", "one row by construction (a singleton table with a CHECK on its id)", "c4f7bd28e36a53b15dec7e61d331d1443d865f842898ecbef7818e47d4062a1e"},
@@ -80,6 +85,10 @@ var rowOrderExempt = map[string]stmtExempt{
 	"qServiceDelete":          {"profile_services", "keyed by its whole primary key (tenant, profile, service_slug), which names one row", "d28330c71b280809f2eca548feaede93f4b50b8038b149c1b47db8baf09b3da1"},
 	"qIdempotencyFinish":      {"idempotency_keys", "keyed by its whole primary key (tenant, key), which names one row", "3284fcd1c37012ca3c2bddf46f821f9e901d2cc6cf0023330e41042f75b4f6c6"},
 	"qIdempotencyPurge":       {"idempotency_keys", "the purge of expired keys deletes a bounded batch by the whole key, which the worker cannot lock first (it holds no UPDATE on the table) and no other statement writes many rows of", "d4a554c2261bfa3225d6c9a61bddf7074cb52457e8a34ee474a415a534897cb4"},
+	"qDomainApplyCommit":      {"domain_settings", "one row by construction (a singleton table with a CHECK on its key)", "c56434dd8ff3eca3c16c444fd2150973417ddb4d492271503232f88a8cef7564"},
+	"qDomainSet":              {"domain_settings", "one row by construction (a singleton table with a CHECK on its key)", "2cf1e4c0ecc9315dbd6032c1007e81a19af2bce1a5859ee5a37090f164d2552c"},
+	"qFreeDNSSet":             {"free_dns_settings", "one row by construction (a singleton table with a CHECK on its key)", "83547031a7e81d5bcfcfbeaddeb9f693abb1ddf54204932fda1f61a4467d4714"},
+	"qGlobalPairSet":          {"public_settings", "one row by construction (a singleton table with a CHECK on its id)", "b28421178d4a2bcd29fedfbf2c15237316313dfa5889e9c5c59558899386456b"},
 	"qHubEnroll":              {"node_enrollments", "keyed by token_hash, a UNIQUE column, which names one row (and the statement moves it out of the state it selects by, so a second call matches nothing)", "c01a825594f7935a6766905b07f05113535c4f42c3aa2a937527d27c37e89e3b"},
 	"qJobOutboxTake":          {"job_outbox", "the drain takes a bounded batch with one DELETE, which the worker cannot lock first (it holds S and D only); every other writer inserts one row of a tenant at a time (JobQueue)", "7571c87eecf72d01045de2e758888762cf8ab3bd65d47b2ca27895e8d76f9c3f"},
 	"qFixtureDemote":          {"catalog_versions", "keyed by its whole primary key (version), which names one row; the table has no id column", "495bdccb7d277ee9c1062299085a367235574d49c899bf8255f827599c0abdbb"},

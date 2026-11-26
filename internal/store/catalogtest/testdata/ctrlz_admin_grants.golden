@@ -142,7 +142,7 @@ table domain_settings UPDATE (admin_host, changed_at, dns_zone, panel_host, prev
 table endpoint_types INSERT
 table endpoint_types SELECT
 table endpoint_types UPDATE
-table endpoints SELECT (admin_hold, admin_state, first_query_at, id, last_query_at, tenant_id, type)
+table endpoints SELECT (admin_hold, admin_state, apple_profile_generated_at, first_query_at, id, last_query_at, tenant_id, type)
 table endpoints UPDATE (admin_hold)
 table feedback_items SELECT
 table feedback_items UPDATE (admin_reply, replied_at, status)

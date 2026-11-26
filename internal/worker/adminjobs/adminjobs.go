@@ -135,6 +135,9 @@ func New(c Config) (*Runner, error) {
 	r.handlers = map[string]Handler{
 		KindRegistrationTransition: r.registrationTransition,
 		KindWebauthnRPChange:       r.webauthnRPChange,
+		KindPairChange:             r.pairChange,
+		KindDomainChange:           r.domainChange,
+		KindNodeRevoked:            r.nodeRevoked,
 	}
 	for k, h := range c.Handlers {
 		r.handlers[k] = h
@@ -259,11 +262,13 @@ func (r *Runner) run(ctx context.Context, j store.AdminJob) error {
 		delete(r.failures, j.ID)
 		return nil
 	}
+	var lastProgress []byte
 	report := func(p any) {
 		b, err := json.Marshal(p)
 		if err != nil {
 			return
 		}
+		lastProgress = b
 		// Progress is for the operator. A failure to store it must not stop the job.
 		_ = r.db.WithGlobal(ctx, store.TxOpts{}, func(g store.GlobalTx) error { return g.AdminJobProgress(j.ID, b) })
 	}
@@ -290,9 +295,23 @@ func (r *Runner) run(ctx context.Context, j store.AdminJob) error {
 		}
 		f := r.failures[j.ID]
 		f.count++
+		if p4Kind(j.Kind) && (errors.Is(err, store.ErrRetry) || errors.Is(err, store.ErrConnection)) && !errors.Is(err, errBadParams) && f.count >= r.maxFail {
+			// A lock race, a deadlock or a lost database connection (a restart, a failover) is not a reason to give up on a
+			// job nobody queues again: a revoked node cannot be revoked a second time, and the tenants after the busy one
+			// would keep what the node learned. The job stays running at the longest backoff, and an admin is told. Only a
+			// bad parameter or a fault of the program ends it as failed (J12-r2-6).
+			f.count = r.maxFail
+			f.retry = r.now().Add(r.backoff[len(r.backoff)-1])
+			r.failures[j.ID] = f
+			r.alertJob(ctx, j, reasonJobStuck)
+			return err
+		}
 		if errors.Is(err, errBadParams) || f.count >= r.maxFail {
 			delete(r.failures, j.ID)
-			return errors.Join(err, r.finish(ctx, j.ID, "failed", map[string]string{"error": failureCode(err)}))
+			if p4Kind(j.Kind) {
+				r.alertJob(ctx, j, reasonJobFailed)
+			}
+			return errors.Join(err, r.finish(ctx, j.ID, "failed", failedProgress(lastProgress, j.Kind, err)))
 		}
 		step := f.count - 1
 		if step >= len(r.backoff) {
@@ -304,6 +323,17 @@ func (r *Runner) run(ctx context.Context, j store.AdminJob) error {
 	}
 	delete(r.failures, j.ID)
 	return r.finish(ctx, j.ID, "done", final)
+}
+
+// failedProgress is the progress a failed job keeps: what the last run reported (the list of rows a revoke kept is read from
+// it) and the class of the failure beside it.
+func failedProgress(last []byte, kind string, err error) map[string]any {
+	out := map[string]any{}
+	if len(last) > 0 && p4Kind(kind) {
+		_ = json.Unmarshal(last, &out)
+	}
+	out["error"] = failureCode(err)
+	return out
 }
 
 // failureCode is the fixed text kept in the job's progress: a class, never an

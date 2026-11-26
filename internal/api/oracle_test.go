@@ -164,6 +164,9 @@ func oracleVariants() []oracleVariant {
 		{name: "getAuthConfig", op: "getAuthConfig", noSubject: true, prepare: func(*oracleWorld, oracleWho) oracle.Request {
 			return oracle.Request{Method: "GET", Path: "/auth/config"}
 		}},
+		{name: "getPublicFreeDns", op: "getPublicFreeDns", noSubject: true, prepare: func(*oracleWorld, oracleWho) oracle.Request {
+			return oracle.Request{Method: "GET", Path: "/public/free-dns"}
+		}},
 		{name: "loginPassword", op: "loginPassword", floor: floorLogin, prepare: func(w *oracleWorld, who oracleWho) oracle.Request {
 			return post("/auth/login/password", map[string]any{"phone": who.phone, "password": oracleWrongPW})
 		}},

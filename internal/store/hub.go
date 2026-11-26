@@ -306,7 +306,8 @@ const qHubDomainChangeJob = `INSERT INTO ctrlz.admin_jobs (kind, params) VALUES 
 // HubReplaceCA stores a CA certificate as the active row of its kind and retires the row it replaces
 // (old is uuid.Nil when there is none). For the zone CA it also queues the domain_change job whose notice
 // carries the reinstall line (4.3): with ON CONFLICT DO NOTHING, since a job in flight reads the state
-// when it runs. reinstall is "same_key" or "new_key".
+// when it runs. reinstall is "same_key" or "new_key"; it is a hint in the job row for the operator, since the handler
+// (internal/worker/adminjobs, domain_change) reads the live zones and the active zone CA row and never the params.
 func (s *Store) HubReplaceCA(ctx context.Context, kind string, old uuid.UUID, chainPEM string, notBefore, notAfter time.Time, names []string, queueJob bool, reinstall string) error {
 	params, err := json.Marshal(map[string]string{"reason": "zone_ca_reissued", "reinstall": reinstall})
 	if err != nil {

@@ -47,17 +47,18 @@ const (
 	NameAuthConfig  Name = "auth_config"
 	NameValkey      Name = "valkey_client"
 	NameSMSSnapshot Name = "sms_router"
+	NameFreeDNS     Name = "free_dns_public"
 )
 
 // Names lists every cache. TestEveryNameHasOneStalenessRow reads the constants above from the source and
 // requires each to be here, so a cache added later cannot skip the table below.
-func Names() []Name { return []Name{NameAuthConfig, NameValkey, NameSMSSnapshot} }
+func Names() []Name { return []Name{NameAuthConfig, NameValkey, NameSMSSnapshot, NameFreeDNS} }
 
 // Valid reports membership. It is a switch over the constants because the lint of closed string types reads
 // exactly that shape; TestEveryNameHasOneStalenessRow requires every Name to be Valid and listed in Names.
 func (n Name) Valid() bool {
 	switch n {
-	case NameAuthConfig, NameValkey, NameSMSSnapshot:
+	case NameAuthConfig, NameValkey, NameSMSSnapshot, NameFreeDNS:
 		return true
 	}
 	return false
@@ -91,6 +92,11 @@ func StalenessOf(n Name) Staleness {
 		// or whose key was rotated must not keep being used because the reload keeps failing (round 16,
 		// tenant-r16-12). Past it a send answers ErrNoSnapshot and the row waits for the next claim.
 		return Staleness{MaxStale: 10 * time.Minute}
+	case NameFreeDNS:
+		// The switch and the two addresses of the page without a login (p4-nodes 9.3): an operator who switched free DNS
+		// off must not find the page still telling people to use it because a refresh has been failing. The pages
+		// themselves keep their last answer for five minutes (T-557), so this is the same order of time.
+		return Staleness{MaxStale: 5 * time.Minute}
 	case NameValkey:
 		// A client that has connected reconnects by itself, so it never expires, and the value is a handle
 		// and not a decision: a stale one cannot keep anything in force that an operator changed.

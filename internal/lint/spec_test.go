@@ -45,6 +45,25 @@ var factTables = []string{
 	"routes-tenant", "routes-admin", "admin-fresh", "coverage", "functions",
 }
 
+// withP4Audit adds the rows of the table audit-admin-p4 of the P4 spec (docs/specs/p4-nodes.md 9.1) to the admin audit
+// table of AUTH 13.2: the registry is one list, and the events of the P4 routes are written beside their routes.
+// The P4 table has the columns of the AUTH one.
+func withP4Audit(t *testing.T, base specTable) specTable {
+	t.Helper()
+	p4, problems := markedTables(readSpecFile(t, "p4-nodes.md"))
+	if len(problems) > 0 {
+		t.Fatal(strings.Join(problems, "\n"))
+	}
+	extra, ok := p4["audit-admin-p4"]
+	if !ok {
+		t.Fatal("the P4 spec has no table marked <!-- spec-fact: audit-admin-p4 -->")
+	}
+	out := base
+	out.rows = append(append([][]string(nil), base.rows...), extra.rows...)
+	out.lines = append(append([]int(nil), base.lines...), extra.lines...)
+	return out
+}
+
 // proseSections are the sections whose prose may not repeat a life of keyring.Uses.
 var proseSections = []string{"8.1", "8.2", "8.3", "8.4", "8.5"}
 
@@ -85,7 +104,7 @@ func TestSpecFactTables(t *testing.T) {
 		})
 	}
 	run("audit-tenant", compareAudit(tables["audit-tenant"], tenantAudit, false))
-	run("audit-admin", compareAudit(tables["audit-admin"], adminAudit, true))
+	run("audit-admin", compareAudit(withP4Audit(t, tables["audit-admin"]), adminAudit, true))
 	run("keyring-domains", compareDomains(tables["keyring-domains"], keyring.Domains()))
 	run("keyring-uses", compareUses(tables["keyring-uses"], keyring.Uses()))
 	run("keyring-prose", compareLifetimeProse(sections, keyring.Uses()))
@@ -179,7 +198,7 @@ func TestSpecFactsCanFail(t *testing.T) {
 	expectFail("a params cell emptied", compareAudit(edit(at, rowOf(at, 0, "`login.ok`"), 1, ""), tenantAudit, false))
 	expectFail("an event row dropped", compareAudit(drop(at, rowOf(at, 0, "`register`")), tenantAudit, false))
 	expectFail("an event the code lacks", compareAudit(edit(at, rowOf(at, 0, "`register`"), 0, "`registerr`"), tenantAudit, false))
-	aa := tables["audit-admin"]
+	aa := withP4Audit(t, tables["audit-admin"])
 	expectFail("a target changed", compareAudit(edit(aa, rowOf(aa, 0, "`invite.revoke`"), aa.column("Target"), "`tenant:<id>`"), adminAudit, true))
 	expectFail("invite.revoke params no longer none", compareAudit(edit(aa, rowOf(aa, 0, "`invite.revoke`"), aa.column("Params"), "`send_sms`"), adminAudit, true))
 

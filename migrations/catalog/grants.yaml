@@ -127,7 +127,7 @@ tables:
     hub: "S(id,tenant_id,pair_override_node_a,pair_override_node_b,pair_version,first_query_at,last_query_at,authorize_secure_dns) U(first_query_at,last_query_at)"
     compiler: "S(-doh_token_ct-apple_profile_pair_version-apple_profile_resolver_id)"
     worker: "S(tenant_id,id,legacy_dns,authorize_ddns,require_authorized_ips,last_query_at,profile_id,profile2_id,pair_override_node_a,pair_override_node_b,pair_version) U(pair_version)"
-    admin: "S(tenant_id,id,type,admin_state,admin_hold,first_query_at,last_query_at) U(admin_hold)"
+    admin: "S(tenant_id,id,type,admin_state,admin_hold,first_query_at,last_query_at,apple_profile_generated_at) U(admin_hold)"
     auth: "S(tenant_id,id,resolver_id,pair_override_node_a,pair_override_node_b,admin_state)"
   endpoint_ddns_hosts:
     tenant: "S I U D"

@@ -104,6 +104,9 @@ func realComposeTables() composeTables {
 			"api":        {"api_spool:/spool"},
 			"caddy-init": {"caddy_data:/data", "caddy_config:/config"},
 			"caddy":      {"./caddy/Caddyfile:/etc/caddy/Caddyfile:ro", "caddy_data:/data", "caddy_config:/config"},
+			// P4 10.4: the apply step reads the current .env (read-only: it prints the new one, the script renames it into place) and
+			// fills the Caddy data volume with the certificate pairs and snippets of the two hosts.
+			"domain-apply": {"./.env:/compose/.env:ro", "caddy_data:/caddy-data"},
 			"postgres": {
 				"pgdata:/var/lib/postgresql",
 				"./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro",

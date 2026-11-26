@@ -729,3 +729,71 @@ func TestChallengeForAClaimMovedWhileWaiting(t *testing.T) {
 		})
 	}
 }
+
+// J12-r4-4: a DDNS host delete releases the claim only that host's answer holds, under the guard: the worker would otherwise
+// release it later as a system change and push a locked profile aside with no password.
+func TestDDNSHostDeleteReleasesItsClaimUnderTheGuard(t *testing.T) {
+	f := newFx(t)
+	locked := f.newProfile(t, f.A.Tenant, "locked")
+	f.lock(t, locked)
+	rows, err := f.env.Create(f.ctx, f.st, f.A.Tenant, opts, endpoints.CreateIn{Type: f.typ, Names: []string{"ddnsplain"}, ProfileID: locked, LegacyDNS: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep := rows[0]
+	h1, err := f.env.CreateDDNSHost(f.ctx, f.st, f.A.Tenant, opts, ep.ID, "one.example.org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c1 := "203.0.113.40/32"
+	r1, err := f.env.RequestClaim(f.ctx, f.st, f.A.Tenant, opts, ep.ID, endpoints.ClaimAsk{Cidr: &c1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id1 := r1.Claim.ID
+	f.exec(t, `UPDATE ctrlz.ip_claims SET source = 'ddns' WHERE id = $1`, id1)
+	f.exec(t, `UPDATE ctrlz.endpoint_ddns_hosts SET last_ips = ARRAY['203.0.113.40'::inet] WHERE id = $1`, h1.ID)
+	released := func(id uuid.UUID) int {
+		return f.count(t, `SELECT count(*) FROM ctrlz.ip_claims WHERE id = $1 AND state = 'released'`, id)
+	}
+	v := &fakeVerifier{right: "pw"}
+	if err := f.env.DeleteDDNSHost(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, v), ep.ID, h1.ID, netip.Addr{}); refusal(t, err).Kind != endpoints.KindLocked {
+		t.Fatal("a host delete that releases the last claim of a locked profile went without its password")
+	}
+	if released(id1) != 0 || f.count(t, `SELECT count(*) FROM ctrlz.endpoint_ddns_hosts WHERE id = $1`, h1.ID) != 1 {
+		t.Fatal("a refused host delete wrote")
+	}
+	f.exec(t, `DELETE FROM ctrlz.policy_outbox`)
+	if err := f.env.DeleteDDNSHost(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, v, pw(locked, "pw")), ep.ID, h1.ID, netip.Addr{}); err != nil {
+		t.Fatal(err)
+	}
+	if released(id1) != 1 {
+		t.Error("the claim only the deleted host held stayed")
+	}
+	if n := f.outbox(t, f.A.Tenant); n != 1 {
+		t.Errorf("the release marked %d times", n)
+	}
+
+	// A claim another host of the Endpoint still answers with stays, and the delete needs no password.
+	h2, err := f.env.CreateDDNSHost(f.ctx, f.st, f.A.Tenant, opts, ep.ID, "two.example.org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h3, err := f.env.CreateDDNSHost(f.ctx, f.st, f.A.Tenant, opts, ep.ID, "three.example.org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2 := "203.0.113.41/32"
+	r2, err := f.env.RequestClaim(f.ctx, f.st, f.A.Tenant, opts, ep.ID, endpoints.ClaimAsk{Cidr: &c2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(t, `UPDATE ctrlz.ip_claims SET source = 'ddns' WHERE id = $1`, r2.Claim.ID)
+	f.exec(t, `UPDATE ctrlz.endpoint_ddns_hosts SET last_ips = ARRAY['203.0.113.41'::inet] WHERE id IN ($1, $2)`, h2.ID, h3.ID)
+	if err := f.env.DeleteDDNSHost(f.ctx, f.st, f.A.Tenant, opts, f.auth(f.A.Tenant, v), ep.ID, h2.ID, netip.Addr{}); err != nil {
+		t.Fatal(err)
+	}
+	if released(r2.Claim.ID) != 0 {
+		t.Error("a claim another host still answers with was released")
+	}
+}

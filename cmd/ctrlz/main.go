@@ -12,6 +12,7 @@
 //	ctrlz rekey user_totp   re-encrypt TOTP seeds under the newest key (one-shot, worker role)
 //	ctrlz declare-lost user_totp --key-number N --yes   clear seeds of a lost key (one-shot, worker role)
 //	ctrlz catalog load-fixture FILE   a catalog version from a fixture file of shared/vectors (lab and dev only, P4 6.3)
+//	ctrlz domain-apply [--commit|--prune] apply a domain change on the server (one-shot, role ctrlz_domain_apply; scripts/domain-apply.sh)
 //	ctrlz ctrlz-admin ...   the admin command line (the same as running it as ctrlz-admin)
 //
 // One binary keeps the image small and the version of every role identical.
@@ -30,6 +31,7 @@ import (
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/admincli"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/app"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/domainapply"
 )
 
 func main() {
@@ -72,6 +74,8 @@ func run(args []string) int {
 		return app.RunCatalogMain(ctx, args[1:])
 	case "declare-lost":
 		return admincli.RunDeclareLost(ctx, args[1:], admincli.Env{})
+	case "domain-apply":
+		return domainapply.Run(ctx, args[1:], domainapply.Env{})
 	}
 	role, err := app.ParseRole(args[0])
 	if err != nil {
@@ -96,6 +100,7 @@ func usage() int {
 	fmt.Fprintln(os.Stderr, "       ctrlz healthcheck URL")
 	fmt.Fprintln(os.Stderr, "       ctrlz keys derive [--dir DIR] [--rotate DOMAIN]")
 	fmt.Fprintln(os.Stderr, "       ctrlz rekey <domain>")
+	fmt.Fprintln(os.Stderr, "       ctrlz domain-apply [--commit|--prune]")
 	fmt.Fprintln(os.Stderr, "       ctrlz declare-lost user_totp --key-number N --yes")
 	fmt.Fprintln(os.Stderr, "       ctrlz ctrlz-admin <command>")
 	return 2

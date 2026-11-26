@@ -63,13 +63,15 @@ third_party:
   - path: github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/hub/v1
     why: the NodeHub service messages the hub serves (internal/hub)
   - path: github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/policy/v1
-    why: the config entry and its records, which the compiler writes and keeps a view of
+    why: the config entry and its records, which the compiler writes and keeps a view of; the PairTable the node routes build to judge a change of membership (internal/nodeadmin)
   - path: github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/sign/v1
     why: the signed Root and Manifest the install door of the hub reads (internal/hub/hubinstall), and the Snapshot message the compiler writes (P4 6, SC 12)
   - path: github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/telemetry/v1
     why: the activity and counters messages of the upload streams the hub serves (internal/hub, internal/hub/hubtel)
   - path: github.com/Kup1ng/CtrlZ-Shared/gtable
     why: the CZGT filter tables of a lab fixture (ctrlz catalog load-fixture, P4 6.3), built the way the importer of P6 will build them
+  - path: google.golang.org/protobuf/encoding/protowire
+    why: walks the top-level fields of a stored log entry for pair_table without decoding it, since one entry may hold 15 MiB (internal/nodeadmin)
   - path: github.com/Kup1ng/CtrlZ-Shared/identity
     why: the resolver grammar (ParseHost, ParseDoHPath, the Valid functions and SlugClient) that internal/setup builds hostnames, URLs and client labels by, so a value it hands a user reads back on the node as the same Endpoint and client; internal/hub/hubtel is the one other caller, which calls ProofCode with the proof key to derive the hash of the TXT code of a UDP proof (SC 3.5, p4-nodes 5.4), and no authenticator code
   - path: github.com/Kup1ng/CtrlZ-Shared/locations
@@ -79,7 +81,7 @@ third_party:
   - path: github.com/Kup1ng/CtrlZ-Shared/names
     why: the canonical form of a domain and of a typed host name (names.ParseUser), the one every rule, profile domain and Target host goes through
   - path: github.com/Kup1ng/CtrlZ-Shared/netclass
-    why: the one constant the ctrlz_lab tag sets (AllowPrivatePairAddrs), which tells the load-fixture command whether this is a lab build
+    why: the one constant the ctrlz_lab tag sets (AllowPrivatePairAddrs), which tells the load-fixture command whether this is a lab build; the address class of a node's advertised address (internal/nodeadmin)
   - path: github.com/Kup1ng/CtrlZ-Shared/noredirect
     why: the one definition of an Iranian name (D42), shared with the evaluator
   - path: github.com/Kup1ng/CtrlZ-Shared/rules
@@ -87,9 +89,9 @@ third_party:
   - path: github.com/Kup1ng/CtrlZ-Shared/schedule
     why: the weekly grid (Cells) and the cell of an instant in a zone, which the lock-password check of internal/endpoints evaluates the stack that applies by
   - path: github.com/Kup1ng/CtrlZ-Shared/wire
-    why: the validators and the hash chain of the entries the compiler writes, the one judge the node uses too
+    why: the validators and the hash chain of the entries the compiler writes, the one judge the node uses too; ValidatePairTable and ZoneInput in internal/nodeadmin
   - path: github.com/Kup1ng/CtrlZ-Shared/zone
-    why: zone.Build, run on every PairTable the compiler is about to write (SC 8a.4, Valid table)
+    why: zone.Build, run on every PairTable the compiler is about to write (SC 8a.4, Valid table); the other judge of a PairTable in internal/nodeadmin
   - path: github.com/ccojocar/zxcvbn-go
     why: password strength score (4.2)
   - path: github.com/ccojocar/zxcvbn-go/match
@@ -152,8 +154,12 @@ third_party:
     why: the rate limiter and the counters in Valkey
   - path: golang.org/x/crypto/argon2
     why: password hashing (4.1)
+  - path: golang.org/x/crypto/x509roots/fallback/bundle
+    why: the Mozilla root certificates embedded in the binary, the "public certificate" test of an uploaded chain (internal/certcheck, p4-nodes 4.3)
+  - path: golang.org/x/net/dns/dnsmessage
+    why: the wire message of the DDNS job's DoH lookups (P4 8), the same package the Go resolver is built on
   - path: golang.org/x/net/publicsuffix
-    why: the cookie domain check of the admin API
+    why: the cookie domain check of the admin API, and the public suffix rule of a dns_zone (internal/nodeadmin, p4-nodes 9.4)
   - path: golang.org/x/sync/semaphore
     why: the first-in-first-out weighted work pool of the heavy operations (internal/admission, spec 6.5), whose large waiter is not passed by small ones that arrive later
   - path: golang.org/x/text/unicode/norm
@@ -167,7 +173,7 @@ third_party:
   - path: google.golang.org/protobuf/encoding/protojson
     why: reading root.json and the bundle manifests, which are protojson (internal/hub/hubinstall)
   - path: google.golang.org/protobuf/proto
-    why: proto.Equal, Marshal and Unmarshal of the records and snapshots of the compiler (P4 6)
+    why: proto.Equal, Marshal and Unmarshal of the records and snapshots of the compiler (P4 6); the PairTable of a stored log entry and of the hub's last event, to refuse the removal of a node a table still pairs (internal/nodeadmin)
   - path: google.golang.org/protobuf/proto
     why: the wire size of a message a handler took out of a NodeHub stream, to give its bytes back to the unread budget of the body (internal/hub/hubnet)
   - path: gopkg.in/yaml.v3

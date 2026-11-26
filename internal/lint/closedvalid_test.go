@@ -34,14 +34,16 @@ import (
 // reviewed entry below, and a helper no Valid method calls fails the test as stale.
 func registeredGrammarHelpers() map[string]string {
 	return map[string]string{
-		"ValidDomain":   "keyring: the domain list of the key ring (8.1)",
-		"hostGrammar":   "audit: the grammar of a relying-party id, which cannot spell a phone number or a code",
-		"ValidTemplate": "sms: the five template keys",
-		"ValidLocale":   "sms: fa and en",
-		"httpStatusOf":  "sms: an HTTP status written as a code, 100 to 599",
-		"numericCode":   "sms: the status values the two providers' pages document, a switch over literals",
-		"Lookup":        "ratelimit: the class table of the budget registry, which is code",
-		"Roles":         "app: the process roles",
+		"ValidDomain":     "keyring: the domain list of the key ring (8.1)",
+		"hostGrammar":     "audit: the grammar of a relying-party id, which cannot spell a phone number or a code",
+		"nodeNameGrammar": "audit: the grammar of a node name (ASCII letters, digits and a few marks, few digits), which cannot spell a phone number",
+		"nodeAddrGrammar": "audit: an IP address with no zone, which a phone number or a token does not parse as",
+		"ValidTemplate":   "sms: the five template keys",
+		"ValidLocale":     "sms: fa and en",
+		"httpStatusOf":    "sms: an HTTP status written as a code, 100 to 599",
+		"numericCode":     "sms: the status values the two providers' pages document, a switch over literals",
+		"Lookup":          "ratelimit: the class table of the budget registry, which is code",
+		"Roles":           "app: the process roles",
 	}
 }
 

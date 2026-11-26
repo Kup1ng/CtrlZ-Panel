@@ -137,14 +137,15 @@ var moduleStdSafe = map[string]string{
 	"context":         "deadlines and cancellation",
 	"crypto/aes":      "AES for the key ring",
 	"crypto/cipher":   "GCM for the key ring",
-	"crypto/ecdh":     "the node's key agreement for the certificate bundle the hub seals to it (hubctl, p4-nodes 5.2)",
+	"crypto/ecdh":     "the node's key agreement for the certificate bundle the hub seals to it (hubctl, p4-nodes 5.2) and the X25519 intake keys an uploaded certificate key is sealed to (internal/intakeseal)",
 	"crypto/ecdsa":    "keys of the dev certificate tools",
 	"crypto/ed25519":  "the manifest signature of the shared module and its vectors",
 	"crypto/elliptic": "curves of the dev certificate tools",
 	"crypto/hkdf":     "subkeys of the key ring",
 	"crypto/hmac":     "MACs",
-	"crypto/hpke":     "the hybrid public key encryption that seals a certificate bundle to the node's key (hubctl, p4-nodes 5.2)",
+	"crypto/hpke":     "the hybrid public key encryption that seals a certificate bundle to the node's key (hubctl, p4-nodes 5.2) and an uploaded certificate key (internal/intakeseal)",
 	"crypto/rand":     "random bytes",
+	"crypto/rsa":      "the key type of an uploaded certificate (internal/certcheck)",
 	"crypto/sha1":     "the HIBP style k-anonymity prefix and the TOTP algorithm named by RFC 6238",
 	"crypto/sha256":   "digests",
 	"crypto/subtle":   "constant time comparison",
@@ -192,7 +193,7 @@ var moduleStdSafe = map[string]string{
 	// edit the lines above by their exact text.
 	"crypto/x509/pkix": "the names and extensions of a certificate the hub's CAs issue (hubpki, enrollproof); a type of values, no file and no process",
 	"encoding/asn1":    "the DER of an enrolment proof and of certificate extensions; a codec over bytes",
-	"encoding/pem":     "PEM text of keys and certificates, over bytes in memory",
+	"encoding/pem":     "PEM text of keys and certificates, over bytes in memory, and of an uploaded certificate chain and key",
 }
 
 // generatedProtobuf lists the seven packages protoc-gen-go and protoc-gen-go-grpc write under
@@ -270,24 +271,25 @@ var osMembers = map[string][]string{
 	"internal/keyring":     {"ErrNotExist"},                                  // a missing key file is not an error of the ring
 	"internal/sms/smshttp": {"ReadFile"},                                     // the bundle of trusted roots, read from one absolute path (sms-r17-12)
 
-	"cmd/ctrlz":                            {"Args", "Exit", "Interrupt", "Stderr"},                                                                                                          // the command line, the exit status and the stop signal of the service
-	"internal/app":                         {"Getenv", "Open", "ReadFile", "Stderr", "Stdout"},                                                                                               // the roles read their environment and log to stdout; load-fixture reads a lab file and prints its result; the hub reads its key files (CTRLZ_HUB_HOST and the secrets of 3.2) from the paths Compose mounts
-	"internal/hub/hubinstall":              {"File", "O_RDONLY", "Open", "OpenRoot", "ReadDir"},                                                                                              // GET /install/* serves the signed bundles under one directory: OpenRoot confines every open to it (a name that escapes is refused by the root), ReadDir lists the versions and Open reads root.json and the manifests, each capped
-	"internal/hub/hubtrust":                {"Chmod", "CreateTemp", "Remove", "Rename"},                                                                                                      // the pin file hub_tls.spki goes by a temporary file in its own directory and a rename, so the admin never reads half of it
-	"internal/admincli":                    {"ErrExist", "ErrNotExist", "FileMode", "Getenv", "O_CREATE", "O_EXCL", "O_WRONLY", "OpenFile", "Remove", "Rename", "Stderr", "Stdin", "Stdout"}, // the console writes secret files exclusively and prints to the terminal
-	"internal/testpg":                      {"ReadFile", "Stderr"},                                                                                                                           // a harness: the wiring test reads the Compose scripts it copies in
-	"deploy":                               {"Environ", "Getenv", "IsNotExist", "ReadFile", "UserHomeDir"},                                                                                   // the image reference a developer may override, and only with a pinned one
-	"internal/testvalkey":                  {"Stderr"},                                                                                                                                       // a harness
-	"internal/toolcmd":                     {"DevNull", "Environ"},                                                                                                                           // the process environment the neutral settings of go and git are added to
-	"internal/hub/hubxfer":                 {"ErrNotExist", "File"},                                                                                                                          // a blob, a snapshot or a bundle file is opened by the store that names it and read through the handle, chunk by chunk; a missing one is ErrNotExist
-	"internal/compiler":                    {"Chmod", "CreateTemp", "File", "Lstat", "MkdirAll", "Open", "Remove", "Rename"},                                                                 // the artifact store writes a blob through a temporary file, a chmod and a rename, and reads it back (P4 6.5)
-	"internal/mutant":                      {"MkdirAll", "MkdirTemp", "ReadDir", "ReadFile", "RemoveAll", "Stat", "WriteFile"},                                                               // the mutation tool works in a scratch copy of the tree
-	"tools/mutants":                        {"Exit", "Getwd", "Interrupt", "Stat", "Stderr", "Stdout"},                                                                                       // the mutation tool's command
-	"tools/genmig":                         {"Exit", "Stderr"},                                                                                                                               // the migration generator's command
-	"tools/genpublicapi":                   {"Exit", "ReadFile", "Stderr", "WriteFile"},                                                                                                      // the public document generator reads api/openapi.yaml and writes api/public-openapi.yaml
-	"internal/migrategen":                  {"Open", "ReadDir", "ReadFile", "WriteFile"},                                                                                                     // the migration generator reads the SQL and writes the generated files
-	"internal/auth/pwstrength/layouts/gen": {"Args", "Exit", "Stderr", "WriteFile"},                                                                                                          // the generator of the layout tables
-	"shared/cmd/sharedtool":                {"Args", "Chmod", "CreateTemp", "Exit", "MkdirAll", "ReadDir", "ReadFile", "Remove", "Rename", "Stat", "Stderr", "Stdout"},                       // the checksum tool reads the module tree and rewrites CHECKSUMS and the copy through a temp file, a chmod and a rename
+	"cmd/ctrlz":                            {"Args", "Exit", "Interrupt", "Stderr"},                                                                                                                                        // the command line, the exit status and the stop signal of the service
+	"internal/app":                         {"DirFS", "Getenv", "Open", "ReadFile", "Stderr", "Stdout"},                                                                                                                    // the roles read their environment and log to stdout; load-fixture reads a lab file and prints its result; the hub reads its key files (CTRLZ_HUB_HOST and the secrets of 3.2) from the paths Compose mounts
+	"internal/domainapply":                 {"ErrNotExist", "FileMode", "Getenv", "MkdirAll", "O_CREATE", "O_EXCL", "O_WRONLY", "Open", "OpenFile", "ReadDir", "ReadFile", "Remove", "Rename", "Stat", "Stderr", "Stdout"}, // the apply step writes the Caddy certificate files by temp file and rename, reads the .env, and prints the new one
+	"internal/hub/hubinstall":              {"File", "O_RDONLY", "Open", "OpenRoot", "ReadDir"},                                                                                                                            // GET /install/* serves the signed bundles under one directory: OpenRoot confines every open to it (a name that escapes is refused by the root), ReadDir lists the versions and Open reads root.json and the manifests, each capped
+	"internal/hub/hubtrust":                {"Chmod", "CreateTemp", "Remove", "Rename"},                                                                                                                                    // the pin file hub_tls.spki goes by a temporary file in its own directory and a rename, so the admin never reads half of it
+	"internal/admincli":                    {"ErrExist", "ErrNotExist", "FileMode", "Getenv", "O_CREATE", "O_EXCL", "O_WRONLY", "OpenFile", "Remove", "Rename", "Stderr", "Stdin", "Stdout"},                               // the console writes secret files exclusively and prints to the terminal
+	"internal/testpg":                      {"ReadFile", "Stderr"},                                                                                                                                                         // a harness: the wiring test reads the Compose scripts it copies in
+	"deploy":                               {"Environ", "Getenv", "IsNotExist", "ReadFile", "UserHomeDir"},                                                                                                                 // the image reference a developer may override, and only with a pinned one
+	"internal/testvalkey":                  {"Stderr"},                                                                                                                                                                     // a harness
+	"internal/toolcmd":                     {"DevNull", "Environ"},                                                                                                                                                         // the process environment the neutral settings of go and git are added to
+	"internal/hub/hubxfer":                 {"ErrNotExist", "File"},                                                                                                                                                        // a blob, a snapshot or a bundle file is opened by the store that names it and read through the handle, chunk by chunk; a missing one is ErrNotExist
+	"internal/compiler":                    {"Chmod", "CreateTemp", "File", "Lstat", "MkdirAll", "Open", "Remove", "Rename"},                                                                                               // the artifact store writes a blob through a temporary file, a chmod and a rename, and reads it back (P4 6.5)
+	"internal/mutant":                      {"MkdirAll", "MkdirTemp", "ReadDir", "ReadFile", "RemoveAll", "Stat", "WriteFile"},                                                                                             // the mutation tool works in a scratch copy of the tree
+	"tools/mutants":                        {"Exit", "Getwd", "Interrupt", "Stat", "Stderr", "Stdout"},                                                                                                                     // the mutation tool's command
+	"tools/genmig":                         {"Exit", "Stderr"},                                                                                                                                                             // the migration generator's command
+	"tools/genpublicapi":                   {"Exit", "ReadFile", "Stderr", "WriteFile"},                                                                                                                                    // the public document generator reads api/openapi.yaml and writes api/public-openapi.yaml
+	"internal/migrategen":                  {"Open", "ReadDir", "ReadFile", "WriteFile"},                                                                                                                                   // the migration generator reads the SQL and writes the generated files
+	"internal/auth/pwstrength/layouts/gen": {"Args", "Exit", "Stderr", "WriteFile"},                                                                                                                                        // the generator of the layout tables
+	"shared/cmd/sharedtool":                {"Args", "Chmod", "CreateTemp", "Exit", "MkdirAll", "ReadDir", "ReadFile", "Remove", "Rename", "Stat", "Stderr", "Stdout"},                                                     // the checksum tool reads the module tree and rewrites CHECKSUMS and the copy through a temp file, a chmod and a rename
 }
 
 // syscallMembers and runtimeMembers: the packages that give a raw system call, the call stack and
@@ -333,7 +335,7 @@ var anyDirMembers = map[string][]string{
 		// The hub's node port: the deadlines of a request and its body, and the HTTP/2 windows.
 		"HTTP2Config", "MaxBytesReader", "NewResponseController",
 	},
-	"crypto/tls": {"Certificate", "Client", "ClientHelloInfo", "Config", "Conn", "ConnectionState", "RequestClientCert", "Server", "VersionTLS12", "VersionTLS13"}, // Client wraps one dialled connection (the hub's prober, over a net.Conn it dialled itself)
+	"crypto/tls": {"Certificate", "Client", "ClientHelloInfo", "Config", "Conn", "ConnectionState", "Dialer", "RequestClientCert", "Server", "VersionTLS12", "VersionTLS13"}, // Client wraps one dialled connection (the hub's prober, over a net.Conn it dialled itself); Dialer dials a DoT server for the DDNS job (internal/worker/periodic) and reads no file
 }
 
 // memberJudged maps a package judged by the member a selector names to its per directory lists.

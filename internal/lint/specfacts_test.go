@@ -377,7 +377,19 @@ func profileRoutes(t *testing.T) map[string]routeFact { _, r, _ := tenantRouteSp
 // endpointRoutes are the operations of the P3 table routes-endpoints.
 func endpointRoutes(t *testing.T) map[string]routeFact { _, _, r := tenantRouteSplit(t); return r }
 
-func adminRoutes(t *testing.T) map[string]routeFact { return routeFacts(t, api.Admin()) }
+// p4AdminTags are the tags of the P4 admin routes. They are the operations of the table routes-admin-p4 of the P4
+// spec (docs/specs/p4-nodes.md 9.2), not of AUTH 15.2 and 10.5, which list the routes of P1.
+var p4AdminTags = map[string]bool{"nodes": true}
+
+func adminRoutes(t *testing.T) map[string]routeFact {
+	out := map[string]routeFact{}
+	for k, f := range routeFacts(t, api.Admin()) {
+		if !p4AdminTags[f.Tag] {
+			out[k] = f
+		}
+	}
+	return out
+}
 
 // ---- tests (18.7) -----------------------------------------------------------
 
