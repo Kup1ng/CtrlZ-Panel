@@ -1,0 +1,22 @@
+# Context of deploy/docker/web.Dockerfile (spec 3.2). BuildKit reads this file instead of the root
+# .dockerignore, which belongs to the Go image and excludes the web workspaces.
+.git
+.worktrees
+.codegraph
+.claude
+**/node_modules
+**/.next
+secrets
+internal
+cmd
+migrations
+shared
+docs
+deploy
+**/e2e
+**/test-results
+**/playwright-report
+# A .env file would be copied by `COPY . .` and then by Next into .next/standalone (writeStandaloneDirectory), so its
+# values would sit in a layer of the runtime image. The files are gitignored, so no review would ever see them (merge-r1-6).
+**/.env
+**/.env.*

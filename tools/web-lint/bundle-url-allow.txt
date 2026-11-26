@@ -1,0 +1,82 @@
+# URL strings that scripts/check-web-bundle.mjs (spec 3.5) accepts in the built apps. One line, one
+# reason; a line without " # reason" is an error. A string that is not here fails CI until someone
+# has read where it comes from. The grammar is in the script's header:
+#
+#   url  <string>... [in <path part>] # reason    exact strings; `in` limits them to paths containing that part
+#   host <name>...                    # reason    a documentation host, for files under node_modules/ inside .next/standalone only, and
+#                                                   never for a link to a file that a program loads (a script, an image, a release asset)
+#
+# Nothing here is a destination the app connects to. The proof of that is the offline run of 17.4
+# (spec 3.5), where every container is on a closed network and the guard of 17.2 fails any request.
+
+# --- The browser bundle (.next/static): exact strings only ------------------------------------------
+url http://www.w3.org/2000/svg http://www.w3.org/1999/xlink http://www.w3.org/1998/Math/MathML http://www.w3.org/1999/xhtml http://www.w3.org/XML/1998/namespace # XML namespace identifiers that React DOM passes to createElementNS. They name a vocabulary and are never fetched
+url https://react.dev/errors/ # React's minified error decoder: only text in an error message, shown to a developer
+url https://redux.js.org/Errors https://redux-toolkit.js.org/Errors https://bit.ly/3cXEKWf # text of error messages in Redux Toolkit, which Recharts bundles. A link in a message, never requested
+url https://github.com/zloirock/core-js https://github.com/zloirock/core-js/blob/v3.38.1/LICENSE # licence banner of the core-js polyfills that Next ships to every page
+url http://l http://n https://a https://a/c%20d https://a@b https://x https://тест # test inputs and dummy base URLs inside core-js's URL polyfill, parsed locally and never requested
+url https://nextjs.org/docs/app/api-reference/functions/use-search-params https://nextjs.org/docs/messages/404-get-initial-props https://nextjs.org/docs/messages/failed-to-find-server-action https://nextjs.org/docs/messages/gssp-component-member https://nextjs.org/docs/messages/gssp-export https://nextjs.org/docs/messages/instant-link-prefetch-partial https://nextjs.org/docs/messages/instant-unrendered-segment https://nextjs.org/docs/messages/non-standard-node-env https://nextjs.org/docs/messages/public-next-folder-conflict https://nextjs.org/docs/messages/ssg-fallback-true-export # links in Next's client error messages. Text only, shown to a developer in the console
+url https://ctrlz.invalid in .next/ # the reserved .invalid base (RFC 2606) that packages/ui/src/proxy/safeNext.ts resolves a next value against with new URL(), so it can tell a same-origin path from another origin. Only compared, never fetched. It is in the panel browser bundle and in the admin server chunks; the source lint carries the same string in url-allow.txt
+
+# --- The server tree (.next/standalone): Next and its dependencies --------------------------------
+# Placeholders and template pieces: the URL is made at run time from the request's own host or is a
+# dummy base for `new URL(path, "http://n")`. None of them can name another site.
+url http://f http://n/ http://n${base http://n${req.url http://n${t https://blank in node_modules/next/dist/ # dummy base URLs used to parse a relative path with the URL class
+url http:// https:// in .next/standalone/ # a bare scheme in Next's checks such as startsWith("https://"); never a destination on its own
+url http://${addressString http://${c.url http://${i.host http://${inspectorURL.host}/json/list https://${origin https://${req.headers.host}${urlPath} https://${req.headers.host}${req.url} in node_modules/next/dist/ # Next building a URL from the host it is running on or from the request's Host header. The two `req.headers.host` values name the whole template (host, brace and the request path that follows), because a path after a placeholder host is otherwise no match (wp5-r10-3); a `${...}` that goes on with a port is fine
+url https://${b https://${c in .next/server/chunks/ # Next's metadataBase from VERCEL_URL and VERCEL_PROJECT_PRODUCTION_URL, which are unset in our image, so the branch is dead
+url http://localhost http://localhost:9999 http://localhost:${proxyPort in node_modules/next/dist/ # loopback: Next's own test proxy and dev inspector. Never leaves the host
+url http://localhost:${a in .next/server/chunks/ # loopback: Next's own dev inspector URL, inlined by Turbopack into a server chunk. Never leaves the host
+url https://*.verify.dns https://*.verify.dns.[a-z0-9.- in .next/standalone/ # our own CSP check of spec 15.3 (the source of parseVerifyOrigin): the error message and its regular expression, a pattern and not a request
+
+# Strings that sound like a destination and are not one. Each is a constant that a code path we do
+# not run mentions; the offline run proves none is reached.
+url https://nextjs.org/telemetry in node_modules/next/dist/telemetry/ # Next's telemetry notice. Telemetry is sent by the CLI (`next build`, `next dev`), not by server.js; the image also sets NEXT_TELEMETRY_DISABLED=1 (Dockerfile, left for after the merge)
+url https://telemetry.nextjs.org/api/v1/record in node_modules/next/dist/telemetry/ # the telemetry endpoint, same as above: CLI only, and switched off
+url https://registry.npmjs.org/ in node_modules/next/dist/lib/helpers/ # `next`'s package-manager helper for `next info` and upgrades, a CLI command
+url https://registry.npmjs.org/-/package/next/dist-tags in node_modules/next/dist/server/dev/ # the version check of `next dev`'s overlay. Development server only
+url http://www.opensource.org/licenses/mit-license.php in node_modules/next/dist/ # a licence link in comments of webpack loaders and plugins that Next ships, build-time code the server never runs. A .php path is a script a host answers, not a page, so a host line does not cover it
+url https://bugs.webkit.org/show_bug.cgi in node_modules/next/dist/ # a bug-tracker link in comments about browser behaviour. A .cgi path is a script a host answers, so a host line does not cover it
+url https://www.cs.utexas.edu/~fussell/courses/cs384g-fall2013/lectures/mitchell/Mitchell.pdf in node_modules/.pnpm/ # a paper cited in a comment of sharp's resize options. A .pdf is a file, so a host line does not cover it
+url https://johncostella.com/magic/mks.pdf in node_modules/.pnpm/ # the paper behind the Magic Kernel Sharp resize kernel, cited in a comment of sharp. A .pdf is a file, so a host line does not cover it
+url https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json in node_modules/next/dist/compiled/conf/ # a JSON-schema $id inside ajv, an identifier that is never fetched
+url https://webpack.js.org/api/loaders/ in node_modules/next/dist/build/webpack/plugins/flight-client-entry-plugin.js # a documentation link in a comment of Next's build-time webpack plugin. A path that starts with /api/ and has no extension looks like an endpoint, so a host line does not cover it
+url https://unpkg.com/browse/@mui/icons-material@5.11.16/esm/index.js in node_modules/next/dist/server/config.js # a link in a comment of Next's optimizePackageImports list
+
+# --- Documentation, specification and attribution hosts, in node_modules/ inside .next/standalone only --------------
+host nextjs.org preview.nextjs.org react.dev nodejs.org webpack.js.org www.typescriptlang.org opentelemetry.io lightningcss.dev jestjs.io rustwasm.github.io # documentation of the framework and the tools around it, in comments and error messages
+host html.spec.whatwg.org w3c.github.io wicg.github.io drafts.csswg.org tc39.es tools.ietf.org httpwg.org www.iana.org # web and IETF specifications named in comments
+host developer.mozilla.org support.1password.com mathiasbynens.be people.mozilla.org exploringjs.com jsperf.com eprints.soton.ac.uk www.cse.yorku.ca www.cairographics.org hreflang.org developer.chrome.com # articles, questions and reference pages that a comment cites
+host github.com gist.github.com cs.github.com stackoverflow.com security.stackexchange.com en.wikipedia.org feross.org www.npmjs.org www.npmjs.com # links to source, issues, questions and gists in comments and licence headers. A link to a file that a program loads or downloads (a script, an image, a release asset, a raw file) is never covered by a host line
+host www.w3.org www.sitemaps.org json-schema.org purl.org www.opensource.org # namespace and schema identifiers (sitemap, XML, JSON Schema, Dublin Core), a licence URL, and the reserved example domains
+host sharp.pixelplumbing.com www.libvips.org # home pages of sharp and libvips, which print them in a banner. Next's optional image tooling is not used: images are unoptimised
+
+# --- Exact strings that a host line does not cover (spec 3.5) -------------------------------------
+# A host line counts only under node_modules/ and never for a link to something a program loads. What is
+# below is either in the compiled code of this repository (.next/server/chunks, which holds our own
+# Server Components and every dependency that Turbopack inlined) or on a host that serves content.
+# `--reveal` of scripts/check-web-bundle.mjs prints a new string whole, to write its line.
+url https://datatracker.ietf.org/doc/html/rfc3986 https://github.com/vercel/next.js https://github.com/webpack/webpack/blob/87660921808566ef3b8796f8df61bd79fc026108/lib/runtime/RelativeUrlRuntimeModule.js https://next-intl.dev/docs/configuration https://next-intl.dev/docs/routing/setup https://next-intl.dev/docs/usage/configuration https://nextjs.org/docs/app/api-reference/config/next-config-js/max-postponed-state-size https://nextjs.org/docs/app/api-reference/directives/use-cache-private https://nextjs.org/docs/app/api-reference/functions/after https://nextjs.org/docs/app/api-reference/functions/cookies https://nextjs.org/docs/app/api-reference/functions/generate-metadata https://nextjs.org/docs/app/api-reference/functions/generate-viewport https://nextjs.org/docs/app/api-reference/functions/headers https://nextjs.org/docs/app/api-reference/functions/unstable_cache https://nextjs.org/docs/app/api-reference/next-config-js/serverActions https://nextjs.org/docs/app/building-your-application/rendering/static-and-dynamic https://nextjs.org/docs/messages/app-static-to-dynamic-error https://nextjs.org/docs/messages/blocking-prerender-client-hook https://nextjs.org/docs/messages/cache-life-outside-use-cache https://nextjs.org/docs/messages/cache-tag-outside-use-cache https://nextjs.org/docs/messages/dynamic-server-error https://nextjs.org/docs/messages/middleware-new-signature https://nextjs.org/docs/messages/middleware-parse-user-agent https://nextjs.org/docs/messages/middleware-relative-urls https://nextjs.org/docs/messages/middleware-request-page https://nextjs.org/docs/messages/nested-use-cache-no-explicit-cachelife https://nextjs.org/docs/messages/next-dynamic-api-wrong-context https://nextjs.org/docs/messages/next-prerender-sync-headers https://nextjs.org/docs/messages/next-request-in-use-cache https://nextjs.org/docs/messages/revalidate-in-use-cache https://nextjs.org/docs/messages/sync-dynamic-apis https://nextjs.org/docs/messages/use-cache-private-composition https://preview.nextjs.org/docs/app/guides/instant-navigation in .next/server/chunks/ # documentation and error-message links of Next, next-intl and webpack's runtime that Turbopack inlined into our compiled server code. Text in a message or a comment; none is requested
+url https://example.com https://example.com/relative https://example.com/search https://example.com/subdir https://example.com/subdir/ https://example.com/subdir/relative in node_modules/next/ # the reserved example domain as a dummy base or sample input when Next parses and resolves a location in its client code: parsed locally, never requested
+url https://example.com/iiif https://www.example.com/some-file.jpg in node_modules/sharp/ # sample URLs in sharp's documentation comments. Image optimisation is off (images are unoptimised), so sharp does not run
+url http://www.google.com/schemas/sitemap-image/1.1 http://www.google.com/schemas/sitemap-video/1.1 in node_modules/next/ # XML namespace identifiers of Google's sitemap extensions, written into a generated sitemap. They name a vocabulary and are never fetched
+url https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/markup https://developer.x.com/en/docs/x-for-websites/cards/overview/summary https://developers.facebook.com/docs/applinks/metadata-reference https://developers.facebook.com/docs/sharing/webmasters/images https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers https://linear.app/vercel/issue/NEXT-4875 https://vercel.com/docs/projects/environment-variables/system-environment-variables https://www.youtube.com/watch in node_modules/next/ # documentation, issue and search-engine reference links in comments, type declarations and a CLI message of Next. Text only, never requested by the server
+url https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/${binaryName} in node_modules/next/dist/lib/mkcert.js # the download of `next dev --experimental-https`, a development command that creates a local certificate. server.js never calls it, and the offline run of 17.4 proves it
+url https://github.com/vercel/next.js in node_modules/next/dist/ # Next's own repository page, named in error messages. The name ends in ".js", so a host line would treat it as a script
+
+# --- Strings that a host line refuses on purpose (spec 3.5, round 9) -------------------------------------
+# A host line never vouches for a link whose path holds a run-time placeholder (the text after the `}` is unknown and
+# may be a release asset, an archive or a climb) or a percent escape (a host may decode it before routing), so each of
+# these is an exact line, scoped to the file that holds it.
+url https://nextjs.org/docs/messages/${r https://nextjs.org/docs/${hasAppDir https://nextjs.org/docs/messages/${docsPathname in node_modules/next/dist/ # documentation links that Next builds into an error message or a generated file (a message name or a docs section as the placeholder). Text only, shown to a developer, never requested by the server
+url https://en.wikipedia.org/wiki/Entropy_%28information_theory%29 https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline in node_modules/sharp/ # articles cited in comments of sharp's resize options. A percent escape in a path is refused by a host line, since a host may decode it before routing
+url //${e in node_modules/next/dist/compiled/comment-json/ # comment-json writing a `//` line comment (the template `//${e}`) into JSON with comments. A comment marker and no URL
+
+# --- Strings that a host line refuses since round 11 (spec 3.5) ---------------------------------------
+# A host line never vouches for a bare origin (a base that a program extends, wp5-r11-6) or for a URL that a `+` or
+# `.concat(` completes, even when a break escape comes before the closing quote (wp5-r11-5). These are the strings
+# of the real builds that are neither: a home page in a licence header and the message links of Next, which end in `\n`
+# before a `+`, and a message, never a request.
+url https://sindresorhus.com in node_modules/next/dist/build/webpack/loaders/css-loader/ # the author's home page in the licence header of a vendored module (camelcase.js). A bare origin is a base to a host line, so it is named here
+url http://browserhacks.com/ https://url.spec.whatwg.org/ https://infra.spec.whatwg.org/ https://mimesniff.spec.whatwg.org/ https://fetch.spec.whatwg.org/ https://webidl.spec.whatwg.org/ https://websockets.spec.whatwg.org/ in node_modules/next/dist/ # root pages of specifications and of a browser-hacks article, cited in comments of Next (wp5-r12-1). A root with its trailing slash is a base to a host line, as a bare origin is, so each is named here, scoped to Next. None is on a host that serves downloads
+url https://nextjs.org/docs/messages/conflicting-ssg-paths https://nextjs.org/docs/messages/module-not-found https://nextjs.org/docs/messages/invalid-route-source https://github.com/nodejs/node/issues/65100 in node_modules/next/dist/ # links in the text of Next's error and warning messages: each string ends in a line break and a `+` joins the next line of the message. Documentation, never a request

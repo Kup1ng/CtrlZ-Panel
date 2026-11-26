@@ -1,0 +1,13 @@
+{
+"table": "profile_presets",
+"columns": ["kind","content","schema_version"],
+"rows": [
+  ["custom",{"format":"ctrlz-profile","version":1,"kind":"custom","filters":[],"services":[],"folders":[],"rules":[],"options":{}},1],
+  ["developer",{"format":"ctrlz-profile","version":1,"kind":"developer","filters":[{"id":"ads-trackers","enabled":true,"mode":"relaxed"},{"id":"malware","enabled":true,"mode":"relaxed"},{"id":"phishing","enabled":true}],"services":[],"folders":[],"rules":[],"options":{}},1],
+  ["gaming",{"format":"ctrlz-profile","version":1,"kind":"gaming","filters":[{"id":"ads-trackers","enabled":true,"mode":"relaxed"},{"id":"malware","enabled":true,"mode":"balanced"},{"id":"phishing","enabled":true}],"services":[],"folders":[],"rules":[],"options":{}},1],
+  ["kids",{"format":"ctrlz-profile","version":1,"kind":"kids","filters":[{"id":"ads-trackers","enabled":true,"mode":"balanced"},{"id":"adult","enabled":true,"mode":"strict"},{"id":"dating","enabled":true},{"id":"drugs","enabled":true},{"id":"gambling","enabled":true},{"id":"malware","enabled":true,"mode":"strict"},{"id":"phishing","enabled":true},{"id":"torrents","enabled":true},{"id":"vpn-dns","enabled":true}],"services":[],"folders":[],"rules":[],"options":{"safe_search":true,"restricted_youtube":true}},1],
+  ["privacy",{"format":"ctrlz-profile","version":1,"kind":"privacy","filters":[{"id":"ads-trackers","enabled":true,"mode":"strict"},{"id":"iot-telemetry","enabled":true},{"id":"malware","enabled":true,"mode":"balanced"},{"id":"phishing","enabled":true}],"services":[],"folders":[],"rules":[],"options":{"block_exfiltration":true,"rebind_protection":true}},1],
+  ["productivity",{"format":"ctrlz-profile","version":1,"kind":"productivity","filters":[{"id":"ads-trackers","enabled":true,"mode":"balanced"},{"id":"clickbait","enabled":true},{"id":"dating","enabled":true},{"id":"gambling","enabled":true},{"id":"games","enabled":true},{"id":"malware","enabled":true,"mode":"balanced"},{"id":"phishing","enabled":true},{"id":"social","enabled":true}],"services":[],"folders":[],"rules":[],"options":{}},1],
+  ["vpn_replacement",{"format":"ctrlz-profile","version":1,"kind":"vpn_replacement","filters":[{"id":"ads-trackers","enabled":true,"mode":"relaxed"},{"id":"malware","enabled":true,"mode":"balanced"},{"id":"phishing","enabled":true}],"services":[],"folders":[],"rules":[],"options":{"default_rule":{"action":"redirect","target":{"kind":"auto"}}}},1]
+]
+}
