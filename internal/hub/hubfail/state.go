@@ -103,7 +103,9 @@ func (l *Loop) feedDrains() {
 // nodeState is the row of one node now.
 func (l *Loop) nodeState(now time.Time, id uuid.UUID) store.HubNodeState {
 	nid := zone.NodeID(id)
-	st := store.HubNodeState{Node: id, Drain: DrainNone, DrainKnown: l.drainSeen[id]}
+	// Fed a table and not seen advertised or draining in it: any drain still stored began before this process, and the store ends
+	// it once its time has passed (GW2-r2-1). The page cannot, since a node not withdrawn may as well be advertised again.
+	st := store.HubNodeState{Node: id, Drain: DrainNone, DrainKnown: l.drainSeen[id], DrainSettled: l.drainFed[id] != 0 && !l.drainSeen[id]}
 	if names, ok := l.f3Unmet(now, nid); ok {
 		st.F3Unmet = names
 		if len(names) > 0 && onlyTiming(names) {
@@ -155,7 +157,7 @@ func onlyTiming(names []string) bool {
 }
 
 func sameState(a, b store.HubNodeState) bool {
-	if a.Node != b.Node || a.Drain != b.Drain || a.DrainKnown != b.DrainKnown || !a.F3DueAt.Equal(b.F3DueAt) || !a.DrainSince.Equal(b.DrainSince) || len(a.F3Unmet) != len(b.F3Unmet) {
+	if a.Node != b.Node || a.Drain != b.Drain || a.DrainKnown != b.DrainKnown || a.DrainSettled != b.DrainSettled || !a.F3DueAt.Equal(b.F3DueAt) || !a.DrainSince.Equal(b.DrainSince) || len(a.F3Unmet) != len(b.F3Unmet) {
 		return false
 	}
 	for i := range a.F3Unmet {

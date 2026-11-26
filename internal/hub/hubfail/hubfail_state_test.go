@@ -371,3 +371,38 @@ func TestRowsAreRewrittenFromTimeToTime(t *testing.T) {
 		t.Fatalf("the stale row stayed: %v", got)
 	}
 }
+
+// GW2-r2-1: a drain that began before a restart for a node that is not withdrawn (a pair change, not a withdrawal) is over for the
+// node's clients once its time has passed, and the hub that took over ends it. The node is not advertised in the table it applied
+// and the new hub has no drain of it in memory, so without this the stored "draining" stays for good.
+//
+// Fails if: HubNodeState.DrainSettled is not set for a node fed a table that does not advertise it (B keeps drain_state draining),
+// or is set before the stored drain has run for its time (B turns done at once).
+func TestAStoredDrainOfANodeThatIsNotWithdrawnEndsWhenItsTimeHasPassed(t *testing.T) {
+	w := newWorld(t)
+	w.settled()
+	w.str.open[uid(nodeB)] = true
+	old, young := w.clk.Now().Add(-10*time.Minute), w.clk.Now().Add(-time.Minute)
+	w.db.mu.Lock()
+	w.db.states[uid(nodeB)] = store.HubNodeState{Node: uid(nodeB), Drain: hubfail.DrainDraining, DrainSince: old, DrainKnown: true}
+	w.db.mu.Unlock()
+	w.tick()
+	w.heartbeat(nodeB, w.pvAt(w.loop.Version(), nodeA), nil)
+	w.run(10*time.Second, w.traffic(true, true))
+	if got := w.db.state(nodeB); got.Drain != hubfail.DrainDone || !got.DrainSince.Equal(old) {
+		t.Fatalf("an old stored drain of B was not ended: %v", got)
+	}
+
+	w = newWorld(t)
+	w.settled()
+	w.str.open[uid(nodeB)] = true
+	w.db.mu.Lock()
+	w.db.states[uid(nodeB)] = store.HubNodeState{Node: uid(nodeB), Drain: hubfail.DrainDraining, DrainSince: young, DrainKnown: true}
+	w.db.mu.Unlock()
+	w.tick()
+	w.heartbeat(nodeB, w.pvAt(w.loop.Version(), nodeA), nil)
+	w.run(10*time.Second, w.traffic(true, true))
+	if got := w.db.state(nodeB); got.Drain != hubfail.DrainDraining {
+		t.Fatalf("a drain that has not run for its time was ended: %v", got)
+	}
+}

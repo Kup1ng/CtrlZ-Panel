@@ -63,6 +63,7 @@ type db struct {
 	failState   bool
 	states      map[uuid.UUID]store.HubNodeState
 	stateWrites int
+	clk         *clock
 	// afterCommit runs once the event is in the database and before the commit returns: the lease can be lost there.
 	afterCommit func()
 }
@@ -146,6 +147,9 @@ func (d *db) HubNodeStateWrite(_ context.Context, rows []store.HubNodeState) err
 		// As the upsert does: the drain columns of a row whose drain the hub has not seen stay as they are.
 		if prev, ok := d.states[r.Node]; ok && !r.DrainKnown {
 			r.Drain, r.DrainSince = prev.Drain, prev.DrainSince
+			if r.DrainSettled && prev.Drain == hubfail.DrainDraining && !prev.DrainSince.After(d.clk.Now().Add(-360*time.Second)) {
+				r.Drain = hubfail.DrainDone
+			}
 		}
 		d.states[r.Node] = r
 	}
@@ -254,6 +258,7 @@ func newWorld(t *testing.T) *world {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	w := &world{t: t, clk: &clock{t: time.Unix(1_800_000_000, 0)}, db: newDB(), view: hubview.New(), lease: &lease{held: true}, pub: pub,
 		str: &streams{open: map[uuid.UUID]bool{}}, alerts: &alerts{by: map[store.HubAlertKind][]map[string]string{}}}
+	w.db.clk = w.clk
 	w.beats = hubctl.NewTrackers(w.clk.Now)
 	e := &policyv1.ConfigEntry{Seq: 1, Class: commonv1.EntryClass_ENTRY_CLASS_POLICY, CreatedAt: w.clk.Now().Unix(), PairTable: membership()}
 	w.view.Apply(e)

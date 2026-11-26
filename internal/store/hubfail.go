@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Kup1ng/CtrlZ-Panel/internal/appclock"
 	"github.com/google/uuid"
 )
 
@@ -224,13 +225,20 @@ type HubNodeState struct {
 	// (it just started, or took the lease) says nothing of the drain: the stored drain_state and drain_since are left as the last
 	// hub wrote them, and a row that does not exist yet starts as none.
 	DrainKnown bool
+	// DrainSettled says this process fed the node the table it applies and the node is neither advertised nor draining in it. A
+	// drain that began before this process (a restart, a lease that moved) is then over for the node's clients, and it is done
+	// once DrainDone has passed since its drain_since. The store writes that "done" for a row that is still "draining" and no
+	// hub has seen (DrainKnown false): the read of the page cannot do it for a node that is not withdrawn, because it cannot tell
+	// that node from one that is advertised again (GW2-r2-1).
+	DrainSettled bool
 }
 
 // qHubNodeState names its row by the whole primary key, so a statement that meets another on a row meets it alone: the loop
 // writes the rows one at a time in node id order (HubNodeStateWrite) and the hub-decider lease makes it their only writer.
 const qHubNodeState = `INSERT INTO ctrlz.node_dns_state AS s (node_id, f3_unmet, f3_due_at, drain_state, drain_since) VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (node_id) DO UPDATE SET f3_unmet = EXCLUDED.f3_unmet, f3_due_at = EXCLUDED.f3_due_at,
-  drain_state = CASE WHEN $6 THEN EXCLUDED.drain_state ELSE s.drain_state END,
+  drain_state = CASE WHEN $6 THEN EXCLUDED.drain_state
+    WHEN $7 AND s.drain_state = 'draining' AND s.drain_since <= $8 THEN 'done' ELSE s.drain_state END,
   drain_since = CASE WHEN $6 THEN EXCLUDED.drain_since ELSE s.drain_since END`
 
 // HubNodeStateWrite writes the rows in one transaction, in node id order. A node that is not in `nodes` (removed since the hub
@@ -238,13 +246,14 @@ ON CONFLICT (node_id) DO UPDATE SET f3_unmet = EXCLUDED.f3_unmet, f3_due_at = EX
 func (s *Store) HubNodeStateWrite(ctx context.Context, states []HubNodeState) error {
 	rows := append([]HubNodeState(nil), states...)
 	sort.Slice(rows, func(i, j int) bool { return lessUUID(rows[i].Node, rows[j].Node) })
+	doneBefore := appclock.Now().Add(-drainDoneAfter)
 	return s.WithGlobal(ctx, TxOpts{}, func(g GlobalTx) error {
 		for _, r := range rows {
 			unmet := r.F3Unmet
 			if unmet == nil {
 				unmet = []string{}
 			}
-			if _, err := g.tx.Exec(g.ctx, qHubNodeState, r.Node, unmet, nullTime(r.F3DueAt), r.Drain, nullTime(r.DrainSince), r.DrainKnown); err != nil {
+			if _, err := g.tx.Exec(g.ctx, qHubNodeState, r.Node, unmet, nullTime(r.F3DueAt), r.Drain, nullTime(r.DrainSince), r.DrainKnown, r.DrainSettled, doneBefore); err != nil {
 				return sanitize(err)
 			}
 		}

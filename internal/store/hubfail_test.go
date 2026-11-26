@@ -312,3 +312,41 @@ func TestHubNodeStateWriteUpsertsUnderTheHubGrants(t *testing.T) {
 		t.Fatalf("node b after the failed batch: %+v", rb)
 	}
 }
+
+// GW2-r2-1: a hub that fed a node a table not advertising it ends a stored drain whose time has passed, for a node that is not
+// withdrawn (the page's own read cannot), and leaves a younger one alone. Fails if the upsert ignores DrainSettled.
+func TestHubNodeStateWriteEndsAnOldStoredDrainOfASettledNode(t *testing.T) {
+	f := newHubFx(t)
+	a, b := f.addNode(t, 1), f.addNode(t, 2)
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	if err := f.hub.HubNodeStateWrite(f.ctx, []store.HubNodeState{
+		{Node: a, Drain: "draining", DrainSince: now.Add(-10 * time.Minute), DrainKnown: true},
+		{Node: b, Drain: "draining", DrainSince: now.Add(-time.Minute), DrainKnown: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.hub.HubNodeStateWrite(f.ctx, []store.HubNodeState{{Node: a, Drain: "none", DrainSettled: true}, {Node: b, Drain: "none", DrainSettled: true}}); err != nil {
+		t.Fatal(err)
+	}
+	admin := f.db.Store(f.ctx, t, store.RoleAdmin)
+	state := func(id uuid.UUID) string {
+		var got string
+		err := admin.WithGlobal(f.ctx, store.TxOpts{}, func(g store.GlobalTx) error {
+			r, _, err := g.NodeGet(id)
+			if err == nil && r.DrainState != nil {
+				got = *r.DrainState
+			}
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if got := state(a); got != "done" {
+		t.Errorf("the old drain of a is %q, want done", got)
+	}
+	if got := state(b); got != "draining" {
+		t.Errorf("the young drain of b is %q, want draining", got)
+	}
+}

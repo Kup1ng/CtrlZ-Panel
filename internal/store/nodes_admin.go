@@ -264,7 +264,8 @@ const drainDoneAfter = 360 * time.Second
 // rule the hub does; a hub that has seen the drain writes "done" itself at the same moment, and a row that is "none" or "done"
 // is never touched. A node that is advertised again is not promoted either: its stored "draining" is an old drain that no hub has
 // cleared yet (the next tick of a hub that sees it advertised writes "none", GP-r3-1), and "its clients have moved" is not
-// true of a node that is back in the answer (GW2-r1-3).
+// true of a node that is back in the answer (GW2-r1-3). A node that is not withdrawn cannot be told from one that is advertised
+// again here, so the hub ends its old drain itself (HubNodeState.DrainSettled, GW2-r2-1).
 func drainShown(state *string, since *time.Time, withdrawn bool, now time.Time) *string {
 	if state == nil || *state != "draining" || since == nil || !withdrawn || now.Sub(*since) < drainDoneAfter {
 		return state
