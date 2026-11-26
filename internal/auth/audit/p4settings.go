@@ -9,6 +9,12 @@ import "github.com/google/uuid"
 // CertKind is the kind of an uploaded certificate row, which is all an audit row says of the certificate itself.
 type CertKind string
 
+// ParseCertKind is the one way a text becomes a CertKind; ok is false for anything that is not a member.
+func ParseCertKind(s string) (CertKind, bool) {
+	k := CertKind(s)
+	return k, k.Valid()
+}
+
 // The kinds the admin may upload (p4-nodes 4.3).
 const (
 	CertWildcard CertKind = "wildcard"

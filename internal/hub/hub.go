@@ -19,6 +19,7 @@ package hub
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -93,6 +94,8 @@ type Stores struct {
 	// the lease and the heartbeats alone, as it did before 5.5.
 	View hubview.Store
 	Eval hubfail.Store
+	// Wildcards reads the uploaded wildcard rows on the control pool (the CertBundle builds' pool, 5.7). Nil serves none.
+	Wildcards hubctl.WildcardRows
 }
 
 // ControlStore is what the control pool is asked.
@@ -140,6 +143,12 @@ type Deps struct {
 	Evaluator hubctl.Evaluator
 	Wildcards hubctl.Wildcards
 	Intake    hubctl.Intake
+	// WildcardKeyPEM is the hub's wildcard_intake_key (X25519, PKCS #8 PEM), the only key that opens the private key of an
+	// uploaded wildcard (3.3). With it and Stores.Wildcards, and no Wildcards of the caller's own, Build serves the uploaded
+	// rows (4.3); without them every zone is private-CA.
+	WildcardKeyPEM []byte
+	// WildcardRoots replaces the embedded public roots an uploaded chain must verify to. Only tests set it.
+	WildcardRoots *x509.CertPool
 	// Directory is the log view of 5.5 as the pair rule needs it; nil means no report that needs a pair is accepted.
 	Directory hubtel.Directory
 }
@@ -171,6 +180,8 @@ type Hub struct {
 	tel      *hubtel.Telemetry
 	lease    *hubctl.Lease
 	zones    zoneCache
+	// publicRoots joins the zone CA in the probes' pool while uploaded wildcards are served: a node then presents a public chain.
+	publicRoots *x509.CertPool
 }
 
 // Build reads the keys, issues the hub leaf, stores the CA rows and wires the servers. It fails

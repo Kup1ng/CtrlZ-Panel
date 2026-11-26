@@ -18,7 +18,7 @@ func (d *fakeDB) HubConfigLoad(_ context.Context, id uuid.UUID) (store.HubConfig
 	if n == nil {
 		return store.HubConfigRead{}, nil
 	}
-	return store.HubConfigRead{Found: true, Status: n.status, SPKI: n.spki, ResolveMode: "recursive",
+	return store.HubConfigRead{Found: true, Status: n.status, SPKI: n.spki, ResolveMode: "recursive", DNSZone: d.zones.DNSZone,
 		DNSBind: netip.MustParseAddr("10.0.0.5"), DNSAdv: netip.MustParseAddr("203.0.113.5")}, nil
 }
 

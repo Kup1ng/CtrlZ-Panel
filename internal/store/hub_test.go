@@ -323,6 +323,26 @@ func TestHubCARowsAndJobs(t *testing.T) {
 	}
 }
 
+// I-r1-4: replacing the node CA row writes the critical alert in the same transaction; the first row writes none.
+func TestHubReplacingTheNodeCAWritesItsAlertWithTheRow(t *testing.T) {
+	f := newHubFx(t)
+	nb, na := time.Now().Add(-time.Hour), time.Now().Add(1000*time.Hour)
+	alerts := func() int {
+		var n int
+		if err := f.db.Scan(f.ctx, `SELECT count(*) FROM ctrlz.alerts WHERE kind = 'node_ca_changed'`, nil, &n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if err := f.hub.HubReplaceCA(f.ctx, store.CertKindNodeCA, uuid.Nil, "CA-1", nb, na, nil, false, ""); err != nil || alerts() != 0 {
+		t.Fatalf("the first node CA row: %v, %d alerts", err, alerts())
+	}
+	r1, _, _ := f.hub.HubActiveCA(f.ctx, store.CertKindNodeCA)
+	if err := f.hub.HubReplaceCA(f.ctx, store.CertKindNodeCA, r1.ID, "CA-2", nb.Add(time.Minute), na, nil, false, ""); err != nil || alerts() != 1 {
+		t.Fatalf("a replaced node CA row: %v, %d alerts", err, alerts())
+	}
+}
+
 func TestHubLiveZonesAndAlert(t *testing.T) {
 	f := newHubFx(t)
 	z, err := f.hub.HubLiveZones(f.ctx)

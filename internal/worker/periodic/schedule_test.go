@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 // leaseLog is the lease table as attempt sees it: every request is kept, and a request can be refused.
@@ -45,7 +47,12 @@ func TestADailyJobHoldsAShortRenewedLeaseWhileItRunsAndTheDayAfterItSucceeded(t 
 	r := scheduleRunner(l)
 	var during []int
 	s := spec{job: JobRules, every: time.Second, budget: 10 * time.Second, daily: true, run: func(ctx context.Context) error {
-		time.Sleep(1300 * time.Millisecond) // two renewals, at half a period
+		// Two renewals, at half a period: wait for the lease log to show the first request and both of them.
+		testwait.Until(t, 10*time.Second, "two renewals of the lease", func() bool {
+			l.mu.Lock()
+			defer l.mu.Unlock()
+			return len(l.secs) >= 3
+		})
 		l.mu.Lock()
 		during = append(during, l.secs...)
 		l.mu.Unlock()
@@ -94,13 +101,12 @@ func TestADailyJobStopsWhenItsLeaseIsTaken(t *testing.T) {
 	r := scheduleRunner(l)
 	stopped := make(chan struct{})
 	s := spec{job: JobRules, every: 100 * time.Millisecond, budget: 10 * time.Second, daily: true, run: func(ctx context.Context) error {
-		select {
-		case <-ctx.Done():
-			close(stopped)
-			return ctx.Err()
-		case <-time.After(5 * time.Second):
+		// The run waits for the end of its context and nothing else: a run that is not stopped leaves stopped open.
+		if _, ended := testwait.TryReceive(ctx.Done(), 5*time.Second); !ended {
 			return nil
 		}
+		close(stopped)
+		return ctx.Err()
 	}}
 	r.attempt(context.Background(), s)
 	select {

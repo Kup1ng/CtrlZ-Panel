@@ -203,8 +203,10 @@ func (c *CAs) Zone() *hubpki.ZoneCA {
 
 // EnsureNodeRow stores the node CA's certificate as the active node_ca row when the stored one is not
 // it (the first start, or a new CA after a compromise, which the runbook announces). The private key is
-// never a row. A row that is replaced raises a critical alert once it is written: every node certificate stops
-// chaining to the new CA, so the admin must be told why the nodes dropped off (W3-r4-3).
+// never a row. A row that is replaced raises a critical alert: every node certificate stops chaining to the new CA, so the
+// admin must be told why the nodes dropped off (W3-r4-3). The store writes the alert in the transaction that replaces the row
+// (I-r1-4), so there is no window in which the row is replaced and nobody is told, and a write that fails at every start
+// raises nothing (W3-r5-3).
 func (c *CAs) EnsureNodeRow(ctx context.Context) error {
 	row, found, err := c.Rows.HubActiveCA(ctx, store.CertKindNodeCA)
 	if err != nil {
@@ -215,16 +217,7 @@ func (c *CAs) EnsureNodeRow(ctx context.Context) error {
 		return nil
 	}
 	cert := c.Node.Cert()
-	// The alert follows the write. A write that keeps failing makes the hub exit and Compose start it
-	// again, and an alert raised before the write would be inserted once per start, with the node port
-	// down all the while (W3-r5-3).
-	if err := c.Rows.HubReplaceCA(ctx, store.CertKindNodeCA, row.ID, want, cert.NotBefore, cert.NotAfter, nil, false, ""); err != nil {
-		return err
-	}
-	if found {
-		c.raise(ctx, "critical", store.HubAlertNodeCAChanged, map[string]string{})
-	}
-	return nil
+	return c.Rows.HubReplaceCA(ctx, store.CertKindNodeCA, row.ID, want, cert.NotBefore, cert.NotAfter, nil, false, "")
 }
 
 // EnsureZone makes the zone CA row match the live zones and the key, at start and every minute (4.3). It

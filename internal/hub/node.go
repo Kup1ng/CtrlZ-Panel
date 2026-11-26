@@ -11,12 +11,14 @@ import (
 	signv1 "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/sign/v1"
 	telemetryv1 "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/telemetry/v1"
 
+	"github.com/Kup1ng/CtrlZ-Panel/internal/certcheck"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/compiler"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubctl"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubinstall"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubsign"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubtel"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubxfer"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/intakeseal"
 )
 
 // nodeHub is the NodeHub server of the hub for every method but RenewCert: the Control stream (hubctl) and the transfer
@@ -98,6 +100,17 @@ func (h *Hub) nodeHub(install *hubinstall.Handler) (hubv1.NodeHubServer, error) 
 	tr := hubctl.NewTrackers(d.Now)
 	h.trackers, h.arts = tr, arts
 	intake := d.Intake
+	wild := d.Wildcards
+	if wild == nil && d.Stores.Wildcards != nil && len(d.WildcardKeyPEM) > 0 {
+		if err := intakeseal.CheckPrivateKey(d.WildcardKeyPEM); err != nil {
+			return nil, errors.New("hub: the wildcard intake key is not an X25519 private key in PEM")
+		}
+		h.publicRoots = d.WildcardRoots
+		if h.publicRoots == nil {
+			h.publicRoots = certcheck.EmbeddedRoots()
+		}
+		wild = hubctl.NewUploadedWildcards(d.Stores.Wildcards, d.WildcardKeyPEM, d.Now).WithRoots(h.publicRoots)
+	}
 	dir, eval := h.logView(d, signer)
 	if d.Stores.Tel != nil {
 		h.tel = hubtel.New(hubtel.Config{
@@ -111,7 +124,7 @@ func (h *Hub) nodeHub(install *hubinstall.Handler) (hubv1.NodeHubServer, error) 
 	decider := &hubctl.LeaseDecider{Lease: h.lease, Trackers: tr, Eval: eval, Streams: func() int { return h.ctl.Streams() }}
 	h.ctl = hubctl.New(hubctl.Config{
 		Roll: h.Roll, Store: d.Stores.Stream, Decider: decider, Trackers: tr, Free: h.feed, Intake: intake, Now: d.Now, Log: d.Log,
-		Certs:     hubctl.NewCerts(h.CAs, d.Wildcards, d.Now),
+		Certs:     hubctl.NewCerts(h.CAs, wild, d.Now),
 		Config:    &hubctl.ConfigBuilder{ProofKey: d.ProofKey, Now: d.Now},
 		Accepting: h.accepting, Opened: h.opened, HeadSent: h.headSent,
 	})

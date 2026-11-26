@@ -776,6 +776,10 @@ func TestOracleDatabaseDown(t *testing.T) {
 	w.f.env.Exec(t, `UPDATE ctrlz.system_settings SET registration_mode = 'open'`)
 	w.f.ck.add(31 * time.Second)
 	w.f.client().get("/auth/config").want(200, "")
+	// The free DNS answer is cached too (5 s, T-556): the first request of an outage would try the pool and fail, and the second
+	// would find the failure remembered, so the pair would differ by the cache and not by the phone. One good load before the
+	// outage, with the clock where it stays, serves both from memory.
+	w.f.client().get("/public/free-dns").want(200, "")
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

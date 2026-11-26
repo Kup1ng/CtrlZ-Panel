@@ -60,13 +60,14 @@ func (s *Server) UploadCertificate(ctx context.Context, req gen.UploadCertificat
 	if s.d.Intake == nil {
 		return nil, httpx.Unavailable()
 	}
-	kind := certcheck.Kind(req.Body.Kind)
+	kind, ok := certcheck.ParseKind(string(req.Body.Kind))
+	if !ok {
+		return nil, errValidation("kind", "invalid")
+	}
+	auditKind, _ := audit.ParseCertKind(string(kind))
 	purpose, pub := intakeseal.Web, s.d.Intake.Web
 	if kind == certcheck.Wildcard {
 		purpose, pub = intakeseal.Wildcard, s.d.Intake.Wildcard
-	}
-	if !kind.Valid() {
-		return nil, errValidation("kind", "invalid")
 	}
 	// The key is read before the database is asked for anything, so a body that is not a key costs no transaction.
 	keyPublic, keyPKCS8, err := certcheck.ParseKey([]byte(req.Body.KeyPem))
@@ -98,7 +99,7 @@ func (s *Server) UploadCertificate(ctx context.Context, req gen.UploadCertificat
 		if err != nil {
 			return err
 		}
-		if _, err := audit.Admin(g, s.now(), p.AdminID, httpx.ClientIPFrom(g.Context()), audit.CertificateUpload{Certificate: id, Kind: audit.CertKind(kind), Names: len(res.Names)}); err != nil {
+		if _, err := audit.Admin(g, s.now(), p.AdminID, httpx.ClientIPFrom(g.Context()), audit.CertificateUpload{Certificate: id, Kind: auditKind, Names: len(res.Names)}); err != nil {
 			return err
 		}
 		out = gen.CertificateCreated{Id: id, Names: res.Names, NotAfter: res.NotAfter.UTC()}

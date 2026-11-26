@@ -335,6 +335,9 @@ services:
       # The key that signs the heads GetHead returns (3.3), and the blobs and snapshots the compiler wrote, read-only: the hub
       # has its own variable for the volume, since the worker's is the one that writes it.
       CTRLZ_POLICY_KEY_FILE: /run/secrets/policy_key
+      # The private half of the wildcard intake key: the one key that opens an uploaded wildcard's private key, so the hub can
+      # seal it again for each node (4.3). The admin holds the public half and cannot open what it stores (N8).
+      CTRLZ_WILDCARD_INTAKE_KEY_FILE: /run/secrets/wildcard_intake_key
       CTRLZ_HUB_ARTIFACTS_DIR: /var/lib/ctrlz/artifacts
       # Below mem_limit, so the collector works harder before the kernel kills the hub: the node port is open
       # to the internet and a flood of half-finished requests must cost time, not the container (5.1).

@@ -65,6 +65,7 @@ var execFromVariable = map[string]string{
 	"internal/admincli/keyidentity_test.go":     "runs scripts/gen-secrets.sh with the host shell",
 	"internal/admincli/review_r5_admin_test.go": "runs scripts/gen-secrets.sh with the host shell",
 	"internal/lint/composenet_test.go":          "runs scripts/compose-net-test.sh with the host shell",
+	"internal/lint/domainapplyscript_test.go":   "runs scripts/domain-apply.sh against a stub docker on the PATH, with the host shell",
 	"internal/lint/composesmoke_test.go":        "runs a block of scripts/compose-smoke.sh with the host shell",
 	"internal/lint/compose_p1_test.go":          "runs scripts/image-smoke.sh with the host shell",
 	"internal/lint/compose_test.go":             "runs scripts/gen-secrets.sh with the host shell",

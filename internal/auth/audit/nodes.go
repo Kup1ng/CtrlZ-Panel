@@ -119,6 +119,12 @@ const (
 	DNSRequestForceFailback DNSRequestKind = "force_failback"
 )
 
+// ParseDNSRequestKind is the one way a text becomes a DNSRequestKind; ok is false for anything that is not a member.
+func ParseDNSRequestKind(s string) (DNSRequestKind, bool) {
+	k := DNSRequestKind(s)
+	return k, k.Valid()
+}
+
 // Valid reports membership.
 func (k DNSRequestKind) Valid() bool {
 	return k == DNSRequestHold || k == DNSRequestRelease || k == DNSRequestForceFailback

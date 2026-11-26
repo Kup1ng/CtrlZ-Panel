@@ -112,7 +112,7 @@ func (r *Runner) collect(ctx context.Context, floor uint64) (int, error) {
 			n := 0
 			res, err = g.ArtifactsCollect(floor, min, after, r.batch, func(hash []byte) error {
 				if n > 0 && n%fileGroup == 0 {
-					if err := ctx.Err(); err != nil {
+					if err := g.Context().Err(); err != nil {
 						return fmt.Errorf("%w: %w", store.ErrCollectStop, err)
 					}
 					// Taking the lock again costs nothing while this transaction holds it, and fails once it does not.

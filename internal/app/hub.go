@@ -31,6 +31,8 @@ import (
 //	CTRLZ_HUB_PUBLIC_DIR      the volume hub_tls.spki is written to
 //	CTRLZ_BUNDLES_DIR         root.json and the signed bundles, read-only
 //	CTRLZ_POLICY_KEY_FILE     the policy key (Ed25519) that signs heads
+//	CTRLZ_WILDCARD_INTAKE_KEY_FILE  the private half of the wildcard intake key (X25519): the one key that opens the private
+//	                          key of an uploaded wildcard certificate, so the hub can seal it again for each node (4.3)
 //	CTRLZ_HUB_ARTIFACTS_DIR   the blobs and snapshots the compiler wrote, read-only (the worker has CTRLZ_ARTIFACTS_DIR)
 type HubConfig struct {
 	Host, Listen                 string
@@ -38,8 +40,9 @@ type HubConfig struct {
 	TLSKeyFile, ZoneCAKeyFile    string
 	PublicDir, BundlesDir        string
 	PolicyKeyFile, ArtifactsDir  string
+	WildcardKeyFile              string
 	nodeCAKey, tlsKey, zoneCAKey secret.Bytes
-	policyKey                    secret.Bytes
+	policyKey, wildcardKey       secret.Bytes
 }
 
 // Enabled says whether the node port is on.
@@ -49,7 +52,8 @@ const defaultHubListen = "0.0.0.0:9443"
 
 func loadHubConfig(role Role, getenv Getenv, c *Config) error {
 	names := []string{"CTRLZ_HUB_HOST", "CTRLZ_HUB_LISTEN", "CTRLZ_NODE_CA_KEY_FILE", "CTRLZ_NODE_CA_PEM_FILE", "CTRLZ_HUB_TLS_KEY_FILE",
-		"CTRLZ_ZONE_CA_KEY_FILE", "CTRLZ_HUB_PUBLIC_DIR", "CTRLZ_BUNDLES_DIR", "CTRLZ_POLICY_KEY_FILE", "CTRLZ_HUB_ARTIFACTS_DIR"}
+		"CTRLZ_ZONE_CA_KEY_FILE", "CTRLZ_HUB_PUBLIC_DIR", "CTRLZ_BUNDLES_DIR", "CTRLZ_POLICY_KEY_FILE", "CTRLZ_HUB_ARTIFACTS_DIR",
+		"CTRLZ_WILDCARD_INTAKE_KEY_FILE"}
 	// The admin has its own, smaller set (loadInstallConfig): the host and the two read-only volumes of the
 	// install command, and none of the hub's keys.
 	if role == RoleAdmin {
@@ -77,9 +81,10 @@ func loadHubConfig(role Role, getenv Getenv, c *Config) error {
 	h.TLSKeyFile, h.ZoneCAKeyFile = getenv("CTRLZ_HUB_TLS_KEY_FILE"), getenv("CTRLZ_ZONE_CA_KEY_FILE")
 	h.PublicDir, h.BundlesDir = getenv("CTRLZ_HUB_PUBLIC_DIR"), getenv("CTRLZ_BUNDLES_DIR")
 	h.PolicyKeyFile, h.ArtifactsDir = getenv("CTRLZ_POLICY_KEY_FILE"), getenv("CTRLZ_HUB_ARTIFACTS_DIR")
+	h.WildcardKeyFile = getenv("CTRLZ_WILDCARD_INTAKE_KEY_FILE")
 	for n, v := range map[string]string{"CTRLZ_NODE_CA_KEY_FILE": h.NodeCAKeyFile, "CTRLZ_NODE_CA_PEM_FILE": h.NodeCAPEMFile, "CTRLZ_HUB_TLS_KEY_FILE": h.TLSKeyFile,
 		"CTRLZ_ZONE_CA_KEY_FILE": h.ZoneCAKeyFile, "CTRLZ_HUB_PUBLIC_DIR": h.PublicDir, "CTRLZ_BUNDLES_DIR": h.BundlesDir,
-		"CTRLZ_POLICY_KEY_FILE": h.PolicyKeyFile, "CTRLZ_HUB_ARTIFACTS_DIR": h.ArtifactsDir} {
+		"CTRLZ_POLICY_KEY_FILE": h.PolicyKeyFile, "CTRLZ_HUB_ARTIFACTS_DIR": h.ArtifactsDir, "CTRLZ_WILDCARD_INTAKE_KEY_FILE": h.WildcardKeyFile} {
 		if v == "" {
 			return fmt.Errorf("CTRLZ_HUB_HOST is set but %s is not", n)
 		}
@@ -100,6 +105,11 @@ func loadHubConfig(role Role, getenv Getenv, c *Config) error {
 		return err
 	}
 	if h.policyKey, err = secret.BytesFromFile(h.PolicyKeyFile); err != nil {
+		return err
+	}
+	// Required, not optional: the admin takes an uploaded wildcard whenever its public half is mounted, and a hub that could
+	// not open the key would serve the private CA's leaf for a zone the admin told its tenants needs no reinstall.
+	if h.wildcardKey, err = secret.BytesFromFile(h.WildcardKeyFile); err != nil {
 		return err
 	}
 	// The proof key goes to every node in NodeConfig; the hub that serves the node port needs it.
@@ -132,7 +142,7 @@ func loadInstallConfig(getenv Getenv, c *Config) error {
 		}
 	}
 	// The keys and the listen address are the hub's alone; the admin mounts no private key (N8).
-	for _, n := range []string{"CTRLZ_HUB_LISTEN", "CTRLZ_NODE_CA_KEY_FILE", "CTRLZ_NODE_CA_PEM_FILE", "CTRLZ_HUB_TLS_KEY_FILE", "CTRLZ_ZONE_CA_KEY_FILE", "CTRLZ_POLICY_KEY_FILE", "CTRLZ_HUB_ARTIFACTS_DIR"} {
+	for _, n := range []string{"CTRLZ_HUB_LISTEN", "CTRLZ_NODE_CA_KEY_FILE", "CTRLZ_NODE_CA_PEM_FILE", "CTRLZ_HUB_TLS_KEY_FILE", "CTRLZ_ZONE_CA_KEY_FILE", "CTRLZ_POLICY_KEY_FILE", "CTRLZ_HUB_ARTIFACTS_DIR", "CTRLZ_WILDCARD_INTAKE_KEY_FILE"} {
 		if getenv(n) != "" {
 			return fmt.Errorf("%s is for the hub only", n)
 		}
@@ -172,7 +182,7 @@ func startHub(ctx context.Context, cfg Config, pools *hub.Pools, log *slog.Logge
 		Stores: pools.Stores(), Now: appclock.Now, Log: log,
 		NodeCAKeyPEM: cfg.Hub.nodeCAKey.Reveal(), NodeCAPEM: caPEM, HubKeyPEM: cfg.Hub.tlsKey.Reveal(), ZoneKeyPEM: cfg.Hub.zoneCAKey.Reveal(),
 		HubHost: cfg.Hub.Host, PublicDir: cfg.Hub.PublicDir, BundlesDir: cfg.Hub.BundlesDir,
-		PolicyKeyPEM: cfg.Hub.policyKey.Reveal(), ProofKey: []byte(cfg.ProofKey.Reveal()), ArtifactsDir: cfg.Hub.ArtifactsDir,
+		PolicyKeyPEM: cfg.Hub.policyKey.Reveal(), WildcardKeyPEM: cfg.Hub.wildcardKey.Reveal(), ProofKey: []byte(cfg.ProofKey.Reveal()), ArtifactsDir: cfg.Hub.ArtifactsDir,
 	}
 	if cfg.Env == EnvProduction {
 		deps.DenyRootKeys = hub.LabRootKeyIDs()

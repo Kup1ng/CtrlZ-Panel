@@ -54,8 +54,19 @@ type p2SystemWriter struct {
 	table, reason, shape, digest string
 }
 
-// p2SystemWriters is empty in P2.
-func p2SystemWriters() map[string]p2SystemWriter { return map[string]p2SystemWriter{} }
+// p2SystemWriters holds the two statements of the expiry purge of P4 (J12, spec 8): an expired rule is already inert on the
+// node, so the purge deletes it and steps the version of the profile it sat in without a profile lock and without an outbox row.
+// Each is bound to one tenant and to the profiles it was handed, and each is pinned by the digest of its text.
+func p2SystemWriters() map[string]p2SystemWriter {
+	return map[string]p2SystemWriter{
+		"qExpiredRulesDelete": {table: "rules", digest: "a4f8afb368cee255358ab79ec1c1079699e34404dbb3edf6056f0671a4d69a99",
+			reason: "the expiry purge: deletes rules whose expires_at has passed, which the node already ignores",
+			shape:  "DELETE of at most LIMIT rows of one tenant, in the profiles it is handed, with expires_at <= now, rows locked in id order"},
+		"qProfilesBumpVersion": {table: "profiles", digest: "8ce83359dbe53245fbe1d39cd42a4ac74e38d693a7102746603a4263540e4b84",
+			reason: "the expiry purge: steps the version of a profile it deleted rules from, so the rule count cache answers a fresh count",
+			shape:  "UPDATE of version alone, of the profiles of one tenant it is handed, rows locked in id order"},
+	}
+}
 
 // p2NoRedirectLookup is the function that sends the one statement that names catalog_no_redirect_domain, and the text of
 // that statement: it selects the pattern and a boolean for the entries the caller names, and nothing else. A change to it is a

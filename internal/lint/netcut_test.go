@@ -396,7 +396,6 @@ var netCutAllowed = map[string]string{
 	"internal/nodeadmin/addr.go#embedsIPv4":                           "tests an operator's node address against the five embedded-IPv4 prefixes, byte by byte; infrastructure of the operator, never a client's",
 	"internal/nodeadmin/addr.go#AddrText":                             "renders a node address for the admin API and the install command; infrastructure of the operator",
 	"internal/nodeadmin/addr.go#PrefixText":                           "renders the prefix of a claim in a node's report for the admin; the tenant's own claim, shown to the admin as the other admin routes show tenant data",
-	"internal/hub/hubnet/root.go#(Root).serveGRPC":                    "charges the Enrollment per-source limit with hublimit.NetKey; it makes no key of its own",
 
 	"internal/auth/throttle/throttle.go#(Who).part":                  "the one choke point of the throttle scopes: it builds the network and /48 key parts the registry names",
 	"internal/auth/throttle/throttle.go#(Service).AdminLoginHits":    "the admin login throttle reads the network part through the registry's scope (Who.part)",

@@ -309,6 +309,6 @@ func Bounds() []Bound {
 		{"maxDoHBody", "length of one DoH response the DDNS job reads, checked on the value in hand"},
 		{"maxDomainPasses", "restarts of one domain_change run, a work limit of one job in hand; nothing shared that racing actors could spend"},
 		{"maxKeptListed", "rows listed in the progress of one node_revoked job (the count is exact); a size of one job's own record, nothing shared that racing actors could spend"},
-		{"MaxFixture", "length of the fixture file ctrlz catalog load-fixture reads, checked on the value in hand"},
+		{"maxFreeQPS", "ceiling of the free DNS rate an admin may set (adminapi, T-374): a range of one request field, checked on the value in hand; the setting is one row the admin writes, nothing is spent from it that racing actors could win"},
 	}
 }

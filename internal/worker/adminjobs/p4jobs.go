@@ -179,6 +179,21 @@ type DomainProgress struct {
 	Notified int `json:"tenants_notified"`
 	// Passes is how many times the walk began: more than one means the state moved while it ran.
 	Passes int `json:"passes"`
+	// stateKey is the zoneKey of the state the last pass ended on. The runner holds the job back from done while the state is
+	// no longer this one (stateStillHolds), so a zone CA the hub issued after the last look is not swallowed by this job.
+	stateKey string
+}
+
+// stateStillHolds is the compare-and-set of a finished domain_change: in the transaction that ends the job it reads the zone
+// state again and says whether it is still the one the walk ended on. The hub queues a job with ON CONFLICT DO NOTHING, so a
+// job that is still running when a new zone CA lands answers for it; without this check that answer ended at the last look of
+// domainChange and the few milliseconds up to the finish belonged to nobody (I-r1-5).
+func stateStillHolds(g store.GlobalTx, p DomainProgress) (bool, error) {
+	z, err := g.ZoneState()
+	if err != nil {
+		return false, err
+	}
+	return zoneKey(z) == p.stateKey, nil
 }
 
 // maxDomainPasses bounds the restarts of one run. The state moves only when an admin changes the domain or the hub issues
@@ -263,6 +278,7 @@ func (r *Runner) domainChange(ctx context.Context, j store.AdminJob, report Repo
 			return nil, err
 		}
 		if zoneKey(begin) == zoneKey(end) {
+			prog.stateKey = zoneKey(end)
 			return prog, nil
 		}
 	}

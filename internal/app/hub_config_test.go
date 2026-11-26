@@ -28,6 +28,7 @@ func hubEnv(t *testing.T, extra map[string]string) map[string]string {
 		"CTRLZ_HUB_TLS_KEY_FILE": write("tls.key", "HUB-TLS-KEY-CANARY"), "CTRLZ_ZONE_CA_KEY_FILE": write("zone.key", "ZONE-KEY-CANARY"),
 		"CTRLZ_HUB_PUBLIC_DIR": dir, "CTRLZ_BUNDLES_DIR": dir,
 		"CTRLZ_POLICY_KEY_FILE": write("policy.key", "POLICY-KEY-CANARY"), "CTRLZ_HUB_ARTIFACTS_DIR": dir, "CTRLZ_PROOF_KEY_FILE": write("proof.key", "PROOF-KEY-CANARY"),
+		"CTRLZ_WILDCARD_INTAKE_KEY_FILE": write("wildcard.key", "WILDCARD-KEY-CANARY"),
 	}
 	for k, v := range extra {
 		m[k] = v
@@ -70,6 +71,7 @@ func TestHubNodePortConfigRefusals(t *testing.T) {
 		"a missing policy key":          {app.RoleHub, nil, "CTRLZ_POLICY_KEY_FILE", "CTRLZ_POLICY_KEY_FILE"},
 		"a missing artifacts directory": {app.RoleHub, nil, "CTRLZ_HUB_ARTIFACTS_DIR", "CTRLZ_HUB_ARTIFACTS_DIR"},
 		"no proof key":                  {app.RoleHub, nil, "CTRLZ_PROOF_KEY_FILE", "CTRLZ_PROOF_KEY_FILE"},
+		"no wildcard intake key":        {app.RoleHub, nil, "CTRLZ_WILDCARD_INTAKE_KEY_FILE", "CTRLZ_WILDCARD_INTAKE_KEY_FILE"},
 		"a key file that is not there":  {app.RoleHub, map[string]string{"CTRLZ_HUB_TLS_KEY_FILE": "/no/such/key"}, "", "/no/such/key"},
 		"no database":                   {app.RoleHub, nil, "CTRLZ_DB_HOST", "CTRLZ_DB_HOST"},
 		"the port on the api":           {app.RoleAPI, map[string]string{"CTRLZ_HUB_HOST": "x"}, "", "hub only"},
@@ -89,10 +91,15 @@ func TestHubNodePortConfigRefusals(t *testing.T) {
 			t.Errorf("%s: %v, want an error naming %q", name, err, tc.want)
 		}
 	}
-	// The admin takes the host for the install command of an enrolment and nothing else (W3-r5-2).
+	// The admin takes the host and the two read-only volumes of the install command of an enrolment, and none of the hub's keys
+	// (W3-r5-2, W10): a host alone would print a command that cannot work, so it is refused.
 	am := map[string]string{"CTRLZ_DB_HOST": "db", "CTRLZ_DB_PASSWORD_FILE": hubEnv(t, nil)["CTRLZ_DB_PASSWORD_FILE"], "CTRLZ_HUB_HOST": "hub.example.net"}
-	if ac, err := app.LoadConfig(app.RoleAdmin, env(am)); err != nil || ac.Hub.Host != "hub.example.net" {
-		t.Errorf("the admin with CTRLZ_HUB_HOST: %v, host %q", err, ac.Hub.Host)
+	if _, err := app.LoadConfig(app.RoleAdmin, env(am)); err == nil || !strings.Contains(err.Error(), "CTRLZ_HUB_PUBLIC_DIR") {
+		t.Errorf("the admin with the host alone: %v", err)
+	}
+	am["CTRLZ_HUB_PUBLIC_DIR"], am["CTRLZ_BUNDLES_DIR"] = hubEnv(t, nil)["CTRLZ_HUB_PUBLIC_DIR"], hubEnv(t, nil)["CTRLZ_BUNDLES_DIR"]
+	if ac, err := app.LoadConfig(app.RoleAdmin, env(am)); err != nil || ac.Install.Host != "hub.example.net" {
+		t.Errorf("the admin with the install variables: %v, host %q", err, ac.Install.Host)
 	}
 	// A hub with no CTRLZ_HUB_HOST serves the health mux alone, and a leftover file variable is a mistake.
 	m := hubEnv(t, nil)
@@ -100,7 +107,7 @@ func TestHubNodePortConfigRefusals(t *testing.T) {
 	if _, err := app.LoadConfig(app.RoleHub, env(m)); err == nil || !strings.Contains(err.Error(), "CTRLZ_HUB_HOST") {
 		t.Errorf("file variables without a host: %v", err)
 	}
-	for _, k := range []string{"CTRLZ_HUB_LISTEN", "CTRLZ_NODE_CA_KEY_FILE", "CTRLZ_NODE_CA_PEM_FILE", "CTRLZ_HUB_TLS_KEY_FILE", "CTRLZ_ZONE_CA_KEY_FILE", "CTRLZ_HUB_PUBLIC_DIR", "CTRLZ_BUNDLES_DIR", "CTRLZ_POLICY_KEY_FILE", "CTRLZ_HUB_ARTIFACTS_DIR"} {
+	for _, k := range []string{"CTRLZ_HUB_LISTEN", "CTRLZ_NODE_CA_KEY_FILE", "CTRLZ_NODE_CA_PEM_FILE", "CTRLZ_HUB_TLS_KEY_FILE", "CTRLZ_ZONE_CA_KEY_FILE", "CTRLZ_HUB_PUBLIC_DIR", "CTRLZ_BUNDLES_DIR", "CTRLZ_POLICY_KEY_FILE", "CTRLZ_HUB_ARTIFACTS_DIR", "CTRLZ_WILDCARD_INTAKE_KEY_FILE"} {
 		delete(m, k)
 	}
 	c, err := app.LoadConfig(app.RoleHub, env(m))

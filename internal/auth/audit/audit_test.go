@@ -65,6 +65,15 @@ func adminEvents() []audit.AdminEvent {
 		audit.SMSTestSend{Gateway: id}, audit.KeyRotated{Domain: "sms_cred", KeyNumber: 2}, audit.KeyDeclaredLost{Domain: "user_totp", KeyNumber: 1},
 		audit.KeyRekeyed{Domain: "admin_totp", KeyNumber: 2, Rewritten: 1, Changed: 0, Failed: 1},
 		audit.AlertAck{Alert: id, Kind: audit.AlertSMSGateway},
+		audit.NodeEnrollmentCreate{Enrollment: id, Bound: true}, audit.NodeEnrollmentConfirm{Enrollment: id, Node: id, Slot: 1}, audit.NodeEnrollmentReject{Enrollment: id},
+		audit.NodeApprove{Node: id}, audit.NodeRevoke{Node: id},
+		audit.NodeRemove{Node: id, OldDNSIP: "192.0.2.1", OldProxyIP: "192.0.2.2", Name: audit.NodeNameOf("node-1")},
+		audit.NodeAddressesChange{Node: id, OldDNSIP: "192.0.2.1", OldProxyIP: "192.0.2.2", Name: audit.NodeNameOf("node-1")},
+		audit.NodeUpdate{Node: id, Renamed: true, ProxyBlocked: false}, audit.NodeDNSRequest{Node: id, Kind: audit.DNSRequestHold},
+		audit.PairCreate{Pair: id, MakeGlobal: true}, audit.PairUpdate{Pair: id}, audit.PairDelete{Pair: id}, audit.GlobalPairSet{Pair: id},
+		audit.FreeDNSChange{FromEnabled: false, ToEnabled: true, QPS: 5},
+		audit.DomainChange{FromZone: audit.DomainNameOf("a.example.test"), ToZone: audit.DomainNameOf("b.example.test"), HostsChanged: true, TransitionDays: 7},
+		audit.CertificateUpload{Certificate: id, Kind: audit.CertWildcard, Names: 2}, audit.CertificateRetire{Certificate: id},
 	}
 }
 
@@ -87,8 +96,9 @@ func TestEveryEventFieldIsClosed(t *testing.T) {
 	}
 	// The closed set of a type is real: it has members, and a value that is not one
 	// of them is refused. A Valid that returns true for everything would pass the
-	// shape check and defeat the rule.
-	probe := "x_not_a_member_9"
+	// shape check and defeat the rule. The probe holds a "!", which no grammar type (Host, NodeName, NodeAddr, DomainName) admits;
+	// a probe of plain letters and an underscore is inside the NodeName grammar and would be a member.
+	probe := "x_not_a_member_9!"
 	for _, ty := range []reflect.Type{reflect.TypeOf(audit.Method("")), reflect.TypeOf(audit.Via("")), reflect.TypeOf(audit.RegMode("")),
 		reflect.TypeOf(audit.KeyDomain("")), reflect.TypeOf(audit.AlertKind("")), reflect.TypeOf(audit.Field("")), reflect.TypeOf(audit.Host("")), reflect.TypeOf(audit.NodeName("")), reflect.TypeOf(audit.NodeAddr("")), reflect.TypeOf(audit.DNSRequestKind("")), reflect.TypeOf(audit.CertKind("")), reflect.TypeOf(audit.DomainName("")),
 		reflect.TypeOf(sms.TemplateKey("")), reflect.TypeOf(sms.Locale(""))} {

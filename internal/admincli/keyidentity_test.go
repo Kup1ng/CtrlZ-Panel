@@ -73,6 +73,7 @@ func notKeyCommands() map[string]string {
 		"ctrlz-admin unlock":         "clears throttle rows",
 		"ctrlz-admin audit":          "walks the audit hash chain",
 		"ctrlz catalog":              "the lab command that loads a catalog fixture: it reads no key file and judges no sealed value (the catalog key is data of the fixture)",
+		"ctrlz domain-apply":         "opens the sealed key of an uploaded panel or admin certificate with the web intake key (an X25519 key of its own, not a keyring key); it derives no keyring key and decides no keyring identity",
 		"ctrlz-admin sms":            "copies pending sealed SMS credentials over the active ones without opening them; a rekey re-seals both",
 	}
 }

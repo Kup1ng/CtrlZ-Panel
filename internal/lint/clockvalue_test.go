@@ -37,7 +37,8 @@ import (
 // file that takes the deadline as a stamp keeps the count of the file and used to pass.
 func wallClockValueAllowed() map[string]wallUse {
 	return map[string]wallUse{
-		"internal/sms/router.go::Router.try": {1, "a length: the time left of the send's context deadline, to refuse a call the deadline cannot finish (sms-r8-5); it is compared with a duration and never with a stored stamp"},
+		"internal/sms/router.go::Router.try":        {1, "a length: the time left of the send's context deadline, to refuse a call the deadline cannot finish (sms-r8-5); it is compared with a duration and never with a stored stamp"},
+		"internal/worker/periodic/ddns.go::hasRoom": {1, "a length: the time left of the pass's context deadline, to refuse beginning a tenant the deadline cannot finish (J12-r3-5); it is compared with a duration and never with a stored stamp"},
 		// The generic waits of the test support package (primitives-r18-20). The element type is the caller's
 		// (a struct, an error, a signal), never a stamp the package reads; the package is imported by test
 		// files only, which TestTestwaitIsImportedByTestFilesOnly holds.

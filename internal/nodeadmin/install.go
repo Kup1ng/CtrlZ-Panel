@@ -106,7 +106,13 @@ func (i *Installer) Command(token string, a EnrollAddrs, now time.Time) (string,
 	return b.String(), nil
 }
 
-func readCapped(fsys fs.FS, name string) ([]byte, error) {
+// fileOpener is the one method of fs.FS the install reader uses. The keyring lint reads every call named Open and wants the
+// receiver's type to be one the repository declares (it cannot resolve io/fs), so the reader names its own.
+type fileOpener interface {
+	Open(name string) (fs.File, error)
+}
+
+func readCapped(fsys fileOpener, name string) ([]byte, error) {
 	f, err := fsys.Open(name)
 	if err != nil {
 		return nil, ErrNoInstall

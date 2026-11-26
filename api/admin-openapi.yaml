@@ -843,6 +843,7 @@ paths:
       description: Never holds a token, a hash of one, a CSR or a certificate. A record shows what the host reported, for the admin to compare with the host console.
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Cursor"}
         - {$ref: "#/components/parameters/Limit"}
@@ -865,6 +866,7 @@ paths:
         `service_unavailable`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -890,6 +892,7 @@ paths:
         `key_reused`, `node_limit_reached`, `address_refused`, `table_invalid`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       requestBody:
@@ -912,6 +915,7 @@ paths:
       description: 'Only an issued or a pending_approval record can be rejected. Errors: `not_found`, `enrollment_state`, `totp_fresh_required`.'
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       requestBody:
@@ -930,6 +934,7 @@ paths:
       description: At most four exist (D25); the list is paged all the same.
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Cursor"}
         - {$ref: "#/components/parameters/Limit"}
@@ -951,6 +956,7 @@ paths:
         fixed wait is 30 days. At most 100 rows, newest first.
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: The list.
@@ -966,6 +972,7 @@ paths:
       description: 'Errors: `not_found`.'
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       responses:
@@ -984,6 +991,7 @@ paths:
         valid table invalid, so none is judged. Errors: `not_found`, `validation_failed`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       requestBody:
@@ -1009,6 +1017,7 @@ paths:
         `not_found`, `node_paired`, `node_in_table`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       responses:
@@ -1024,6 +1033,7 @@ paths:
         `node_state`, `table_invalid`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       requestBody:
@@ -1049,6 +1059,7 @@ paths:
         `node_state`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       requestBody:
@@ -1075,6 +1086,7 @@ paths:
         `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       requestBody:
@@ -1099,6 +1111,7 @@ paths:
         Errors: `not_found`, `node_state`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       requestBody:
@@ -1120,6 +1133,7 @@ paths:
       summary: Node pairs (p4-nodes 9.2)
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Cursor"}
         - {$ref: "#/components/parameters/Limit"}
@@ -1140,6 +1154,7 @@ paths:
         `global_pair_required`, `table_invalid`, `validation_failed`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -1162,6 +1177,7 @@ paths:
         `validation_failed`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       requestBody:
@@ -1185,6 +1201,7 @@ paths:
         `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       responses:
@@ -1198,6 +1215,7 @@ paths:
       description: 'Errors: `not_found`, `table_invalid`, `totp_fresh_required`.'
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -1223,6 +1241,7 @@ paths:
         node outlives its row. `kept_truncated` says the job's list of kept rows was cut. Errors: `not_found`.
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
         - name: from
@@ -1250,6 +1269,7 @@ paths:
         that reported them, and the free DNS settings. The memory-only parts of a node (5.3 to 5.6) follow the hub.
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: The overview.
@@ -1268,6 +1288,7 @@ paths:
         Errors: `validation_failed`.
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - name: from
           in: query
@@ -1300,6 +1321,7 @@ paths:
       summary: The free DNS switch and rate (p4-nodes 9.2, T-556)
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: The settings.
@@ -1316,6 +1338,7 @@ paths:
         of T-374 (2000 until it is measured) is `qps_out_of_range`. Errors: `qps_out_of_range`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -1335,6 +1358,7 @@ paths:
       summary: The domain settings (p4-nodes 9.2, 10.4)
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: The settings.
@@ -1352,6 +1376,7 @@ paths:
         `domain_invalid`, `transition_active`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       requestBody:
         required: true
         content:
@@ -1371,6 +1396,7 @@ paths:
       summary: What a change of zone touches (p4-nodes 9.2)
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       responses:
         "200":
           description: The counts.
@@ -1386,6 +1412,7 @@ paths:
       description: Never the chain, never the sealed key. Rows of the private CAs are listed beside the uploaded ones.
       x-ctrlz-auth: admin
       x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Cursor"}
         - {$ref: "#/components/parameters/Limit"}
@@ -1408,6 +1435,7 @@ paths:
         `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       x-ctrlz-max-body: 65536
       requestBody:
         required: true
@@ -1431,6 +1459,7 @@ paths:
         is `not_found`. Errors: `not_found`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
       parameters:
         - {$ref: "#/components/parameters/Id"}
       responses:
@@ -2273,8 +2302,10 @@ components:
       required: [kind, chain_pem, key_pem]
       properties:
         kind: {type: string, maxLength: 8, enum: [wildcard, panel, admin]}
-        chain_pem: {type: string, minLength: 64, maxLength: 32768, pattern: *pem}
-        key_pem: {type: string, minLength: 64, maxLength: 8192, pattern: *pem}
+        # The examples satisfy the pattern and are not a certificate or a key: the boundary lint sends one as the baseline of the
+        # request, and the route answers it with cert_invalid.
+        chain_pem: {type: string, minLength: 64, maxLength: 32768, pattern: *pem, example: "-----BEGIN EXAMPLE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5\n-----END EXAMPLE-----"}
+        key_pem: {type: string, minLength: 64, maxLength: 8192, pattern: *pem, example: "-----BEGIN EXAMPLE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5\n-----END EXAMPLE-----"}
     CertificateCreated:
       type: object
       required: [id, names, not_after]

@@ -140,11 +140,15 @@ func (k keeperNodes) Applied(node uuid.UUID) (uint64, bool) {
 	return hb.AppliedSeq, true
 }
 
-// zoneRoots is the pool the probes verify the zone certificate against. Private-CA mode is the only mode there is until the
-// uploaded wildcard exists (hubctl.Wildcards), so it is the zone CA alone. A hub with no zone CA yet gets an empty pool, which
-// no certificate chains to: a probe fails closed, and a nil pool would have meant the system's roots.
+// zoneRoots is the pool the probes verify the zone certificate against: the zone CA, and the public roots too while the hub serves
+// uploaded wildcards (hubctl.Wildcards), since a zone that an upload covers is served with a public chain and the rest with the
+// zone CA's. A hub with no zone CA yet gets an empty pool of its own, which no certificate chains to: a probe fails closed, and
+// a nil pool would have meant the system's roots.
 func (h *Hub) zoneRoots() *x509.CertPool {
 	pool := x509.NewCertPool()
+	if h.publicRoots != nil {
+		pool = h.publicRoots.Clone()
+	}
 	if z := h.CAs.Zone(); z != nil {
 		pool.AddCert(z.Cert())
 	}

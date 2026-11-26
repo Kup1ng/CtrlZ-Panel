@@ -70,6 +70,8 @@ type Config struct {
 	// tenants. Nothing in production sets them.
 	BeforeStart func(store.AdminJob)
 	AfterPage   func(tenantsDone int)
+	// BeforeFinish is a test seam for the moment between the end of a handler and the transaction that ends its job.
+	BeforeFinish func(store.AdminJob)
 	// SweepBudget bounds the tenants one periodic registration sweep walks; default 50,000. A test seam as well: the next run
 	// resumes after the last tenant of the one before.
 	SweepBudget int
@@ -95,8 +97,9 @@ type Runner struct {
 	sweepMu     sync.Mutex
 	sweepAfter  uuid.UUID
 
-	beforeStart func(store.AdminJob)
-	afterPage   func(int)
+	beforeStart  func(store.AdminJob)
+	afterPage    func(int)
+	beforeFinish func(store.AdminJob)
 }
 
 // failure is what the runner remembers of a job that failed. It lives in memory
@@ -113,7 +116,7 @@ func New(c Config) (*Runner, error) {
 		return nil, errors.New("adminjobs: store and log are required")
 	}
 	r := &Runner{db: c.Store, log: c.Log, poll: c.Poll, maxFail: c.MaxFailures, page: c.Page, failures: map[uuid.UUID]failure{}, holder: sweepHolder(), backoff: c.Backoff, now: c.Now,
-		beforeStart: c.BeforeStart, afterPage: c.AfterPage, sweepBudget: c.SweepBudget}
+		beforeStart: c.BeforeStart, afterPage: c.AfterPage, beforeFinish: c.BeforeFinish, sweepBudget: c.SweepBudget}
 	if r.poll <= 0 {
 		r.poll = 5 * time.Second
 	}
@@ -322,7 +325,14 @@ func (r *Runner) run(ctx context.Context, j store.AdminJob) error {
 		return err // left running: a later poll runs it again, after the backoff
 	}
 	delete(r.failures, j.ID)
-	return r.finish(ctx, j.ID, "done", final)
+	if r.beforeFinish != nil {
+		r.beforeFinish(j)
+	}
+	var holds func(store.GlobalTx) (bool, error)
+	if dp, ok := final.(DomainProgress); ok {
+		holds = func(g store.GlobalTx) (bool, error) { return stateStillHolds(g, dp) }
+	}
+	return r.finishIf(ctx, j.ID, "done", final, holds)
 }
 
 // failedProgress is the progress a failed job keeps: what the last run reported (the list of rows a revoke kept is read from
@@ -351,11 +361,27 @@ func failureCode(err error) string {
 }
 
 func (r *Runner) finish(ctx context.Context, id uuid.UUID, state string, progress any) error {
+	return r.finishIf(ctx, id, state, progress, nil)
+}
+
+// finishIf ends a job like finish, but first asks holds, in the same transaction, whether what the run settled on still stands.
+// When it does not, the job is left running and the next poll walks it again; that is not a failure and is not counted.
+func (r *Runner) finishIf(ctx context.Context, id uuid.UUID, state string, progress any, holds func(store.GlobalTx) (bool, error)) error {
 	b, err := json.Marshal(progress)
 	if err != nil {
 		b = []byte("{}")
 	}
 	return r.db.WithGlobal(ctx, store.TxOpts{}, func(g store.GlobalTx) error {
+		if holds != nil {
+			ok, err := holds(g)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				r.log.Info("the state moved after the last pass, so the job is walked again", logattr.ID("job", id))
+				return nil
+			}
+		}
 		ended, err := g.AdminJobFinish(id, state, b)
 		if err != nil {
 			return err

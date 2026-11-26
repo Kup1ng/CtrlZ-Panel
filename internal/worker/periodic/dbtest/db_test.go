@@ -309,6 +309,8 @@ func TestEnrollmentsExpireAndAreSweptAWeekLater(t *testing.T) {
 	r := newRig(t)
 	// A node that was revoked: its approved enrolment with no certificate goes, where an active node's stays.
 	r.env.Exec(t, `INSERT INTO ctrlz.nodes (id, slot, name) VALUES ('00000000-0000-7000-8000-0000000000c9', 3, 'gone')`)
+	// A status moves pending, active, revoked and no shorter (migration 0100), so the node goes through active.
+	r.env.Exec(t, `UPDATE ctrlz.nodes SET status = 'active' WHERE id = '00000000-0000-7000-8000-0000000000c9'`)
 	r.env.Exec(t, `UPDATE ctrlz.nodes SET status = 'revoked' WHERE id = '00000000-0000-7000-8000-0000000000c9'`)
 
 	r.enrolment("issued", "-1 minute", "", nil)                                    // expired
@@ -395,10 +397,10 @@ func TestScheduleHorizonMarksTheTenantsThatHaveAWindow(t *testing.T) {
 func TestPruneDeletesTheLogBelowTheOlderSnapshotAndTheBlobsNoNodeNeeds(t *testing.T) {
 	r := newRig(t)
 	for seq := 1; seq <= 250; seq++ {
-		r.env.Exec(t, `INSERT INTO ctrlz.config_log (seq, class, entry_hash, payload) VALUES ($1, 'policy', sha256(convert_to($1::text, 'UTF8')), '\x00')`, seq)
+		r.env.Exec(t, `INSERT INTO ctrlz.config_log (seq, class, entry_hash, payload) VALUES ($1::bigint, 'policy', sha256(convert_to($1::bigint::text, 'UTF8')), '\x00')`, seq)
 	}
 	for _, seq := range []int{50, 100, 200} {
-		r.env.Exec(t, `INSERT INTO ctrlz.config_snapshot (seq, entry_hash, store_ref) VALUES ($1, sha256(convert_to($1::text, 'UTF8')), 'ref')`, seq)
+		r.env.Exec(t, `INSERT INTO ctrlz.config_snapshot (seq, entry_hash, store_ref) VALUES ($1::bigint, sha256(convert_to($1::bigint::text, 'UTF8')), 'ref')`, seq)
 	}
 	blob := func(name string, gcAfter any) {
 		r.env.Exec(t, `INSERT INTO ctrlz.policy_artifacts (hash, kind, size, store_ref, first_seq, gc_after_seq)
@@ -520,7 +522,10 @@ func TestDDNSSkipsAHostTheTenantDeletedWhileItWasResolved(t *testing.T) {
 	r.res.by["second.example.test"] = addrs("1.1.1.1")
 	r.res.onLookup = func(host string) {
 		if host == "home1.example.test" {
-			r.env.Exec(t, `DELETE FROM ctrlz.endpoint_ddns_hosts WHERE tenant_id = $1 AND hostname = 'home1.example.test'`, a.Tenant)
+			// As the route does since 0075: the host goes with the addresses it wrote (the foreign key is deferred and no longer cascades).
+			r.env.Exec(t, `WITH gone AS (DELETE FROM ctrlz.authorized_ips WHERE tenant_id = $1 AND ddns_host_id IN
+				(SELECT id FROM ctrlz.endpoint_ddns_hosts WHERE tenant_id = $1 AND hostname = 'home1.example.test'))
+				DELETE FROM ctrlz.endpoint_ddns_hosts WHERE tenant_id = $1 AND hostname = 'home1.example.test'`, a.Tenant)
 		}
 	}
 	r.run(periodic.JobDDNS)

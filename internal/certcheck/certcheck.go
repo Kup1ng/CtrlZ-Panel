@@ -39,6 +39,12 @@ const (
 // Valid reports membership.
 func (k Kind) Valid() bool { return k == Wildcard || k == Panel || k == Admin }
 
+// ParseKind is the one way a text from a request becomes a Kind; ok is false for anything that is not a member.
+func ParseKind(s string) (Kind, bool) {
+	k := Kind(s)
+	return k, k.Valid()
+}
+
 // The refusals, one for each error code of p4-nodes 9.4. A caller maps them with errors.Is; none carries a name, a
 // chain or a key, so the text is safe to log.
 var (

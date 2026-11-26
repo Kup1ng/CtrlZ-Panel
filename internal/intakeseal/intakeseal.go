@@ -69,8 +69,14 @@ func Seal(pub PublicKey, p Purpose, plaintext []byte) ([]byte, error) {
 	return hpke.Seal(pub.pk, kdf(), aead(), info(p), plaintext)
 }
 
-// Open decrypts a sealed value with the PEM private key (PKCS #8) of the intake. Only the hub and domain-apply call it.
-func Open(privPEM []byte, p Purpose, sealed []byte) ([]byte, error) {
+// CheckPrivateKey says whether privPEM is an X25519 private key in PEM, so a wrong mount stops the hub at its start and not at
+// the first upload that needs the key.
+func CheckPrivateKey(privPEM []byte) error {
+	_, err := parsePrivate(privPEM)
+	return err
+}
+
+func parsePrivate(privPEM []byte) (hpke.PrivateKey, error) {
 	b, _ := pem.Decode(privPEM)
 	if b == nil || b.Type != "PRIVATE KEY" {
 		return nil, ErrKey
@@ -86,6 +92,15 @@ func Open(privPEM []byte, p Purpose, sealed []byte) ([]byte, error) {
 	hk, err := hpke.NewDHKEMPrivateKey(priv)
 	if err != nil {
 		return nil, ErrKey
+	}
+	return hk, nil
+}
+
+// Open decrypts a sealed value with the PEM private key (PKCS #8) of the intake. Only the hub and domain-apply call it.
+func Open(privPEM []byte, p Purpose, sealed []byte) ([]byte, error) {
+	hk, err := parsePrivate(privPEM)
+	if err != nil {
+		return nil, err
 	}
 	out, err := hpke.Open(hk, kdf(), aead(), info(p), sealed)
 	if err != nil {

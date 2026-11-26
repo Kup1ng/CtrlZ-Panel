@@ -214,6 +214,38 @@ func TestDomainChangeNotifiesEachTenantOncePerStateAndStartsAgainWhenTheStateMov
 	}
 }
 
+// I-r1-5: a zone CA the hub issues after the last look of the walk, while the job is still running, is answered by this job (the
+// hub's own insert met it in the table and queued nothing). The job is not ended on the state it settled on before that: it stays
+// running, is walked again, and every tenant is told the new state.
+func TestDomainChangeIsNotEndedOnAStateThatMovedAfterItsLastLook(t *testing.T) {
+	var r *rig
+	moved := false
+	r = newRig(t, adminjobs.Config{BeforeFinish: func(store.AdminJob) {
+		if !moved {
+			moved = true
+			r.zoneCA("2 hours")
+		}
+	}})
+	a, b := r.env.A, r.env.B
+	r.env.Exec(t, `UPDATE ctrlz.domain_settings SET dns_zone = 'dns.example.org'`)
+	r.zoneCA("1 day")
+
+	id := r.queue(adminjobs.KindDomainChange, map[string]string{})
+	r.runOnce()
+	if state, _ := r.job(id); state != "running" {
+		t.Fatalf("the job ended as %s on a state that had already moved", state)
+	}
+	r.runOnce()
+	if state, _ := r.job(id); state != "done" {
+		t.Fatalf("the job did not end once the state held: %s", state)
+	}
+	for _, tenant := range []uuid.UUID{a.Tenant, b.Tenant} {
+		if r.notices(tenant, "domain_changed") != 2 {
+			t.Errorf("tenant %v holds %d notices, want one for each state", tenant, r.notices(tenant, "domain_changed"))
+		}
+	}
+}
+
 // zoneCA retires the active zone CA row and issues a new one that began the given interval ago (so the newer row has the
 // later start when the interval is shorter).
 func (r *rig) zoneCA(ago string) {

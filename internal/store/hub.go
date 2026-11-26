@@ -325,6 +325,14 @@ func (s *Store) HubReplaceCA(ctx context.Context, kind string, old uuid.UUID, ch
 		if _, err := g.tx.Exec(g.ctx, qHubInsertCA, kind, chainPEM, notBefore, notAfter, names); err != nil {
 			return sanitize(err)
 		}
+		// A replaced node CA is told to the admin in the transaction that replaces it: every node certificate stops chaining
+		// to the new one, and an alert written after the commit is lost when the hub dies between the two (I-r1-4). The
+		// first row of the kind (old is nil) replaces nothing and tells nothing.
+		if kind == CertKindNodeCA && old != uuid.Nil {
+			if _, err := g.tx.Exec(g.ctx, qHubAlert, "critical", string(HubAlertNodeCAChanged), "{}"); err != nil {
+				return sanitize(err)
+			}
+		}
 		if queueJob {
 			if _, err := g.tx.Exec(g.ctx, qHubDomainChangeJob, string(params)); err != nil {
 				return sanitize(err)
@@ -401,4 +409,39 @@ func (s *Store) HubAlert(ctx context.Context, severity string, kind HubAlertKind
 		_, err := g.tx.Exec(g.ctx, qHubAlert, severity, string(kind), string(b))
 		return sanitize(err)
 	})
+}
+
+// HubWildcardRow is an uploaded wildcard certificate as the hub reads it: the chain and the key sealed to the hub's own
+// intake key (intakeseal.Wildcard), which the hub alone can open (p4-nodes 3.3, 4.3).
+type HubWildcardRow struct {
+	ID        uuid.UUID
+	ChainPEM  string
+	SealedKey []byte // never logged, printed or sent as it is: the hub opens it and seals the key again for one node
+}
+
+// The limit of 400 is a ceiling and not a page: an uploaded certificate ends or is retired by hand, so a few rows are
+// active at once.
+const qHubWildcards = `SELECT id, chain_pem, wrapped_key_ct FROM ctrlz.certificates
+WHERE kind = 'wildcard' AND source = 'uploaded' AND state = 'active' AND wrapped_key_ct IS NOT NULL ORDER BY id DESC LIMIT 400`
+
+// HubWildcardRows reads the active uploaded wildcard rows. The row-level policy hub_read already lets the hub see this kind
+// (it reads the zone CA rows through the same table); the choice among the rows is certcheck.Choose's, made by the caller.
+func (s *Store) HubWildcardRows(ctx context.Context) ([]HubWildcardRow, error) {
+	var out []HubWildcardRow
+	err := s.WithGlobal(ctx, TxOpts{ReadOnly: true}, func(g GlobalTx) error {
+		rows, err := g.tx.Query(g.ctx, qHubWildcards)
+		if err != nil {
+			return sanitize(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var r HubWildcardRow
+			if err := rows.Scan(&r.ID, &r.ChainPEM, &r.SealedKey); err != nil {
+				return sanitize(err)
+			}
+			out = append(out, r)
+		}
+		return sanitize(rows.Err())
+	})
+	return out, err
 }

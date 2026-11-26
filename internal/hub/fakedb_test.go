@@ -241,6 +241,11 @@ func (d *fakeDB) HubReplaceCA(_ context.Context, kind string, old uuid.UUID, cha
 		}
 	}
 	d.cas[kind] = append(d.cas[kind], &fCA{row: store.HubCertRow{ID: uuid.New(), ChainPEM: chain, NotBefore: nb, NotAfter: na, Names: names}})
+	// The store writes the alert of a replaced node CA in the same transaction as the row (I-r1-4).
+	if kind == store.CertKindNodeCA && old != uuid.Nil {
+		d.alerts++
+		d.kinds = append(d.kinds, store.HubAlertNodeCAChanged)
+	}
 	if queue {
 		d.jobs = append(d.jobs, reinstall)
 	}

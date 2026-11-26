@@ -99,5 +99,5 @@ func (p *Pools) Close() {
 
 // Stores gives the components of this package the pool each one works on.
 func (p *Pools) Stores() Stores {
-	return Stores{L3: p.L3, Control: p.Control, Telemetry: p.Telemetry, Enrollment: p.Enrollment, Transfer: p.Transfer, Lease: p.Lease, Stream: p.Control, Tel: p.Telemetry, Outside: p.Outside, View: p.Control, Eval: p.L4}
+	return Stores{L3: p.L3, Control: p.Control, Telemetry: p.Telemetry, Enrollment: p.Enrollment, Transfer: p.Transfer, Lease: p.Lease, Stream: p.Control, Tel: p.Telemetry, Outside: p.Outside, View: p.Control, Eval: p.L4, Wildcards: p.Control}
 }

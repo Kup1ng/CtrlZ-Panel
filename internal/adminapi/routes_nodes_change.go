@@ -471,8 +471,8 @@ func (s *Server) CreateNodeDnsRequest(ctx context.Context, req gen.CreateNodeDns
 	if err != nil {
 		return nil, err
 	}
-	kind := audit.DNSRequestKind(req.Body.Kind)
-	if !kind.Valid() {
+	kind, ok := audit.ParseDNSRequestKind(string(req.Body.Kind))
+	if !ok {
 		return nil, errValidation("kind", "invalid")
 	}
 	var id uuid.UUID

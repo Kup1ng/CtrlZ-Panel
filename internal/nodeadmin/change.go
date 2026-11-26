@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"sync"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protowire"
@@ -65,7 +66,9 @@ func pairsNode(pt *policyv1.PairTable, node uuid.UUID) bool {
 
 // pairTableField is the field number of ConfigEntry.pair_table, read from the descriptor so that a renumbering of
 // the proto cannot leave this file reading another field.
-var pairTableField = (&policyv1.ConfigEntry{}).ProtoReflect().Descriptor().Fields().ByName("pair_table").Number()
+var pairTableField = sync.OnceValue(func() protowire.Number {
+	return protowire.Number((&policyv1.ConfigEntry{}).ProtoReflect().Descriptor().Fields().ByName("pair_table").Number())
+})
 
 // EntryPairTable returns the bytes of the PairTable a stored config_log entry carries and whether it carries one.
 // An entry carries a table only when the membership changed (wire.ValidatePairTable: an entry that carries none
@@ -82,7 +85,7 @@ func EntryPairTable(entry []byte) (table []byte, found bool, err error) {
 			return nil, false, ErrTableDecode
 		}
 		entry = entry[n:]
-		if num == pairTableField && typ == protowire.BytesType {
+		if num == pairTableField() && typ == protowire.BytesType {
 			v, n := protowire.ConsumeBytes(entry)
 			if n < 0 {
 				return nil, false, ErrTableDecode
