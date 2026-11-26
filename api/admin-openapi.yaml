@@ -988,7 +988,9 @@ paths:
       summary: Edit the name and the proxy block of a node (p4-nodes 9.2)
       description: |
         A change of `proxy_blocked` reaches the nodes with the next PairTable the compiler writes; it cannot make a
-        valid table invalid, so none is judged. Errors: `not_found`, `validation_failed`, `totp_fresh_required`.
+        valid table invalid, so none is judged. A blank or over-long name, an empty body and an unknown field are refused by the
+        schema, 400 `bad_request`; the handler's own checks of the same rules never see a value the schema let through.
+        Errors: `bad_request`, `not_found`, `totp_fresh_required`.
       x-ctrlz-auth: admin-fresh
       x-ctrlz-rate: admin-write
       x-ctrlz-token: none

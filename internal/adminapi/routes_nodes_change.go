@@ -146,9 +146,14 @@ func (s *Server) RevokeNode(ctx context.Context, req gen.RevokeNodeRequestObject
 		if err != nil {
 			return err
 		}
-		params, err := nodeadmin.RevokedJobParams(req.Id, superseded)
+		params, dropped, err := nodeadmin.RevokedJobParams(req.Id, superseded)
 		if err != nil {
 			return err
+		}
+		if dropped > 0 && s.d.Log != nil {
+			// The revocation goes through; only the clean-up list of the oldest unfinished jobs is cut. A worker that cannot
+			// finish node_revoked jobs is the cause to look for.
+			s.d.Log.Warn("node_revoked clean-up list cut", "dropped", dropped)
 		}
 		if _, err := g.AdminJobInsert("node_revoked", params, p.AdminID); err != nil {
 			return err

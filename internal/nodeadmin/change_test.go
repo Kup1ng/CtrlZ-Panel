@@ -2,6 +2,7 @@ package nodeadmin
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -101,9 +102,9 @@ func TestInSomeTable(t *testing.T) {
 func TestRevokedJobParams(t *testing.T) {
 	n := ids(3)
 	old, _ := json.Marshal(map[string]any{"node_ids": []string{n[1].String(), n[0].String()}})
-	got, err := RevokedJobParams(n[0], [][]byte{old, []byte(`{"node_ids":["not a uuid"]}`), []byte(`not json`), []byte(`{}`)})
-	if err != nil {
-		t.Fatal(err)
+	got, dropped, err := RevokedJobParams(n[0], [][]byte{old, []byte(`{"node_ids":["not a uuid"]}`), []byte(`not json`), []byte(`{}`)})
+	if err != nil || dropped != 0 {
+		t.Fatal(dropped, err)
 	}
 	var p struct {
 		NodeIDs []string `json:"node_ids"`
@@ -114,9 +115,37 @@ func TestRevokedJobParams(t *testing.T) {
 	if len(p.NodeIDs) != 2 || p.NodeIDs[0] != n[0].String() || p.NodeIDs[1] != n[1].String() {
 		t.Fatalf("node_ids %v", p.NodeIDs)
 	}
-	alone, err := RevokedJobParams(n[2], nil)
+	alone, _, err := RevokedJobParams(n[2], nil)
 	if err != nil || string(alone) != `{"node_ids":["`+n[2].String()+`"]}` {
 		t.Fatalf("alone: %s %v", alone, err)
+	}
+}
+
+// TestRevokedJobParamsNeverRefusesARevocation: past MaxRevokedNodeIDs the carried list is cut, this node stays in it, the
+// others are kept in id order, and the count of the dropped is returned (I-r3-5). The old behaviour was an error, which
+// made a revocation fail while the clean-up of earlier ones was stuck.
+func TestRevokedJobParamsNeverRefusesARevocation(t *testing.T) {
+	many := make([]uuid.UUID, MaxRevokedNodeIDs+10)
+	for i := range many {
+		many[i] = uuid.New()
+	}
+	var strs []string
+	for _, id := range many[1:] {
+		strs = append(strs, id.String())
+	}
+	old, _ := json.Marshal(map[string]any{"node_ids": strs})
+	got, dropped, err := RevokedJobParams(many[0], [][]byte{old})
+	if err != nil {
+		t.Fatalf("a long carried list refused the revocation: %v", err)
+	}
+	var p struct {
+		NodeIDs []string `json:"node_ids"`
+	}
+	if err := json.Unmarshal(got, &p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.NodeIDs) != MaxRevokedNodeIDs || dropped != 10 || !slices.Contains(p.NodeIDs, many[0].String()) {
+		t.Fatalf("%d ids, %d dropped, self kept %v", len(p.NodeIDs), dropped, slices.Contains(p.NodeIDs, many[0].String()))
 	}
 }
 

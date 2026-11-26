@@ -101,8 +101,19 @@ func (u *UploadedWildcards) Covering(ctx context.Context, zone string) (chainPEM
 	defer clear(pkcs8PEM)
 	// The key is held against the leaf at the time of use too, as domain-apply does, so a row whose sealed key was swapped
 	// in the database is never sent to a node as that certificate's key.
-	if _, err := certcheck.Check(c.chain, certcheck.Wildcard, certcheck.Scope{Zones: []string{zone}}, now,
-		certcheck.Options{Roots: u.roots, KeyPublic: pub}); err != nil {
+	scope := certcheck.Scope{Zones: []string{zone}}
+	if _, err := certcheck.Check(c.chain, certcheck.Wildcard, scope, now, certcheck.Options{Roots: u.roots, KeyPublic: pub}); err != nil {
+		// The choice may be up to wildcardTTL old, and the chain may have ended inside that time. That is not a key mismatch
+		// and must not raise the tampering alert: the zone goes back to the private CA, as Choose does for an ended chain, and
+		// the memo is dropped so the next call chooses again. Only a chain that still verifies with a key that is not its own
+		// is the mismatch.
+		if _, cerr := certcheck.Check(c.chain, certcheck.Wildcard, scope, now, certcheck.Options{Roots: u.roots}); cerr != nil {
+			u.mu.Lock()
+			delete(u.memo, zone)
+			delete(u.alerted, c.id)
+			u.mu.Unlock()
+			return nil, nil, time.Time{}, false, nil
+		}
 		return nil, nil, time.Time{}, false, u.unusable(ctx, c.id, zone, "key_not_the_leafs",
 			fmt.Errorf("the key of uploaded certificate %s does not belong to it", c.id))
 	}

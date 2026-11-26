@@ -270,7 +270,8 @@ func TestABadUploadedWildcardStopsOnlyItsOwnZone(t *testing.T) {
 		t.Fatal(err)
 	}
 	al := &alertLog{}
-	u := hubctl.NewUploadedWildcards(&wildRows{rows: []store.HubWildcardRow{bad}}, f.hubKey, clk.now).WithRoots(f.roots).WithAlerts(al)
+	rows := &wildRows{rows: []store.HubWildcardRow{bad}}
+	u := hubctl.NewUploadedWildcards(rows, f.hubKey, clk.now).WithRoots(f.roots).WithAlerts(al)
 	c := hubctl.NewCerts(zoneOnly{ca}, u, clk.now)
 	n := newNode(t)
 	zones := []string{"dns.example.test", "dns.prev.example.test"}
@@ -289,10 +290,49 @@ func TestABadUploadedWildcardStopsOnlyItsOwnZone(t *testing.T) {
 	if len(al.kind) != 1 || al.kind[0] != store.HubAlertWildcardUnusable || al.sev[0] != "critical" || al.rows[0]["certificate_id"] != bad.ID.String() {
 		t.Fatalf("alerts: %v %v %v", al.kind, al.sev, al.rows)
 	}
-	// The row works again (the intake seal is made right): the mark is cleared, so a later failure alerts again.
-	rows := &wildRows{rows: []store.HubWildcardRow{f.row}}
-	u2 := hubctl.NewUploadedWildcards(rows, f.hubKey, clk.now).WithRoots(f.roots).WithAlerts(al)
-	if _, _, _, found, err := u2.Covering(context.Background(), "dns.example.test"); !found || err != nil {
+	// The row works again (the intake seal is made right): the same UploadedWildcards clears its mark, so a later failure alerts
+	// again. A second object would start with an empty mark and prove nothing about the clearing.
+	set := func(r store.HubWildcardRow) {
+		rows.mu.Lock()
+		rows.rows = []store.HubWildcardRow{r}
+		rows.mu.Unlock()
+		clk.add(6 * time.Second) // past the memo, so the row is read again
+	}
+	set(f.row)
+	if _, _, _, found, err := u.Covering(context.Background(), "dns.example.test"); !found || err != nil {
 		t.Fatalf("the good row: %v %v", found, err)
+	}
+	set(bad)
+	if _, _, _, found, err := u.Covering(context.Background(), "dns.example.test"); found || err == nil {
+		t.Fatalf("the bad row again: %v %v", found, err)
+	}
+	if len(al.kind) != 2 {
+		t.Fatalf("a failure after a recovery raised %d alerts in all, want 2", len(al.kind))
+	}
+}
+
+// A wildcard that ends inside the memo's few seconds is not the key of another certificate: no tampering alert, the zone goes
+// back to the private CA like any ended chain (I-r3-3).
+func TestAnUploadedWildcardThatEndsInsideTheMemoRaisesNoKeyAlert(t *testing.T) {
+	clk := &clock{t: time.Now()}
+	f := uploadedWildcard(t, "dns.example.test", clk.now())
+	al := &alertLog{}
+	rows := &wildRows{rows: []store.HubWildcardRow{f.row}}
+	u := hubctl.NewUploadedWildcards(rows, f.hubKey, clk.now).WithRoots(f.roots).WithAlerts(al)
+	_, _, notAfter, found, err := u.Covering(context.Background(), "dns.example.test")
+	if !found || err != nil {
+		t.Fatalf("before the end: %v %v", found, err)
+	}
+	// The choice is made two seconds before the end and used one second after it, inside the memo.
+	clk.add(notAfter.Add(-2 * time.Second).Sub(clk.now()))
+	if _, _, _, found, err := u.Covering(context.Background(), "dns.example.test"); !found || err != nil {
+		t.Fatalf("two seconds before the end: %v %v", found, err)
+	}
+	clk.add(3 * time.Second)
+	if _, _, _, found, err := u.Covering(context.Background(), "dns.example.test"); found || err != nil {
+		t.Fatalf("after the end: found %v, %v", found, err)
+	}
+	if len(al.kind) != 0 {
+		t.Fatalf("an ended certificate raised %v", al.kind)
 	}
 }

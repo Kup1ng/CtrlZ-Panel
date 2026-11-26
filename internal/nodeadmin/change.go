@@ -133,14 +133,19 @@ func InSomeTable(logTable, lastTable []byte, node uuid.UUID) (bool, error) {
 }
 
 // MaxRevokedNodeIDs bounds the node_ids of a node_revoked job. Four slots exist (D25), so a chain of superseded
-// revocations that grows past this is a defect, and the list stops growing instead of the row.
+// revocations that grows past this is a defect, and the list stops growing instead of the row: the revocation itself is
+// never refused for it (the answer to a compromise is not held back by the state of other rows).
 const MaxRevokedNodeIDs = 64
 
 // RevokedJobParams builds the params of the node_revoked job a revocation queues: this node plus the node_ids of the
 // jobs it supersedes (p4-nodes 8), so a job that never finished loses nothing to the newer one. The result is sorted
 // and unique, which makes the same set the same bytes.
-func RevokedJobParams(node uuid.UUID, superseded [][]byte) ([]byte, error) {
-	ids := []string{node.String()}
+//
+// Past MaxRevokedNodeIDs the carried list is cut, never the revocation: this node always stays, the others are kept in id
+// order, and dropped says how many ids lost their clean-up so the caller can log it.
+func RevokedJobParams(node uuid.UUID, superseded [][]byte) (params []byte, dropped int, err error) {
+	self := node.String()
+	var others []string
 	for _, raw := range superseded {
 		var p struct {
 			NodeIDs []string `json:"node_ids"`
@@ -149,15 +154,19 @@ func RevokedJobParams(node uuid.UUID, superseded [][]byte) ([]byte, error) {
 			continue
 		}
 		for _, s := range p.NodeIDs {
-			if id, err := uuid.Parse(s); err == nil {
-				ids = append(ids, id.String())
+			if id, err := uuid.Parse(s); err == nil && id.String() != self {
+				others = append(others, id.String())
 			}
 		}
 	}
-	slices.Sort(ids)
-	ids = slices.Compact(ids)
-	if len(ids) > MaxRevokedNodeIDs {
-		return nil, errors.New("nodeadmin: too many revoked node ids")
+	slices.Sort(others)
+	others = slices.Compact(others)
+	if len(others) > MaxRevokedNodeIDs-1 {
+		dropped = len(others) - (MaxRevokedNodeIDs - 1)
+		others = others[:MaxRevokedNodeIDs-1]
 	}
-	return json.Marshal(map[string]any{"node_ids": ids})
+	ids := append([]string{self}, others...)
+	slices.Sort(ids)
+	params, err = json.Marshal(map[string]any{"node_ids": ids})
+	return params, dropped, err
 }

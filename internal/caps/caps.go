@@ -310,7 +310,7 @@ func Bounds() []Bound {
 		{"maxDomainPasses", "restarts of one domain_change run, a work limit of one job in hand; nothing shared that racing actors could spend"},
 		{"maxKeptListed", "rows listed in the progress of one node_revoked job (the count is exact); a size of one job's own record, nothing shared that racing actors could spend"},
 		{"maxFreeQPS", "ceiling of the free DNS rate an admin may set (adminapi, T-374): a range of one request field, checked on the value in hand; the setting is one row the admin writes, nothing is spent from it that racing actors could win"},
-		{"MaxRevokedNodeIDs", "node ids in the params of one node_revoked job (nodeadmin.RevokedJobParams): the list of the job row being built from the revocation and the superseded jobs read in the same transaction, checked on the value in hand; at most four slots exist (D25), so nothing accumulates that racing actors could spend"},
+		{"MaxRevokedNodeIDs", "node ids in the params of one node_revoked job (nodeadmin.RevokedJobParams): the list of the job row being built from the revocation and the superseded jobs read in the same transaction, checked on the value in hand; past it the carried list is cut and logged, never the revocation; at most four slots exist (D25), so nothing accumulates that racing actors could spend"},
 		{"MaxServedHost", "longest host the apply step can serve (nodeadmin, a Caddy file name holds 255 bytes): a format limit checked on the one value in hand; nothing shared that racing actors could spend"},
 		{"counterMaxPage", "page size of the free DNS counters list; reads only"},
 		{"maxCursorSec", "range of a decoded cursor value of the counters list (the last second of the year 9999); checked on the value in hand"},

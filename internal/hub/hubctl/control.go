@@ -539,6 +539,20 @@ func (s *Server) gatedRead(ctx context.Context, node uuid.UUID, now time.Time) (
 	return r, nil
 }
 
+// onlyNoZoneCA is true when every error joined into err is ErrNoZoneCA. Certs.For joins one error per failing zone, so
+// errors.Is alone would hide a real failure of one zone behind the "no zone CA yet" of another.
+func onlyNoZoneCA(err error) bool {
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, e := range j.Unwrap() {
+			if !onlyNoZoneCA(e) {
+				return false
+			}
+		}
+		return true
+	}
+	return errors.Is(err, ErrNoZoneCA)
+}
+
 func (ss *session) configPass(ctx context.Context, now time.Time) {
 	s := ss.s
 	r, err := s.gatedRead(ctx, ss.node, now)
@@ -583,7 +597,7 @@ func (ss *session) configPass(ctx context.Context, now time.Time) {
 	zones := s.cfg.Config.Zones(r)
 	// A zone that failed comes back empty beside the zones that did not, so one bad zone stops only itself.
 	bundles, err := s.cfg.Certs.For(ctx, ss.node, ss.pub, zones)
-	if err != nil && s.cfg.Log != nil && !errors.Is(err, ErrNoZoneCA) {
+	if err != nil && s.cfg.Log != nil && !onlyNoZoneCA(err) {
 		s.cfg.Log.Warn("cert bundle not built")
 	}
 	for i, b := range bundles {

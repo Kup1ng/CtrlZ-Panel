@@ -310,6 +310,8 @@ func TestPatchNode(t *testing.T) {
 	b.call("PATCH", "/nodes/"+uuid.NewString(), map[string]any{"name": "x"}).want(404, "not_found")
 	// A blank name never reaches the handler: the schema's `content` alphabet refuses a value whose first character is a separator (admin-r5-1), so the answer is the boundary's 400.
 	b.call("PATCH", "/nodes/"+seedNode1, map[string]any{"name": "   "}).want(400, "bad_request")
+	// An empty body is the schema's minProperties, the same boundary answer; the handler's own validation_failed for it is a guard that cannot be reached, so the document does not promise it (red-1).
+	b.call("PATCH", "/nodes/"+seedNode1, map[string]any{}).want(400, "bad_request")
 
 	var v nodeStatus
 	b.call("PATCH", "/nodes/"+seedNode1, map[string]any{"name": "frankfurt  ", "proxy_blocked": true}).want(200, "").json(&v)
