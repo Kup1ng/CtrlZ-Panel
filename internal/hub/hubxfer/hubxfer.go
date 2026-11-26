@@ -301,7 +301,9 @@ func (s *Service) FetchEntries(req *hubv1.FetchEntriesRequest, srv grpc.ServerSt
 		}
 		return status.FromContextError(ctx.Err()).Err()
 	}
-	holdEnd := time.Now().Add(s.FetchHold) // the real clock: the context's deadline below runs on it too
+	// A timer, not a stamp: the hold is a length counted from here, the same length the context deadline below counts, and a timer
+	// needs no read of the machine's clock (the clock rule).
+	hold := time.NewTimer(s.FetchHold)
 	err = s.within(ctx, s.FetchHold, func(ctx context.Context) error {
 		rows, err := s.Log.HubLogEntries(ctx, req.GetAfterSeq(), b, limit, MaxFetchBytes)
 		if err != nil {
@@ -318,7 +320,7 @@ func (s *Service) FetchEntries(req *hubv1.FetchEntriesRequest, srv grpc.ServerSt
 		return nil
 	})
 	handedOver = true
-	s.settle(hubnet.EndedFrom(parent), holdEnd, slot, func() {
+	s.settle(hubnet.EndedFrom(parent), hold, slot, func() {
 		leave()
 		s.budget.Release(need)
 	})
@@ -330,19 +332,19 @@ func (s *Service) FetchEntries(req *hubv1.FetchEntriesRequest, srv grpc.ServerSt
 // entries it holds, for as long as it likes; counting the bytes as free at the handler's return would let eight such streams per
 // node hold memory outside the budget (H-r3-3). A stream that is still not over at the end of the hold is ended, as a registry kill
 // ends it. A call with no root handler (a test) has its stream over already, and nothing waits.
-func (s *Service) settle(ended <-chan struct{}, holdEnd time.Time, slot *fetchSlot, release func()) {
+func (s *Service) settle(ended <-chan struct{}, hold *time.Timer, slot *fetchSlot, release func()) {
 	select {
 	case <-ended:
+		hold.Stop()
 		release()
 		return
 	default:
 	}
 	safego.Go(s.Logger, unitFetch, func() {
-		t := time.NewTimer(time.Until(holdEnd))
-		defer t.Stop()
+		defer hold.Stop()
 		select {
 		case <-ended:
-		case <-t.C:
+		case <-hold.C:
 			slot.stop() // the stream's write fails, so what it holds goes with it
 		}
 		release()

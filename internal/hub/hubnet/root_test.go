@@ -255,3 +255,33 @@ func TestRootEnrollmentSlotEndsWithTheWork(t *testing.T) {
 func grpcStatus(w *httptest.ResponseRecorder) string {
 	return w.Result().Trailer.Get("Grpc-Status")
 }
+
+// A NodeHub call served through Root carries an ended channel that stays open while the handler runs and closes only once the
+// root handler is done (H-r4-2). The transfer handlers settle their share on it; if Root stopped arming it, EndedFrom would return
+// a channel that is closed already and the share would be given back at the handler's return, before the stream's write.
+func TestRootArmsEndedForANodeHubCall(t *testing.T) {
+	for _, method := range []string{"FetchEntries", "RenewCert"} {
+		t.Run(method, func(t *testing.T) {
+			var ended <-chan struct{}
+			openInHandler := false
+			h := newRoot(&fixedClock{time.Now()}, http.NotFoundHandler(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ended = EndedFrom(r.Context())
+				select {
+				case <-ended:
+				default:
+					openInHandler = true
+				}
+			}))
+			h.NodeCheck = func(ctx context.Context, _ string) (Identity, error) { return IdentityFrom(ctx), nil }
+			h.ServeHTTP(httptest.NewRecorder(), nodeReq("/ctrlz.hub.v1.NodeHub/"+method, uuid.New(), bytes.NewReader(make([]byte, 16))))
+			if ended == nil || !openInHandler {
+				t.Fatalf("the ended channel was missing or already closed while the handler ran (open %v)", openInHandler)
+			}
+			select {
+			case <-ended:
+			default:
+				t.Fatal("the ended channel stayed open after the root handler returned")
+			}
+		})
+	}
+}

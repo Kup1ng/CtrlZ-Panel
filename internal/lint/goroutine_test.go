@@ -61,6 +61,7 @@ var goroutineTopLevel = map[string]topLoop{
 var callbackSync = map[string]string{
 	"sync.Once.Do":           "runs the function at once, on the caller's goroutine; a panic is the caller's own",
 	"sync.OnceValue":         "returns a function that runs the one given on the first call, on that caller's goroutine; nothing is started here",
+	"sync.OnceFunc":          "returns a function that runs the one given on the first call, on that caller's goroutine; nothing is started here",
 	"testing.TB.Cleanup":     "the interface form of the same: the test runs it when it ends, on its own goroutine",
 	"testing.common.Cleanup": "runs when the test ends, on the test's goroutine; the helper files that take a *testing.T are never part of a service (the method is promoted from the unexported common)",
 }
