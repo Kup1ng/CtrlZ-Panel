@@ -372,12 +372,14 @@ func TestFetchEntriesWaitsForTheHubWideBudgetAndReadsNothingUntilItHasIt(t *test
 	inSend := make(chan struct{}, 1)
 	var holders []chan struct{}
 	for i := 0; i < hubxfer.FetchBudget/(hubxfer.MaxFetchBytes+wire.MaxEntrySize); i++ {
+		node := uuid.New() // one share per node: four holders are four nodes
+		w.bounds[node] = 5
 		done := make(chan struct{})
 		holders = append(holders, done)
 		go func() {
 			defer close(done)
 			_ = w.svc.FetchEntries(&hubv1.FetchEntriesRequest{AfterSeq: 0, Limit: 1}, &blockingStream{
-				stream: stream[hubv1.StoredEntry]{ctx: ctxOf(w.a)}, entered: inSend, release: release})
+				stream: stream[hubv1.StoredEntry]{ctx: ctxOf(node)}, entered: inSend, release: release})
 		}()
 		testwait.Receive(t, inSend, 5*time.Second, "a call holds its share while it sends")
 	}
@@ -414,4 +416,160 @@ func (b *blockingStream) Send(m *hubv1.StoredEntry) error {
 	}
 	<-b.release
 	return b.stream.Send(m)
+}
+
+// holdShares starts one blocked FetchEntries per node and returns when every one is inside its Send, holding a share.
+func holdShares(t *testing.T, w *world, svc *hubxfer.Service, n int, release chan struct{}) (nodes []uuid.UUID, done []chan struct{}) {
+	t.Helper()
+	inSend := make(chan struct{}, 1)
+	for i := 0; i < n; i++ {
+		node := uuid.New()
+		w.bounds[node] = 5
+		nodes = append(nodes, node)
+		d := make(chan struct{})
+		done = append(done, d)
+		go func() {
+			defer close(d)
+			_ = svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 1}, &blockingStream{
+				stream: stream[hubv1.StoredEntry]{ctx: ctxOf(node)}, entered: inSend, release: release})
+		}()
+		testwait.Receive(t, inSend, 5*time.Second, "a call holds its share while it sends")
+	}
+	return nodes, done
+}
+
+func withTimes(w *world, wait, hold time.Duration) *hubxfer.Service {
+	return hubxfer.New(hubxfer.Service{Log: w.log, Bounds: w.bounds, Files: w.files, Now: time.Now, FetchWait: wait, FetchHold: hold})
+}
+
+// H-r2-3: a node holds one share at a time, so the eight transfer slots of one node cannot add up to the hub's whole budget.
+func TestANodeHoldsOneFetchSharePerCall(t *testing.T) {
+	w := newWorld(t)
+	w.bounds[w.a] = 5
+	release := make(chan struct{})
+	inSend := make(chan struct{}, 1)
+	first := make(chan error, 1)
+	go func() {
+		first <- w.svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 1}, &blockingStream{
+			stream: stream[hubv1.StoredEntry]{ctx: ctxOf(w.a)}, entered: inSend, release: release})
+	}()
+	testwait.Receive(t, inSend, 5*time.Second, "the first call holds its share")
+	err := w.svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 1}, &stream[hubv1.StoredEntry]{ctx: ctxOf(w.a)})
+	if status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("a second call of the same node: %v", err)
+	}
+	close(release)
+	if err := testwait.Receive(t, first, 5*time.Second, "the first call ends"); err != nil {
+		t.Fatal(err)
+	}
+	// Its slot is free again once it ended.
+	if err := w.svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 1}, &stream[hubv1.StoredEntry]{ctx: ctxOf(w.a)}); err != nil {
+		t.Fatalf("a call after the first ended: %v", err)
+	}
+}
+
+// H-r2-1: a reader that never takes its data loses its share at the deadline, and another node's call goes through. The Send
+// of the stalled calls never returns on its own; the handler must return at the deadline without it.
+func TestAStalledReaderLosesItsFetchShareAtTheDeadline(t *testing.T) {
+	w := newWorld(t)
+	svc := withTimes(w, 10*time.Second, 200*time.Millisecond)
+	release := make(chan struct{})
+	defer close(release)
+	_, done := holdShares(t, w, svc, hubxfer.FetchBudget/(hubxfer.MaxFetchBytes+wire.MaxEntrySize), release)
+	w.bounds[w.b] = 5
+	st := &stream[hubv1.StoredEntry]{ctx: ctxOf(w.b)}
+	if err := svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 2}, st); err != nil {
+		t.Fatalf("another node's call behind four stalled ones: %v", err)
+	}
+	if len(st.sent) != 2 {
+		t.Fatalf("the other node got %d entries", len(st.sent))
+	}
+	for _, d := range done {
+		testwait.Receive(t, d, 5*time.Second, "a stalled call returns at its deadline")
+	}
+}
+
+// H-r2-1: a call that cannot get a share stops waiting after FetchWait and tells the node to retry.
+func TestAFetchWaitsOnlyForTheWaitBound(t *testing.T) {
+	w := newWorld(t)
+	svc := withTimes(w, 100*time.Millisecond, time.Minute)
+	release := make(chan struct{})
+	defer close(release)
+	holdShares(t, w, svc, hubxfer.FetchBudget/(hubxfer.MaxFetchBytes+wire.MaxEntrySize), release)
+	w.bounds[w.b] = 5
+	err := svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 1}, &stream[hubv1.StoredEntry]{ctx: ctxOf(w.b)})
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("a call with no share: %v", err)
+	}
+}
+
+type clock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *clock) Now() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.t }
+func (c *clock) add(d time.Duration) {
+	c.mu.Lock()
+	c.t = c.t.Add(d)
+	c.mu.Unlock()
+}
+
+func fetchAll(t *testing.T, w *world, svc *hubxfer.Service, sum [32]byte, offset uint64) (*stream[hubv1.BlobChunk], error) {
+	t.Helper()
+	st := &stream[hubv1.BlobChunk]{ctx: ctxOf(w.a)}
+	return st, svc.FetchBlob(&hubv1.FetchBlobRequest{Hash: sum[:], Offset: offset}, st)
+}
+
+// H-r2-2, H-r2-4: hashing is paid for once. A call that sends no byte does not hash at all; a file that was hashed is not hashed
+// again until VerifiedKeep passes or the file's size or modification time changes.
+func TestHashingIsNotRepeatedForAVerifiedFile(t *testing.T) {
+	w := newWorld(t)
+	clk := &clock{t: time.Now()}
+	svc := hubxfer.New(hubxfer.Service{Log: w.log, Bounds: w.bounds, Files: w.files, Now: clk.Now})
+	data := bytes.Repeat([]byte("h"), 1000)
+	sum := sha256.Sum256(data)
+	name := filepath.Join(w.files.dir, hex.EncodeToString(sum[:]))
+	w.files.put(t, hex.EncodeToString(sum[:]), data)
+	if _, err := fetchAll(t, w, svc, sum, 0); err != nil {
+		t.Fatal(err)
+	}
+	damaged := bytes.Repeat([]byte("d"), 1000)
+	mod := time.Now().Add(-time.Hour)
+	damage := func(mt time.Time) {
+		if err := os.WriteFile(name, damaged, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(name, mt, mt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A verified file that is unchanged by size and time is not hashed again: the damaged bytes are not looked at.
+	st0, _ := os.Stat(name)
+	damage(st0.ModTime())
+	if _, err := fetchAll(t, w, svc, sum, 0); err != nil {
+		t.Fatalf("a verified file within the memo: %v", err)
+	}
+	// A changed modification time is a different file: it is hashed and refused.
+	damage(mod)
+	if _, err := fetchAll(t, w, svc, sum, 0); status.Code(err) != codes.Unavailable {
+		t.Fatalf("a file whose time changed: %v", err)
+	}
+	// So is a memo that has expired.
+	good := hubxfer.VerifiedKeep
+	w.files.put(t, hex.EncodeToString(sum[:]), data)
+	if _, err := fetchAll(t, w, svc, sum, 0); err != nil {
+		t.Fatal(err)
+	}
+	st1, _ := os.Stat(name)
+	damage(st1.ModTime())
+	clk.add(good + time.Second)
+	if _, err := fetchAll(t, w, svc, sum, 0); status.Code(err) != codes.Unavailable {
+		t.Fatalf("a file after the memo expired: %v", err)
+	}
+	// An offset at the end sends one empty last chunk and costs no hash: a damaged file is not even looked at.
+	st, err := fetchAll(t, w, svc, sum, uint64(len(damaged)))
+	if err != nil || len(st.sent) != 1 || !st.sent[0].Last || len(st.sent[0].Data) != 0 {
+		t.Fatalf("an offset at the end: %v, %d chunks", err, len(st.sent))
+	}
 }

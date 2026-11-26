@@ -26,6 +26,7 @@ import (
 	policyv1 "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/policy/v1"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubview"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/logattr"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
 )
 
@@ -141,7 +142,7 @@ func (k *Keeper) evict() {
 	k.items = append([]*item(nil), k.items[n:]...)
 	k.dropped += uint64(n)
 	if k.log != nil {
-		k.log.Warn("revocations let go: more are held than the bound allows", "dropped", n)
+		k.log.Warn("revocations let go: more are held than the bound allows", logattr.Int("dropped", n))
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/semaphore"
@@ -39,6 +40,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/appclock"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hublimit"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubnet"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/safego"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
 )
 
@@ -62,6 +64,18 @@ const (
 	MaxBlobBytes = wire.MaxProfileBlob
 	// MaxSnapshotBytes is the largest snapshot served: under four times the entry cap (the compiler's own bound).
 	MaxSnapshotBytes = 4 * wire.MaxEntrySize
+	// FetchWait is how long a FetchEntries waits for its share of the budget before it answers Unavailable and lets the node
+	// retry; it keeps a queue of calls from growing behind a holder (H-r2-1).
+	FetchWait = 30 * time.Second
+	// FetchHold is the longest one FetchEntries may run once it holds its share, reading and sending together. An honest call
+	// moves at most 16 MiB at the node's rate (about 2 s); a reader that keeps its socket alive but takes no data loses the share
+	// at this deadline, which the transport's write timeout cannot do while no socket write is pending (H-r2-1, H-r2-3).
+	FetchHold = 60 * time.Second
+	// VerifiedKeep is how long a file that was hashed against its name is trusted again without hashing it (H-r2-2, H-r2-4); it
+	// is short enough that a file damaged on the volume is found within minutes.
+	VerifiedKeep = 10 * time.Minute
+	// VerifiedMax is how many verified files the memo remembers.
+	VerifiedMax = 256
 	// SnapshotLook is how many snapshot rows are read to find one under the bound (the compiler keeps two).
 	SnapshotLook = 4
 )
@@ -107,8 +121,24 @@ type Service struct {
 	Now      func() time.Time
 	Logger   *slog.Logger
 
+	// FetchWait and FetchHold override the constants of the same name; zero means the constant (tests set them short).
+	FetchWait time.Duration
+	FetchHold time.Duration
+
 	pace   *hublimit.Keyed
 	budget *semaphore.Weighted
+
+	mu       *sync.Mutex            // a pointer: New takes the Service by value
+	fetching map[uuid.UUID]struct{} // nodes with a FetchEntries in flight: one at a time each
+	verified map[verifiedKey]time.Time
+}
+
+// verifiedKey names a file as it was when it was hashed. The artifacts are content-addressed and never rewritten, so the
+// size and modification time say the file is the one that was checked.
+type verifiedKey struct {
+	hash string
+	size int64
+	mod  int64
 }
 
 // New makes a Service, with its pacing bucket.
@@ -118,6 +148,15 @@ func New(s Service) *Service {
 	}
 	s.pace = hublimit.NewKeyed(BytesPerSecond, 4*ChunkBytes, s.Now)
 	s.budget = semaphore.NewWeighted(FetchBudget)
+	s.mu = new(sync.Mutex)
+	s.fetching = map[uuid.UUID]struct{}{}
+	s.verified = map[verifiedKey]time.Time{}
+	if s.FetchWait <= 0 {
+		s.FetchWait = FetchWait
+	}
+	if s.FetchHold <= 0 {
+		s.FetchHold = FetchHold
+	}
 	return &s
 }
 
@@ -211,31 +250,78 @@ func (s *Service) FetchEntries(req *hubv1.FetchEntriesRequest, srv grpc.ServerSt
 	if limit <= 0 || limit > MaxEntries {
 		limit = MaxEntries
 	}
-	// The reservation covers the rows until the last one is sent; a node that reads slowly holds it for as long as it holds the rows.
+	// The honest agent fetches one batch at a time, so a node holds at most one share. Without this, the eight transfer slots of a
+	// node (hubnet.MaxTransfers) would be eight shares, and one node could hold the whole budget against every other (H-r2-3).
+	s.mu.Lock()
+	if _, busy := s.fetching[node]; busy {
+		s.mu.Unlock()
+		return status.Error(codes.ResourceExhausted, "one fetch at a time")
+	}
+	s.fetching[node] = struct{}{}
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.fetching, node)
+		s.mu.Unlock()
+	}()
+	// The reservation covers the rows until the last one is sent. The wait for it and the hold of it are both bounded, so a
+	// stalled reader frees its share at the deadline and a queue behind it moves on.
 	need := int64(MaxFetchBytes + wire.MaxEntrySize)
-	if err := s.budget.Acquire(ctx, need); err != nil {
-		return status.FromContextError(err).Err()
+	wctx, wcancel := context.WithTimeout(ctx, s.FetchWait)
+	err = s.budget.Acquire(wctx, need)
+	wcancel()
+	if err != nil {
+		if ctx.Err() == nil {
+			return status.Error(codes.Unavailable, "busy, try again")
+		}
+		return status.FromContextError(ctx.Err()).Err()
 	}
 	defer s.budget.Release(need)
-	rows, err := s.Log.HubLogEntries(ctx, req.GetAfterSeq(), b, limit, MaxFetchBytes)
-	if err != nil {
-		return s.readErr(err)
-	}
-	for _, r := range rows {
-		if err := s.take(ctx, node, len(r.Payload)); err != nil {
-			return err
+	return s.within(ctx, s.FetchHold, func(ctx context.Context) error {
+		rows, err := s.Log.HubLogEntries(ctx, req.GetAfterSeq(), b, limit, MaxFetchBytes)
+		if err != nil {
+			return s.readErr(err)
 		}
-		if err := srv.Send(&hubv1.StoredEntry{Seq: r.Seq, EntryHash: r.EntryHash, EntryBytes: r.Payload}); err != nil {
-			return err
+		for _, r := range rows {
+			if err := s.take(ctx, node, len(r.Payload)); err != nil {
+				return err
+			}
+			if err := srv.Send(&hubv1.StoredEntry{Seq: r.Seq, EntryHash: r.EntryHash, EntryBytes: r.Payload}); err != nil {
+				return err
+			}
 		}
+		return nil
+	})
+}
+
+// within runs fn under a deadline and returns when fn does or the deadline passes, whichever is first. A Send that waits for flow
+// control cannot be interrupted from the handler, so fn runs on its own goroutine and the handler returns at the deadline: that
+// ends the stream, which fails the pending Send and lets the goroutine go.
+func (s *Service) within(ctx context.Context, d time.Duration, fn func(context.Context) error) error {
+	ctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	done := make(chan error, 1)
+	safego.Go(s.Logger, unitFetch, func() {
+		err := status.Error(codes.Internal, "read") // what a panic in fn leaves, so the handler does not wait for the deadline
+		defer func() { done <- err }()
+		err = fn(ctx)
+	})
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return status.FromContextError(ctx.Err()).Err()
 	}
-	return nil
 }
 
 // openChecked opens the file of a hash and checks its bytes against the name by streaming them through the open handle, so
 // no more than a small buffer is held and the file that was checked is the one that is sent. A file above max, or one that
 // is not there, is os.ErrNotExist; one whose bytes are not its name is refused and never sent under a name it does not have.
-func (s *Service) openChecked(hash []byte, max int64) (*os.File, int64, error) {
+//
+// Hashing is work the node asks for, so it is paid for: a call that sends no byte (offset at or past the end) does not hash, a
+// file hashed within VerifiedKeep is not hashed again, and a hash that is done is charged to the node's transfer rate like the
+// bytes it would send (H-r2-2, H-r2-4).
+func (s *Service) openChecked(ctx context.Context, node uuid.UUID, hash []byte, max int64, offset uint64) (*os.File, int64, error) {
 	f, size, err := s.Files.Open(hash)
 	if err != nil {
 		return nil, 0, err
@@ -243,6 +329,23 @@ func (s *Service) openChecked(hash []byte, max int64) (*os.File, int64, error) {
 	if size > max {
 		f.Close()
 		return nil, 0, os.ErrNotExist
+	}
+	if offset >= uint64(size) {
+		return f, size, nil // only an empty last chunk goes out; sendFile refuses an offset past the end
+	}
+	key := verifiedKey{hash: string(hash), size: size}
+	st, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, 0, err
+	}
+	key.mod = st.ModTime().UnixNano()
+	if s.isVerified(key) {
+		return f, size, nil
+	}
+	if err := s.take(ctx, node, int(size)); err != nil {
+		f.Close()
+		return nil, 0, err
 	}
 	h := sha256.New()
 	if _, err := io.Copy(h, io.NewSectionReader(f, 0, size)); err != nil {
@@ -253,7 +356,36 @@ func (s *Service) openChecked(hash []byte, max int64) (*os.File, int64, error) {
 		f.Close()
 		return nil, 0, errors.New("hubxfer: artifact does not match its name")
 	}
+	s.markVerified(key)
 	return f, size, nil
+}
+
+func (s *Service) isVerified(k verifiedKey) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	at, ok := s.verified[k]
+	if ok && s.Now().Sub(at) >= VerifiedKeep {
+		delete(s.verified, k)
+		return false
+	}
+	return ok
+}
+
+func (s *Service) markVerified(k verifiedKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.Now()
+	for len(s.verified) >= VerifiedMax {
+		var oldest verifiedKey
+		var oldestAt time.Time
+		for old, at := range s.verified {
+			if oldestAt.IsZero() || at.Before(oldestAt) {
+				oldest, oldestAt = old, at
+			}
+		}
+		delete(s.verified, oldest)
+	}
+	s.verified[k] = now
 }
 
 // sendFile sends the file from offset in chunks, paced, the last marked. An empty file or an offset at the end is one empty
@@ -297,7 +429,7 @@ func (s *Service) FetchBlob(req *hubv1.FetchBlobRequest, srv grpc.ServerStreamin
 	if len(req.GetHash()) != 32 {
 		return status.Error(codes.InvalidArgument, "hash")
 	}
-	f, size, err := s.openChecked(req.GetHash(), MaxBlobBytes)
+	f, size, err := s.openChecked(ctx, node, req.GetHash(), MaxBlobBytes, req.GetOffset())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return status.Error(codes.NotFound, "no such blob")
@@ -335,7 +467,7 @@ func (s *Service) GetSnapshot(req *hubv1.GetSnapshotRequest, srv grpc.ServerStre
 		if !ok {
 			return status.Error(codes.Internal, "snapshot reference")
 		}
-		f, size, err := s.openChecked(name, MaxSnapshotBytes)
+		f, size, err := s.openChecked(ctx, node, name, MaxSnapshotBytes, 0)
 		if err != nil {
 			return s.readErr(err)
 		}
@@ -371,3 +503,10 @@ func hashOfRef(ref string) ([]byte, bool) {
 	b, err := hex.DecodeString(ref)
 	return b, err == nil
 }
+
+// unit names the goroutine of a FetchEntries for the log of a kept panic (a closed value, never a request detail).
+type unit string
+
+const unitFetch unit = "hub_fetch"
+
+func (u unit) Valid() bool { return u == unitFetch }
