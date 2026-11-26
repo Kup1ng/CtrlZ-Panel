@@ -65,8 +65,11 @@ const (
 	// MaxSnapshotBytes is the largest snapshot served: under four times the entry cap (the compiler's own bound).
 	MaxSnapshotBytes = 4 * wire.MaxEntrySize
 	// FetchWait is how long a FetchEntries waits for its share of the budget before it answers Unavailable and lets the node
-	// retry; it keeps a queue of calls from growing behind a holder (H-r2-1).
-	FetchWait = 30 * time.Second
+	// retry; it keeps a queue of calls from growing behind a holder (H-r2-1). It is well under the node's idle time for a
+	// transfer call (30 s, agent/transfer IdleTimeout): the agent's watchdog starts before it sends the request and resets its
+	// connection when no item arrives, so a wait as long as that would end in a stall and a reset and never in this answer
+	// (H-r3-1). A test pins the relation to the agent's number.
+	FetchWait = 15 * time.Second
 	// FetchHold is the longest one FetchEntries may run once it holds its share, reading and sending together. An honest call
 	// moves at most 16 MiB at the node's rate (about 2 s); a reader that keeps its socket alive but takes no data loses the share
 	// at this deadline, which the transport's write timeout cannot do while no socket write is pending (H-r2-1, H-r2-3).
@@ -128,10 +131,13 @@ type Service struct {
 	pace   *hublimit.Keyed
 	budget *semaphore.Weighted
 
-	mu       *sync.Mutex            // a pointer: New takes the Service by value
-	fetching map[uuid.UUID]struct{} // nodes with a FetchEntries in flight: one at a time each
+	mu       *sync.Mutex              // a pointer: New takes the Service by value
+	fetching map[uuid.UUID]*fetchSlot // nodes with a FetchEntries in flight: one at a time each
 	verified map[verifiedKey]time.Time
 }
+
+// fetchSlot is a node's one FetchEntries in flight. A newer call of the same node ends it (H-r3-2).
+type fetchSlot struct{ stop func() }
 
 // verifiedKey names a file as it was when it was hashed. The artifacts are content-addressed and never rewritten, so the
 // size and modification time say the file is the one that was checked.
@@ -149,7 +155,7 @@ func New(s Service) *Service {
 	s.pace = hublimit.NewKeyed(BytesPerSecond, 4*ChunkBytes, s.Now)
 	s.budget = semaphore.NewWeighted(FetchBudget)
 	s.mu = new(sync.Mutex)
-	s.fetching = map[uuid.UUID]struct{}{}
+	s.fetching = map[uuid.UUID]*fetchSlot{}
 	s.verified = map[verifiedKey]time.Time{}
 	if s.FetchWait <= 0 {
 		s.FetchWait = FetchWait
@@ -252,17 +258,36 @@ func (s *Service) FetchEntries(req *hubv1.FetchEntriesRequest, srv grpc.ServerSt
 	}
 	// The honest agent fetches one batch at a time, so a node holds at most one share. Without this, the eight transfer slots of a
 	// node (hubnet.MaxTransfers) would be eight shares, and one node could hold the whole budget against every other (H-r2-3).
+	// A newer call takes the slot over and ends the older one, as a new Control stream ends the older one: the agent that opens a
+	// new call has given up the old one (its watchdog reset the connection), and the hub may not have seen the old connection die
+	// yet, so refusing the new call would hold the node's log catch-up back for as long as the old handler lives (H-r3-2).
+	parent := srv.Context()
+	ctx, cancel := context.WithCancel(parent)
+	slot := &fetchSlot{}
+	slot.stop = sync.OnceFunc(func() {
+		cancel()
+		hubnet.AbortFrom(parent)()
+	})
 	s.mu.Lock()
-	if _, busy := s.fetching[node]; busy {
-		s.mu.Unlock()
-		return status.Error(codes.ResourceExhausted, "one fetch at a time")
-	}
-	s.fetching[node] = struct{}{}
+	old := s.fetching[node]
+	s.fetching[node] = slot
 	s.mu.Unlock()
-	defer func() {
+	if old != nil {
+		old.stop()
+	}
+	leave := func() {
+		cancel()
 		s.mu.Lock()
-		delete(s.fetching, node)
+		if s.fetching[node] == slot {
+			delete(s.fetching, node)
+		}
 		s.mu.Unlock()
+	}
+	handedOver := false
+	defer func() {
+		if !handedOver {
+			leave()
+		}
 	}()
 	// The reservation covers the rows until the last one is sent. The wait for it and the hold of it are both bounded, so a
 	// stalled reader frees its share at the deadline and a queue behind it moves on.
@@ -276,8 +301,8 @@ func (s *Service) FetchEntries(req *hubv1.FetchEntriesRequest, srv grpc.ServerSt
 		}
 		return status.FromContextError(ctx.Err()).Err()
 	}
-	defer s.budget.Release(need)
-	return s.within(ctx, s.FetchHold, func(ctx context.Context) error {
+	holdEnd := time.Now().Add(s.FetchHold) // the real clock: the context's deadline below runs on it too
+	err = s.within(ctx, s.FetchHold, func(ctx context.Context) error {
 		rows, err := s.Log.HubLogEntries(ctx, req.GetAfterSeq(), b, limit, MaxFetchBytes)
 		if err != nil {
 			return s.readErr(err)
@@ -292,13 +317,46 @@ func (s *Service) FetchEntries(req *hubv1.FetchEntriesRequest, srv grpc.ServerSt
 		}
 		return nil
 	})
+	handedOver = true
+	s.settle(hubnet.EndedFrom(parent), holdEnd, slot, func() {
+		leave()
+		s.budget.Release(need)
+	})
+	return err
 }
 
-// within runs fn under a deadline and returns when fn does or the deadline passes, whichever is first. A Send that waits for flow
-// control cannot be interrupted from the handler, so fn runs on its own goroutine and the handler returns at the deadline: that
-// ends the stream, which fails the pending Send and lets the goroutine go.
-func (s *Service) within(ctx context.Context, d time.Duration, fn func(context.Context) error) error {
-	ctx, cancel := context.WithTimeout(ctx, d)
+// settle gives the share and the node's slot back once the call's HTTP stream is over, not when the handler returns. Under gRPC's
+// ServeHTTP the answer is written after the handler returns, and a node that gives its stream no window keeps that write, and the
+// entries it holds, for as long as it likes; counting the bytes as free at the handler's return would let eight such streams per
+// node hold memory outside the budget (H-r3-3). A stream that is still not over at the end of the hold is ended, as a registry kill
+// ends it. A call with no root handler (a test) has its stream over already, and nothing waits.
+func (s *Service) settle(ended <-chan struct{}, holdEnd time.Time, slot *fetchSlot, release func()) {
+	select {
+	case <-ended:
+		release()
+		return
+	default:
+	}
+	safego.Go(s.Logger, unitFetch, func() {
+		t := time.NewTimer(time.Until(holdEnd))
+		defer t.Stop()
+		select {
+		case <-ended:
+		case <-t.C:
+			slot.stop() // the stream's write fails, so what it holds goes with it
+		}
+		release()
+	})
+}
+
+// within runs fn under a deadline and returns when fn does or the deadline passes (or the call is ended), whichever is first. A
+// Send that waits for flow control cannot be interrupted from the handler, so fn runs on its own goroutine and the handler
+// returns without it. Returning alone does not end the HTTP stream: the hub serves NodeHub through grpc's ServeHTTP, where a
+// write that waits for a window holds the stream's goroutine, its slots and the entries in flight until the peer goes away. So
+// the handler ends the stream itself, as a registry kill does, before it returns; that fails the pending Send and lets the
+// goroutine go, and the memory it holds is freed with the share (H-r3-3).
+func (s *Service) within(parent context.Context, d time.Duration, fn func(context.Context) error) error {
+	ctx, cancel := context.WithTimeout(parent, d)
 	defer cancel()
 	done := make(chan error, 1)
 	safego.Go(s.Logger, unitFetch, func() {
@@ -310,6 +368,7 @@ func (s *Service) within(ctx context.Context, d time.Duration, fn func(context.C
 	case err := <-done:
 		return err
 	case <-ctx.Done():
+		hubnet.AbortFrom(parent)()
 		return status.FromContextError(ctx.Err()).Err()
 	}
 }

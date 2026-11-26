@@ -442,11 +442,14 @@ func withTimes(w *world, wait, hold time.Duration) *hubxfer.Service {
 	return hubxfer.New(hubxfer.Service{Log: w.log, Bounds: w.bounds, Files: w.files, Now: time.Now, FetchWait: wait, FetchHold: hold})
 }
 
-// H-r2-3: a node holds one share at a time, so the eight transfer slots of one node cannot add up to the hub's whole budget.
-func TestANodeHoldsOneFetchSharePerCall(t *testing.T) {
+// H-r2-3, H-r3-2: a node holds one share at a time, so the eight transfer slots of one node cannot add up to the hub's whole
+// budget. A newer call of the node takes the slot over and ends the older one, which may be stuck behind a connection the hub has
+// not seen die; another node's call is not touched.
+func TestANodeHoldsOneFetchShareAndANewerCallTakesItOver(t *testing.T) {
 	w := newWorld(t)
-	w.bounds[w.a] = 5
+	w.bounds[w.a], w.bounds[w.b] = 5, 5
 	release := make(chan struct{})
+	defer close(release)
 	inSend := make(chan struct{}, 1)
 	first := make(chan error, 1)
 	go func() {
@@ -454,17 +457,36 @@ func TestANodeHoldsOneFetchSharePerCall(t *testing.T) {
 			stream: stream[hubv1.StoredEntry]{ctx: ctxOf(w.a)}, entered: inSend, release: release})
 	}()
 	testwait.Receive(t, inSend, 5*time.Second, "the first call holds its share")
-	err := w.svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 1}, &stream[hubv1.StoredEntry]{ctx: ctxOf(w.a)})
-	if status.Code(err) != codes.ResourceExhausted {
-		t.Fatalf("a second call of the same node: %v", err)
+	other := make(chan error, 1)
+	go func() {
+		other <- w.svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 1}, &blockingStream{
+			stream: stream[hubv1.StoredEntry]{ctx: ctxOf(w.b)}, entered: inSend, release: release})
+	}()
+	testwait.Receive(t, inSend, 5*time.Second, "another node's call holds its own share")
+	st := &stream[hubv1.StoredEntry]{ctx: ctxOf(w.a)}
+	if err := w.svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 2}, st); err != nil || len(st.sent) != 2 {
+		t.Fatalf("a second call of the same node: %v, %d entries", err, len(st.sent))
 	}
-	close(release)
-	if err := testwait.Receive(t, first, 5*time.Second, "the first call ends"); err != nil {
-		t.Fatal(err)
+	if err := testwait.Receive(t, first, 5*time.Second, "the older call ends when the newer takes over"); status.Code(err) != codes.Canceled {
+		t.Fatalf("the older call: %v", err)
 	}
-	// Its slot is free again once it ended.
+	select {
+	case err := <-other:
+		t.Fatalf("another node's call was ended: %v", err)
+	default:
+	}
+	// The older call's exit did not free the newer call's slot: the slot is the newer call's until it ends, and free after.
 	if err := w.svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 1}, &stream[hubv1.StoredEntry]{ctx: ctxOf(w.a)}); err != nil {
-		t.Fatalf("a call after the first ended: %v", err)
+		t.Fatalf("a call after the others ended: %v", err)
+	}
+}
+
+// H-r3-1: the agent resets its connection when a transfer call gets no item for its idle time (30 s, agent/transfer IdleTimeout,
+// its timer starts before the request is sent), so the hub's busy answer reaches a queued node only when the wait is well under it.
+func TestFetchWaitIsWellUnderTheNodesIdleTime(t *testing.T) {
+	const nodeIdle = 30 * time.Second
+	if hubxfer.FetchWait*3/2 > nodeIdle {
+		t.Fatalf("FetchWait %v is too near the node's idle time %v: the agent would reset before the answer comes", hubxfer.FetchWait, nodeIdle)
 	}
 }
 

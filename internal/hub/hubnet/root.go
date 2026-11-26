@@ -65,6 +65,28 @@ func AbortFrom(ctx context.Context) func() {
 	return func() {}
 }
 
+// endedKey carries the channel that closes when the HTTP stream of a NodeHub call is over.
+type endedKey struct{}
+
+// WithEnded returns a context that carries a channel EndedFrom reads, and the function that closes it (once). The root handler
+// closes it when the whole call is done, which for HTTP/2 under gRPC is later than the handler's return: gRPC writes the final
+// status after the handler returns, and a peer with no window leaves that write, and everything the call still holds, waiting.
+func WithEnded(ctx context.Context) (context.Context, func()) {
+	ch := make(chan struct{})
+	return context.WithValue(ctx, endedKey{}, ch), sync.OnceFunc(func() { close(ch) })
+}
+
+// EndedFrom returns the channel that closes when the call's stream is over; for a context that has none (a call that is not
+// served by the root handler) it is a channel that is closed already, so nothing waits for it.
+func EndedFrom(ctx context.Context) <-chan struct{} {
+	if ch, ok := ctx.Value(endedKey{}).(chan struct{}); ok {
+		return ch
+	}
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}
+
 // WithIdentity and IdentityFrom carry the identity in a context.
 func WithIdentity(ctx context.Context, id Identity) context.Context {
 	return context.WithValue(ctx, identityKey{}, id)
@@ -405,6 +427,9 @@ func (h *Root) serveNodeHub(w http.ResponseWriter, r *http.Request, id Identity)
 	}
 	defer func() { amu.Lock(); over = true; amu.Unlock() }()
 	r = r.WithContext(WithAbort(r.Context(), abort))
+	ectx, ended := WithEnded(r.Context())
+	defer ended() // after the answer is written: what a handler holds for the stream is held until here (EndedFrom)
+	r = r.WithContext(ectx)
 	if oneRequest(method) {
 		// One small request message (RenewCert about 8 KiB, a transfer's request less): bounded and read
 		// whole like an enrolment, so it never holds gRPC's per-read buffers either.

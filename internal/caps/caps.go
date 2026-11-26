@@ -299,6 +299,7 @@ func Bounds() []Bound {
 		{"MaxFetchBytes", "payload bytes one FetchEntries call chooses (hubxfer): the size of one read of the log; the hub-wide memory is counted by FetchBudget in the hub's process under a semaphore, which decides nothing in a transaction"},
 		{"MaxBlobBytes", "largest file FetchBlob serves (hubxfer): checked on the file in hand, before any byte is read"},
 		{"MaxSnapshotBytes", "largest snapshot file GetSnapshot serves (hubxfer): checked on the file in hand, before any byte is read"},
+		{"VerifiedMax", "files the hub remembers as hashed against their name (hubxfer, p4-nodes 5.2): a memo in one process, held to the bound under the service's own mutex (the oldest entry goes first), so it bounds memory and decides nothing in a transaction that racing actors could win; a full memo only costs a re-hash"},
 		{"MaxLearnedPerEndpoint", "secure_dns rows one Endpoint holds (D31): counted and decided inside HubLearnIP under the Endpoint's own row lock (the row lock qHubLearnEndpoint takes), so learners of one Endpoint are ordered and none overspends it; the hub's own write, with no tenant request and no Won to return"},
 		{"maxBody", "bytes of one probe response the hub's prober reads (hubprobe): a bound of one response in hand, nothing shared that racing actors could spend"},
 		{"maxCarriers", "pair tables the hub's view keeps in memory (hubview): one process, a guard on memory against a runaway log, nothing in the database that racing actors could spend"},
