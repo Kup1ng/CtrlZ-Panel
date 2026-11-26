@@ -73,13 +73,15 @@ for (const {lang, dir} of LANGS) {
       await expect(page.getByTestId("node-summary").locator('[data-hub-health="degraded"]')).toHaveText(N("hubHealth.degraded"));
     });
 
-    test("T-542: when every condition is met the page shows the time F3 acts, and a drain in progress shows when it began", async ({page, context, baseURL}) => {
+    test("T-542: when only the stable period is left the page shows the time F3 acts beside it, and a drain in progress shows when it began", async ({page, context, baseURL}) => {
       const w = world();
-      const soon = {...w.b, dns_withdrawn: true, f3_unmet: [], f3_due_at: new Date(Date.now() + 5 * 60_000).toISOString(), drain_state: "draining", drain_since: minutesAgo(5)};
+      // The hub writes f3_due_at only together with ["stable_period"] (or the flapping name), never with an empty list: this is the shape it sends.
+      const soon = {...w.b, dns_withdrawn: true, f3_unmet: ["stable_period"], f3_due_at: new Date(Date.now() + 5 * 60_000).toISOString(), drain_state: "draining", drain_since: minutesAgo(5)};
       await openAdmin(context, baseURL, {handlers: {...w.handlers, "GET /nodes/{id}": {body: soon}}});
       await goto(page, w.b.id, "tehran-2");
       const failover = page.getByTestId("node-failover");
-      await expect(failover.getByTestId("f3-none")).toHaveText(N("node.failover.unmet.none"));
+      await expect(failover.getByTestId("f3-unmet").locator('[data-condition="stable_period"]')).toContainText(N("node.failover.unmet.names.stable_period"));
+      await expect(failover.getByTestId("f3-none")).toHaveCount(0);
       await expect(failover.getByTestId("fact-f3-due")).toContainText(N("node.failover.unmet.dueTitle"));
       await expect(failover.getByTestId("f3-due-at")).not.toBeEmpty();
       await expect(failover.locator("[data-drain]")).toHaveText(N("node.failover.drain.states.draining"));
@@ -87,9 +89,16 @@ for (const {lang, dir} of LANGS) {
       await expect(failover.getByTestId("not-reported")).toHaveCount(1); // only the peers' view, which no document carries
     });
 
+    test("T-542: a withdrawn node with an empty list of unmet conditions reads as every condition met (a shape this hub does not write, kept for another hub version)", async ({page, context, baseURL}) => {
+      const w = world();
+      await openAdmin(context, baseURL, {handlers: {...w.handlers, "GET /nodes/{id}": {body: {...w.b, dns_withdrawn: true, f3_unmet: []}}}});
+      await goto(page, w.b.id, "tehran-2");
+      await expect(page.getByTestId("node-failover").getByTestId("f3-none")).toHaveText(N("node.failover.unmet.none"));
+    });
+
     test("T-542: a node that is not draining shows no start of a drain, and a time the page cannot read is left out", async ({page, context, baseURL}) => {
       const w = world();
-      const node = {...w.b, dns_withdrawn: true, f3_unmet: [], f3_due_at: "soon", drain_state: "none", drain_since: minutesAgo(90)};
+      const node = {...w.b, dns_withdrawn: true, f3_unmet: ["stable_period"], f3_due_at: "soon", drain_state: "none", drain_since: minutesAgo(90)};
       await openAdmin(context, baseURL, {handlers: {...w.handlers, "GET /nodes/{id}": {body: node}}});
       await goto(page, w.b.id, "tehran-2");
       const failover = page.getByTestId("node-failover");

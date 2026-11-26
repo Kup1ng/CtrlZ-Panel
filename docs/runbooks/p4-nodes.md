@@ -1,6 +1,6 @@
 # Node runbook (P4)
 
-This is the runbook for the steps that happen outside the panel, or in an order the panel cannot enforce. The admin app shows the same steps on its node runbook page (`/runbook`; the text is `runbook.*` in `packages/i18n/messages/<locale>/nodes.json`). The Nodes page, the revoke dialog and the hold note link to that page, so the link never leaves the origin. When you change a step here, change that text in both languages with it. A test (`packages/ui/src/admin/runbook/runbookDoc.test.ts`) fails when the number of steps differs.
+This is the runbook for the steps that happen outside the panel, or in an order the panel cannot enforce. The admin app shows the numbered steps of each section on its node runbook page (`/runbook`; the text is `runbook.*` in `packages/i18n/messages/<locale>/nodes.json`). This file alone carries the reports step and the two cases that need care under Compromise, and the step texts on the page are shorter, so read this file on a host with a terminal. The Nodes page, the revoke dialog and the hold note link to that page, so the link never leaves the origin. When you change a step here, change that text in both languages with it. A test (`packages/ui/src/admin/runbook/runbookDoc.test.ts`) fails when the number of steps differs.
 
 The rules behind the steps are in the shared contract: 8a.4 (membership, revocation in the log, addresses given up) and 8a.9 (replacement order, compromise runbook), and in `docs/specs/p4-nodes.md` 4.5. This file adds the order in which an operator does them.
 

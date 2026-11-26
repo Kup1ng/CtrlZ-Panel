@@ -238,10 +238,10 @@ const SCREENS: Screen[] = [
     after: async (page) => expect(page.getByTestId("f3-unmet")).toBeVisible(),
   },
   {
-    // T-542: every condition met, so the hub has written the time F3 acts, and a drain that is done with its start.
+    // T-542: only the stable period is left, so the hub has written the time F3 acts (it writes both together), and a drain that is done with its start.
     name: "node-detail-f3-due",
     path: `/nodes/${nodeB.id}`,
-    handlers: {"GET /nodes/{id}": {body: {...nodeB, dns_withdrawn: true, f3_unmet: [], f3_due_at: new Date(Date.now() + 5 * 60_000).toISOString(), drain_state: "done", drain_since: new Date(Date.now() - 20 * 60_000).toISOString()}}},
+    handlers: {"GET /nodes/{id}": {body: {...nodeB, dns_withdrawn: true, f3_unmet: ["stable_period"], f3_due_at: new Date(Date.now() + 5 * 60_000).toISOString(), drain_state: "done", drain_since: new Date(Date.now() - 20 * 60_000).toISOString()}}},
     ready: async (page) => expect(page.getByRole("heading", {level: 1, name: "tehran-2"})).toBeVisible(),
     after: async (page) => expect(page.getByTestId("f3-due-at")).toBeVisible(),
   },
