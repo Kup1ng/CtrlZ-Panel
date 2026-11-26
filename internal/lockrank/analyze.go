@@ -316,7 +316,8 @@ func Analyze(sql string) ([]Touch, error) {
 					if err := unranked(t, "insert"); err != nil {
 						return nil, err
 					}
-					for _, parent := range sortedParents(t) {
+					cols, _ := insertTarget(toks, i+1)
+					for _, parent := range sortedParents(t, cols) {
 						emit(Touch{Table: parent, Mode: KeyShare})
 					}
 					// An upsert locks the row it conflicts with, which is somebody
@@ -566,9 +567,9 @@ func isRanked(table string) bool { _, ok := Of(table); return ok }
 // order of its own; key shares do not conflict with each other, so the order
 // among them can only matter to a writer that takes FOR UPDATE on a parent, and
 // the rule forbids that on the tables where it would (users).
-func sortedParents(table string) []string {
+func sortedParents(table string, cols []string) []string {
 	var out []string
-	for _, p := range Parents(table) {
+	for _, p := range InsertParents(table, cols) {
 		if !Inert(p) {
 			out = append(out, p)
 		}

@@ -63,16 +63,15 @@ func InsertsWith(sql string, setReturning func(name string) bool) ([]RowInsert, 
 	return out, nil
 }
 
-// readInsert reads what follows the table of an INSERT: an alias, a column list, OVERRIDING, then the source.
-func readInsert(toks []token, i int, table string, setReturning func(string) bool) RowInsert {
-	ri := RowInsert{Table: table, Multi: true}
+// insertTarget reads what follows the table of an INSERT up to its source: an alias and the column list. cols is nil when the
+// statement names none (every column, in table order); next is the index of the first token after them.
+func insertTarget(toks []token, i int) (cols []string, next int) {
 	if i < len(toks) && isWord(toks[i], "as") {
 		i += 2
 	} else if i < len(toks) && toks[i].k == 'w' && !notAlias(toks[i].s) && toks[i].s != "overriding" && toks[i].s != "default" && toks[i].s != "select" && toks[i].s != "with" && toks[i].s != "table" {
 		i++
 	}
 	// A column list is a parenthesis that does not open a query.
-	var cols []string
 	if i < len(toks) && toks[i].k == '(' && !(i+1 < len(toks) && (isWord(toks[i+1], "select") || isWord(toks[i+1], "with") || isWord(toks[i+1], "values"))) {
 		if c := closeOf(toks, i); c >= 0 {
 			for _, tk := range toks[i+1 : c] {
@@ -83,6 +82,14 @@ func readInsert(toks []token, i int, table string, setReturning func(string) boo
 			i = c + 1
 		}
 	}
+	return cols, i
+}
+
+// readInsert reads what follows the table of an INSERT: an alias, a column list, OVERRIDING, then the source.
+func readInsert(toks []token, i int, table string, setReturning func(string) bool) RowInsert {
+	ri := RowInsert{Table: table, Multi: true}
+	var cols []string
+	cols, i = insertTarget(toks, i)
 	for i < len(toks) && toks[i].k == 'w' && (toks[i].s == "overriding" || toks[i].s == "system" || toks[i].s == "user" || toks[i].s == "value") {
 		i++
 	}

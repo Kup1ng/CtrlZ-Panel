@@ -173,3 +173,26 @@ func sha256Sum(b []byte) []byte {
 	s := sha256.Sum256(b)
 	return s[:]
 }
+
+// Open opens the file of a hash for reading and returns its size, without reading it. A caller that serves the file checks the
+// bytes against the name itself, by streaming them through the handle it holds (the hub does), and so never holds a file whole
+// in memory. A link, a directory or anything else that is not a regular file reads as not there.
+func (d *DirArtifacts) Open(hash []byte) (*os.File, int64, error) {
+	p, err := d.path(hash)
+	if err != nil {
+		return nil, 0, err
+	}
+	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() {
+		return nil, 0, fmt.Errorf("compiler: artifact: %w", fs.ErrNotExist)
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		return nil, 0, fmt.Errorf("compiler: artifact: %w", err)
+	}
+	fi, err := f.Stat()
+	if err != nil || !fi.Mode().IsRegular() {
+		f.Close()
+		return nil, 0, fmt.Errorf("compiler: artifact: %w", fs.ErrNotExist)
+	}
+	return f, fi.Size(), nil
+}

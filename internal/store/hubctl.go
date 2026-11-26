@@ -56,22 +56,54 @@ func (s *Store) HubLogHash(ctx context.Context, seq uint64) (hash []byte, found 
 	return hash, found, err
 }
 
-const qHubLogEntries = `SELECT seq, class, prev_hash, entry_hash, payload FROM ctrlz.config_log WHERE seq > $1 AND seq <= $2 ORDER BY seq LIMIT $3`
+// The payload of an entry can be 16 MiB and a LIMIT of 200 entries could make Postgres detoast and send gigabytes that the byte cap
+// then discards (H-r1-7). So the range is chosen by size first: qHubLogSizes reads the lengths, which Postgres takes from the
+// TOAST pointer without detoasting, and qHubLogEntries reads the payloads of the rows that stay inside the cap.
+const (
+	qHubLogSizes   = `SELECT seq, octet_length(payload) FROM ctrlz.config_log WHERE seq > $1 AND seq <= $2 ORDER BY seq LIMIT $3`
+	qHubLogEntries = `SELECT seq, class, prev_hash, entry_hash, payload FROM ctrlz.config_log WHERE seq > $1 AND seq <= $2 ORDER BY seq LIMIT $3`
+)
 
 // HubLogEntries reads entries with seq in (after, upTo], oldest first, at most limit of them and stopping once
-// maxBytes of payload were read (the entry that crosses the line is kept: one entry may be larger than the cap, and
-// a node that got none would never move).
+// maxBytes of payload were chosen (the entry that crosses the line is kept: one entry may be larger than the cap, and
+// a node that got none would never move). Only the payloads of the chosen entries leave the database.
 func (s *Store) HubLogEntries(ctx context.Context, after, upTo uint64, limit, maxBytes int) (out []LogRow, err error) {
 	if upTo <= after {
 		return nil, nil
 	}
-	err = s.WithGlobal(ctx, TxOpts{ReadOnly: true}, func(g GlobalTx) error {
-		rows, err := g.tx.Query(g.ctx, qHubLogEntries, int64(after), int64(upTo), int32(limit))
+	err = s.WithGlobal(ctx, TxOpts{ReadOnly: true, Isolation: RepeatableRead}, func(g GlobalTx) error {
+		rows, err := g.tx.Query(g.ctx, qHubLogSizes, int64(after), int64(upTo), int32(limit))
+		if err != nil {
+			return sanitize(err)
+		}
+		var cut int64
+		var n int32
+		total := 0
+		for rows.Next() {
+			var seq int64
+			var size int32
+			if err := rows.Scan(&seq, &size); err != nil {
+				rows.Close()
+				return sanitize(err)
+			}
+			cut = seq
+			n++
+			if total += int(size); total >= maxBytes {
+				break
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return sanitize(err)
+		}
+		if n == 0 {
+			return nil
+		}
+		rows, err = g.tx.Query(g.ctx, qHubLogEntries, int64(after), cut, n)
 		if err != nil {
 			return sanitize(err)
 		}
 		defer rows.Close()
-		total := 0
 		for rows.Next() {
 			var r LogRow
 			var seq int64
@@ -80,9 +112,6 @@ func (s *Store) HubLogEntries(ctx context.Context, after, upTo uint64, limit, ma
 			}
 			r.Seq = uint64(seq)
 			out = append(out, r)
-			if total += len(r.Payload); total >= maxBytes {
-				break
-			}
 		}
 		return sanitize(rows.Err())
 	})

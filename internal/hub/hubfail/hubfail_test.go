@@ -60,6 +60,8 @@ type db struct {
 	commits  int
 	failRead bool
 	failCmt  bool
+	// afterCommit runs once the event is in the database and before the commit returns: the lease can be lost there.
+	afterCommit func()
 }
 
 func newDB() *db {
@@ -111,6 +113,9 @@ func (d *db) HubFailCommit(_ context.Context, ev store.HubFailEvent) (uint64, er
 		d.reqs = keep
 	}
 	d.commits++
+	if d.afterCommit != nil {
+		d.afterCommit()
+	}
 	return v, nil
 }
 
@@ -356,6 +361,20 @@ func TestWithNothingDueTheStartEventIsTheRefresh(t *testing.T) {
 }
 
 // A hub that does not hold the lease reads, and knows the release point, but signs nothing and says it cannot decide.
+// H-r1-9: the lease is checked when the tick begins, and the commit can take long. An event whose commit returns after the lease
+// was lost is in the database but is not signed, pushed or broadcast by this hub.
+func TestALeaseLostDuringTheCommitSignsAndPushesNothing(t *testing.T) {
+	w := newWorld(t)
+	w.db.afterCommit = func() { w.lease.held = false }
+	w.tick()
+	if w.db.commits == 0 {
+		t.Fatal("the start event did not commit")
+	}
+	if w.loop.Push() != nil || w.str.count() != 0 || w.loop.Ready() {
+		t.Fatal("a hub that lost its lease inside the commit signed or pushed the event")
+	}
+}
+
 func TestWithoutTheLeaseNothingIsSigned(t *testing.T) {
 	w := newWorld(t)
 	w.settled()

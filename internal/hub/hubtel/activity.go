@@ -65,7 +65,7 @@ func (t *Telemetry) acceptActivity(node uuid.UUID, b *telemetryv1.ActivityBatch)
 		t.dropBatchRate.add()
 		return
 	}
-	t.batchAt[node] = stamp{now}
+	t.batchAt[node] = stamp{t: now}
 	t.mu.Unlock()
 	if len(b.Entries) > ActivityBatchEntries {
 		t.dropBatchSize.add()

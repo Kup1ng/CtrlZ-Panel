@@ -63,6 +63,29 @@ type ep struct {
 	reqAuth   bool
 	pair      string
 	clientCap uint32
+	// since is when the view first saw the record, the created_at of the entry that put it; zero for a record the view loaded from
+	// a snapshot, which is older than anything the view keeps. hist holds the pairs the Endpoint had before the current one, each
+	// with the instant a change took it off, for the last 24 h only (H-r1-8, H-r1-12).
+	since time.Time
+	hist  []pairSpan
+}
+
+// pairSpan is a pair an Endpoint had until the instant a later record took it off.
+type pairSpan struct {
+	pair  string
+	until time.Time
+}
+
+// pairsAt are the pair ids whose nodes may report for the Endpoint at now: the current one, and each one a change took it off
+// less than PairMemory ago.
+func (e ep) pairsAt(now time.Time) []string {
+	out := []string{e.pair}
+	for _, h := range e.hist {
+		if now.Sub(h.until) <= PairMemory {
+			out = append(out, h.pair)
+		}
+	}
+	return out
 }
 
 func epOf(r *policyv1.EndpointRecord) ep {
@@ -281,10 +304,20 @@ func (v *View) Apply(e *policyv1.ConfigEntry) Applied {
 		}
 		gone = append(gone, id)
 	}
+	at := time.Unix(e.CreatedAt, 0)
 	for _, r := range e.PutEndpoints {
 		next := epOf(r)
-		if old, ok := v.eps[string(r.EndpointId)]; ok && revokes(old, next) {
+		old, had := v.eps[string(r.EndpointId)]
+		if had && revokes(old, next) {
 			hard = append(hard, r.EndpointId)
+		}
+		switch {
+		case !had:
+			next.since = at
+		case old.pair != next.pair:
+			next.since, next.hist = old.since, append(keepSpans(old.hist, at), pairSpan{pair: old.pair, until: at})
+		default:
+			next.since, next.hist = old.since, keepSpans(old.hist, at)
 		}
 		v.eps[string(r.EndpointId)] = next
 	}
@@ -299,6 +332,17 @@ func (v *View) Apply(e *policyv1.ConfigEntry) Applied {
 	}
 	v.seq = e.Seq
 	return a
+}
+
+// keepSpans copies the spans that a change at the instant at can still matter for: the ones that ended less than PairMemory before.
+func keepSpans(h []pairSpan, at time.Time) []pairSpan {
+	var out []pairSpan
+	for _, s := range h {
+		if at.Sub(s.until) <= PairMemory {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // revokes says whether a change of an Endpoint record is one the hub does not leave to the rollout (5.5): the Endpoint turns
@@ -364,14 +408,22 @@ func (v *View) Allowed(endpoint, node uuid.UUID, now time.Time) bool {
 		return false
 	}
 	want := string(node[:])
+	pairs := e.pairsAt(now)
 	for i := len(v.carriers) - 1; i >= 0; i-- {
 		c := v.carriers[i]
 		if !c.until.IsZero() && now.Sub(c.until) > PairMemory {
 			break // older ones were replaced even earlier
 		}
-		for _, id := range c.nodesOf(e.pair) {
-			if id == want {
-				return true
+		// A table that was replaced before the Endpoint existed says nothing of it: its fallback to the global pair is for a pair
+		// id the table lacks while a record named it, not for a record that was not there yet.
+		if !e.since.IsZero() && !c.until.IsZero() && !c.until.After(e.since) {
+			continue
+		}
+		for _, p := range pairs {
+			for _, id := range c.nodesOf(p) {
+				if id == want {
+					return true
+				}
 			}
 		}
 	}

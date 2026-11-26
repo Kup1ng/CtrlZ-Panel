@@ -165,3 +165,54 @@ func TestAnUnheardNodeHoldsItAndTheBoundLetsTheOldestGo(t *testing.T) {
 		t.Fatalf("held %d first %d dropped %d", len(h), h[0], k.Dropped())
 	}
 }
+
+func bigRev(seq uint64, ids [][]byte) hubview.Applied {
+	return hubview.Applied{Seq: seq, Revs: []hubview.Rev{{Kind: policyv1.RevocationKind_REVOCATION_KIND_ENDPOINT, IDs: ids}}}
+}
+
+func manyIDs(n int) [][]byte {
+	out := make([][]byte, n)
+	for i := range out {
+		out[i] = bytes.Repeat([]byte{byte(i)}, 16)
+	}
+	return out
+}
+
+// H-r1-11: a node that is behind by many large Revocations is not sent them all in one burst, which would overflow its stream's
+// queue and end the stream on every open; the rest comes with the next Tick.
+func TestABurstOfLargeRevocationsIsSentInPassesWithinTheBudget(t *testing.T) {
+	a := uid(1)
+	w := newWorld(a)
+	k := hubrev.New(w, w, w.Now, nil, nil)
+	ids := manyIDs(20_000) // 400 KB of budget each: two fit in 1 MiB
+	for i := uint64(1); i <= 4; i++ {
+		k.Add(bigRev(i, ids))
+	}
+	w.open(a)
+	k.Opened(a)
+	if n := len(w.got(a)); n != 2 {
+		t.Fatalf("the first pass sent %d, want 2", n)
+	}
+	k.Tick()
+	if n := len(w.got(a)); n != 4 {
+		t.Fatalf("after the Tick %d were sent, want 4", n)
+	}
+}
+
+// H-r1-11: the held ids are bounded by bytes as well as by count, and the newest stay.
+func TestTheKeeperIsBoundedByBytesAndKeepsTheNewest(t *testing.T) {
+	a := uid(1)
+	w := newWorld(a)
+	w.mu.Lock()
+	w.heard[a] = false
+	w.mu.Unlock()
+	k := hubrev.New(w, w, w.Now, nil, nil)
+	ids := manyIDs(100_000) // 2 MB each
+	for i := uint64(1); i <= 40; i++ {
+		k.Add(bigRev(i, ids))
+	}
+	h := k.Held()
+	if len(h) >= 40 || len(h) < 20 || h[len(h)-1] != 40 || k.Dropped() == 0 {
+		t.Fatalf("held %d, newest %d, dropped %d", len(h), h[len(h)-1], k.Dropped())
+	}
+}

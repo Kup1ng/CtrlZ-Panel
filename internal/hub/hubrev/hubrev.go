@@ -40,6 +40,12 @@ const (
 	// Keep bounds the Revocations held. A node that never comes back would hold its revocations for ever, so the oldest are let
 	// go past this many, and counted.
 	Keep = 4096
+	// KeepBytes bounds the ids held as well: one Revocation can carry 100,000 ids, so the count alone does not bound memory.
+	KeepBytes = 64 << 20
+	// SendBudget is the most one send pass (a stream opening, a Tick) puts on one node's queue. The queue is 4 MiB and a put that
+	// does not fit ends the stream, so a node that is behind by many large Revocations would end its stream on every open and meet
+	// the same burst again. What a pass leaves out is sent by the next Tick, which has no stream to end for it.
+	SendBudget = 1 << 20
 )
 
 // Sender puts a message on a node's stream. Send says whether the node has one; Broadcast reaches every stream.
@@ -58,6 +64,7 @@ type Nodes interface {
 }
 
 type item struct {
+	size    int // the ids' bytes, for KeepBytes and SendBudget
 	seq     uint64
 	kind    policyv1.RevocationKind
 	ids     [][]byte
@@ -96,12 +103,12 @@ func (k *Keeper) Add(a hubview.Applied) {
 	now := k.now()
 	for _, r := range a.Revs {
 		it := &item{seq: a.Seq, kind: r.Kind, ids: r.IDs, at: now, sent: map[uuid.UUID]time.Time{}, alerted: map[uuid.UUID]bool{}}
+		for _, id := range r.IDs {
+			it.size += len(id) + 4
+		}
 		k.mu.Lock()
 		k.items = append(k.items, it)
-		if len(k.items) > Keep {
-			k.items = append([]*item(nil), k.items[len(k.items)-Keep:]...)
-			k.dropped++
-		}
+		k.evict()
 		k.mu.Unlock()
 		k.send.Broadcast(k.message(it, now))
 		// A node with a stream has it queued now; one without gets it when it opens (Opened). Recording the time here is what
@@ -116,15 +123,44 @@ func (k *Keeper) Add(a hubview.Applied) {
 	}
 }
 
-// Opened sends a node that has just opened its stream every Revocation it has not applied, as the first thing after the first
-// ServerTime.
+// evict lets the oldest Revocations go past Keep items or KeepBytes, always keeping the newest, and says so: a node that comes back
+// after that is told only by the rollout. The caller holds the lock.
+func (k *Keeper) evict() {
+	total := 0
+	for _, it := range k.items {
+		total += it.size
+	}
+	n := 0
+	for len(k.items)-n > Keep || (total > KeepBytes && len(k.items)-n > 1) {
+		total -= k.items[n].size
+		n++
+	}
+	if n == 0 {
+		return
+	}
+	k.items = append([]*item(nil), k.items[n:]...)
+	k.dropped += uint64(n)
+	if k.log != nil {
+		k.log.Warn("revocations let go: more are held than the bound allows", "dropped", n)
+	}
+}
+
+// Opened sends a node that has just opened its stream the Revocations it has not applied, as the first thing after the first
+// ServerTime, up to SendBudget; the next Tick sends the rest.
 func (k *Keeper) Opened(node uuid.UUID) {
 	now := k.now()
 	applied, _ := k.nodes.Applied(node)
 	k.mu.Lock()
 	var out []*hubv1.HubMessage
+	spent := 0
 	for _, it := range k.items {
 		if it.seq > applied {
+			if spent > 0 && spent+it.size > SendBudget {
+				// Add stamped it as sent to every node it heard; this node has not been sent it, so the next Tick does.
+				delete(it.sent, node)
+				continue
+			}
+			spent += it.size
 			it.sent[node] = now
 			out = append(out, k.message(it, now))
 		}
@@ -142,6 +178,7 @@ func (k *Keeper) Tick() {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	kept := k.items[:0]
+	spent := map[uuid.UUID]int{}
 	for _, it := range k.items {
 		behind := false
 		for _, n := range nodes {
@@ -152,8 +189,11 @@ func (k *Keeper) Tick() {
 			behind = true
 			if heard && now.Sub(it.sent[n]) >= Resend {
 				// A node is sent it again only while it has a stream: Send says so, and a node with none gets it when it opens.
-				if k.send.Send(n, k.message(it, now)) {
-					it.sent[n] = now
+				if spent[n] == 0 || spent[n]+it.size <= SendBudget {
+					if k.send.Send(n, k.message(it, now)) {
+						it.sent[n] = now
+						spent[n] += it.size
+					}
 				}
 			}
 			if now.Sub(it.at) >= Behind && !it.alerted[n] {

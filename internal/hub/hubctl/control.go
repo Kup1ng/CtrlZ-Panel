@@ -173,7 +173,9 @@ func (s *Server) Send(node uuid.UUID, m *hubv1.HubMessage) bool {
 	return ss != nil && ss.put(m, false)
 }
 
-// Broadcast hands a message to every open stream.
+// Broadcast hands a message to every open stream that has been sent its first ServerTime. A stream that has not is skipped: the
+// node rebases a Revocation on the first ServerTime (p4-nodes 7.3), and what it missed is sent by Opened and by the push that
+// follows that ServerTime, so nothing is lost (H-r1-4).
 func (s *Server) Broadcast(m *hubv1.HubMessage) {
 	s.mu.Lock()
 	all := make([]*session, 0, len(s.sessions))
@@ -182,7 +184,9 @@ func (s *Server) Broadcast(m *hubv1.HubMessage) {
 	}
 	s.mu.Unlock()
 	for _, ss := range all {
-		ss.put(m, false)
+		if ss.timed.Load() {
+			ss.put(m, false)
+		}
 	}
 }
 
@@ -315,6 +319,7 @@ type session struct {
 
 	hb       chan struct{} // a Heartbeat arrived
 	reported atomic.Uint64 // node_config_version of the latest Heartbeat
+	timed    atomic.Bool   // the first ServerTime and the push behind it are queued; Broadcast waits for it
 
 	// What the run loop alone touches.
 	firstHB   bool
@@ -415,19 +420,16 @@ func (ss *session) readLoop(_ context.Context, stream grpc.BidiStreamingServer[h
 	}
 }
 
-// resolveHealthy is "the node's resolve path is healthy" for the canary check of 6.4: no path listed counts as healthy (a
-// node in recursive mode lists none), and otherwise one healthy path is enough, as the "cannot resolve" alert of 8a.4 reads it.
+// resolveHealthy is "the node's resolve path is healthy" for the canary check of 6.4. Heartbeat.upstreams lists the resolve paths
+// (SC 8a.4); the locations are the health of proxy locations, which is another thing, so they are not read. No path listed
+// counts as healthy (a node in recursive mode lists none), and otherwise one healthy path is enough, as the "cannot resolve"
+// alert of hubfail reads it.
 func resolveHealthy(h *hubv1.Heartbeat) bool {
-	if len(h.Upstreams)+len(h.Locations) == 0 {
+	if len(h.Upstreams) == 0 {
 		return true
 	}
 	for _, u := range h.Upstreams {
 		if u.Healthy {
-			return true
-		}
-	}
-	for _, l := range h.Locations {
-		if l.Healthy {
 			return true
 		}
 	}
@@ -490,6 +492,7 @@ func (ss *session) pass(ctx context.Context) {
 				ss.lastCfgAt = time.Time{} // the first ServerTime is followed at once by the config and the certificates
 			}
 			ss.lastST, ss.stSent = now, true
+			ss.timed.Store(true) // before Opened reads the keeper, so an item added in between is sent by one of the two
 			if first && cfg.Opened != nil {
 				cfg.Opened(ss.node)
 			}

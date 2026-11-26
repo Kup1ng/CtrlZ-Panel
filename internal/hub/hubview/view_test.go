@@ -178,6 +178,72 @@ func TestAllowedIsTheCurrentPairAndThePreviousOneForADay(t *testing.T) {
 	}
 }
 
+// H-r1-8: an Endpoint whose record moves to another pair id keeps the nodes of its old pair for 24 h, as a membership change of one
+// pair id does, and not from the entry that moved it.
+func TestAnEndpointMovedToAnotherPairKeepsItsOldPairForADay(t *testing.T) {
+	v := hubview.New()
+	t0 := time.Unix(1_000_000, 0)
+	e := entry(1, t0.Unix())
+	nodes := []*policyv1.NodeEntry{node(1, false), node(2, false), node(3, false), node(4, false)}
+	e.PairTable = table(1, nodes, pair(1, 1, 2), pair(9, 3, 4))
+	r := rec(0xa)
+	r.PairId = id16(1)
+	e.PutEndpoints = []*policyv1.EndpointRecord{r}
+	v.Apply(e)
+	ep := uid(0xa)
+	if !v.Allowed(ep, uid(1), t0) || v.Allowed(ep, uid(3), t0) {
+		t.Fatal("before the move the Endpoint is in pair 1")
+	}
+	move := t0.Add(time.Hour)
+	e = entry(2, move.Unix())
+	r = rec(0xa)
+	r.PairId = id16(9)
+	e.PutEndpoints = []*policyv1.EndpointRecord{r} // the record moves; the table does not change
+	v.Apply(e)
+	if !v.Allowed(ep, uid(3), move) || !v.Allowed(ep, uid(4), move) {
+		t.Fatal("the new pair is allowed")
+	}
+	if !v.Allowed(ep, uid(1), move.Add(23*time.Hour)) || !v.Allowed(ep, uid(2), move.Add(23*time.Hour)) {
+		t.Fatal("the old pair is still allowed inside the 24 h after the move")
+	}
+	// Past 24 h from the entry that moved it, the old pair is forgotten (the newest table has been in force since before it, so
+	// the memory of the table is the memory of the move).
+	e = entry(3, move.Add(30*time.Hour).Unix())
+	e.PairTable = table(1, nodes, pair(1, 1, 2), pair(9, 3, 4))
+	v.Apply(e)
+	if v.Allowed(ep, uid(1), move.Add(30*time.Hour+time.Second)) {
+		t.Fatal("the old pair is allowed more than 24 h after the move")
+	}
+	if !v.Allowed(ep, uid(3), move.Add(30*time.Hour)) {
+		t.Fatal("the new pair stays allowed")
+	}
+}
+
+// H-r1-12: a table from before a pair existed names nobody for an Endpoint that was created in that pair: the global-pair fallback
+// of a table is for a pair id the table lacks while the Endpoint named it, not for an Endpoint that did not exist yet.
+func TestAnEndpointOfANewPairIsNotJudgedByTheGlobalPairOfOlderTables(t *testing.T) {
+	v := hubview.New()
+	t0 := time.Unix(1_000_000, 0)
+	nodes := []*policyv1.NodeEntry{node(1, false), node(2, false), node(3, false), node(4, false)}
+	e := entry(1, t0.Unix())
+	e.PairTable = table(1, nodes, pair(1, 1, 2)) // global pair only
+	v.Apply(e)
+	later := t0.Add(time.Hour)
+	e = entry(2, later.Unix())
+	e.PairTable = table(1, nodes, pair(1, 1, 2), pair(9, 3, 4)) // pair 9 appears with the Endpoint's creation
+	r := rec(0xc)
+	r.PairId = id16(9)
+	e.PutEndpoints = []*policyv1.EndpointRecord{r}
+	v.Apply(e)
+	ep := uid(0xc)
+	if v.Allowed(ep, uid(1), later) || v.Allowed(ep, uid(2), later) {
+		t.Fatal("a node of the global pair reports for an Endpoint it never served")
+	}
+	if !v.Allowed(ep, uid(3), later) || !v.Allowed(ep, uid(4), later) {
+		t.Fatal("the Endpoint's own pair is allowed")
+	}
+}
+
 // The release point of L12 in the cases the contract names: nothing due, a pair change waiting for its event, the event
 // committed, and a change reverted before its event.
 func TestReleasePoint(t *testing.T) {

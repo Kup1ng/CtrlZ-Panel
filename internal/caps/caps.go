@@ -295,6 +295,14 @@ func Bounds() []Bound {
 		{"maxKeys", "keys of one limiter table in the hub's process; a full table drops its oldest key (hublimit), so it bounds memory and decides nothing a racing actor could win"},
 		{"maxSeen", "node addresses the hub remembers (hub.addrSet): one per node, a guard on memory in one process"},
 		{"MaxFixture", "size of the one fixture file the lab command reads (ctrlz catalog load-fixture): checked on the file in hand; nothing is shared between requests that racing actors could spend"},
+		{"MaxEntries", "entries one FetchEntries call returns (hubxfer, p4-nodes 5.2): the size of one read of the log; nothing is spent and nothing is shared that racing actors could spend"},
+		{"MaxFetchBytes", "payload bytes one FetchEntries call chooses (hubxfer): the size of one read of the log; the hub-wide memory is counted by FetchBudget in the hub's process under a semaphore, which decides nothing in a transaction"},
+		{"MaxBlobBytes", "largest file FetchBlob serves (hubxfer): checked on the file in hand, before any byte is read"},
+		{"MaxSnapshotBytes", "largest snapshot file GetSnapshot serves (hubxfer): checked on the file in hand, before any byte is read"},
+		{"MaxLearnedPerEndpoint", "secure_dns rows one Endpoint holds (D31): counted and decided inside HubLearnIP under the Endpoint's own row lock (the row lock qHubLearnEndpoint takes), so learners of one Endpoint are ordered and none overspends it; the hub's own write, with no tenant request and no Won to return"},
+		{"maxBody", "bytes of one probe response the hub's prober reads (hubprobe): a bound of one response in hand, nothing shared that racing actors could spend"},
+		{"maxCarriers", "pair tables the hub's view keeps in memory (hubview): one process, a guard on memory against a runaway log, nothing in the database that racing actors could spend"},
+		{"maxHealthItems", "health items of one Heartbeat kept in version_info (hubtel): the items of one message in hand, nothing shared that racing actors could spend"},
 		{"MaxClientsPerSelector", "clients one selector write resolves (spec 9.3): the write applies to the rows it locked and says whether more remain, so the caller repeats; a size of one request, not an amount racing actors spend"},
 	}
 }

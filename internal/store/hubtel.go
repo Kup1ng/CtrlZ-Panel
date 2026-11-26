@@ -18,14 +18,21 @@ import (
 type HubBeat struct {
 	VersionInfo []byte // JSON object, no address of a client
 	AppliedSeq  uint64
+	// At is when the hub received the Heartbeat. last_heartbeat_at says when the node last spoke, not when the hub last
+	// wrote, so a node that went quiet is not made to look alive by a repeated write. Zero means now.
+	At time.Time
 }
 
-const qHubBeat = `UPDATE ctrlz.nodes SET last_heartbeat_at = pg_catalog.now(), version_info = $2::jsonb, applied_seq = $3 WHERE id = $1 AND status = 'active'`
+const qHubBeat = `UPDATE ctrlz.nodes SET last_heartbeat_at = COALESCE($4::timestamptz, pg_catalog.now()), version_info = $2::jsonb, applied_seq = $3 WHERE id = $1 AND status = 'active'`
 
 // HubWriteBeat writes the Heartbeat fields of one active node (5.3). A node that is not active writes nothing.
 func (s *Store) HubWriteBeat(ctx context.Context, node uuid.UUID, in HubBeat) error {
+	var at any
+	if !in.At.IsZero() {
+		at = in.At
+	}
 	return s.WithGlobal(ctx, TxOpts{}, func(g GlobalTx) error {
-		_, err := g.tx.Exec(g.ctx, qHubBeat, node, string(in.VersionInfo), int64(in.AppliedSeq))
+		_, err := g.tx.Exec(g.ctx, qHubBeat, node, string(in.VersionInfo), int64(in.AppliedSeq), at)
 		return sanitize(err)
 	})
 }

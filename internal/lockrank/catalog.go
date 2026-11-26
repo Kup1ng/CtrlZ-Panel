@@ -28,12 +28,16 @@ type Child struct {
 type fkIndex struct {
 	parents  map[string][]string
 	children map[string][]Child
+	// nullable lists, for each (child, parent) pair, the columns of every foreign key between them that can be NULL, or
+	// nil for a key that cannot (a key whose action is not set_null). A NULL column makes the server skip the check, so
+	// an INSERT that names none of them takes no key share on the parent.
+	nullable map[[2]string][][]string
 }
 
-var fkRe = regexp.MustCompile(`^(\w+)\([^)]*\) -> (\w+)\([^)]*\) (\w+)`)
+var fkRe = regexp.MustCompile(`^(\w+)\(([^)]*)\) -> (\w+)\([^)]*\) (\w+)(?:\(([^)]*)\))?`)
 
 var fks = sync.OnceValue(func() fkIndex {
-	idx := fkIndex{parents: map[string][]string{}, children: map[string][]Child{}}
+	idx := fkIndex{parents: map[string][]string{}, children: map[string][]Child{}, nullable: map[[2]string][][]string{}}
 	b, err := fs.ReadFile(catalogfixtures.FS, "foreign_keys.yaml")
 	if err != nil {
 		panic(fmt.Sprintf("lockrank: foreign_keys.yaml: %v", err))
@@ -50,7 +54,17 @@ var fks = sync.OnceValue(func() fkIndex {
 		if m == nil {
 			panic("lockrank: foreign_keys.yaml: cannot read " + line)
 		}
-		child, parent, on := m[1], m[2], m[3]
+		child, parent, on := m[1], m[3], m[4]
+		var nullCols []string
+		if on == "set_null" {
+			// "set_null(col)" names the columns set to NULL; a bare set_null means every column of the key.
+			list := m[5]
+			if list == "" {
+				list = m[2]
+			}
+			nullCols = strings.Split(strings.ReplaceAll(list, " ", ""), ",")
+		}
+		idx.nullable[[2]string{child, parent}] = append(idx.nullable[[2]string{child, parent}], nullCols)
 		if !seenP[[2]string{child, parent}] {
 			seenP[[2]string{child, parent}] = true
 			idx.parents[child] = append(idx.parents[child], parent)
@@ -66,6 +80,43 @@ var fks = sync.OnceValue(func() fkIndex {
 // Parents lists the tables a row of the table points at. Inserting a row takes
 // FOR KEY SHARE on one row of each.
 func Parents(table string) []string { return fks().parents[table] }
+
+// InsertParents is Parents for an INSERT that names its columns: a parent is left out when every foreign key to it can be NULL
+// (ON DELETE SET NULL) and the statement names none of that key's nullable columns, because the omitted column is NULL and the
+// server takes no lock on a parent for it. cols nil means the statement names no column list, and every parent stays.
+func InsertParents(table string, cols []string) []string {
+	if cols == nil {
+		return Parents(table)
+	}
+	named := map[string]bool{}
+	for _, c := range cols {
+		named[c] = true
+	}
+	var out []string
+	for _, p := range Parents(table) {
+		if !omitsEveryKey(fks().nullable[[2]string{table, p}], named) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func omitsEveryKey(keys [][]string, named map[string]bool) bool {
+	if len(keys) == 0 {
+		return false
+	}
+	for _, k := range keys {
+		if k == nil {
+			return false
+		}
+		for _, c := range k {
+			if named[c] {
+				return false
+			}
+		}
+	}
+	return true
+}
 
 // Children lists the foreign keys that point at the table.
 func Children(table string) []Child { return fks().children[table] }

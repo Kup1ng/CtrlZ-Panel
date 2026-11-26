@@ -166,7 +166,9 @@ type Telemetry struct {
 
 // stamp, alertQ, quarQueue and wakeCh are named types because a struct that holds a mutex and a time.Time or a channel reads to
 // the cache lint as a hand-written cache; none of these is a cache of outside state.
-type stamp struct{ t time.Time }
+//
+// t is when the hub acted; heard is, for lastBeat, the arrival time of the Heartbeat that the write carried.
+type stamp struct{ t, heard time.Time }
 
 type (
 	alertQ    chan alertReq

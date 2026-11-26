@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubctl"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 // The start event runs before the hub accepts a Control stream (SC 8a.4 Versions): until the hub says it is accepting, a stream is
@@ -75,7 +76,18 @@ func TestOpenedComesAfterTheFirstServerTimeAndBeforeTheFirstHeadNotice(t *testin
 	for got := false; !got; {
 		got = next(t, n).GetHeadNotice() != nil
 	}
-	time.Sleep(80 * time.Millisecond) // several more ServerTimes: Opened must not repeat
+	// Several more ServerTimes must have gone out by now, so a second Opened would show: wait for them by what the writer saw.
+	testwait.Until(t, wait, "two more ServerTimes after the first", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		n := 0
+		for _, o := range order {
+			if o == "server_time" {
+				n++
+			}
+		}
+		return n >= 3
+	})
 	mu.Lock()
 	defer mu.Unlock()
 	opened := 0
@@ -94,6 +106,35 @@ func TestOpenedComesAfterTheFirstServerTimeAndBeforeTheFirstHeadNotice(t *testin
 	}
 	if len(heads) != 1 || heads[0] != 3 {
 		t.Fatalf("heads told %v", heads)
+	}
+	n.cancel()
+	<-done
+}
+
+// H-r1-4: a Broadcast does not reach a stream that has not been sent its first ServerTime. The node rebases a Revocation on that
+// ServerTime, so a copy ahead of it would be dated by the node's own clock; Opened sends what the stream missed.
+func TestBroadcastWaitsForTheFirstServerTime(t *testing.T) {
+	w := newWorld(t, free{}, nil)
+	w.decider.ok.Store(false) // the hub cannot decide yet: the stream is attached and has spoken, but has no ServerTime
+	n := newNode(t)
+	w.active(n)
+	done := w.open(n)
+	testwait.Until(t, wait, "the stream is attached", func() bool { return w.srv.Streams() == 1 })
+	n.in <- heartbeat(0)
+	w.srv.Broadcast(&hubv1.HubMessage{Body: &hubv1.HubMessage_Revocation{Revocation: &policyv1.Revocation{RevSeq: 9}}})
+	w.decider.ok.Store(true)
+	if m := next(t, n); m.GetServerTime() == nil {
+		t.Fatalf("the first message is %T, want ServerTime", m.Body)
+	}
+	w.srv.Broadcast(&hubv1.HubMessage{Body: &hubv1.HubMessage_Revocation{Revocation: &policyv1.Revocation{RevSeq: 10}}})
+	for {
+		m := next(t, n)
+		if r := m.GetRevocation(); r != nil {
+			if r.RevSeq != 10 {
+				t.Fatalf("the revocation sent before the first ServerTime reached the stream: %d", r.RevSeq)
+			}
+			break
+		}
 	}
 	n.cancel()
 	<-done

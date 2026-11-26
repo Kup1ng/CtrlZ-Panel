@@ -109,6 +109,7 @@ var sweepNotASweep = map[string]string{
 	"qCompilerSnapshotDelete":           "keyed by its whole primary key (seq): one row, named by the statement's own parameter; the table has no id column",
 	"qCompilerArtifactGC":               "keyed by its whole primary key (hash): one row, named by the statement's own parameter; the table has no id column",
 	"qCompilerOutboxDelete":             "the rows an entry stands for, named by the ids of the marks the compiler read: its own statement, bounded by the 5,000 marks of a pass, deleted in the same transaction as the entry",
+	"qHubFailWrite":                     "the singleton row of pair_event_state (WHERE singleton, its primary key): one row, moved by the compare-and-set on its version that every signing event of the hub commits; nothing drives it by a timer",
 	"qIdempotencyFinish":                "keyed by its whole primary key (tenant, key): the one row the request inserted, named by the statement's own parameters",
 }
 

@@ -33,6 +33,11 @@ func TestAnalyze(t *testing.T) {
 		{"a plain read takes nothing", `SELECT id FROM ctrlz.sessions WHERE id = $1`, ""},
 		{"an update", `UPDATE ctrlz.sessions SET revoked_at = now() WHERE id = $1`, "sessions"},
 		{"an insert takes key shares on its parents first", `INSERT INTO ctrlz.refresh_tokens (tenant_id, session_id, user_id) VALUES ($1, $2, $3)`, "users:ks sessions:ks refresh_tokens:ins"},
+		// The hub inserts an auto client with no profile: the omitted ON DELETE SET NULL columns are NULL and take no key
+		// share, so the insert can follow the Endpoint's lock (p4-nodes 5.4). Naming the column brings the parent back.
+		{"an insert that omits a nullable key takes no key share on its parent", `INSERT INTO ctrlz.clients (tenant_id, endpoint_id, label, source) VALUES ($1, $2, $3, 'auto')`, "endpoints:ks clients:ins"},
+		{"an insert that names the nullable key takes the key share", `INSERT INTO ctrlz.clients (tenant_id, endpoint_id, label, profile_id) VALUES ($1, $2, $3, $4)`, "profiles:ks endpoints:ks clients:ins"},
+		{"an insert with no column list keeps every parent", `INSERT INTO ctrlz.clients VALUES ($1, $2, $3)`, "profiles:ks endpoints:ks clients:ins"},
 		{"FOR NO KEY UPDATE", `SELECT 1 FROM ctrlz.users WHERE id = $1 FOR NO KEY UPDATE`, "users"},
 		{"FOR KEY SHARE", `SELECT 1 FROM ctrlz.users WHERE id = $1 FOR KEY SHARE`, "users:ks"},
 		{"OF names the table that is locked", `SELECT 1 FROM ctrlz.users u JOIN ctrlz.tenants t ON t.id = u.tenant_id WHERE u.id = $1 FOR NO KEY UPDATE OF u`, "users"},

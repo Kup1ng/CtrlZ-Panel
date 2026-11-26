@@ -212,6 +212,31 @@ func TestHeartbeatFieldsAreWrittenAtMostEvery30Seconds(t *testing.T) {
 	}
 }
 
+// H-r1-1: a node that stopped speaking keeps its tracker for ten minutes, and the passes in that time must write nothing, so
+// last_heartbeat_at keeps saying when the node last spoke.
+func TestSilentNodeIsNotWrittenAsAliveAndCarriesItsArrivalTime(t *testing.T) {
+	w := newWorld(t)
+	n := id(1)
+	heard := w.clk.now()
+	w.tr.Take(n, hb(w, nil))
+	w.tel.BeatPass(context.Background())
+	if len(w.fs.beats) != 1 || !w.fs.beats[0].At.Equal(heard) {
+		t.Fatalf("the write carries the Heartbeat's arrival time: %+v", w.fs.beats)
+	}
+	for i := 0; i < 8; i++ {
+		w.clk.add(time.Minute)
+		w.tel.BeatPass(context.Background())
+	}
+	if len(w.fs.beats) != 1 {
+		t.Fatalf("a silent node was written again: %d writes", len(w.fs.beats))
+	}
+	w.tr.Take(n, hb(w, func(h *hubv1.Heartbeat) { h.AppliedSeq = 11 }))
+	w.tel.BeatPass(context.Background())
+	if len(w.fs.beats) != 2 || w.fs.beats[1].AppliedSeq != 11 {
+		t.Fatalf("a new Heartbeat after the silence is written: %d writes", len(w.fs.beats))
+	}
+}
+
 func TestSilentNodeLeavesTheTrackers(t *testing.T) {
 	w := newWorld(t)
 	w.tr.Take(id(1), hb(w, nil))

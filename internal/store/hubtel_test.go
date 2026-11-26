@@ -198,7 +198,7 @@ func TestHubFreeCountersCountABatchOnce(t *testing.T) {
 	f := newFixture(t)
 	hub := f.hubStore(t)
 	node := uuid.New()
-	if err := f.db.Exec(f.ctx, `INSERT INTO ctrlz.nodes (id, slot, name, status, spki_sha256) VALUES ($1, 1, 'n1', 'active', $2)`, node, make([]byte, 32)); err != nil {
+	if err := f.db.Exec(f.ctx, `INSERT INTO ctrlz.nodes (id, slot, name, status, spki_sha256) VALUES ($1, 3, 'n1', 'active', $2)`, node, make([]byte, 32)); err != nil {
 		t.Fatal(err)
 	}
 	bucket := time.Now().Unix() / 300 * 300
@@ -221,9 +221,10 @@ func TestHubQuarantineAddCountsNodes(t *testing.T) {
 	f := newFixture(t)
 	hub := f.hubStore(t)
 	a, b := uuid.New(), uuid.New()
+	// The seed holds slots 1 and 2, so the two new nodes take 3 and 4.
 	for i, n := range []uuid.UUID{a, b} {
 		if err := f.db.Exec(f.ctx, `INSERT INTO ctrlz.nodes (id, slot, name, status, spki_sha256) VALUES ($1, $2, $3, 'active', $4)`,
-			n, i+1, "n"+string(rune('a'+i)), append(make([]byte, 31), byte(i+1))); err != nil {
+			n, i+3, "n"+string(rune('a'+i)), append(make([]byte, 31), byte(i+1))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -243,10 +244,11 @@ func TestHubWriteBeatWritesOnlyAnActiveNode(t *testing.T) {
 	f := newFixture(t)
 	hub := f.hubStore(t)
 	node := uuid.New()
-	if err := f.db.Exec(f.ctx, `INSERT INTO ctrlz.nodes (id, slot, name, status, spki_sha256) VALUES ($1, 1, 'n1', 'pending', $2)`, node, make([]byte, 32)); err != nil {
+	if err := f.db.Exec(f.ctx, `INSERT INTO ctrlz.nodes (id, slot, name, status, spki_sha256) VALUES ($1, 3, 'n1', 'pending', $2)`, node, make([]byte, 32)); err != nil {
 		t.Fatal(err)
 	}
-	in := store.HubBeat{VersionInfo: []byte(`{"node_version":"1.0"}`), AppliedSeq: 42}
+	heard := time.Now().Add(-9 * time.Minute).Truncate(time.Second)
+	in := store.HubBeat{VersionInfo: []byte(`{"node_version":"1.0"}`), AppliedSeq: 42, At: heard}
 	if err := hub.HubWriteBeat(f.ctx, node, in); err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +261,7 @@ func TestHubWriteBeatWritesOnlyAnActiveNode(t *testing.T) {
 	if err := hub.HubWriteBeat(f.ctx, node, in); err != nil {
 		t.Fatal(err)
 	}
-	if n := f.count(t, `SELECT count(*) FROM ctrlz.nodes WHERE id = $1 AND applied_seq = 42 AND last_heartbeat_at IS NOT NULL AND version_info->>'node_version' = '1.0'`, node); n != 1 {
+	if n := f.count(t, `SELECT count(*) FROM ctrlz.nodes WHERE id = $1 AND applied_seq = 42 AND last_heartbeat_at = $2 AND version_info->>'node_version' = '1.0'`, node, heard); n != 1 {
 		t.Fatal("an active node's Heartbeat fields were not written")
 	}
 }

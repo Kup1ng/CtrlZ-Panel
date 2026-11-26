@@ -95,15 +95,22 @@ func (t *Telemetry) BeatPass(ctx context.Context) {
 			continue
 		}
 		t.mu.Lock()
-		last := t.lastBeat[n].t
+		last := t.lastBeat[n]
 		t.mu.Unlock()
-		if !last.IsZero() && now.Sub(last) < BeatEvery {
+		// A tracker is kept for ten minutes after the node went quiet, so without this a silent node would be written as
+		// alive at every pass. Only a Heartbeat that arrived since the last write is written, and with its own arrival
+		// time (H-r1-1).
+		if !at.After(last.heard) {
+			continue
+		}
+		if !last.t.IsZero() && now.Sub(last.t) < BeatEvery {
 			continue
 		}
 		in, err := beatOf(hb)
 		if err != nil {
 			continue
 		}
+		in.At = at
 		wctx, cancel := context.WithTimeout(ctx, writeTimeout)
 		err = t.cfg.Store.HubWriteBeat(wctx, n, in)
 		cancel()
@@ -111,7 +118,7 @@ func (t *Telemetry) BeatPass(ctx context.Context) {
 			continue // tried again at the next pass
 		}
 		t.mu.Lock()
-		t.lastBeat[n] = stamp{now}
+		t.lastBeat[n] = stamp{t: now, heard: at}
 		t.mu.Unlock()
 		t.wroteBeats.add()
 	}

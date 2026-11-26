@@ -117,6 +117,6 @@ func (h *Hub) nodeHub(install *hubinstall.Handler) (hubv1.NodeHubServer, error) 
 	})
 	h.wireFailover(d)
 	h.feed.OnFreeOff = h.ctl.FreeOff
-	xfer := hubxfer.New(hubxfer.Service{Log: d.Stores.Transfer, Bounds: h.Roll, Files: arts, Bundles: install, Signer: signer, Now: d.Now, Logger: d.Log})
+	xfer := hubxfer.New(hubxfer.Service{Log: d.Stores.Transfer, Bounds: h.Roll, Files: arts, Bundles: install, Signer: signer, Deciding: h.lease.Held, Now: d.Now, Logger: d.Log})
 	return &nodeHub{ctl: h.ctl, xfer: xfer, tel: h.tel}, nil
 }

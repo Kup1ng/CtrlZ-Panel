@@ -527,6 +527,12 @@ func (l *Loop) commit(ev *zone.Event) error {
 		return err
 	}
 	l.version = version
+	// The lease was checked when the tick began and the commit may have waited on the database since. An event committed by a hub
+	// that no longer holds the lease is not signed or pushed: the next tick sees the lost lease and resets, and the hub that holds
+	// it reads the version and goes on from there (H-r1-9).
+	if l.cfg.Lease == nil || !l.cfg.Lease.Held() {
+		return nil
+	}
 	l.peers.Store(&peersBox{hubview.PeersOf(pt)})
 	l.relVer, l.relSeen = version, true
 	env := l.cfg.Signer.Sign(manifest.TypePairTable, payload)

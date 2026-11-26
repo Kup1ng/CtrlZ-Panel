@@ -29,6 +29,9 @@ const (
 	// EnrollmentStatementTimeout bounds a statement of the enrollment pool: its one connection is the
 	// one an unauthenticated caller can reach, so a slow statement must not hold it (5.7).
 	EnrollmentStatementTimeout = 2 * time.Second
+	// TransferStatementTimeout bounds a statement of the transfer pool: its two connections serve every node's GetHead and
+	// FetchEntries, so a read that cannot finish must not hold one (5.7). A read of 16 MiB of payload is far inside it.
+	TransferStatementTimeout = 15 * time.Second
 	// L4StatementTimeout bounds a statement of the evaluation loop (8a.11 L4).
 	L4StatementTimeout = time.Second
 	// acquireWait is how long a call waits for a free connection of its pool before it is refused, so
@@ -69,7 +72,7 @@ func OpenPools(ctx context.Context, base store.Config) (*Pools, error) {
 		{&p.L3, "l3", PoolL3, nil},
 		// The evaluation loop fails a statement after 1 s so a lock or a database that cannot answer keeps its tick from ending (L4).
 		{&p.L4, "l4", PoolL4, func(c *store.Config) { c.StatementTimeout = L4StatementTimeout }},
-		{&p.Transfer, "transfer", PoolTransfer, nil},
+		{&p.Transfer, "transfer", PoolTransfer, func(c *store.Config) { c.StatementTimeout = TransferStatementTimeout }},
 		{&p.Lease, "lease", PoolLease, nil},
 		{&p.Telemetry, "telemetry", PoolTelemetry, nil},
 		{&p.Outside, "outside", PoolOutside, nil},

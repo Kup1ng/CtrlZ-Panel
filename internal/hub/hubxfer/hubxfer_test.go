@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,16 +24,19 @@ import (
 	hubv1 "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/hub/v1"
 	signv1 "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/sign/v1"
 	"github.com/Kup1ng/CtrlZ-Shared/manifest"
+	"github.com/Kup1ng/CtrlZ-Shared/wire"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubnet"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubsign"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubxfer"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
 type fakeLog struct {
 	rows  []store.LogRow
 	snaps []store.SnapshotRow
+	reads atomic.Int64 // calls of HubLogEntries
 }
 
 func (f *fakeLog) HubLogHash(_ context.Context, seq uint64) ([]byte, bool, error) {
@@ -45,6 +49,7 @@ func (f *fakeLog) HubLogHash(_ context.Context, seq uint64) ([]byte, bool, error
 }
 
 func (f *fakeLog) HubLogEntries(_ context.Context, after, upTo uint64, limit, _ int) ([]store.LogRow, error) {
+	f.reads.Add(1)
 	var out []store.LogRow
 	for _, r := range f.rows {
 		if r.Seq > after && r.Seq <= upTo && len(out) < limit {
@@ -62,14 +67,23 @@ type bounds map[uuid.UUID]uint64
 
 func (b bounds) Bound(id uuid.UUID) (uint64, bool) { v, ok := b[id]; return v, ok }
 
-type files map[string][]byte
+// files is a directory of files named by the hex of their hash, as the artifacts volume is.
+type files struct{ dir string }
 
-func (f files) Get(h []byte) ([]byte, error) {
-	d, ok := f[hex.EncodeToString(h)]
-	if !ok {
-		return nil, os.ErrNotExist
+func (f files) put(t *testing.T, name string, data []byte) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(f.dir, name), data, 0o600); err != nil {
+		t.Fatal(err)
 	}
-	return d, nil
+}
+
+func (f files) Open(h []byte) (*os.File, int64, error) {
+	fl, err := os.Open(filepath.Join(f.dir, hex.EncodeToString(h)))
+	if err != nil {
+		return nil, 0, err
+	}
+	st, _ := fl.Stat()
+	return fl, st.Size(), nil
 }
 
 type bundles struct{ dir string }
@@ -131,7 +145,7 @@ func newWorld(t *testing.T) *world {
 	if err := os.WriteFile(filepath.Join(dir, "x"), bytes.Repeat([]byte("z"), hubxfer.ChunkBytes+5), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	w := &world{log: &fakeLog{}, bounds: bounds{}, files: files{}, pub: pub, a: uuid.New(), b: uuid.New()}
+	w := &world{log: &fakeLog{}, bounds: bounds{}, files: files{t.TempDir()}, pub: pub, a: uuid.New(), b: uuid.New()}
 	for i := uint64(1); i <= 5; i++ {
 		w.log.rows = append(w.log.rows, entry(i))
 	}
@@ -146,7 +160,7 @@ func TestEveryDoorStopsAtTheNodesOwnBound(t *testing.T) {
 	w.bounds[w.a], w.bounds[w.b] = 2, 5
 	snapBytes := []byte("snapshot-4")
 	sum := sha256.Sum256(snapBytes)
-	w.files[hex.EncodeToString(sum[:])] = snapBytes
+	w.files.put(t, hex.EncodeToString(sum[:]), snapBytes)
 	w.log.snaps = []store.SnapshotRow{{Seq: 4, StoreRef: hex.EncodeToString(sum[:])}}
 
 	headSeq := func(n uuid.UUID) uint64 {
@@ -204,6 +218,21 @@ func TestEveryDoorStopsAtTheNodesOwnBound(t *testing.T) {
 }
 
 // Before the release point is known the hub serves nothing and returns no head (L12).
+// H-r1-9: a hub that does not hold the hub-decider lease signs no head.
+func TestGetHeadIsRefusedWithoutTheLease(t *testing.T) {
+	w := newWorld(t)
+	w.bounds[w.a] = 3
+	deciding := false
+	w.svc.Deciding = func() bool { return deciding }
+	if _, err := w.svc.GetHead(ctxOf(w.a), &hubv1.GetHeadRequest{}); status.Code(err) != codes.Unavailable {
+		t.Fatalf("without the lease: %v", err)
+	}
+	deciding = true
+	if _, err := w.svc.GetHead(ctxOf(w.a), &hubv1.GetHeadRequest{}); err != nil {
+		t.Fatalf("with the lease: %v", err)
+	}
+}
+
 func TestNothingIsServedWhileTheBoundIsUnknown(t *testing.T) {
 	w := newWorld(t)
 	if _, err := w.svc.GetHead(ctxOf(w.a), &hubv1.GetHeadRequest{}); status.Code(err) != codes.Unavailable {
@@ -226,7 +255,7 @@ func TestBlobResumesAtTheOffsetInChunksAndTheLastIsMarked(t *testing.T) {
 	w := newWorld(t)
 	data := bytes.Repeat([]byte("b"), hubxfer.ChunkBytes+100)
 	sum := sha256.Sum256(data)
-	w.files[hex.EncodeToString(sum[:])] = data
+	w.files.put(t, hex.EncodeToString(sum[:]), data)
 
 	st := &stream[hubv1.BlobChunk]{ctx: ctxOf(w.a)}
 	if err := w.svc.FetchBlob(&hubv1.FetchBlobRequest{Hash: sum[:]}, st); err != nil {
@@ -280,7 +309,7 @@ func TestPacingIsPerNodeAndNotPerStream(t *testing.T) {
 	w := newWorld(t)
 	data := bytes.Repeat([]byte("p"), 6*hubxfer.ChunkBytes)
 	sum := sha256.Sum256(data)
-	w.files[hex.EncodeToString(sum[:])] = data
+	w.files.put(t, hex.EncodeToString(sum[:]), data)
 	start := time.Now()
 	for i := 0; i < 3; i++ {
 		if err := w.svc.FetchBlob(&hubv1.FetchBlobRequest{Hash: sum[:]}, &stream[hubv1.BlobChunk]{ctx: ctxOf(w.a)}); err != nil {
@@ -291,4 +320,98 @@ func TestPacingIsPerNodeAndNotPerStream(t *testing.T) {
 	if d := time.Since(start); d < 250*time.Millisecond {
 		t.Fatalf("4.5 MiB went out in %v: not paced", d)
 	}
+}
+
+// H-r1-6: a file is read through the handle it was checked on, so a damaged file is refused, a file larger than a profile blob
+// (the catalog's filter tables share the volume) is not served through the blob door, and the bytes are the file's.
+func TestBlobIsCheckedAndBoundedAndNeverReadWhole(t *testing.T) {
+	w := newWorld(t)
+	good := bytes.Repeat([]byte("g"), 3*hubxfer.ChunkBytes+7)
+	sum := sha256.Sum256(good)
+	w.files.put(t, hex.EncodeToString(sum[:]), good)
+	st := &stream[hubv1.BlobChunk]{ctx: ctxOf(w.a)}
+	if err := w.svc.FetchBlob(&hubv1.FetchBlobRequest{Hash: sum[:]}, st); err != nil {
+		t.Fatal(err)
+	}
+	var got []byte
+	for _, c := range st.sent {
+		got = append(got, c.Data...)
+	}
+	if !bytes.Equal(got, good) || !st.sent[len(st.sent)-1].Last {
+		t.Fatalf("served %d bytes of %d", len(got), len(good))
+	}
+	// A file whose bytes are not its name: refused, nothing sent.
+	bad := sha256.Sum256([]byte("name"))
+	w.files.put(t, hex.EncodeToString(bad[:]), []byte("other bytes"))
+	st = &stream[hubv1.BlobChunk]{ctx: ctxOf(w.a)}
+	if err := w.svc.FetchBlob(&hubv1.FetchBlobRequest{Hash: bad[:]}, st); status.Code(err) != codes.Unavailable || len(st.sent) != 0 {
+		t.Fatalf("a damaged file: %v, %d chunks", err, len(st.sent))
+	}
+	// A file above the blob cap is not served here, whatever its bytes (a sparse file: no disk is spent).
+	big := sha256.Sum256([]byte("big"))
+	fl, err := os.Create(filepath.Join(w.files.dir, hex.EncodeToString(big[:])))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fl.Truncate(hubxfer.MaxBlobBytes + 1); err != nil {
+		t.Skipf("no sparse file here: %v", err)
+	}
+	fl.Close()
+	st = &stream[hubv1.BlobChunk]{ctx: ctxOf(w.a)}
+	if err := w.svc.FetchBlob(&hubv1.FetchBlobRequest{Hash: big[:]}, st); status.Code(err) != codes.NotFound || len(st.sent) != 0 {
+		t.Fatalf("a file above the blob cap: %v", err)
+	}
+}
+
+// H-r1-6: the payloads of FetchEntries are counted against one budget for the hub. A call that cannot get its share stops
+// waiting when its stream ends, and reads nothing from the log.
+func TestFetchEntriesWaitsForTheHubWideBudgetAndReadsNothingUntilItHasIt(t *testing.T) {
+	w := newWorld(t)
+	w.bounds[w.a], w.bounds[w.b] = 5, 5
+	release := make(chan struct{})
+	inSend := make(chan struct{}, 1)
+	var holders []chan struct{}
+	for i := 0; i < hubxfer.FetchBudget/(hubxfer.MaxFetchBytes+wire.MaxEntrySize); i++ {
+		done := make(chan struct{})
+		holders = append(holders, done)
+		go func() {
+			defer close(done)
+			_ = w.svc.FetchEntries(&hubv1.FetchEntriesRequest{AfterSeq: 0, Limit: 1}, &blockingStream{
+				stream: stream[hubv1.StoredEntry]{ctx: ctxOf(w.a)}, entered: inSend, release: release})
+		}()
+		testwait.Receive(t, inSend, 5*time.Second, "a call holds its share while it sends")
+	}
+	reads := w.log.reads.Load()
+	ctx, cancel := context.WithCancel(ctxOf(w.b))
+	waiter := make(chan error, 1)
+	go func() {
+		waiter <- w.svc.FetchEntries(&hubv1.FetchEntriesRequest{Limit: 1}, &stream[hubv1.StoredEntry]{ctx: ctx})
+	}()
+	cancel()
+	if err := testwait.Receive(t, waiter, 5*time.Second, "a call with no share ends when its stream does"); status.Code(err) != codes.Canceled {
+		t.Fatalf("the waiting call: %v", err)
+	}
+	if w.log.reads.Load() != reads {
+		t.Fatal("a call that never got its share read the log")
+	}
+	close(release)
+	for _, d := range holders {
+		testwait.Receive(t, d, 5*time.Second, "the holders finish")
+	}
+}
+
+// blockingStream holds a call inside its first Send until release is closed.
+type blockingStream struct {
+	stream[hubv1.StoredEntry]
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingStream) Send(m *hubv1.StoredEntry) error {
+	select {
+	case b.entered <- struct{}{}:
+	default:
+	}
+	<-b.release
+	return b.stream.Send(m)
 }

@@ -34,8 +34,9 @@ func (h *Hub) logView(d Deps, signer *hubsign.Signer) (hubtel.Directory, hubctl.
 	h.view = hubview.New()
 	h.fail = hubfail.New(hubfail.Config{
 		Store: d.Stores.Eval, View: h.view, Beats: h.trackers, Lease: h.lease, Signer: signer,
-		Alert:   h.raise,
-		Probing: func() bool { return h.zones.get(d) != "" },
+		Alert: h.raise,
+		// An unknown zone counts as probing: the prober has nothing to probe through, so no round completes and Ready is false.
+		Probing: func() bool { zone, known := h.zones.get(d); return !known || zone != "" },
 		Now:     d.Now, Log: d.Log,
 	})
 	if dir == nil {
@@ -63,7 +64,7 @@ func (h *Hub) wireFailover(d Deps) {
 	h.keeper = hubrev.New(h.ctl, keeperNodes{h}, d.Now, h.raise, d.Log)
 	h.prober = hubprobe.New(hubprobe.Config{
 		Targets: h.fail.Targets,
-		Zone:    func() string { return h.zones.get(d) },
+		Zone:    func() string { zone, _ := h.zones.get(d); return zone },
 		Roots:   h.zoneRoots,
 		Report:  h.fail.Report,
 		Now:     d.Now, Log: d.Log,
@@ -151,37 +152,53 @@ func (h *Hub) zoneRoots() *x509.CertPool {
 }
 
 // zoneCache is the live zone the prober probes through, read from domain_settings at most every 30 s.
+//
+// Three answers are told apart (H-r1-5, H-r1-10). A zone is live. No zone is live, which is a fact about the settings and lets
+// the hub decide with no probe round (SC 8a.11 L4). Nothing is known yet, because no read has succeeded: that is not "no zone",
+// so the hub is not ready on the strength of it. Every attempt, a failed one or an empty answer too, stamps the cache, so a
+// database that is slow or down costs one read of 2 s per window and not one per call.
 type zoneCache struct {
-	zone atomic.Pointer[string]
-	at   atomic.Int64 // unix nanos of the last successful read, 0 for none
+	zone  atomic.Pointer[string] // the last successful answer, "" when none was live
+	at    atomic.Int64           // unix nanos the window of the next read counts from, 0 for none
+	known atomic.Bool            // a read has succeeded at least once
 }
 
-const zoneEvery = 30 * time.Second
+const (
+	zoneEvery = 30 * time.Second
+	zoneRetry = 5 * time.Second // the window after a failed read
+)
 
-func (z *zoneCache) get(d Deps) string {
+func (z *zoneCache) last() (string, bool) {
+	known := z.known.Load()
+	if p := z.zone.Load(); p != nil {
+		return *p, known
+	}
+	return "", known
+}
+
+// get returns the live zone ("" for none) and whether the answer is known.
+func (z *zoneCache) get(d Deps) (zone string, known bool) {
 	now := d.Now()
 	if at := z.at.Load(); at != 0 && now.Sub(time.Unix(0, at)) < zoneEvery {
-		if p := z.zone.Load(); p != nil {
-			return *p
-		}
+		return z.last()
 	}
 	// No lock is held across the read: two callers that read at once both store the same answer.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	zs, err := d.Stores.Control.HubLiveZones(ctx)
 	if err != nil {
-		if p := z.zone.Load(); p != nil {
-			return *p // the last one stands; "" until the first read succeeds
-		}
-		return ""
+		z.at.Store(now.Add(zoneRetry - zoneEvery).UnixNano())
+		return z.last() // the last answer stands; unknown until the first read succeeds
 	}
 	live := hubtrust.LiveZones(zs, now)
-	if len(live) == 0 {
-		return ""
+	var cur string
+	if len(live) > 0 {
+		cur = live[0]
 	}
-	z.zone.Store(&live[0])
+	z.zone.Store(&cur)
+	z.known.Store(true)
 	z.at.Store(now.UnixNano())
-	return live[0]
+	return cur, true
 }
 
 // keepRevocations ticks the revocation keeper once a second: it drops what every node has applied, sends again to the nodes that lag
