@@ -103,7 +103,7 @@ func TestRevokedJobParams(t *testing.T) {
 	n := ids(3)
 	old, _ := json.Marshal(map[string]any{"node_ids": []string{n[1].String(), n[0].String()}})
 	got, dropped, err := RevokedJobParams(n[0], [][]byte{old, []byte(`{"node_ids":["not a uuid"]}`), []byte(`not json`), []byte(`{}`)})
-	if err != nil || dropped != 0 {
+	if err != nil || len(dropped) != 0 {
 		t.Fatal(dropped, err)
 	}
 	var p struct {
@@ -144,8 +144,14 @@ func TestRevokedJobParamsNeverRefusesARevocation(t *testing.T) {
 	if err := json.Unmarshal(got, &p); err != nil {
 		t.Fatal(err)
 	}
-	if len(p.NodeIDs) != MaxRevokedNodeIDs || dropped != 10 || !slices.Contains(p.NodeIDs, many[0].String()) {
-		t.Fatalf("%d ids, %d dropped, self kept %v", len(p.NodeIDs), dropped, slices.Contains(p.NodeIDs, many[0].String()))
+	if len(p.NodeIDs) != MaxRevokedNodeIDs || len(dropped) != 10 || !slices.Contains(p.NodeIDs, many[0].String()) {
+		t.Fatalf("%d ids, %d dropped, self kept %v", len(p.NodeIDs), len(dropped), slices.Contains(p.NodeIDs, many[0].String()))
+	}
+	// Every id is either kept or named as dropped, so none loses its clean-up without a trace (I-r4-2, I-r4-3).
+	for _, id := range many[1:] {
+		if !slices.Contains(p.NodeIDs, id.String()) && !slices.Contains(dropped, id) {
+			t.Fatalf("%s is neither kept nor reported as dropped", id)
+		}
 	}
 }
 

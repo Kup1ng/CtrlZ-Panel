@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,12 +18,19 @@ import (
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubctl"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/hub/hubpki"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/testwait"
 )
 
-// failingWild fails for one zone and covers none other, so the other zone falls to the private CA.
-type failingWild struct{ bad string }
+// failingWild fails for one zone and covers none other, so the other zone falls to the private CA. It counts its calls: the
+// stream asks once per zone at each pass, so the count says how many passes have gone by, which is the condition a test
+// waits on before it looks at what was (not) logged.
+type failingWild struct {
+	bad   string
+	calls atomic.Int64
+}
 
-func (f failingWild) Covering(_ context.Context, zone string) ([]byte, []byte, time.Time, bool, error) {
+func (f *failingWild) Covering(_ context.Context, zone string) ([]byte, []byte, time.Time, bool, error) {
+	f.calls.Add(1)
 	if zone == f.bad {
 		return nil, nil, time.Time{}, false, errors.New("the uploaded wildcard does not open")
 	}
@@ -52,7 +60,7 @@ func TestTheStreamSendsTheHealthyZonesBundleAndNoEmptyOne(t *testing.T) {
 	}
 	logs := &lockedBuf{}
 	w := newWorld(t, free{}, func(c *hubctl.Config) {
-		c.Certs = hubctl.NewCerts(zoneOnly{ca}, failingWild{bad: "dns.a.test"}, time.Now)
+		c.Certs = hubctl.NewCerts(zoneOnly{ca}, &failingWild{bad: "dns.a.test"}, time.Now)
 		c.Log = slog.New(slog.NewTextHandler(logs, nil))
 	})
 	n := newNode(t)
@@ -65,22 +73,25 @@ func TestTheStreamSendsTheHealthyZonesBundleAndNoEmptyOne(t *testing.T) {
 	done := w.open(n)
 	n.in <- heartbeat(0)
 
+	// The live zone (dns.a.test, the failing one) comes first, then the previous one. An empty bundle for the failed zone
+	// would be queued before the healthy zone's, so reading up to the healthy bundle and judging every CertBundle on the
+	// way covers it; the log line is written in the same pass before any bundle is queued.
 	var bundles int
-	deadline := time.After(500 * time.Millisecond)
-loop:
-	for {
-		select {
-		case m := <-n.out:
-			if cb, ok := m.Body.(*hubv1.HubMessage_CertBundle); ok {
-				bundles++
-				if cb.CertBundle == nil || len(cb.CertBundle.ChainPem) == 0 {
-					t.Fatal("an empty CertBundle was sent")
+	testwait.Until(t, wait, "the healthy zone's CertBundle", func() bool {
+		for {
+			select {
+			case m := <-n.out:
+				if cb, ok := m.Body.(*hubv1.HubMessage_CertBundle); ok {
+					bundles++
+					if cb.CertBundle == nil || len(cb.CertBundle.ChainPem) == 0 {
+						t.Fatal("an empty CertBundle was sent")
+					}
 				}
+			default:
+				return bundles > 0
 			}
-		case <-deadline:
-			break loop
 		}
-	}
+	})
 	if bundles != 1 {
 		t.Fatalf("%d bundles sent, want the healthy zone's one", bundles)
 	}
@@ -104,8 +115,9 @@ func TestARealFailureIsLoggedBesideAZoneThatOnlyWaitsForItsCA(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			logs := &lockedBuf{}
+			wild := &failingWild{bad: tc.bad}
 			w := newWorld(t, free{}, func(c *hubctl.Config) {
-				c.Certs = hubctl.NewCerts(zoneOnly{nil}, failingWild{bad: tc.bad}, time.Now)
+				c.Certs = hubctl.NewCerts(zoneOnly{nil}, wild, time.Now)
 				c.Log = slog.New(slog.NewTextHandler(logs, nil))
 			})
 			n := newNode(t)
@@ -117,7 +129,8 @@ func TestARealFailureIsLoggedBesideAZoneThatOnlyWaitsForItsCA(t *testing.T) {
 			w.st.mu.Unlock()
 			done := w.open(n)
 			n.in <- heartbeat(0)
-			time.Sleep(300 * time.Millisecond) // several config passes (every 10 ms)
+			// Two zones per pass: the fourth call belongs to the second pass, so the first pass has finished and logged (or not).
+			testwait.Until(t, wait, "a second config pass", func() bool { return wild.calls.Load() >= 4 })
 			if got := strings.Contains(logs.String(), "cert bundle not built"); got != tc.wantLog {
 				t.Fatalf("logged %v, want %v: %q", got, tc.wantLog, logs.String())
 			}

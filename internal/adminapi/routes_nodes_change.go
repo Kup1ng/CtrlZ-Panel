@@ -13,6 +13,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/adminapi/gen"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/auth/audit"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/httpx"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/logattr"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/nodeadmin"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
 )
@@ -150,10 +151,13 @@ func (s *Server) RevokeNode(ctx context.Context, req gen.RevokeNodeRequestObject
 		if err != nil {
 			return err
 		}
-		if dropped > 0 && s.d.Log != nil {
-			// The revocation goes through; only the clean-up list of the oldest unfinished jobs is cut. A worker that cannot
-			// finish node_revoked jobs is the cause to look for.
-			s.d.Log.Warn("node_revoked clean-up list cut", "dropped", dropped)
+		if len(dropped) > 0 && s.d.Log != nil {
+			// The revocation goes through; only the clean-up list carried from the unfinished jobs is cut, in id order. A
+			// worker that cannot finish node_revoked jobs is the cause to look for. The ids are logged (they are row ids, no
+			// secret) so the clean-up of those nodes can be redone by hand.
+			for _, id := range dropped {
+				s.d.Log.Warn("node_revoked clean-up list cut", logattr.ID("node_id", id))
+			}
 		}
 		if _, err := g.AdminJobInsert("node_revoked", params, p.AdminID); err != nil {
 			return err

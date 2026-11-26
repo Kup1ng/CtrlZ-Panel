@@ -142,8 +142,9 @@ const MaxRevokedNodeIDs = 64
 // and unique, which makes the same set the same bytes.
 //
 // Past MaxRevokedNodeIDs the carried list is cut, never the revocation: this node always stays, the others are kept in id
-// order, and dropped says how many ids lost their clean-up so the caller can log it.
-func RevokedJobParams(node uuid.UUID, superseded [][]byte) (params []byte, dropped int, err error) {
+// order (the order says nothing about age, since a job row does not keep when each id joined it), and dropped names the ids
+// that lost their clean-up so the caller can log them and an operator can redo it by hand.
+func RevokedJobParams(node uuid.UUID, superseded [][]byte) (params []byte, dropped []uuid.UUID, err error) {
 	self := node.String()
 	var others []string
 	for _, raw := range superseded {
@@ -162,7 +163,10 @@ func RevokedJobParams(node uuid.UUID, superseded [][]byte) (params []byte, dropp
 	slices.Sort(others)
 	others = slices.Compact(others)
 	if len(others) > MaxRevokedNodeIDs-1 {
-		dropped = len(others) - (MaxRevokedNodeIDs - 1)
+		for _, s := range others[MaxRevokedNodeIDs-1:] {
+			id, _ := uuid.Parse(s) // each entry was parsed above
+			dropped = append(dropped, id)
+		}
 		others = others[:MaxRevokedNodeIDs-1]
 	}
 	ids := append([]string{self}, others...)
