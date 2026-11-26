@@ -1,0 +1,615 @@
+/* GENERATED from tokens/radius.table.ts by scripts/gen-radius.mjs. Do not edit. */
+/* It sits in @layer components after HeroUI's rules, so an equal-specificity rule here wins. */
+@layer components {
+  /* button.css (h-10 md:h-9) */
+  .button {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .button { --control-h: calc(var(--spacing) * 9); }
+  }
+
+  /* button.css (h-9 md:h-8) */
+  .button--sm {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .button--sm { --control-h: calc(var(--spacing) * 8); }
+  }
+
+  /* button.css (h-11 md:h-10) */
+  .button--lg {
+    --control-h: calc(var(--spacing) * 11);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .button--lg { --control-h: calc(var(--spacing) * 10); }
+  }
+
+  /* input.css, derived */
+  .input {
+    --control-h: calc(var(--spacing) * 4 + 1.5rem + 2px);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 40rem) {
+    .input { --control-h: calc(var(--spacing) * 4 + 1.25rem + 2px); }
+  }
+
+  /* textarea.css, derived */
+  .textarea {
+    --control-h: calc(var(--spacing) * 4 + 1.5rem + 2px);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 40rem) {
+    .textarea { --control-h: calc(var(--spacing) * 4 + 1.25rem + 2px); }
+  }
+
+  /* select.css, derived (min-h-9 is below the natural height) */
+  .select__trigger {
+    --control-h: calc(var(--spacing) * 4 + 1.5rem + 2px);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 40rem) {
+    .select__trigger { --control-h: calc(var(--spacing) * 4 + 1.25rem + 2px); }
+  }
+
+  /* autocomplete.css, derived */
+  .autocomplete__trigger {
+    --control-h: calc(var(--spacing) * 4 + 1.5rem + 2px);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 40rem) {
+    .autocomplete__trigger { --control-h: calc(var(--spacing) * 4 + 1.25rem + 2px); }
+  }
+
+  /* native-select.css, derived (text-sm at every width, unlike Input) */
+  .native-select__select {
+    --control-h: calc(var(--spacing) * 4 + 1.25rem + 2px);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* input-group.css, derived (inner parts follow the shell, WP8 round 9) */
+  .input-group {
+    --control-h: calc(var(--spacing) * 4 + 1.5rem + 2px);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+    --field-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+    --radius-field: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 40rem) {
+    .input-group { --control-h: calc(var(--spacing) * 4 + 1.25rem + 2px); }
+  }
+
+  /* search-field.css (h-9) */
+  .search-field__group {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* number-field.css (h-9) */
+  .number-field__group {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* date-input-group.css (h-9) */
+  .date-input-group {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* color-input-group.css (h-9) */
+  .color-input-group {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* input-otp.css (h-10) */
+  .input-otp__slot {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* cell-select.css (h-9) */
+  .cell-select .cell-select__trigger {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* cell-switch.css (h-9) */
+  .cell-switch .cell-switch__trigger {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* cell-color-picker.css (h-9) */
+  .cell-color-picker .cell-color-picker__trigger {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* cell-slider.css (h-9) */
+  .cell-slider .cell-slider__track {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* select.css (size-5) */
+  .select__clear-button {
+    --control-h: calc(var(--spacing) * 5);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* autocomplete.css (size-5) */
+  .autocomplete__clear-button {
+    --control-h: calc(var(--spacing) * 5);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* tabs.css (tab h-8 + p-1 x2) */
+  .tabs__list-container {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* tabs.css (tab h-8 + p-1 x2) */
+  .tabs__list {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* tabs.css (h-8) */
+  .tabs__tab {
+    --control-h: calc(var(--spacing) * 8);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* tabs.css (size-full of a h-8 tab) */
+  .tabs__indicator {
+    --control-h: calc(var(--spacing) * 8);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* segment.css (item h-8 + p-1 x2) */
+  .segment {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* segment.css (item h-7 + p-0.5 x2) */
+  .segment--sm {
+    --control-h: calc(var(--spacing) * 8);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* segment.css (item h-10 + p-1 x2) */
+  .segment:has(.segment__item--lg) {
+    --control-h: calc(var(--spacing) * 12);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* segment.css (h-8) */
+  .segment__item {
+    --control-h: calc(var(--spacing) * 8);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* segment.css (h-7) */
+  .segment__item--sm {
+    --control-h: calc(var(--spacing) * 7);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* segment.css (h-10) */
+  .segment__item--lg {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* pagination.css (size-9 md:size-8) */
+  .pagination__link {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .pagination__link { --control-h: calc(var(--spacing) * 8); }
+  }
+
+  /* pagination.css (size-8 md:size-7) */
+  .pagination--sm .pagination__link {
+    --control-h: calc(var(--spacing) * 8);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .pagination--sm .pagination__link { --control-h: calc(var(--spacing) * 7); }
+  }
+
+  /* pagination.css (size-10 md:size-9) */
+  .pagination--lg .pagination__link {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .pagination--lg .pagination__link { --control-h: calc(var(--spacing) * 9); }
+  }
+
+  /* number-stepper.css (button h-9 md:h-8, p-0) */
+  .number-stepper__group {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .number-stepper__group { --control-h: calc(var(--spacing) * 8); }
+  }
+
+  /* number-stepper.css */
+  .number-stepper__group--sm {
+    --control-h: calc(calc(var(--spacing) * 8) + var(--spacing));
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .number-stepper__group--sm { --control-h: calc(calc(var(--spacing) * 7) + var(--spacing)); }
+  }
+
+  /* number-stepper.css */
+  .number-stepper__group--md {
+    --control-h: calc(calc(var(--spacing) * 9) + var(--spacing));
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .number-stepper__group--md { --control-h: calc(calc(var(--spacing) * 8) + var(--spacing)); }
+  }
+
+  /* number-stepper.css */
+  .number-stepper__group--lg {
+    --control-h: calc(calc(var(--spacing) * 10) + var(--spacing));
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .number-stepper__group--lg { --control-h: calc(calc(var(--spacing) * 9) + var(--spacing)); }
+  }
+
+  /* number-stepper.css (h-9 md:h-8) */
+  .number-stepper__decrement-button, .number-stepper__increment-button {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .number-stepper__decrement-button, .number-stepper__increment-button { --control-h: calc(var(--spacing) * 8); }
+  }
+
+  /* number-stepper.css */
+  .number-stepper__decrement-button--sm, .number-stepper__increment-button--sm {
+    --control-h: calc(var(--spacing) * 8);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .number-stepper__decrement-button--sm, .number-stepper__increment-button--sm { --control-h: calc(var(--spacing) * 7); }
+  }
+
+  /* number-stepper.css */
+  .number-stepper__decrement-button--md, .number-stepper__increment-button--md {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .number-stepper__decrement-button--md, .number-stepper__increment-button--md { --control-h: calc(var(--spacing) * 8); }
+  }
+
+  /* number-stepper.css */
+  .number-stepper__decrement-button--lg, .number-stepper__increment-button--lg {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+  @media (width >= 48rem) {
+    .number-stepper__decrement-button--lg, .number-stepper__increment-button--lg { --control-h: calc(var(--spacing) * 9); }
+  }
+
+  /* chip.css (leading-5 + py-0.5 x2) */
+  .chip {
+    --control-h: calc(var(--spacing) * 6);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* chip.css (leading-5, py-0) */
+  .chip--sm {
+    --control-h: calc(var(--spacing) * 5);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* chip.css (leading-5 + py-1 x2) */
+  .chip--lg {
+    --control-h: calc(var(--spacing) * 7);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* badge.css (min-h-7) */
+  .badge {
+    --control-h: calc(var(--spacing) * 7);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* badge.css (min-h-4) */
+  .badge--sm {
+    --control-h: calc(var(--spacing) * 4);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* badge.css (min-h-8) */
+  .badge--lg {
+    --control-h: calc(var(--spacing) * 8);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* kbd.css (h-6) */
+  .kbd {
+    --control-h: calc(var(--spacing) * 6);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* avatar.css (size-10) */
+  .avatar {
+    --control-h: calc(var(--spacing) * 10);
+    --avatar-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* avatar.css (size-8) */
+  .avatar--sm {
+    --control-h: calc(var(--spacing) * 8);
+    --avatar-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* avatar.css (size-12) */
+  .avatar--lg {
+    --control-h: calc(var(--spacing) * 12);
+    --avatar-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* switch.css (fixed rem, not scaled by --spacing) */
+  .switch__control {
+    border-radius: calc(infinity * 1px); /* D47 */
+  }
+
+  /* switch.css */
+  .switch--sm .switch__control {
+    border-radius: calc(infinity * 1px); /* D47 */
+  }
+
+  /* switch.css */
+  .switch--lg .switch__control {
+    border-radius: calc(infinity * 1px); /* D47 */
+  }
+
+  /* switch.css */
+  .switch__thumb {
+    border-radius: calc(infinity * 1px); /* D47 */
+  }
+
+  /* switch.css */
+  .switch--sm .switch__thumb {
+    border-radius: calc(infinity * 1px); /* D47 */
+  }
+
+  /* switch.css */
+  .switch--lg .switch__thumb {
+    border-radius: calc(infinity * 1px); /* D47 */
+  }
+
+  /* checkbox.css (size-4) */
+  .checkbox__control {
+    --control-h: calc(var(--spacing) * 4);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* item-card.css (size-9) */
+  .item-card__icon {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* kpi.css (size-8) */
+  .kpi__icon {
+    --control-h: calc(var(--spacing) * 8);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* modal.css (size-10) */
+  .modal__icon {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* sidebar.css (min-h-9); spec 6.2 */
+  .sidebar__menu-item-content {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* our own: a 6-step square, the redirect flag of a profile icon */
+  .tile-6 {
+    --control-h: calc(var(--spacing) * 6);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* our own: an 11-step square, the profile icon of a list row */
+  .tile-11 {
+    --control-h: calc(var(--spacing) * 11);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* our own: the link of one counter in a list row (RowCounters), about 10 steps tall */
+  .row-counter {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* icons/ServiceLogo.tsx (size-9) */
+  .service-logo {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* shell.css, skip link (spec 8.1) */
+  .skip-link {
+    --control-h: calc(var(--spacing) * 9);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* shell.css, page header icon (size-10) */
+  .page-header__icon {
+    --control-h: calc(var(--spacing) * 10);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* D16: height 50 gives radius 20 */
+  .control-50 {
+    --control-h: var(--size-50);
+    height: var(--control-h);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* D16: height 75 gives radius 30, the cap */
+  .control-75 {
+    --control-h: var(--size-75);
+    height: var(--control-h);
+    border-radius: min(calc(var(--control-h) * var(--radius-control-ratio)), var(--radius-control-cap));
+  }
+
+  /* card.css (min(32px, 3 x radius)) */
+  .card {
+    border-radius: var(--radius-box);
+  }
+
+  /* modal.css */
+  .modal__dialog {
+    border-radius: var(--radius-box);
+  }
+
+  /* sheet.css (rounded-2xl) */
+  .sheet__content[data-detached] {
+    border-radius: var(--radius-box);
+  }
+
+  /* sheet.css (rounded-2xl) */
+  .sheet__content[data-detached] .sheet__dialog {
+    border-radius: var(--radius-box);
+  }
+
+  /* sheet.css (rounded-t-2xl) */
+  .sheet__content--bottom {
+    border-radius: var(--radius-box) var(--radius-box) 0 0;
+  }
+
+  /* sheet.css (rounded-b-2xl) */
+  .sheet__content--top {
+    border-radius: 0 0 var(--radius-box) var(--radius-box);
+  }
+
+  /* sheet.css (rounded-r-2xl) */
+  .sheet__content--left {
+    border-radius: 0 var(--radius-box) var(--radius-box) 0;
+  }
+
+  /* sheet.css (rounded-l-2xl) */
+  .sheet__content--right {
+    border-radius: var(--radius-box) 0 0 var(--radius-box);
+  }
+
+  /* sheet.css (rounded-t-2xl) */
+  .sheet__dialog--bottom {
+    border-radius: var(--radius-box) var(--radius-box) 0 0;
+  }
+
+  /* sheet.css (rounded-b-2xl) */
+  .sheet__dialog--top {
+    border-radius: 0 0 var(--radius-box) var(--radius-box);
+  }
+
+  /* sheet.css (rounded-r-2xl) */
+  .sheet__dialog--left {
+    border-radius: 0 var(--radius-box) var(--radius-box) 0;
+  }
+
+  /* sheet.css (rounded-l-2xl) */
+  .sheet__dialog--right {
+    border-radius: var(--radius-box) 0 0 var(--radius-box);
+  }
+
+  /* popover.css (min(32px, 3 x radius)) */
+  .popover {
+    border-radius: var(--radius-box);
+  }
+
+  /* dropdown.css (min(32px, 2 x radius + 1.5 x spacing)) */
+  .dropdown__popover {
+    border-radius: var(--radius-box);
+  }
+
+  /* data-grid.css has none; the wrapper gets 20px and clips its table */
+  .data-grid {
+    border-radius: var(--radius-box);
+    overflow: clip;
+  }
+
+  /* table.css (min(32px, 2.5 x radius), which is 20px at radius 8; kept so it cannot drift) */
+  .table-root--primary {
+    border-radius: var(--radius-box);
+  }
+
+  /* kpi.css (2 x radius) */
+  .kpi {
+    border-radius: var(--radius-box);
+  }
+
+  /* item-card.css (2 x radius) */
+  .item-card {
+    border-radius: var(--radius-box);
+  }
+
+  /* item-card-group.css (2 x radius) */
+  .item-card-group {
+    border-radius: var(--radius-box);
+    overflow: clip;
+  }
+
+  /* widget.css (2 x radius) */
+  .widget {
+    border-radius: var(--radius-box);
+  }
+
+  /* alert.css (min(32px, 3 x radius)) */
+  .alert {
+    border-radius: var(--radius-box);
+  }
+
+  /* toast.css (min(32px, 3 x radius)) */
+  .toast {
+    border-radius: var(--radius-box);
+  }
+
+  /* accordion.css (min(32px, 3 x radius)) */
+  .accordion--surface {
+    border-radius: var(--radius-box);
+  }
+
+  /* select.css (min(32px, 2 x radius + 1.5 x spacing)) */
+  .select__popover {
+    border-radius: var(--radius-box);
+  }
+
+  /* autocomplete.css */
+  .autocomplete__popover {
+    border-radius: var(--radius-box);
+  }
+
+  /* combo-box.css */
+  .combo-box__popover {
+    border-radius: var(--radius-box);
+  }
+
+  /* sidebar.css (2 x radius) */
+  .sidebar--floating {
+    border-radius: var(--radius-box);
+  }
+}

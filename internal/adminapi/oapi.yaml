@@ -1,0 +1,9 @@
+# oapi-codegen config for the admin API. Regenerate with
+# `go generate ./internal/adminapi`; scripts/ci.sh fails when the output is stale.
+package: gen
+generate:
+  chi-server: true
+  strict-server: true
+  models: true
+output-options:
+  exclude-tags: [health]
