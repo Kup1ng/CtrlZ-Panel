@@ -301,7 +301,7 @@
       "text": "Whether the zone gives this node's address to clients, and what keeps it from coming back.",
       "notActive": "Only an active node takes part in the answer.",
       "revokedInPair": "This node is revoked and still in its pair. Revoking changes only its status: the zone keeps advertising it, and its peer still trusts it until the revocation reaches the nodes. Replace it in the pair now.",
-      "revokedHoldDialog": "The node leaves the answer at once. The hold lasts only until failover moves the answer back to this node, because the hub still counts a revoked node as fit until the revocation reaches it, and it still reports and votes on its peer. Stop the host now (compromise runbook, step 3).",
+      "revokedHoldDialog": "This asks the hub to take the node out of the answer. The hub refuses it when the node has no pair, when its peer is not fit, or when its peer is already withdrawn. If it accepts, the hold lasts only until failover moves the answer back to this node, because the hub still counts a revoked node as fit until the revocation reaches it, and it still reports and votes on its peer. Stop the host now (compromise runbook, step 3).",
       "revokedHold": "Until the revocation has reached the nodes, hold this node to move the zone answer to its pair peer. A hold does not stop the host: follow the compromise runbook.",
       "noPair": "This node is in no pair. Failover does not look at it, and a request can only clear its hold.",
       "answer": "DNS answer",

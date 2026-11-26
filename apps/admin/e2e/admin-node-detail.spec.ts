@@ -160,7 +160,7 @@ for (const {lang, dir} of LANGS) {
       await expect(page.getByTestId("request-force_failback")).toHaveCount(0);
       await page.getByTestId("request-hold").click();
       // PW-r1-5: the dialog of a revoked node does not promise that the hold lasts, and does not repeat the active node's text.
-      await expect(page.getByRole("dialog")).toContainText(N("node.failover.revokedHoldDialog"));
+      await expect(page.getByRole("alertdialog")).toContainText(N("node.failover.revokedHoldDialog"));
       await page.getByTestId("confirm-hold").click();
       // The mock answers as the route does (a hold of a revoked node is accepted), so the request is recorded with the real body (PW-r1-1).
       await expect.poll(() => bodies(mock, "POST", `/nodes/${w.a.id}/dns-requests`)).toEqual([{kind: "hold"}]);
@@ -231,7 +231,7 @@ for (const {lang, dir} of LANGS) {
       await expect(page.getByTestId("node-summary").getByTestId("fact-state")).toContainText(N("health.revoked"));
       const reports = page.getByTestId("node-reports");
       await expect(reports.getByRole("grid", {name: N("node.reports.gridLabel")}).getByRole("row")).toHaveCount(2);
-      // A revoked node's addresses are not edited, and nothing offers to hold or approve it.
+      // A revoked node's addresses are not edited, and nothing offers to approve or revoke it.
       await expect(page.getByTestId("node-addresses")).toContainText(N("node.addresses.revoked"));
       await expect(page.getByTestId("node-approve")).toHaveCount(0);
       await expect(page.getByTestId("node-revoke")).toHaveCount(0);

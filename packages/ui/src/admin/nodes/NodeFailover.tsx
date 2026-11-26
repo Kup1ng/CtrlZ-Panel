@@ -36,7 +36,7 @@ export function NodeFailover({node, pairs, nodes}: {node: NodeView; pairs?: read
   const answer = answerState(node, pairs, nodes);
   const notReported = <NotReported text={t("notReported")} />;
   const flapping = flapUntilActive(node.dns_flap_until);
-  // The buttons the node can take; the route decides in the end. A revoked node in its pair offers hold and release only (SC 8a.9).
+  // The buttons the node can take; the route decides in the end. A revoked node in its pair offers hold only (SC 8a.9): release and force failback would let failover return it while the hub still counts it as fit.
   const actions = (
     <div className="flex flex-wrap gap-2" data-testid="failover-actions">
       {KINDS.filter((kind) => !revokedInPair || kind === "hold").map((kind) => (
