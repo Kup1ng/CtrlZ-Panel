@@ -287,6 +287,45 @@ func TestADrainTheHubHasNotSeenIsNotOverwrittenWithNone(t *testing.T) {
 	}
 }
 
+// GP-r3-1: the hub that took the lease again learns a returned node has no drain from the table that advertises it, not from a
+// drain it saw (it saw none). That is the only way the stored "done" of a node that is serving again becomes "none".
+//
+// Fails if: feedDrains marks a node as seen only when it is draining (A keeps drain_state done for good after F3 returns it).
+func TestARestartedHubClearsTheStoredDrainOfANodeItSeesAdvertisedAgain(t *testing.T) {
+	w := newWorld(t)
+	w.settled()
+	w.str.open[uid(nodeB)] = true
+	w.tick()
+	w.run(40*time.Second, w.traffic(true, true))
+	w.holdA()
+	w.run(3*time.Second, nil)
+	w.heartbeat(nodeA, w.pvAt(w.loop.Version(), nodeB), nil)
+	w.run(365*time.Second, w.traffic(true, true))
+	if before := w.db.state(nodeA); before.Drain != hubfail.DrainDone {
+		t.Fatalf("setup: A is %v", before)
+	}
+
+	// The restart: this process never saw A drain.
+	w.lease.held = false
+	w.run(2*time.Second, nil)
+	w.lease.held = true
+	w.run(30*time.Second, w.traffic(true, true))
+	if got := w.db.state(nodeA); got.Drain != hubfail.DrainDone || !w.db.node(nodeA).Withdrawn {
+		t.Fatalf("setup: the restarted hub touched A: %v", got)
+	}
+
+	w.db.mu.Lock()
+	w.db.reqs = append(w.db.reqs, store.HubFailRequest{ID: uid(92), Node: uid(nodeA), Kind: "release", RequestedAt: w.clk.Now()})
+	w.db.mu.Unlock()
+	w.run(zone.Inputs().Stable+60*time.Second, w.traffic(true, true))
+	if w.db.node(nodeA).Withdrawn {
+		t.Fatal("setup: A was not returned")
+	}
+	if a := w.db.state(nodeA); a.Drain != hubfail.DrainNone || !a.DrainSince.IsZero() {
+		t.Fatalf("a node that serves again keeps its stored drain: %v", a)
+	}
+}
+
 // GP-r1-10: the tick checks the lease at its start, and the rows are written at its end. A hub whose lease went in between
 // writes nothing.
 //
