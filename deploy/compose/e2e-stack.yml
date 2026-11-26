@@ -1,0 +1,33 @@
+# Override of the full stack for the flow tests of spec 17.7: the real API behind Caddy, with the
+# `noop` SMS driver, which production refuses.
+#
+#   docker compose -f docker-compose.yml -f e2e.yml -f e2e-stack.yml up -d --wait
+#   node ../../scripts/e2e-seed.mjs --out <private dir>
+#
+# Run by steps 10d and 10f of scripts/ci-web.sh (the Caddy set and the flow tests). Its project name is `ctrlz-e2e`, never `ctrlz`.
+name: ctrlz-e2e
+
+services:
+  # The base file starts Caddy after the web containers only (e2e.yml). The flows need the API too.
+  caddy:
+    depends_on:
+      api: {condition: service_started}
+      admin: {condition: service_started}
+
+  # CTRLZ_ENV=test lets the roles start on throw-away keys and accept the `noop` gateway. The default,
+  # production, refuses both. Only this file sets it.
+  api:
+    environment:
+      CTRLZ_ENV: test
+  admin:
+    environment:
+      CTRLZ_ENV: test
+  worker:
+    environment:
+      CTRLZ_ENV: test
+      # The `noop` driver appends every message it would have sent to this file, and the tests read the
+      # codes from it on the host. The root of the container is read-only, so it is a bind mount, and
+      # `e2e-out` must be writable by uid 65532 (scripts/ci-web.sh makes it).
+      CTRLZ_NOOP_SMS_FILE: /e2e/noop.jsonl
+    volumes:
+      - ./e2e-out:/e2e

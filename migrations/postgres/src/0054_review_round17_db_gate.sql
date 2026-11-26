@@ -1,0 +1,218 @@
+-- P1 auth review round 17, fix gate, area database (findings db-r17-13 and db-r17-17; rule lock-order).
+--
+-- db-r17-13. ip_claim_take wrote several rows of ip_claims (the victims it releases) and of ip_proof_challenges
+-- (the udp challenges that count one more attempt) in plan order, and was excused from the key-order check by its
+-- NAME, on the strength of a comment that it locks every row it writes first with a PERFORM ... FOR UPDATE.
+-- Nothing read that text: a later CREATE OR REPLACE that dropped or reordered the PERFORM, or a row that turned
+-- up between the PERFORM and the UPDATE (the UPDATE is a new statement with a new snapshot), would have waited
+-- for it in plan order again. The two UPDATEs now take their rows through the one ordered locking subselect of
+-- internal/store/locks.go, like every other multi-row writer, so there is nothing to excuse and no function is
+-- excused by name any more. The PERFORMs stay: they decide what the check below them sees.
+--
+-- db-r17-17. The INSERT of the policy_outbox rows (the victims' tenants and the taker) takes its rows in the
+-- order of a DISTINCT, which is a hash order. It is sorted by id now, so an INSERT that has to wait for another
+-- transaction's uncommitted row of the same key meets it in the one order (the dedupe key carries the batch id,
+-- which is one per transaction, so two takers do not conflict today; the order is for the day a key is shared).
+--
+-- Signature, owner, grants and ranks are those of the function it replaces (body only). A new file and not an
+-- edit of an applied one (README, Rules).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+SET ROLE ctrlz_auth;
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.ip_claim_take(p_claim_id uuid, p_code text, p_batch_id uuid)
+RETURNS TABLE (outcome text)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant   uuid := ctrlz.current_tenant_id();
+  v_cidr     cidr;
+  v_state    text;
+  v_approved boolean;
+  v_proven   timestamptz;
+  v_idle     integer;
+  v_code     text;
+  v_hash     bytea;
+  v_chal     uuid;
+  v_obs      inet;
+  v_proto    text;
+  v_method   text;
+  v_udp_ids  uuid[] := ARRAY[]::uuid[];
+  v_diff     integer;
+  v_blocked  boolean;
+  v_victims  uuid[];
+  r          record;
+  i          integer;
+BEGIN
+  IF v_tenant IS NULL THEN
+    RETURN;
+  END IF;
+  IF p_batch_id IS NULL THEN
+    RETURN QUERY SELECT 'invalid_batch'::text;
+    RETURN;
+  END IF;
+
+  -- The cidr of a claim never changes, so it can be read before the lock.
+  SELECT c.cidr INTO v_cidr FROM ctrlz.ip_claims c WHERE c.tenant_id = v_tenant AND c.id = p_claim_id;
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 'not_found'::text;
+    RETURN;
+  END IF;
+
+  PERFORM 1 FROM ctrlz.ip_claims c
+  WHERE c.tenant_id = v_tenant AND c.cidr && v_cidr AND (c.id = p_claim_id OR c.state <> 'released')
+  ORDER BY c.id
+  FOR UPDATE;
+
+  SELECT c.state, c.approved_by_admin, c.proven_at INTO v_state, v_approved, v_proven
+  FROM ctrlz.ip_claims c
+  WHERE c.tenant_id = v_tenant AND c.id = p_claim_id;
+
+  IF NOT FOUND OR v_state = 'released' THEN
+    RETURN QUERY SELECT 'not_found'::text;
+    RETURN;
+  ELSIF v_state = 'active' AND v_proven IS NOT NULL THEN
+    RETURN QUERY SELECT 'already_active'::text;
+    RETURN;
+  ELSIF v_state = 'suspended' THEN
+    RETURN QUERY SELECT 'suspended'::text;
+    RETURN;
+  ELSIF EXISTS (SELECT 1 FROM ctrlz.ip_claims o
+                WHERE o.tenant_id = v_tenant AND o.state = 'suspended' AND o.cidr && v_cidr AND o.id <> p_claim_id) THEN
+    RETURN QUERY SELECT 'suspended'::text;
+    RETURN;
+  END IF;
+
+  SELECT s.takeover_idle_days INTO v_idle FROM ctrlz.system_settings s;
+
+  IF pg_catalog.masklen(v_cidr) < 32 AND NOT v_approved THEN
+    RETURN QUERY SELECT 'wide_requires_approval'::text;
+    RETURN;
+  END IF;
+
+  v_code := pg_catalog.lower(pg_catalog.btrim(COALESCE(p_code, '')));
+  IF v_code <> '' THEN
+    v_hash := pg_catalog.sha256(pg_catalog.convert_to(v_code, 'UTF8'));
+  END IF;
+
+  -- Look for evidence: TCP-class first, then udp ones that match the code.
+  FOR r IN
+    SELECT ch.id, ch.observed_ip, ch.observed_protocol, ch.txt_code_hash
+    FROM ctrlz.ip_proof_challenges ch
+    WHERE ch.tenant_id = v_tenant AND ch.claim_id = p_claim_id
+      AND ch.observed_at IS NOT NULL AND ch.observed_ip <<= v_cidr
+      AND ch.observed_at <= ch.expires_at AND ch.expires_at > pg_catalog.now()
+      AND ch.observed_at > pg_catalog.now() - interval '15 minutes'
+      AND ch.consumed_at IS NULL AND ch.attempts < 5
+    ORDER BY (ch.observed_protocol = 'udp'), ch.observed_at DESC, ch.id
+    FOR UPDATE
+  LOOP
+    IF r.observed_protocol <> 'udp' THEN
+      v_chal := r.id; v_obs := r.observed_ip; v_proto := r.observed_protocol;
+      EXIT;
+    END IF;
+    v_udp_ids := v_udp_ids || r.id;
+    IF v_hash IS NOT NULL THEN
+      -- No early exit: the whole hash is always compared.
+      v_diff := 0;
+      FOR i IN 0 .. 31 LOOP
+        v_diff := v_diff | (pg_catalog.get_byte(r.txt_code_hash, i) # pg_catalog.get_byte(v_hash, i));
+      END LOOP;
+      IF v_diff = 0 THEN
+        v_chal := r.id; v_obs := r.observed_ip; v_proto := r.observed_protocol;
+        EXIT;
+      END IF;
+    END IF;
+  END LOOP;
+
+  IF v_chal IS NULL THEN
+    IF v_hash IS NOT NULL AND pg_catalog.cardinality(v_udp_ids) > 0 THEN
+      UPDATE ctrlz.ip_proof_challenges ch
+      SET attempts = ch.attempts + 1,
+          consumed_at = CASE WHEN ch.attempts + 1 >= 5 THEN pg_catalog.now() ELSE ch.consumed_at END
+      WHERE ch.id = ANY (ARRAY(SELECT x.id FROM ctrlz.ip_proof_challenges x
+                               WHERE x.tenant_id = v_tenant AND x.id = ANY (v_udp_ids)
+                               ORDER BY x.id FOR NO KEY UPDATE))
+        AND ch.tenant_id = v_tenant;
+    END IF;
+    RETURN QUERY SELECT 'no_proof'::text;
+    RETURN;
+  END IF;
+
+  v_method := CASE v_proto WHEN 'udp' THEN 'verify_udp_txt' WHEN 'tcp' THEN 'verify_tcp' ELSE 'secure_dns' END;
+
+  -- Lock first, then look: the check below runs as a new statement and sees
+  -- whatever a concurrent transaction committed while we waited. Ordered by id,
+  -- so two takers that both reach a third tenant's rows lock them in one order.
+  PERFORM 1
+  FROM ctrlz.ip_claims o
+  WHERE o.cidr && v_cidr AND o.state IN ('active', 'grace') AND o.tenant_id <> v_tenant
+  ORDER BY o.id
+  FOR UPDATE;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM ctrlz.ip_claims o
+    LEFT JOIN ctrlz.endpoints oe ON oe.tenant_id = o.tenant_id AND oe.id = o.endpoint_id
+    WHERE o.cidr && v_cidr AND o.state IN ('active', 'grace') AND o.tenant_id <> v_tenant
+      AND NOT (
+        o.cidr <<= v_cidr AND o.cidr >>= v_obs
+        AND (o.proven_at IS NULL
+             OR COALESCE(o.last_seen_at, o.proven_at) < pg_catalog.now() - pg_catalog.make_interval(days => v_idle)
+             OR COALESCE(oe.admin_state, '') = 'hard_disabled')
+      )
+  ) INTO v_blocked;
+
+  IF v_blocked THEN
+    RETURN QUERY SELECT 'unavailable'::text;
+    RETURN;
+  END IF;
+
+  BEGIN
+    WITH d AS (
+      UPDATE ctrlz.ip_claims o SET state = 'released', displaced_at = pg_catalog.now()
+      WHERE o.id = ANY (ARRAY(SELECT x.id FROM ctrlz.ip_claims x
+            WHERE x.cidr && v_cidr AND x.state IN ('active', 'grace') AND x.tenant_id <> v_tenant
+              AND x.cidr <<= v_cidr AND x.cidr >>= v_obs
+              AND (x.proven_at IS NULL
+                   OR COALESCE(x.last_seen_at, x.proven_at) < pg_catalog.now() - pg_catalog.make_interval(days => v_idle)
+                   OR EXISTS (SELECT 1 FROM ctrlz.endpoints oe
+                              WHERE oe.tenant_id = x.tenant_id AND oe.id = x.endpoint_id AND oe.admin_state = 'hard_disabled'))
+            ORDER BY x.id FOR NO KEY UPDATE))
+        AND o.state IN ('active', 'grace') AND o.tenant_id <> v_tenant
+      RETURNING o.tenant_id
+    )
+    SELECT pg_catalog.array_agg(DISTINCT d.tenant_id) INTO v_victims FROM d;
+
+    UPDATE ctrlz.ip_claims c
+    SET state = 'active', proof_method = v_method, proven_at = pg_catalog.now(), grace_until = NULL
+    WHERE c.tenant_id = v_tenant AND c.id = p_claim_id;
+
+    UPDATE ctrlz.ip_proof_challenges ch SET consumed_at = pg_catalog.now()
+    WHERE ch.tenant_id = v_tenant AND ch.id = v_chal;
+
+    -- The victim's endpoint_set must be rebuilt too, or its nodes keep serving
+    -- the claim that was just released.
+    INSERT INTO ctrlz.policy_outbox (tenant_id, aggregate_type, aggregate_id, batch_id)
+    SELECT t.id, 'endpoint_set', t.id, p_batch_id
+    FROM (SELECT DISTINCT x AS id FROM pg_catalog.unnest(COALESCE(v_victims, ARRAY[]::uuid[]) || v_tenant) AS x) t
+    ORDER BY t.id
+    ON CONFLICT DO NOTHING;
+  EXCEPTION WHEN exclusion_violation THEN
+    -- Something overlapping that the predicate did not release (the caller's
+    -- own tenant, or a row that changed). The subtransaction undoes the
+    -- displacement and the outbox rows above.
+    RETURN QUERY SELECT 'unavailable'::text;
+    RETURN;
+  END;
+
+  RETURN QUERY SELECT 'active'::text;
+END
+$$;
+-- +goose StatementEnd
+
+RESET ROLE;
