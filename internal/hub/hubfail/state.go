@@ -38,6 +38,18 @@ const (
 // lost it mid-write can leave a stale row; the leader's own view does not change, and without this it would never replace it.
 const stateRefresh = 5 * time.Minute
 
+// settleRewrite is how long after its first settled write a node's row is written once more. The store ends a stored drain at the
+// write only when drain_since is 360 s old (store drainDoneAfter, SC 8a.6); a drain that was younger then has no change to trigger
+// another write, and waiting for stateRefresh would show it draining up to 5 minutes past its end. drain_since is not later than that
+// first write, so 360 s after it the drain is over, and the margin covers the store reading its clock a moment after the hub.
+const settleRewrite = 360*time.Second + 5*time.Second
+
+// settleWrite is the settled-row write of one node: when the first one went through, and whether the rewrite has been made.
+type settleWrite struct {
+	at     time.Time
+	rewrit bool
+}
+
 func (l *Loop) resetState() {
 	l.tbl, l.tblVer = nil, 0
 	l.drains = map[uuid.UUID]*zone.Drain{}
@@ -48,6 +60,7 @@ func (l *Loop) resetState() {
 	// node only for a drain it has seen (drainSeen): the drain lives in memory, so a restart cannot tell a withdrawn node that was
 	// draining from one that never drained, and must not overwrite the stored answer with a quiet "none" (GP-r1-1).
 	l.written = map[uuid.UUID]store.HubNodeState{}
+	l.settled = map[uuid.UUID]settleWrite{}
 	l.fullAt = stamp{}
 }
 
@@ -180,7 +193,7 @@ func (l *Loop) publishState(ctx context.Context, now time.Time) {
 	var batch []store.HubNodeState
 	for _, t := range l.Targets() {
 		st := l.nodeState(now, t.ID)
-		if prev, ok := l.written[t.ID]; ok && !full && sameState(prev, st) {
+		if prev, ok := l.written[t.ID]; ok && !full && sameState(prev, st) && !l.settleDue(now, st) {
 			continue
 		}
 		batch = append(batch, st)
@@ -198,8 +211,24 @@ func (l *Loop) publishState(ctx context.Context, now time.Time) {
 	}
 	for _, st := range batch {
 		l.written[st.Node] = st
+		if !st.DrainSettled {
+			delete(l.settled, st.Node)
+			continue
+		}
+		if w, ok := l.settled[st.Node]; !ok {
+			l.settled[st.Node] = settleWrite{at: now}
+		} else if !w.rewrit && now.Sub(w.at) >= settleRewrite {
+			l.settled[st.Node] = settleWrite{at: w.at, rewrit: true}
+		}
 	}
 	if full {
 		l.fullAt = stamp{now}
 	}
+}
+
+// settleDue says a settled row has to be written again now (see settleRewrite): its first settled write is old enough and no rewrite
+// followed it.
+func (l *Loop) settleDue(now time.Time, st store.HubNodeState) bool {
+	w, ok := l.settled[st.Node]
+	return st.DrainSettled && ok && !w.rewrit && now.Sub(w.at) >= settleRewrite
 }

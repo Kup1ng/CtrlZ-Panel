@@ -406,3 +406,29 @@ func TestAStoredDrainOfANodeThatIsNotWithdrawnEndsWhenItsTimeHasPassed(t *testin
 		t.Fatalf("a drain that has not run for its time was ended: %v", got)
 	}
 }
+
+// GW3-r1-1: a stored drain that was young when the hub first wrote the settled row ends when its 360 s have passed, not at some later
+// full refresh. The drain here began 10 s before the first write, so the refresh 300 s later still finds it young and the next one is
+// 600 s away; only the rewrite after the first settled write can end it by 370 s.
+//
+// Fails if: publishState does not write a settled row again once 360 s have passed since its first settled write (the row stays
+// draining at 370 s), or writes it early (it is done at 300 s).
+func TestAYoungStoredDrainOfANodeThatIsNotWithdrawnEndsWhenItsTimeHasPassedWithNoOtherChange(t *testing.T) {
+	w := newWorld(t)
+	w.settled()
+	w.str.open[uid(nodeB)] = true
+	young := w.clk.Now().Add(-10 * time.Second)
+	w.db.mu.Lock()
+	w.db.states[uid(nodeB)] = store.HubNodeState{Node: uid(nodeB), Drain: hubfail.DrainDraining, DrainSince: young, DrainKnown: true}
+	w.db.mu.Unlock()
+	w.tick()
+	w.heartbeat(nodeB, w.pvAt(w.loop.Version(), nodeA), nil)
+	w.run(320*time.Second, w.traffic(true, true))
+	if got := w.db.state(nodeB); got.Drain != hubfail.DrainDraining {
+		t.Fatalf("the drain of B ended before its time: %v", got)
+	}
+	w.run(50*time.Second, w.traffic(true, true))
+	if got := w.db.state(nodeB); got.Drain != hubfail.DrainDone || !got.DrainSince.Equal(young) {
+		t.Fatalf("the drain of B did not end when its time passed: %v", got)
+	}
+}
