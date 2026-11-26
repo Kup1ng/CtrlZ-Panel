@@ -533,7 +533,7 @@
         "users": "{count, plural, one {# user is affected.} other {# users are affected.}}",
         "enforced": "{count, plural, one {# of them signs in only with a passkey.} other {# of them sign in only with a passkey.}}"
       },
-      "refused": "The server refused these values. In production it will not turn Passkey on until the real domain has been accepted.",
+      "refused": "Passkey cannot be turned on yet. In production the panel's public certificate must be applied first.",
       "submit": "Save",
       "saved": "Passkey settings saved."
     }

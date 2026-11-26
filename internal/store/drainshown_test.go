@@ -29,12 +29,16 @@ func TestDrainShownAppliesTheDrainRuleToARowNoHubWatches(t *testing.T) {
 		{"none is never promoted", str("none"), at(48 * time.Hour), "none"},
 		{"done stays done", str("done"), at(48 * time.Hour), "done"},
 	} {
-		got := drainShown(c.state, c.since, now)
+		got := drainShown(c.state, c.since, true, now)
 		if got == nil || *got != c.want {
 			t.Errorf("%s: got %v, want %s", c.name, got, c.want)
 		}
 	}
-	if drainShown(nil, nil, now) != nil {
+	// A node back in the answer keeps the stored row as it is, however old the drain (GW2-r1-3): fails if drainShown ignores it.
+	if got := drainShown(str("draining"), at(48*time.Hour), false, now); got == nil || *got != "draining" {
+		t.Errorf("an advertised node's old draining row must not be shown as done, got %v", got)
+	}
+	if drainShown(nil, nil, true, now) != nil {
 		t.Error("a node with no hub row must stay without a state")
 	}
 }

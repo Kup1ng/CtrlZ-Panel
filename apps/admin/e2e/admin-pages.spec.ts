@@ -2268,6 +2268,8 @@ for (const {lang, dir} of LANGS) {
         await expect(card.getByText(A("fieldErrors.rp_id.invalid"))).toBeVisible();
         await expect(card.getByText(errText(lang, "fields.invalid"), {exact: true})).toHaveCount(0);
         await expect(field).toHaveAttribute("aria-invalid", "true");
+        // The production refusal is cert_not_public, so a malformed RP ID gets no note about the certificate (GW2-r1-1).
+        await expect(card.getByTestId("webauthn-refused")).toHaveCount(0);
       });
 
       test("passkey: Retry of a failed save does not outlive the RP ID it was for, and no value is written without its count (wp10-r3-6)", async ({page, context, baseURL}) => {
@@ -2678,12 +2680,12 @@ for (const {lang, dir} of LANGS) {
       });
 
       test("passkey: turning it on in production is refused by the server and the page says so plainly", async ({page, context, baseURL}) => {
-        await openAdmin(context, baseURL, {handlers: {...rest, "GET /settings/registration": reg("invite"), "PUT /settings/webauthn": err(422, "validation_failed")}});
+        await openAdmin(context, baseURL, {handlers: {...rest, "GET /settings/registration": reg("invite"), "PUT /settings/webauthn": err(422, "cert_not_public")}});
         await goto(page, "/settings", A("pages.settings.title"));
         const card = page.getByTestId("settings-webauthn");
         await card.getByRole("switch", {name: A("settings.webauthn.enabled")}).locator("xpath=ancestor::label").click();
         await card.getByRole("button", {name: A("settings.webauthn.submit")}).click();
-        await expect(card.getByText(errText(lang, "validation_failed"))).toBeVisible();
+        await expect(card.getByText(errText(lang, "cert_not_public"))).toBeVisible();
         await expect(card.getByTestId("webauthn-refused")).toContainText(A("settings.webauthn.refused"));
       });
     });

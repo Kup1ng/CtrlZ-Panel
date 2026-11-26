@@ -26,8 +26,9 @@ import {PrimaryButton} from "../../forms/PrimaryButton.tsx";
 // server writes it, AUTH 7.2). Changing the RP ID makes passkeys made under the old one stale, so
 // `GET /settings/webauthn/impact?rp_id=` says how many credentials, users and enforced users it touches before the Save
 // is possible. `PUT /settings/webauthn {rp_id, enabled}` needs the fresh TOTP window. In production the server refuses
-// `enabled = true` until the real domain is accepted (P4): that is `validation_failed`, shown plainly with a line that
-// says why it may happen, and not hidden behind a general error.
+// `enabled = true` until a public certificate has been applied to the panel: that is 422 `cert_not_public`, shown plainly with
+// a line that says what to do first, and not hidden behind a general error. A malformed RP ID is `validation_failed` with an
+// `rp_id` field, which the field itself says, so that code gets no note of this kind.
 
 const IMPACT_DELAY_MS = 500;
 
@@ -232,7 +233,7 @@ function Editor({current}: {current: WebauthnConfig}) {
       ) : null}
 
       <FormError error={form.formError} onRetry={() => keepFocus(() => submit())} />
-      {hasCode(form.formError, "validation_failed") ? (
+      {hasCode(form.formError, "cert_not_public") ? (
         <p role="note" className="text-muted text-sm" data-testid="webauthn-refused">
           {t("settings.webauthn.refused")}
         </p>

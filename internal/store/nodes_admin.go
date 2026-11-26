@@ -250,7 +250,7 @@ func scanNode(row pgx.Row) (NodeRow, error) {
 		&n.DNSWithdrawn, &n.DNSHold, &n.DNSLastFailback, &n.DNSFlapUntil, &n.PairPeer, &pending,
 		&n.F3Unmet, &n.F3DueAt, &n.DrainState, &n.DrainSince)
 	n.Slot, n.PendingRequests = int(slot), int(pending)
-	n.DrainState = drainShown(n.DrainState, n.DrainSince, appclock.Now())
+	n.DrainState = drainShown(n.DrainState, n.DrainSince, n.DNSWithdrawn, appclock.Now())
 	return n, err
 }
 
@@ -262,9 +262,11 @@ const drainDoneAfter = 360 * time.Second
 // of the lease holder in the middle of the drain: the new hub cannot tell a drain from none and leaves the columns alone, GP-r1-1)
 // would otherwise show "draining" for good, though "done" is nothing but the time since drain_since. So the read applies the same
 // rule the hub does; a hub that has seen the drain writes "done" itself at the same moment, and a row that is "none" or "done"
-// is never touched.
-func drainShown(state *string, since *time.Time, now time.Time) *string {
-	if state == nil || *state != "draining" || since == nil || now.Sub(*since) < drainDoneAfter {
+// is never touched. A node that is advertised again is not promoted either: its stored "draining" is an old drain that no hub has
+// cleared yet (the next tick of a hub that sees it advertised writes "none", GP-r3-1), and "its clients have moved" is not
+// true of a node that is back in the answer (GW2-r1-3).
+func drainShown(state *string, since *time.Time, withdrawn bool, now time.Time) *string {
+	if state == nil || *state != "draining" || since == nil || !withdrawn || now.Sub(*since) < drainDoneAfter {
 		return state
 	}
 	done := "done"
