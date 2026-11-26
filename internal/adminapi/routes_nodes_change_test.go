@@ -560,3 +560,38 @@ func TestNodeChangeRoutesNeedAFreshAdmin(t *testing.T) {
 func jsonCompact(s string) string {
 	return strings.NewReplacer(`": `, `":`, `, "`, `,"`).Replace(s)
 }
+
+// TestRevokeNodeLogsTheCutListOnlyOnceTheRevocationCommitted pins I-r5-1: the Warn lines for the ids a cut clean-up list
+// lost are written after the transaction, so a revocation that rolls back (the old job keeps its list) says nothing.
+func TestRevokeNodeLogsTheCutListOnlyOnceTheRevocationCommitted(t *testing.T) {
+	r := newRig(t)
+	b, _ := r.admin(t)
+	n := r.addNode(t, 3, "active", "93.184.230.3", "93.184.230.103", "revoke-cut")
+
+	// An unfinished job that names 64 other nodes, so the carried list is one past the bound and one id is dropped.
+	ids := make([]string, 0, 64)
+	for i := range 64 {
+		ids = append(ids, fmt.Sprintf("00000000-0000-7000-8000-%012d", i+1))
+	}
+	r.env.Exec(t, `INSERT INTO ctrlz.admin_jobs (kind, params) VALUES ('node_revoked', jsonb_build_object('node_ids', to_jsonb($1::text[])))`, ids)
+	dropped := ids[len(ids)-1] // the list is cut in id order, so the largest id is the one that goes
+
+	// A fault after the point where the Warn used to be logged: the status change fails, the transaction rolls back.
+	r.env.Exec(t, `CREATE FUNCTION ctrlz.test_refuse_revoke() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'refused'; END $$`)
+	r.env.Exec(t, `CREATE TRIGGER test_refuse_revoke BEFORE UPDATE OF status ON ctrlz.nodes FOR EACH ROW WHEN (NEW.status = 'revoked') EXECUTE FUNCTION ctrlz.test_refuse_revoke()`)
+	if got := b.post("/nodes/"+n+":revoke", nil); got.Code == 200 {
+		t.Fatal("the revocation went through with the status change refused")
+	}
+	if strings.Contains(r.logs.String(), "clean-up list cut") {
+		t.Fatal("a rolled-back revocation logged that its clean-up list was cut")
+	}
+	if r.count(t, `SELECT count(*) FROM ctrlz.admin_jobs WHERE kind = 'node_revoked' AND state = 'queued'`) != 1 {
+		t.Fatal("the rolled-back revocation changed the job queue")
+	}
+
+	r.env.Exec(t, `DROP TRIGGER test_refuse_revoke ON ctrlz.nodes`)
+	b.post("/nodes/"+n+":revoke", nil).want(200, "")
+	if out := r.logs.String(); strings.Count(out, "clean-up list cut") != 1 || !strings.Contains(out, dropped) {
+		t.Fatalf("the committed revocation did not log the one dropped id %s once", dropped)
+	}
+}

@@ -130,6 +130,7 @@ func (s *Server) RevokeNode(ctx context.Context, req gen.RevokeNodeRequestObject
 		return nil, err
 	}
 	var out gen.NodeView
+	var cut []uuid.UUID
 	err = s.global(ctx, func(g store.GlobalTx) error {
 		// A read without a lock decides whether this is a revocation at all, so a request for a node that is
 		// not active ends no job. The row is locked below and the state read again.
@@ -151,14 +152,7 @@ func (s *Server) RevokeNode(ctx context.Context, req gen.RevokeNodeRequestObject
 		if err != nil {
 			return err
 		}
-		if len(dropped) > 0 && s.d.Log != nil {
-			// The revocation goes through; only the clean-up list carried from the unfinished jobs is cut, in id order. A
-			// worker that cannot finish node_revoked jobs is the cause to look for. The ids are logged (they are row ids, no
-			// secret) so the clean-up of those nodes can be redone by hand.
-			for _, id := range dropped {
-				s.d.Log.Warn("node_revoked clean-up list cut", logattr.ID("node_id", id))
-			}
-		}
+		cut = dropped
 		if _, err := g.AdminJobInsert("node_revoked", params, p.AdminID); err != nil {
 			return err
 		}
@@ -185,6 +179,15 @@ func (s *Server) RevokeNode(ctx context.Context, req gen.RevokeNodeRequestObject
 	})
 	if err != nil {
 		return nil, err
+	}
+	// The revocation goes through; only the clean-up list carried from the unfinished jobs is cut, in id order. A
+	// worker that cannot finish node_revoked jobs is the cause to look for. The ids are logged (they are row ids, no
+	// secret) so the clean-up of those nodes can be redone by hand. This runs after the transaction: a revocation
+	// that rolled back leaves the old job and its list intact, so it must never say the list was cut.
+	if s.d.Log != nil {
+		for _, id := range cut {
+			s.d.Log.Warn("node_revoked clean-up list cut", logattr.ID("node_id", id))
+		}
 	}
 	return gen.RevokeNode200JSONResponse(out), nil
 }
