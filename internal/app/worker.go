@@ -11,6 +11,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/locations"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/logattr"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/profiles"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/ratelimit"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/safego"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/sms"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/sms/classify"
@@ -64,7 +65,7 @@ func startWorker(ctx context.Context, cfg Config, rt *Runtime, st, compilerStore
 	if err != nil {
 		return nil, err
 	}
-	budget, err := newIPClaimBudget()
+	budget, err := ratelimit.NewLocalBudget(ratelimit.Tenant, ratelimit.IPClaim)
 	if err != nil {
 		return nil, err
 	}

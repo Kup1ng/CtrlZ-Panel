@@ -581,16 +581,14 @@ func (ss *session) configPass(ctx context.Context, now time.Time) {
 		return
 	}
 	zones := s.cfg.Config.Zones(r)
+	// A zone that failed comes back empty beside the zones that did not, so one bad zone stops only itself.
 	bundles, err := s.cfg.Certs.For(ctx, ss.node, ss.pub, zones)
-	if err != nil {
-		if s.cfg.Log != nil && !errors.Is(err, ErrNoZoneCA) {
-			s.cfg.Log.Warn("cert bundle not built")
-		}
-		return
+	if err != nil && s.cfg.Log != nil && !errors.Is(err, ErrNoZoneCA) {
+		s.cfg.Log.Warn("cert bundle not built")
 	}
 	for i, b := range bundles {
 		zone := zones[i]
-		if ss.certs[zone] == b.ID {
+		if b.Msg == nil || ss.certs[zone] == b.ID {
 			continue
 		}
 		if ss.put(&hubv1.HubMessage{Body: &hubv1.HubMessage_CertBundle{CertBundle: b.Msg}}, false) {

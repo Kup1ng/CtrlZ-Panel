@@ -32,15 +32,30 @@ const wildcardTTL = 5 * time.Second
 // private half of the intake key (N8), so this is the only place an uploaded wildcard key is ever readable.
 //
 // A row that does not open, or whose key is not the leaf's, is an error and not a reason to serve another certificate in
-// silence: the stream does not send a bundle for that zone while it lasts, and the node keeps the one it has.
+// silence: the stream does not send a bundle for that zone while it lasts, and the node keeps the one it has. The error is
+// that zone's alone (Certs.For skips the zone and still builds the others), and it raises one critical alert that names the
+// certificate, so an operator who rotated the intake key hears of it before the private-CA leaves of other zones run out.
 type UploadedWildcards struct {
-	rows  WildcardRows
-	key   []byte
-	now   func() time.Time
-	roots *x509.CertPool
+	rows   WildcardRows
+	key    []byte
+	now    func() time.Time
+	roots  *x509.CertPool
+	alerts Alerter
 
-	mu   sync.Mutex
-	memo map[string]chosen
+	mu      sync.Mutex
+	memo    map[string]chosen
+	alerted map[uuid.UUID]bool // certificates an unusable-wildcard alert stands for, cleared when the row works again
+}
+
+// Alerter raises an alert on the telemetry pool (the method hubtrust.Alerter has, so the same value serves).
+type Alerter interface {
+	HubAlert(ctx context.Context, severity string, kind store.HubAlertKind, params map[string]string) error
+}
+
+// WithAlerts sets where the unusable-wildcard alert goes. Without it the error alone is returned.
+func (u *UploadedWildcards) WithAlerts(a Alerter) *UploadedWildcards {
+	u.alerts = a
+	return u
 }
 
 // chosen is what Choose said for one zone at one time. The key stays sealed in it.
@@ -56,7 +71,7 @@ type chosen struct {
 // NewUploadedWildcards builds it. keyPEM is the hub's wildcard_intake_key (PKCS #8 PEM, X25519); it is kept for the life of
 // the process, like the hub's other keys.
 func NewUploadedWildcards(rows WildcardRows, keyPEM []byte, now func() time.Time) *UploadedWildcards {
-	return &UploadedWildcards{rows: rows, key: keyPEM, now: now, roots: certcheck.EmbeddedRoots(), memo: make(map[string]chosen)}
+	return &UploadedWildcards{rows: rows, key: keyPEM, now: now, roots: certcheck.EmbeddedRoots(), memo: make(map[string]chosen), alerted: make(map[uuid.UUID]bool)}
 }
 
 // WithRoots replaces the public roots a chain must verify to. Only tests set it, with a root of their own.
@@ -74,25 +89,53 @@ func (u *UploadedWildcards) Covering(ctx context.Context, zone string) (chainPEM
 	}
 	keyPEM, err := intakeseal.Open(u.key, intakeseal.Wildcard, c.sealed)
 	if err != nil {
-		return nil, nil, time.Time{}, false, fmt.Errorf("the key of uploaded certificate %s does not open with the wildcard intake key", c.id)
+		return nil, nil, time.Time{}, false, u.unusable(ctx, c.id, zone, "key_does_not_open",
+			fmt.Errorf("the key of uploaded certificate %s does not open with the wildcard intake key", c.id))
 	}
 	pub, pkcs8PEM, err := certcheck.ParseKey(keyPEM)
 	clear(keyPEM)
 	if err != nil {
-		return nil, nil, time.Time{}, false, fmt.Errorf("the key of uploaded certificate %s is not a private key", c.id)
+		return nil, nil, time.Time{}, false, u.unusable(ctx, c.id, zone, "key_not_a_private_key",
+			fmt.Errorf("the key of uploaded certificate %s is not a private key", c.id))
 	}
 	defer clear(pkcs8PEM)
 	// The key is held against the leaf at the time of use too, as domain-apply does, so a row whose sealed key was swapped
 	// in the database is never sent to a node as that certificate's key.
 	if _, err := certcheck.Check(c.chain, certcheck.Wildcard, certcheck.Scope{Zones: []string{zone}}, now,
 		certcheck.Options{Roots: u.roots, KeyPublic: pub}); err != nil {
-		return nil, nil, time.Time{}, false, fmt.Errorf("the key of uploaded certificate %s does not belong to it", c.id)
+		return nil, nil, time.Time{}, false, u.unusable(ctx, c.id, zone, "key_not_the_leafs",
+			fmt.Errorf("the key of uploaded certificate %s does not belong to it", c.id))
 	}
 	b, _ := pem.Decode(pkcs8PEM)
 	if b == nil {
 		return nil, nil, time.Time{}, false, errors.New("hubctl: the uploaded key cannot be encoded")
 	}
+	u.mu.Lock()
+	delete(u.alerted, c.id)
+	u.mu.Unlock()
 	return c.chain, b.Bytes, c.notAfter, true, nil
+}
+
+// unusable raises the one critical alert for a chosen row that cannot be served and returns err. The mark is set before the
+// insert, so two nodes' passes at once raise it once, and taken back when the insert fails, so the next pass tries again.
+// The params name the certificate, the zone and the reason, never the key.
+func (u *UploadedWildcards) unusable(ctx context.Context, id uuid.UUID, zone, reason string, err error) error {
+	if u.alerts == nil {
+		return err
+	}
+	u.mu.Lock()
+	first := !u.alerted[id]
+	u.alerted[id] = true
+	u.mu.Unlock()
+	if first {
+		if aerr := u.alerts.HubAlert(ctx, "critical", store.HubAlertWildcardUnusable,
+			map[string]string{"certificate_id": id.String(), "zone": zone, "reason": reason}); aerr != nil {
+			u.mu.Lock()
+			delete(u.alerted, id)
+			u.mu.Unlock()
+		}
+	}
+	return err
 }
 
 // choice reads the rows and chooses, or returns the choice of the last few seconds. The lock is never held across the read.

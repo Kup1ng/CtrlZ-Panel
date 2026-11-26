@@ -242,3 +242,57 @@ func TestEveryNodeGetsTheUploadedWildcardInsteadOfAZoneLeaf(t *testing.T) {
 		t.Fatalf("bundle id %q is not a wildcard's", ba[0].ID)
 	}
 }
+
+type alertLog struct {
+	mu   sync.Mutex
+	rows []map[string]string
+	kind []store.HubAlertKind
+	sev  []string
+}
+
+func (a *alertLog) HubAlert(_ context.Context, sev string, k store.HubAlertKind, p map[string]string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.rows, a.kind, a.sev = append(a.rows, p), append(a.kind, k), append(a.sev, sev)
+	return nil
+}
+
+// One uploaded wildcard that does not open stops its own zone and nothing else (I-r2-1, I-r2-3): the other zone of the same
+// node, a plain private-CA zone, still gets its leaf, and the bad row raises one critical alert however many passes see it.
+func TestABadUploadedWildcardStopsOnlyItsOwnZone(t *testing.T) {
+	clk := &clock{t: time.Now()}
+	f := uploadedWildcard(t, "dns.example.test", clk.now())
+	bad := f.row
+	bad.SealedKey = f.seal(t, f.leafKey, intakeseal.Web) // sealed for another purpose: the hub's intake key cannot open it
+	zkey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	ca, err := hubpki.IssueZoneCA(zkey, []string{"dns.example.test", "dns.prev.example.test"}, clk.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	al := &alertLog{}
+	u := hubctl.NewUploadedWildcards(&wildRows{rows: []store.HubWildcardRow{bad}}, f.hubKey, clk.now).WithRoots(f.roots).WithAlerts(al)
+	c := hubctl.NewCerts(zoneOnly{ca}, u, clk.now)
+	n := newNode(t)
+	zones := []string{"dns.example.test", "dns.prev.example.test"}
+	for range 3 {
+		got, err := c.For(context.Background(), n.id, &n.key.PublicKey, zones)
+		if err == nil {
+			t.Fatal("the bad row raised no error")
+		}
+		if len(got) != 2 || got[0].Msg != nil {
+			t.Fatalf("the failing zone was not left empty: %d bundles", len(got))
+		}
+		if got[1].Msg == nil || !strings.HasPrefix(got[1].ID, "dns.prev.example.test/p/") {
+			t.Fatalf("the healthy zone got no private-CA leaf: %+v", got[1])
+		}
+	}
+	if len(al.kind) != 1 || al.kind[0] != store.HubAlertWildcardUnusable || al.sev[0] != "critical" || al.rows[0]["certificate_id"] != bad.ID.String() {
+		t.Fatalf("alerts: %v %v %v", al.kind, al.sev, al.rows)
+	}
+	// The row works again (the intake seal is made right): the mark is cleared, so a later failure alerts again.
+	rows := &wildRows{rows: []store.HubWildcardRow{f.row}}
+	u2 := hubctl.NewUploadedWildcards(rows, f.hubKey, clk.now).WithRoots(f.roots).WithAlerts(al)
+	if _, _, _, found, err := u2.Covering(context.Background(), "dns.example.test"); !found || err != nil {
+		t.Fatalf("the good row: %v %v", found, err)
+	}
+}

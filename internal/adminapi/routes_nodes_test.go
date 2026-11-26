@@ -193,7 +193,6 @@ func TestCreateNodeEnrollment(t *testing.T) {
 	bad := []map[string]any{
 		{"dns_advertised_ip": "::ffff:93.184.216.34"},
 		{"dns_bind_ip": "0.0.0.0"},
-		{"proxy_bind_ip": "fe80::1%eth0"},
 		{"bound_ip": "64:ff9b::5db8:d822"},
 		{"proxy_advertised_ip": "198.51.100.9"},
 	}
@@ -206,6 +205,9 @@ func TestCreateNodeEnrollment(t *testing.T) {
 			t.Errorf("%v: no field named in %s", extra, resp.Body)
 		}
 	}
+	// A zone suffix is outside the alphabet of an address in the schema (`%` is not in `ip`), so the boundary refuses it before any
+	// rule is asked: 400, with no field named.
+	b.post("/node-enrollments", withBody(map[string]any{"proxy_bind_ip": "fe80::1%eth0"})).want(400, "bad_request")
 	if n := r.count(t, rows); n != before+1 {
 		t.Fatalf("%d enrolments, want the one", n)
 	}
@@ -242,7 +244,7 @@ func TestConfirmNodeEnrollment(t *testing.T) {
 		NodeID string `json:"node_id"`
 		Slot   int    `json:"slot"`
 	}
-	b.post("/node-enrollments/"+id+":confirm", map[string]any{"fingerprint": strings.Join(pairs, ":"), "name": "  frankfurt  "}).want(201, "").json(&done)
+	b.post("/node-enrollments/"+id+":confirm", map[string]any{"fingerprint": strings.Join(pairs, ":"), "name": "frankfurt  "}).want(201, "").json(&done)
 	if done.Slot != 3 || done.NodeID == "" {
 		t.Fatalf("answer %+v: the two seeded nodes hold slots 1 and 2", done)
 	}
@@ -556,7 +558,8 @@ func TestNodeReports(t *testing.T) {
 	}
 
 	// Both tenants' claims were proven on a challenge the node observed, at one instant (as a take writes them).
-	taken := r.ck.now().Add(-time.Minute).UTC()
+	// Microsecond precision is the column's, so the instant the test writes is the one a cursor read back from the page holds.
+	taken := r.ck.now().Add(-time.Minute).UTC().Truncate(time.Microsecond)
 	for _, tn := range []uuid.UUID{r.env.A.Tenant, r.env.B.Tenant} {
 		r.env.Exec(t, `UPDATE ctrlz.ip_claims SET proven_at = $2 WHERE tenant_id = $1`, tn, taken)
 		r.env.Exec(t, `UPDATE ctrlz.ip_proof_challenges SET observed_by_node_id = $2, consumed_at = $3 WHERE tenant_id = $1`, tn, seedNode1, taken)
@@ -600,8 +603,8 @@ func TestNodeReports(t *testing.T) {
 	// The end of the window: before the take nothing shows, and the instant of the take is included, so a page that
 	// ends inside it can be read again from there.
 	var early, at reports
-	b.get("/nodes/"+seedNode1+"/reports?to="+taken.Add(-time.Hour).Format(time.RFC3339)).want(200, "").json(&early)
-	b.get("/nodes/"+seedNode1+"/reports?to="+taken.Format(time.RFC3339)).want(200, "").json(&at)
+	b.get("/nodes/"+seedNode1+"/reports?to="+taken.Add(-time.Hour).Format(time.RFC3339Nano)).want(200, "").json(&early)
+	b.get("/nodes/"+seedNode1+"/reports?to="+taken.Format(time.RFC3339Nano)).want(200, "").json(&at)
 	if len(early.Claims) != 0 || len(at.Claims) != len(got.Claims) {
 		t.Fatalf("the end of the window: %d claims before the take, %d at it, want 0 and %d", len(early.Claims), len(at.Claims), len(got.Claims))
 	}

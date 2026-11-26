@@ -81,22 +81,28 @@ var ErrNoZoneCA = errors.New("hubctl: no zone CA yet")
 
 // For gives one bundle for each zone, in the order of zones. pub is the public key of the node's certificate, which is the
 // enrolled key (the check at open made its SPKI the row's).
+//
+// A zone that cannot be built (an uploaded wildcard whose key does not open, no zone CA yet, a zone the CA does not permit)
+// is left as an empty Bundle (Msg nil) at its place and joined into the returned error; the other zones are still built. One
+// bad row must not stop a node's other certificates, or the private-CA leaves of a healthy zone would run out.
 func (c *Certs) For(ctx context.Context, node uuid.UUID, pub *ecdsa.PublicKey, zones []string) ([]Bundle, error) {
 	spki, err := x509.MarshalPKIXPublicKey(pub)
 	if err != nil {
 		return nil, errors.New("hubctl: the node key is not usable")
 	}
 	pk := sha256.Sum256(spki)
-	out := make([]Bundle, 0, len(zones))
-	for _, z := range zones {
+	out := make([]Bundle, len(zones))
+	var errs []error
+	for i, z := range zones {
 		b, err := c.bundleFor(ctx, node, pub, pk[:], z)
 		if err != nil {
-			return nil, err
+			errs = append(errs, fmt.Errorf("zone %s: %w", z, err))
+			continue
 		}
-		out = append(out, b)
+		out[i] = b
 	}
 	c.forget(node, zones)
-	return out, nil
+	return out, errors.Join(errs...)
 }
 
 func (c *Certs) bundleFor(ctx context.Context, node uuid.UUID, pub *ecdsa.PublicKey, pk []byte, zone string) (Bundle, error) {

@@ -140,9 +140,11 @@ func (k keeperNodes) Applied(node uuid.UUID) (uint64, bool) {
 	return hb.AppliedSeq, true
 }
 
-// zoneRoots is the pool the probes verify the zone certificate against: the zone CA, and the public roots too while the hub serves
-// uploaded wildcards (hubctl.Wildcards), since a zone that an upload covers is served with a public chain and the rest with the
-// zone CA's. A hub with no zone CA yet gets an empty pool of its own, which no certificate chains to: a probe fails closed, and
+// zoneRoots is the pool the probes verify the zone certificate against: the zone CA, and the public roots too whenever the hub is
+// set up to serve uploaded wildcards (hubctl.Wildcards), since a zone that an upload covers is served with a public chain and the
+// rest with the zone CA's. The roots are added whether or not a row is active now, on purpose: an upload reaches a node within
+// seconds, and a probe in that gap must not read a public chain as a failure and move the node. The cost is that a probe of a
+// private-CA zone also accepts a public chain for the zone name, which only a holder of such a certificate can present. A hub with no zone CA yet gets an empty pool of its own, which no certificate chains to: a probe fails closed, and
 // a nil pool would have meant the system's roots.
 func (h *Hub) zoneRoots() *x509.CertPool {
 	pool := x509.NewCertPool()

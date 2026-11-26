@@ -397,6 +397,9 @@ const (
 	HubAlertFailFlapping          HubAlertKind = "failover_flapping"
 	HubAlertFailNotDecided        HubAlertKind = "failover_event_not_committed"
 	HubAlertNodeCannotResolve     HubAlertKind = "node_cannot_resolve"
+	// HubAlertWildcardUnusable says the uploaded wildcard chosen for a zone cannot be served: its key does not open with the
+	// hub's intake key, is not a key, or is not the leaf's. No node gets that zone's certificate while it lasts.
+	HubAlertWildcardUnusable HubAlertKind = "wildcard_unusable"
 )
 
 // HubAlert inserts an alert. params carry names and counts only, never a key or a token.

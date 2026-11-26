@@ -16703,11 +16703,12 @@ mutants:
     edits:
       - file: internal/lint/p2sql_test.go
         old: |-
-          func p2SystemWriters() map[string]p2SystemWriter { return map[string]p2SystemWriter{} }
+          func p2SystemWriters() map[string]p2SystemWriter {
+          	return map[string]p2SystemWriter{
         new: |-
           func p2SystemWriters() map[string]p2SystemWriter {
-          	return map[string]p2SystemWriter{"qGonePlanted": {table: "rules", reason: "planted", shape: "planted", digest: "planted"}}
-          }
+          	return map[string]p2SystemWriter{
+          		"qGonePlanted": {table: "rules", reason: "planted", shape: "planted", digest: "planted"},
     must_fail:
       - pkg: ./internal/lint
         tests: [TestProfileWritesTakeAProfileWrite]

@@ -109,7 +109,11 @@ func (h *Hub) nodeHub(install *hubinstall.Handler) (hubv1.NodeHubServer, error) 
 		if h.publicRoots == nil {
 			h.publicRoots = certcheck.EmbeddedRoots()
 		}
-		wild = hubctl.NewUploadedWildcards(d.Stores.Wildcards, d.WildcardKeyPEM, d.Now).WithRoots(h.publicRoots)
+		uw := hubctl.NewUploadedWildcards(d.Stores.Wildcards, d.WildcardKeyPEM, d.Now).WithRoots(h.publicRoots)
+		if d.Stores.Telemetry != nil {
+			uw.WithAlerts(d.Stores.Telemetry)
+		}
+		wild = uw
 	}
 	dir, eval := h.logView(d, signer)
 	if d.Stores.Tel != nil {

@@ -39,9 +39,11 @@ func TestFreeDNSSettings(t *testing.T) {
 		t.Fatalf("the defaults are on at 1000, got %+v", f)
 	}
 	// 0 and anything above the ceiling of T-374 (2000 until it is measured) are refused, and nothing is written.
-	for _, qps := range []int{0, -1, 2001, 50000} {
+	for _, qps := range []int{0, 2001, 50000} {
 		b.put("/settings/free-dns", map[string]any{"enabled": true, "qps": qps}).want(422, "qps_out_of_range")
 	}
+	// A negative number is outside the schema's range (minimum 0), so the boundary refuses it before the ceiling is asked.
+	b.put("/settings/free-dns", map[string]any{"enabled": true, "qps": -1}).want(400, "bad_request")
 	if r.auditCount(t, "settings.free_dns") != 0 {
 		t.Fatal("a refused change left an audit row")
 	}
@@ -170,7 +172,10 @@ func TestDomainSettings(t *testing.T) {
 		return r.count(t, `SELECT count(*) FROM ctrlz.admin_jobs WHERE kind = 'domain_change' AND state = 'queued'`)
 	}
 	var v view
-	b.get("/settings/domain").want(200, "").json(&v)
+	// Decoding into a view that already holds a value keeps the members the answer leaves out (an unset host is not sent), so each
+	// answer is read into an empty one.
+	fresh := func(p *view) *view { *p = view{}; return p }
+	b.get("/settings/domain").want(200, "").json(fresh(&v))
 	if v.DNSZone != "" || v.ApplyPending {
 		t.Fatalf("a fresh panel has no zone and nothing pending: %+v", v)
 	}
@@ -194,7 +199,7 @@ func TestDomainSettings(t *testing.T) {
 	b.put("/settings/domain", map[string]any{"dns_zone": "dns.example.ir", "panel_host": "p.example.ir:8443"}).want(400, "bad_request")
 
 	// A first set starts no transition, queues the job, and stamps changed_at.
-	b.put("/settings/domain", map[string]any{"dns_zone": "DNS.Example.ir", "panel_host": "panel.example.ir", "admin_host": "admin.example.ir"}).want(200, "").json(&v)
+	b.put("/settings/domain", map[string]any{"dns_zone": "DNS.Example.ir", "panel_host": "panel.example.ir", "admin_host": "admin.example.ir"}).want(200, "").json(fresh(&v))
 	if v.DNSZone != "dns.example.ir" || v.PrevDNSZone != "" || v.TransitionUntil != nil || !v.ApplyPending {
 		t.Fatalf("a first set: %+v (lower case, no transition, an apply pending)", v)
 	}
@@ -205,7 +210,7 @@ func TestDomainSettings(t *testing.T) {
 		t.Fatal("changed_at is not stamped, or a first set started a transition")
 	}
 	// A host-only edit queues nothing and starts no transition.
-	b.put("/settings/domain", map[string]any{"dns_zone": "dns.example.ir", "panel_host": "panel2.example.ir", "admin_host": "admin.example.ir"}).want(200, "").json(&v)
+	b.put("/settings/domain", map[string]any{"dns_zone": "dns.example.ir", "panel_host": "panel2.example.ir", "admin_host": "admin.example.ir"}).want(200, "").json(fresh(&v))
 	if v.PanelHost != "panel2.example.ir" || v.PrevDNSZone != "" || jobs() != 1 || r.auditCount(t, "settings.domain") != 2 {
 		t.Fatalf("a host edit: %+v, %d jobs", v, jobs())
 	}
@@ -215,7 +220,7 @@ func TestDomainSettings(t *testing.T) {
 		t.Fatal("a repeat wrote an audit row")
 	}
 	// A change of zone from one value to another starts the transition and supersedes the unfinished job.
-	b.put("/settings/domain", map[string]any{"dns_zone": "dns.new.ir", "transition_days": 7}).want(200, "").json(&v)
+	b.put("/settings/domain", map[string]any{"dns_zone": "dns.new.ir", "transition_days": 7}).want(200, "").json(fresh(&v))
 	if v.DNSZone != "dns.new.ir" || v.PrevDNSZone != "dns.example.ir" || v.TransitionUntil == nil || v.PanelHost != "" {
 		t.Fatalf("a zone change: %+v", v)
 	}
@@ -227,7 +232,7 @@ func TestDomainSettings(t *testing.T) {
 	b.put("/settings/domain", map[string]any{"dns_zone": "dns.new.ir", "panel_host": "p.dns.example.ir"}).want(422, "domain_invalid")
 	// After it ends the zone may change again.
 	r.env.Exec(t, `UPDATE ctrlz.domain_settings SET transition_until = now() - interval '1 hour'`)
-	b.put("/settings/domain", map[string]any{"dns_zone": "dns.third.ir"}).want(200, "").json(&v)
+	b.put("/settings/domain", map[string]any{"dns_zone": "dns.third.ir"}).want(200, "").json(fresh(&v))
 	if v.PrevDNSZone != "dns.new.ir" {
 		t.Fatalf("the earlier zone is the one before: %+v", v)
 	}
