@@ -273,7 +273,6 @@
     },
     "empty": "It is empty.",
     "out_of_range": "It is outside the allowed range.",
-    "not_available": "It cannot be turned on yet.",
     "same_as_primary": "It must be a different gateway from the primary one.",
     "count": "The number of names does not match.",
     "not_allowed": "It is not allowed here.",

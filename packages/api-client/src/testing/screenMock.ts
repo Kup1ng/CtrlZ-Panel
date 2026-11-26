@@ -1035,7 +1035,7 @@ export function screenHandlers(state: ScreenState): Record<MockKey, MockHandler>
     },
     "POST /public/share/apple-profile": (c) => (bodyOf<{link: string}>(c).link === VALID_SHARE_LINK ? ok({url: https("panel.localhost/dl/APPLE_PROFILE_LINK"), expires_at: new Date(Date.now() + 900_000).toISOString()}, 201) : notFound),
 
-    // ---- API tokens (local types until D5) and feedback ----
+    // ---- API tokens and feedback ----
     "GET /api-tokens": () => ok({tokens: state.tokens}),
     "POST /api-tokens": (c) => {
       const b = bodyOf<{name: string; kind: ApiToken["kind"]; allowed_ips?: string[]}>(c);
