@@ -3,8 +3,11 @@
 package hubtrust_test
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,5 +57,41 @@ func TestNTSKeyKeepsItsGroupWhenRewritten(t *testing.T) {
 	}
 	if got := gidOf(t, key); got != want {
 		t.Errorf("the renewed key has group %d, want %d", got, want)
+	}
+}
+
+// GP-r2-2: the hub in its container may hand a file only to a group it belongs to, so the chown of a renewed key to the group an
+// operator gave chrony can fail. That must be said in the log at the write (before the restart that follows it), without a path or
+// a group id, and the renewal must still go through.
+func TestNTSKeyThatLosesItsGroupIsLogged(t *testing.T) {
+	now := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+	var buf bytes.Buffer
+	n := newNTS(t, now, &alerts{})
+	n.Log = slog.New(slog.NewTextHandler(&buf, nil))
+	if _, err := n.Ensure(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("a first write logged %q", buf.String())
+	}
+	// With the real chown a renewal hands the key to the group it already has, which always works: no warning.
+	n.CA = newCA(t, now)
+	if wrote, err := n.Ensure(t.Context()); err != nil || !wrote {
+		t.Fatalf("renewal: wrote %v, err %v", wrote, err)
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("a renewal that kept the group logged %q", buf.String())
+	}
+	n.SetChgrp(func(string, int, int) error { return os.ErrPermission })
+	n.CA = newCA(t, now)
+	if wrote, err := n.Ensure(t.Context()); err != nil || !wrote {
+		t.Fatalf("renewal with a refused chown: wrote %v, err %v", wrote, err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "group") || !strings.Contains(out, "WARN") {
+		t.Errorf("the lost group is not warned about: %q", out)
+	}
+	if strings.Contains(out, n.Dir) || strings.Contains(out, hubtrust.NTSKeyFile) {
+		t.Errorf("the warning names a path: %q", out)
 	}
 }

@@ -229,7 +229,7 @@ func Build(ctx context.Context, d Deps) (*Hub, error) {
 
 	h := &Hub{deps: d, CA: ca, CAs: cas, Leaf: leaf, Streams: hubnodes.NewRegistry(), nodeAddr: newAddrSet(), Roll: hubroll.New(hubroll.Config{Release: d.Release})}
 	if d.NTSDir != "" {
-		h.nts = &hubtrust.NTS{CA: ca, Dir: d.NTSDir, Hosts: d.HubHost, Now: d.Now, Alerts: d.Stores.Telemetry}
+		h.nts = &hubtrust.NTS{CA: ca, Dir: d.NTSDir, Hosts: d.HubHost, Now: d.Now, Alerts: d.Stores.Telemetry, Log: d.Log}
 		// A leaf that cannot be written is the chrony service's problem, not the node port's: the nodes keep their own clocks
 		// meanwhile, so the hub starts and the next pass of the trust loop tries again.
 		h.ntsPass(ctx)

@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -45,6 +46,9 @@ type NTS struct {
 	Hosts  string // CTRLZ_HUB_HOST: the names the nodes dial, which are the leaf's SANs
 	Now    func() time.Time
 	Alerts Alerter
+	Log    *slog.Logger // may be nil; it carries the one warning that a renewed key lost its group
+
+	chgrp func(path string, uid, gid int) error // os.Chown unless a test says otherwise
 }
 
 // Ensure writes a leaf when the directory has none that is usable, and says whether it did. A usable leaf is one the current
@@ -87,13 +91,19 @@ func (n *NTS) Ensure(ctx context.Context) (bool, error) {
 	if err := os.WriteFile(owed, nil, 0o600); err != nil {
 		return false, err
 	}
-	if err := writeAtomic(filepath.Join(n.Dir, NTSKeyFile), keyPEM, 0o640); err != nil {
+	keptGroup, err := writeAtomic(n.chown(), filepath.Join(n.Dir, NTSKeyFile), keyPEM, 0o640)
+	if err != nil {
 		if !hadDebt {
 			_ = os.Remove(owed)
 		}
 		return false, err
 	}
-	if err := writeAtomic(filepath.Join(n.Dir, NTSCertFile), chain, 0o644); err != nil {
+	if !keptGroup && n.Log != nil {
+		// Said at the write, before the restart the operator is asked for: afterwards chrony may not read the key and NTS-KE
+		// is down for every node. No path, no key, no group id in the text.
+		n.Log.Warn("the renewed NTS key could not keep the group of the old one; give chrony a default ACL on the NTS directory (deploy/chrony/panel.conf) or it may not read the key after its restart")
+	}
+	if _, err := writeAtomic(n.chown(), filepath.Join(n.Dir, NTSCertFile), chain, 0o644); err != nil {
 		// The key is new and the certificate old: usable() sees the mismatch, the next pass writes both again, and the debt
 		// stays until that pass pays it.
 		return false, err
@@ -169,24 +179,32 @@ func (n *NTS) usable(dns []string, ips []net.IP, now time.Time) bool {
 }
 
 // writeAtomic writes a file through a temporary file and a rename, so chrony never reads half of one.
-func writeAtomic(path string, data []byte, mode os.FileMode) error {
+// keptGroup is false when the group of the file it replaces could not be handed on.
+func writeAtomic(chown func(string, int, int) error, path string, data []byte, mode os.FileMode) (keptGroup bool, err error) {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".nts-*")
 	if err != nil {
-		return err
+		return true, err
 	}
 	name := tmp.Name()
 	_, werr := tmp.Write(data)
 	cerr := tmp.Close()
 	// A file renamed over another is a new inode, and the operator's grant for chrony (a group, or an ACL entry) sat on the old
-	// one. Keep the group; an ACL needs the directory's default ACL (deploy/chrony/panel.conf says so).
-	keepGroup(path, name)
+	// one. Keep the group where the process may; an ACL needs the directory's default ACL (deploy/chrony/panel.conf says so).
+	keptGroup = keepGroup(chown, path, name)
 	if err := errors.Join(werr, cerr, os.Chmod(name, mode)); err != nil {
 		_ = os.Remove(name)
-		return err
+		return keptGroup, err
 	}
 	if err := os.Rename(name, path); err != nil {
 		_ = os.Remove(name)
-		return err
+		return keptGroup, err
 	}
-	return nil
+	return keptGroup, nil
+}
+
+func (n *NTS) chown() func(string, int, int) error {
+	if n.chgrp != nil {
+		return n.chgrp
+	}
+	return os.Chown
 }

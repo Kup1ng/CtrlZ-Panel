@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/Kup1ng/CtrlZ-Panel/internal/appclock"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -249,7 +250,7 @@ func scanNode(row pgx.Row) (NodeRow, error) {
 		&n.DNSWithdrawn, &n.DNSHold, &n.DNSLastFailback, &n.DNSFlapUntil, &n.PairPeer, &pending,
 		&n.F3Unmet, &n.F3DueAt, &n.DrainState, &n.DrainSince)
 	n.Slot, n.PendingRequests = int(slot), int(pending)
-	n.DrainState = drainShown(n.DrainState, n.DrainSince, time.Now())
+	n.DrainState = drainShown(n.DrainState, n.DrainSince, appclock.Now())
 	return n, err
 }
 
