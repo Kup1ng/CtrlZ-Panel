@@ -415,8 +415,8 @@ var allowedEnvironmentAssignments = map[string]map[string]string{
 		`export NEXT_TELEMETRY_DISABLED=1`:                                 "a switch that turns Next's telemetry off, which the run must not send",
 		`export NODE_OPTIONS`:                                              "the heap size of the build, exported under a name set a few lines above; a number",
 		`(cd "apps/$app" && E2E_START_SERVER=1 pnpm exec playwright test)`: "a flag for the test run: start `next start` on its own port",
-		`(cd "apps/$app" && CTRLZ_VERIFY_ORIGIN='https://*.verify.dns.example.test' E2E_START_SERVER=1 pnpm exec playwright test headers.spec.ts --project=functional)`: "a host pattern " +
-			"on a reserved name, for the header spec of the web proxy; no credential",
+		`(cd "apps/$app" && CTRLZ_VERIFY_ORIGIN="$origin" E2E_START_SERVER=1 pnpm exec playwright test headers.spec.ts --project=functional)`: "an origin list " +
+			"(one or two host patterns on a reserved name, from the loop above it) for the header spec of the web proxy; no credential",
 		`CTRLZ_WEB_DEPS_IMAGE="$deps_image" sh scripts/web-deps-stamp.sh`: "the name of a local image",
 		`{ grep -hv '^#' deploy/compose/.env.example deploy/compose/profiles/small.env | grep -v '^$' \`: "the substitution file of the throw-away e2e project: the path " +
 			"of its secrets directory, which the line writes into a file and no container's environment",

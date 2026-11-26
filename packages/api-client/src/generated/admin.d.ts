@@ -889,9 +889,9 @@ export interface paths {
         /**
          * Ask the hub to hold, release or fail back a node's DNS answer (SC 8a.4, Requests)
          * @description Writes a row of `node_dns_requests`, which only the hub decides, on its next tick, and never after 10 s.
-         *     An active node takes all three kinds. A revoked node takes `hold` and `release` (SC 8a.9 gives the hold as the
-         *     remedy until the revocation has reached the nodes); `force_failback` of a revoked node, and any kind for a pending
-         *     node, is `node_state`. Errors: `not_found`, `node_state`, `totp_fresh_required`.
+         *     An active node takes all three kinds. A revoked node takes `hold` only (SC 8a.9 gives the hold as the
+         *     remedy until the revocation has reached the nodes); `release` and `force_failback` of a revoked node, and any
+         *     kind for a pending node, are `node_state`. Errors: `not_found`, `node_state`, `totp_fresh_required`.
          */
         post: operations["createNodeDnsRequest"];
         delete?: never;

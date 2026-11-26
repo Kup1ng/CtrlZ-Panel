@@ -496,12 +496,12 @@ func (s *Server) CreateNodeDnsRequest(ctx context.Context, req gen.CreateNodeDns
 		if !ok {
 			return httpx.NotFound()
 		}
-		// An active node has a DNS answer to hold or give back. A revoked node may be held and released as well: SC 8a.9
-		// names the hold as the remedy while a revocation has not reached the nodes, and rows F4 and F5 of 8a.6 judge
-		// only the pair peer and the hold flag, so the hub decides the request by its own conditions. Force failback
-		// stays refused for a revoked node: no row but F0 clears its withdrawal (8a.1 invariant 5), and the hub would
-		// refuse it as not fit. A pending node is in no table and has no answer, so none of the three applies.
-		if n.Status != "active" && !(n.Status == "revoked" && kind != audit.DNSRequestForceFailback) {
+		// An active node has a DNS answer to hold or give back. A revoked node may be held only: SC 8a.9 names the hold
+		// as the remedy while a revocation has not reached the nodes. A release would clear that hold while the hub still
+		// holds the node's SPKI as fit, and F3 would then put the revoked host back in the answer; force failback would
+		// do the same at once. No row but F0 clears the withdrawal of a revoked node (8a.1 invariant 5). A pending node
+		// is in no table and has no answer, so none of the three applies.
+		if n.Status != "active" && !(n.Status == "revoked" && kind == audit.DNSRequestHold) {
 			return errNodeState()
 		}
 		if id, err = g.NodeDNSRequestInsert(req.Id, string(kind), p.AdminID); err != nil {

@@ -189,8 +189,9 @@ export function createNodeMock(initial: Partial<NodeMockState> = {}): {state: No
     "POST /nodes/{id}/dns-requests": write("POST /nodes/{id}/dns-requests", (call) => {
       const n = node(idOf(call));
       if (!n) return fail(404, "not_found");
-      if (n.status !== "active") return fail(409, "node_state");
       const kind = (call.body as {kind: "hold" | "release" | "force_failback"}).kind;
+      // The route's own rule: an active node takes all three kinds, a revoked one only a hold (SC 8a.9), a pending one none.
+      if (n.status !== "active" && !(n.status === "revoked" && kind === "hold")) return fail(409, "node_state");
       if (kind === "hold") n.dns_hold = true;
       if (kind === "release") n.dns_hold = false;
       return ok({request_id: newId()}, 202);

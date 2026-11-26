@@ -145,10 +145,10 @@ for (const {lang, dir} of LANGS) {
       await expect(page.getByTestId("request-hold")).toHaveCount(0);
     });
 
-    test("PG-r2-6, PG-r2-7: a revoked node still in its pair is said to need replacing, and it can be held and released but not failed back", async ({page, context, baseURL}) => {
+    test("PG-r2-6, PG-r2-7: a revoked node still in its pair is said to need replacing, and it can be held but not released or failed back", async ({page, context, baseURL}) => {
       const w = world();
       w.state.nodes[0] = {...w.a, status: "revoked"};
-      await openAdmin(context, baseURL, {handlers: w.handlers});
+      const mock = await openAdmin(context, baseURL, {handlers: w.handlers});
       await goto(page, w.a.id, "tehran-1");
       const block = page.getByTestId("failover-revoked-in-pair");
       await expect(block).toContainText(N("node.failover.revokedInPair"));
@@ -156,10 +156,14 @@ for (const {lang, dir} of LANGS) {
       await expect(block.getByRole("link", {name: N("givenUp.runbook")})).toHaveAttribute("href", new RegExp("/runbook#compromise$"));
       await expect(page.getByTestId("failover-not-active")).toHaveCount(0);
       await expect(page.getByTestId("request-hold")).toBeEnabled();
-      await expect(page.getByTestId("request-release")).toBeDisabled();
+      await expect(page.getByTestId("request-release")).toHaveCount(0);
       await expect(page.getByTestId("request-force_failback")).toHaveCount(0);
       await page.getByTestId("request-hold").click();
+      // PW-r1-5: the dialog of a revoked node does not promise that the hold lasts, and does not repeat the active node's text.
+      await expect(page.getByRole("dialog")).toContainText(N("node.failover.revokedHoldDialog"));
       await page.getByTestId("confirm-hold").click();
+      // The mock answers as the route does (a hold of a revoked node is accepted), so the request is recorded with the real body (PW-r1-1).
+      await expect.poll(() => bodies(mock, "POST", `/nodes/${w.a.id}/dns-requests`)).toEqual([{kind: "hold"}]);
       await expect(page.getByTestId("action-error")).toHaveCount(0);
     });
 

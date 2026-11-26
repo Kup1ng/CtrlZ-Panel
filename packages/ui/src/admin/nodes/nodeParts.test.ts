@@ -130,10 +130,10 @@ describe("nodeActions (T-542)", () => {
     expect(nodeActions(node())).toMatchObject({hold: true, release: false, force_failback: false, revoke: true, approve: false});
     expect(nodeActions(node({dns_hold: true, dns_withdrawn: true}))).toMatchObject({hold: false, release: true, force_failback: true});
   });
-  it("offers a pending node approval and nothing about its answer, and a revoked one removal, hold and release", () => {
+  it("offers a pending node approval and nothing about its answer, and a revoked one removal and hold", () => {
     expect(nodeActions(node({status: "pending"}))).toMatchObject({approve: true, hold: false, release: false, force_failback: false, revoke: false, addresses: true});
     expect(nodeActions(node({status: "revoked"}))).toMatchObject({approve: false, revoke: false, hold: true, release: false, force_failback: false, addresses: false, remove: true});
-    expect(nodeActions(node({status: "revoked", dns_hold: true, dns_withdrawn: true}))).toMatchObject({hold: false, release: true, force_failback: false});
+    expect(nodeActions(node({status: "revoked", dns_hold: true, dns_withdrawn: true}))).toMatchObject({hold: false, release: false, force_failback: false});
   });
   it("keeps a paired node from removal, and says so from the pair peer", () => {
     expect(removeBlockedByPair(nodeFixture())).toBe(false);

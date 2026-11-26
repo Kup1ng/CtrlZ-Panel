@@ -39,7 +39,7 @@ export function NodeFailover({node, pairs, nodes}: {node: NodeView; pairs?: read
   // The buttons the node can take; the route decides in the end. A revoked node in its pair offers hold and release only (SC 8a.9).
   const actions = (
     <div className="flex flex-wrap gap-2" data-testid="failover-actions">
-      {KINDS.filter((kind) => !revokedInPair || kind !== "force_failback").map((kind) => (
+      {KINDS.filter((kind) => !revokedInPair || kind === "hold").map((kind) => (
         <Button
           key={kind}
           variant={kind === "force_failback" ? "outline" : "secondary"}
@@ -175,8 +175,15 @@ export function NodeFailover({node, pairs, nodes}: {node: NodeView; pairs?: read
           onDone={() => toast.success(t("node.failover.sent"))}
           testId={`confirm-${kind}`}
         >
-          <p>{t(`node.failover.actions.${kind}.text`)}</p>
-          {kind === "hold" && !revokedInPair ? <p className="text-muted text-sm">{t("node.failover.holdNote.text")}</p> : null}
+          {kind === "hold" && revokedInPair ? (
+            // A held revoked node is still fit to the hub until it reads the revocation, so failover can clear the hold: say that, not "stays out".
+            <p>{t("node.failover.revokedHoldDialog")}</p>
+          ) : (
+            <>
+              <p>{t(`node.failover.actions.${kind}.text`)}</p>
+              {kind === "hold" ? <p className="text-muted text-sm">{t("node.failover.holdNote.text")}</p> : null}
+            </>
+          )}
         </ActionDialog>
       ))}
     </NodeCard>

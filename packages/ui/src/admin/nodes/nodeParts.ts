@@ -165,10 +165,10 @@ export function nodeActions(node: Pick<NodeView, "status" | "dns_hold" | "dns_wi
     approve: node.status === "pending",
     revoke: active,
     remove: true,
-    // A revoked node can be held and released (SC 8a.9: the hold is the remedy until the revocation reaches the nodes); a force failback
-    // would return it to service, which no row but F0 does for a revoked node, so it stays active-only.
+    // A revoked node can be held (SC 8a.9: the hold is the remedy until the revocation reaches the nodes). A release or a force failback
+    // would let the automatic return put it back in service while the hub still counts it as fit, so both stay active-only.
     hold: (active || node.status === "revoked") && !node.dns_hold,
-    release: (active || node.status === "revoked") && node.dns_hold,
+    release: active && node.dns_hold,
     force_failback: active && node.dns_withdrawn,
     addresses: node.status !== "revoked",
   };

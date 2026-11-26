@@ -431,18 +431,18 @@ func TestNodeDNSRequests(t *testing.T) {
 		t.Fatal("the requests are not both in the audit log")
 	}
 
-	// A revoked node can be held and released (SC 8a.9 gives the hold as the remedy while a revocation has not reached
-	// the nodes), and the hub judges each by its row of 8a.6. Force failback stays refused: no row but F0 clears the
-	// withdrawal of a revoked node, so the request could only be refused by the hub.
+	// A revoked node can be held (SC 8a.9 gives the hold as the remedy while a revocation has not reached the nodes) and
+	// nothing else: a release or a force failback would let F3 or F5 put the revoked host back in the answer while the
+	// hub still counts it as fit, and no row but F0 clears its withdrawal.
 	rev := r.addNode(t, 4, "revoked", "93.184.230.4", "93.184.230.104", "req-4")
-	for _, kind := range []string{"hold", "release"} {
-		b.post("/nodes/"+rev+"/dns-requests", map[string]any{"kind": kind}).want(202, "")
+	b.post("/nodes/"+rev+"/dns-requests", map[string]any{"kind": "hold"}).want(202, "")
+	for _, kind := range []string{"release", "force_failback"} {
+		b.post("/nodes/"+rev+"/dns-requests", map[string]any{"kind": kind}).want(409, "node_state")
 	}
-	b.post("/nodes/"+rev+"/dns-requests", map[string]any{"kind": "force_failback"}).want(409, "node_state")
-	if n := r.count(t, `SELECT count(*) FROM ctrlz.node_dns_requests WHERE node_id = $1 AND state = 'pending'`, rev); n != 2 {
-		t.Fatalf("a revoked node has %d pending requests, want 2", n)
+	if n := r.count(t, `SELECT count(*) FROM ctrlz.node_dns_requests WHERE node_id = $1 AND state = 'pending'`, rev); n != 1 {
+		t.Fatalf("a revoked node has %d pending requests, want 1", n)
 	}
-	if r.auditCount(t, "node.dns_request") != 4 {
+	if r.auditCount(t, "node.dns_request") != 3 {
 		t.Fatal("the requests of the revoked node are not in the audit log")
 	}
 }
