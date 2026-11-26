@@ -1,0 +1,2325 @@
+openapi: 3.1.0
+info:
+  title: Ctrl Z Admin API
+  version: 0.2.0-p1
+  summary: The admin API. Every route of spec 15.2, with the re-issue of a user's one-time password (T-536).
+  description: |
+    The admin API (`ctrlz admin`, database role `ctrlz_admin`), on its own
+    hostname. An admin session never authorises a tenant route, and a panel
+    session never authorises an admin route: the cookie, the table, the database
+    role and this document are all separate (T-321).
+
+    Every operation outside the `health` tag carries two extensions that the
+    router and a test read (`internal/apispec`):
+
+    - `x-ctrlz-auth`: `none`, `admin-setup` (allowed while the account is still in
+      setup), `admin` (a ready account) or `admin-fresh` (a ready account with a
+      TOTP check in the last 5 minutes);
+    - `x-ctrlz-rate`: the rate class of spec 15.1.
+
+    Errors are `Error` bodies. The codes of spec 14.3 are listed on each
+    operation's `default` response; the HTTP status is the one of that table.
+
+    Nothing here returns a password hash, a TOTP secret, a token, an SMS
+    credential or a log row of a tenant (spec 18.1). The only secrets that leave
+    are one-time values shown once: a new user's or a re-issued one-time password,
+    an invite link, a TOTP seed during setup.
+servers:
+  - url: /api/v1
+    description: Behind the Admin hostname, through the front door.
+tags:
+  - name: health
+    description: Liveness and readiness. Not versioned, not authenticated, outside the request pipeline.
+  - name: auth
+    description: Admin sessions.
+  - name: me
+    description: The signed-in admin's own account and setup.
+  - name: users
+    description: The minimum Users page (T-327) and the re-issue of a one-time password (T-536).
+  - name: invites
+    description: Invites by code.
+  - name: settings
+    description: Registration mode and the Passkey RP ID.
+  - name: sms
+    description: Gateways, routing, templates, limits and statistics.
+  - name: audit
+    description: The admin audit log and operator alerts.
+  - name: nodes
+    description: Node enrolment, the nodes list and what a node reported, the free DNS and domain settings and the certificates (P4, p4-nodes 9.2).
+# The alphabets of the string schemas below, written once so the two documents and
+# every field agree (rule boundary-input, spec 14.2). Each pattern is anchored and
+# excludes the control, format and private-use characters; internal/lint judges them
+# by what they accept, not by how they are written. They are RE2 (Go) patterns, which
+# is what the request validator runs.
+x-ctrlz-patterns:
+  text: &text '^[^\p{C}]*$'
+  # A typed code or a phone number: `text` plus the paste marks (format characters, tab, line feed,
+  # carriage return) that the fold of internal/auth/digits drops, so a code pasted from a
+  # right-to-left editor reaches the handler instead of being refused here. The text is
+  # digits.PastePattern; TestPastePatternIsThePasteMarkClass holds the two together (round 14,
+  # primitives-r14-3). The fields that use it are the lint's list (codeFields).
+  pasted: &pasted '^(?:[^\p{C}]|\p{Cf}|[\t\n\r])*$'
+  # An identifier or a value the server keys on: its first character is not a control, format or
+  # separator character, so an empty value and a blank one ("   ", which the handler trims to
+  # nothing) are refused by the schema and never reach a keyed step (round 5, admin-r5-1).
+  content: &content '^[^\p{C}\p{Z}][^\p{C}]*$'
+  # `content` for a typed code or phone an admin sends (digits.PasteContentPattern).
+  pastedcontent: &pastedcontent '^(?:\p{Cf}|\p{Z}|[\t\n\r])*[^\p{C}\p{Z}](?:[^\p{C}]|\p{Cf}|[\t\n\r])*$'
+  # Persian prose keeps the zero width non-joiner (U+200C), which the language needs
+  # inside words. Only fields that carry prose use it, and the lint holds that list.
+  prose: &prose '^(?:[^\p{C}]|\x{200C})*$'
+  # The same for a prose field that must say something: the template body.
+  prosebody: &prosebody '^(?:[^\p{C}\p{Z}]|\x{200C})(?:[^\p{C}]|\x{200C})*$'
+  uuid: &uuid '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+  datetime: &datetime '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]{8,16}(Z|[+-][0-9]{2}:[0-9]{2})$'
+  date: &date '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+  b64url: &b64url '^[A-Za-z0-9_-]*$'
+  b64urlsome: &b64urlsome '^[A-Za-z0-9_-]+$'
+  word: &word '^[a-z][a-z0-9_.-]*$'
+  key: &key '^[A-Za-z][A-Za-z0-9_.-]*$'
+  host: &host '^[A-Za-z0-9.-]*$'
+  alpha2: &alpha2 '^[A-Za-z]{2}$'
+  base32: &base32 '^[A-Z2-7]*$'
+  money: &money '^[0-9]{0,10}(\.[0-9]{1,4})?$'
+  digits: &digits '^[0-9]*$'
+  param: &param '^[A-Za-z0-9_.-]*$'
+  # An IP address or a prefix as text; the handler parses it.
+  ip: &ip '^[0-9A-Fa-f:./]+$'
+  hex: &hex '^[0-9a-f]*$'
+  # A key fingerprint typed from a console: hex digits, with the separators a person may type between pairs.
+  # A PEM text: its first line is a BEGIN line, so empty and blank values are refused. It holds line breaks, which the
+  # boundary lint allows for the two PEM fields only (chain_pem, key_pem).
+  pem: &pem '^-----BEGIN [A-Z ]+-----[A-Za-z0-9+/=\r\n -]*$'
+  fingerprint: &fingerprint '^[0-9A-Fa-f][0-9A-Fa-f :-]*$'
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      operationId: healthz
+      summary: Liveness
+      security: []
+      servers:
+        - url: /
+      responses:
+        "200":
+          description: The process is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, role, version]
+                properties:
+                  status: {type: string, const: ok, maxLength: 2}
+                  role: {type: string, maxLength: 32, pattern: '^[a-z]+$'}
+                  version: {type: string, maxLength: 64, pattern: '^[A-Za-z0-9._+~-]*$'}
+  /readyz:
+    get:
+      tags: [health]
+      operationId: readyz
+      summary: Readiness
+      description: |
+        Answered to a loopback peer only (the container healthcheck); any other peer gets the 404 of an
+        unknown path, so a neighbour cannot spend the role's database pool through it (admin-r11-4).
+      security: []
+      servers:
+        - url: /
+      responses:
+        "200": {description: Ready.}
+        "503": {description: The database is unavailable.}
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: adminLogin
+      summary: Sign in with a username, a password and, once enrolled, a TOTP code
+      description: |
+        Inside a 500 ms floor (a request the speed limit of the network turned away
+        is answered at once). An unknown username, a wrong password, a disabled
+        account, an expired one-time password and a missing or wrong TOTP code all
+        answer `invalid_credentials`, so none tells the others apart. A TOTP code
+        that matches a step already spent is `totp_step_reused`, which is only
+        reachable with the right password. A request that the speed limit of the
+        network has turned away is `rate_limited`, with `Retry-After`; the limits of
+        one account are `too_many_attempts`. Errors: `invalid_credentials`,
+        `totp_step_reused`, `too_many_attempts`, `rate_limited`, `server_busy`.
+      security: []
+      x-ctrlz-auth: none
+      x-ctrlz-rate: admin-login
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AdminLoginRequest"}
+      responses:
+        "200":
+          description: Signed in. The session cookie is set. `setup_required` means only the setup routes work until the password is changed and TOTP enrolled.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AdminLoginResult"}
+        "429": {$ref: "#/components/responses/RateLimited"}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: adminLogout
+      summary: End this admin session
+      x-ctrlz-auth: admin-setup
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      responses:
+        "204": {description: Signed out. The cookie is cleared.}
+        "401": {$ref: "#/components/responses/SessionExpired"}
+        "429": {$ref: "#/components/responses/RateLimited"}
+        "503": {$ref: "#/components/responses/Unavailable"}
+  /auth/totp/fresh:
+    post:
+      tags: [auth]
+      operationId: adminTotpFresh
+      summary: Prove the authenticator again, for the next five minutes
+      description: 'Errors: `totp_invalid`, `totp_step_reused`, `too_many_attempts`.'
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TotpCodeRequest"}
+      responses:
+        "200":
+          description: The window is open.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FreshWindow"}
+        default: {$ref: "#/components/responses/Problem"}
+  /me:
+    get:
+      tags: [me]
+      operationId: getAdminMe
+      summary: The shell's bootstrap
+      x-ctrlz-auth: admin-setup
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: The admin, their setup state and any console-reset notices.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AdminMe"}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/notices/ack:
+    post:
+      tags: [me]
+      operationId: ackAdminNotices
+      summary: Dismiss the notices that predate this session
+      description: |
+        Clears the notices dated before this session began: the banner after a
+        console reset, and `sms_gateway_changed`. A notice made during this session
+        stays, so the session that changed the SMS gateway cannot erase the warning
+        before the owner has seen it at their next login. Always 204; GET /me shows
+        what is left. An acknowledgement that cleared or kept something is written
+        to the audit log as `admin.notices_ack`.
+      x-ctrlz-auth: admin-setup
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      responses:
+        "204": {description: Cleared.}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/password:
+    post:
+      tags: [me]
+      operationId: changeAdminPassword
+      summary: Replace the password
+      description: |
+        Counts on `admin_reauth` (a scope of its own, keyed on the admin) before the
+        current password is checked, so a stolen cookie cannot test passwords without
+        limit. Once TOTP is enrolled and the password is the admin's own, a TOTP code
+        is required too. A wrong password, a missing or wrong code and a spent
+        `admin_totp` all answer 401 `invalid_credentials`, so the answer never says
+        that the password was right. Rotates this session and ends the others.
+        Errors: `invalid_credentials`, `password_weak` (with `fields`),
+        `validation_failed`, `totp_step_reused`, `too_many_attempts`, `server_busy`.
+      x-ctrlz-auth: admin-setup
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AdminPasswordRequest"}
+      responses:
+        "204": {description: Changed. A new session cookie is set.}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/totp/setup:
+    post:
+      tags: [me]
+      operationId: adminTotpSetup
+      summary: Make a TOTP secret, not yet enabled
+      description: 'Errors: `totp_already_enabled`.'
+      x-ctrlz-auth: admin-setup
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Empty"}
+      responses:
+        "200":
+          description: The secret, shown once, and the otpauth URI for the QR code.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AdminTotpSetup"}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/totp/confirm:
+    post:
+      tags: [me]
+      operationId: adminTotpConfirm
+      summary: Prove the app has the secret and turn TOTP on
+      description: 'Errors: `totp_invalid`, `totp_step_reused`, `totp_not_pending`, `totp_already_enabled`, `too_many_attempts`.'
+      x-ctrlz-auth: admin-setup
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TotpCodeRequest"}
+      responses:
+        "204": {description: TOTP is on. A new session cookie is set and the other sessions end.}
+        default: {$ref: "#/components/responses/Problem"}
+  /users:
+    get:
+      tags: [users]
+      operationId: listUsers
+      summary: Users, newest first
+      description: 'Filtered by a phone prefix. Lists no log data (D19). Errors: `validation_failed`.'
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: A phone number prefix, in any of the accepted forms.
+          schema: {type: string, maxLength: 64, pattern: *pasted}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AdminUserPage"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [users]
+      operationId: createUser
+      summary: Make a user with a one-time password
+      description: |
+        Works with no SMS gateway. The one-time password is in this response and
+        nowhere else. Errors: `phone_unavailable`, `invalid_phone`,
+        `validation_failed`, `server_busy`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CreateUserRequest"}
+      responses:
+        "201":
+          description: Created. Shown once.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/UserCreated"}
+        default: {$ref: "#/components/responses/Problem"}
+  /tenants/{tenant_id}/users/{user_id}/one-time-password:
+    post:
+      tags: [users]
+      operationId: reissueOneTimePassword
+      summary: Issue a user a new one-time password (T-536)
+      description: |
+        Only for a user whose current password is still an admin-issued one-time
+        password, expired or not, and who holds no second factor. A user who set
+        their own password, and an OTP-only user, are `password_not_one_time`.
+        Revokes every session and refresh token of the user and their open mfa and
+        reset tickets. Errors: `not_found`, `password_not_one_time`,
+        `totp_fresh_required`, `server_busy`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Empty"}
+      responses:
+        "200":
+          description: Issued. The password is in this response and nowhere else.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OneTimePasswordIssued"}
+        default: {$ref: "#/components/responses/Problem"}
+  /invites:
+    get:
+      tags: [invites]
+      operationId: listInvites
+      summary: Invites, newest first
+      description: Never holds a code.
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/InvitePage"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [invites]
+      operationId: createInvite
+      summary: Make an invite link
+      description: 'The link is in this response and nowhere else; an invite is never sent by SMS, the admin copies the link (D67). Errors: `phone_unavailable`, `invalid_phone`, `totp_fresh_required`.'
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CreateInviteRequest"}
+      responses:
+        "201":
+          description: Created. Shown once.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/InviteCreated"}
+        default: {$ref: "#/components/responses/Problem"}
+  /invites/{id}:
+    delete:
+      tags: [invites]
+      operationId: revokeInvite
+      summary: Revoke an unused invite
+      description: 'Errors: `totp_fresh_required`.'
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "204": {description: Revoked.}
+        default: {$ref: "#/components/responses/Problem"}
+  /settings/registration:
+    get:
+      tags: [settings]
+      operationId: getRegistration
+      summary: The registration mode
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RegistrationSettings"}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      tags: [settings]
+      operationId: putRegistration
+      summary: Change the registration mode
+      description: 'An unknown mode or a grace outside 1 to 365 days is refused by the schema, 400 `bad_request`. A mode change ends an unfinished transition job of its own (a newer change replaces it), so `conflict` means another admin changed the mode at the same moment and this one retries. Errors: `conflict`, `totp_fresh_required`.'
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RegistrationRequest"}
+      responses:
+        "200":
+          description: The settings after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RegistrationSettings"}
+        default: {$ref: "#/components/responses/Problem"}
+  /settings/registration/impact:
+    get:
+      tags: [settings]
+      operationId: getRegistrationImpact
+      summary: What moving to a mode does to unproven claims
+      description: 'An unknown mode is refused by the schema, 400 `bad_request`.'
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - name: to
+          in: query
+          required: true
+          schema: {$ref: "#/components/schemas/RegistrationMode"}
+      responses:
+        "200":
+          description: The counts the confirm dialog shows.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RegistrationImpact"}
+        default: {$ref: "#/components/responses/Problem"}
+  /settings/webauthn:
+    get:
+      tags: [settings]
+      operationId: getWebauthn
+      summary: The Passkey configuration
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: The configuration.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/WebauthnConfig"}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      tags: [settings]
+      operationId: putWebauthn
+      summary: Change the Passkey RP ID, or switch Passkey on or off
+      description: |
+        Takes no origins: the server writes `https://<panel host>`. Refuses an RP
+        ID that is not the panel host or a suffix of it, and one that is a public
+        suffix (`co.ir`, a bare TLD). In production `enabled = true` is refused
+        until real-domain acceptance (P4). A change of RP ID ends an unfinished
+        `webauthn_rp_change` job (a newer change replaces it), so `conflict` means
+        another admin changed it at the same moment and this one retries.
+        Errors: `validation_failed`, `conflict`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/WebauthnRequest"}
+      responses:
+        "200":
+          description: The configuration after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/WebauthnConfig"}
+        default: {$ref: "#/components/responses/Problem"}
+  /settings/webauthn/impact:
+    get:
+      tags: [settings]
+      operationId: getWebauthnImpact
+      summary: How many credentials a change of RP ID would make stale
+      description: 'Errors: `validation_failed`.'
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - name: rp_id
+          in: query
+          required: true
+          schema: {type: string, maxLength: 253, pattern: *content}
+      responses:
+        "200":
+          description: The counts.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/WebauthnImpact"}
+        default: {$ref: "#/components/responses/Problem"}
+  /sms/gateways:
+    get:
+      tags: [sms]
+      operationId: listSmsGateways
+      summary: The gateways, never their credentials
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: One row per provider.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsGatewayList"}
+        default: {$ref: "#/components/responses/Problem"}
+  /sms/gateways/{provider}:
+    put:
+      tags: [sms]
+      operationId: putSmsGateway
+      summary: Set a gateway's credentials or price
+      description: |
+        Credentials are `{"api_key"}` for sms.ir and `{"username","password"}` for
+        Melipayamak. Only their shape is checked here; a real check is the test
+        send. They are sealed at once and never returned. They are saved as PENDING
+        and carry no code until the owner confirms them at the server console with
+        `ctrlz-admin sms confirm`; the active credentials keep serving meanwhile,
+        and the response row shows `pending_confirmation: true`. The response to the
+        PUT that staged them, and only that response, carries `pending_fingerprint`,
+        which the console needs. A gateway with a pair that waits refuses a second
+        pair: `credentials/pending_exists`, until the console confirms or discards
+        the first. `noop` is refused unless the deployment is dev or test.
+        Errors: `validation_failed` (the field `credentials` with the code
+        `pending_exists` among them), `totp_fresh_required`. A routing request that
+        names a gateway whose credentials are still pending is refused with
+        `pending_confirmation` (see `putSmsRouting`).
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Provider"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SmsGatewayRequest"}
+      responses:
+        "200":
+          description: The gateway after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsGatewayRow"}
+        default: {$ref: "#/components/responses/Problem"}
+  /sms/routing:
+    put:
+      tags: [sms]
+      operationId: putSmsRouting
+      summary: Choose the primary and the fallback gateway
+      description: 'Errors: `validation_failed` (an unknown provider, one with no credentials (code `not_configured`) or with credentials that still wait for the console (code `pending_confirmation`), the same one twice, or `noop` outside dev and test), `totp_fresh_required`.'
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SmsRoutingRequest"}
+      responses:
+        "200":
+          description: The gateways after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsGatewayList"}
+        default: {$ref: "#/components/responses/Problem"}
+  /sms/gateways/{provider}/test:
+    post:
+      tags: [sms]
+      operationId: testSmsGateway
+      summary: Queue a test message through one gateway
+      description: |
+        Goes through the outbox, since the admin service has no route out. The
+        message is pinned to this gateway and does not fall back. Errors:
+        `invalid_phone`, `validation_failed`, `not_found`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Provider"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SmsTestRequest"}
+      responses:
+        "202":
+          description: Queued.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsTestQueued"}
+        default: {$ref: "#/components/responses/Problem"}
+  /sms/outbox/{id}:
+    get:
+      tags: [sms]
+      operationId: getSmsOutbox
+      summary: The state of one queued message
+      description: Never the phone number or the text.
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "200":
+          description: The state.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsOutboxStatus"}
+        default: {$ref: "#/components/responses/Problem"}
+  /sms/templates:
+    get:
+      tags: [sms]
+      operationId: listSmsTemplates
+      summary: The templates and their provider mappings
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: One row per template and locale.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsTemplateList"}
+        default: {$ref: "#/components/responses/Problem"}
+  /sms/templates/{key}/{locale}:
+    put:
+      tags: [sms]
+      operationId: putSmsTemplate
+      summary: Change the text of a template
+      description: 'Errors: `validation_failed` (a wrong number of placeholders, or a link), `not_found`, `totp_fresh_required`.'
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/TemplateKey"}
+        - {$ref: "#/components/parameters/Locale"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SmsTemplateRequest"}
+      responses:
+        "200":
+          description: The template after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsTemplateRow"}
+        default: {$ref: "#/components/responses/Problem"}
+  /sms/gateways/{provider}/templates/{key}/{locale}:
+    put:
+      tags: [sms]
+      operationId: putSmsProviderTemplate
+      summary: Map a template to the provider's approved copy
+      description: 'The number of parameter names must equal the template''s placeholders. Errors: `validation_failed`, `totp_fresh_required`.'
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Provider"}
+        - {$ref: "#/components/parameters/TemplateKey"}
+        - {$ref: "#/components/parameters/Locale"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SmsProviderTemplateRequest"}
+      responses:
+        "200":
+          description: The template with its mappings.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsTemplateRow"}
+        default: {$ref: "#/components/responses/Problem"}
+  /sms/limits:
+    get:
+      tags: [sms]
+      operationId: getSmsLimits
+      summary: The OTP caps and the SMS spending caps
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: The limits.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsLimits"}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      tags: [sms]
+      operationId: putSmsLimits
+      summary: Replace the limits
+      description: 'Errors: `validation_failed`, `totp_fresh_required`.'
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SmsLimits"}
+      responses:
+        "200":
+          description: The limits after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsLimits"}
+        default: {$ref: "#/components/responses/Problem"}
+  /sms/stats:
+    get:
+      tags: [sms]
+      operationId: getSmsStats
+      summary: Messages and cost per day, attempts per gateway
+      description: Holds no phone number and no text.
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 90, default: 7}
+      responses:
+        "200":
+          description: The numbers.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SmsStats"}
+        default: {$ref: "#/components/responses/Problem"}
+  /audit:
+    get:
+      tags: [audit]
+      operationId: listAudit
+      summary: The admin audit log, newest first
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+        - name: action
+          in: query
+          required: false
+          description: An exact action name.
+          schema: {type: string, maxLength: 64, pattern: *word}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AuditPage"}
+        default: {$ref: "#/components/responses/Problem"}
+  /alerts:
+    get:
+      tags: [audit]
+      operationId: listAlerts
+      summary: Operator alerts, unresolved first
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AlertPage"}
+        default: {$ref: "#/components/responses/Problem"}
+  /alerts/{id}/ack:
+    post:
+      tags: [audit]
+      operationId: ackAlert
+      summary: Resolve an alert
+      description: 'Errors: `totp_fresh_required`.'
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "204": {description: Resolved.}
+        default: {$ref: "#/components/responses/Problem"}
+  /node-enrollments:
+    get:
+      tags: [nodes]
+      operationId: listNodeEnrollments
+      summary: Node enrolment records, newest first (p4-nodes 4.2 step 4)
+      description: Never holds a token, a hash of one, a CSR or a certificate. A record shows what the host reported, for the admin to compare with the host console.
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeEnrollmentPage"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [nodes]
+      operationId: createNodeEnrollment
+      summary: Make an enrolment token and its install command (p4-nodes 4.2 step 1)
+      description: |
+        The token is 32 random bytes, valid 15 minutes, single use, optionally bound to a source address.
+        Only its SHA-256 is stored. The install command, which holds the token, is in this response and
+        nowhere else. When the pin file of the hub, `root.json` or a verified node bundle is not there yet
+        the answer is `service_unavailable` and no enrolment is made. Errors: `address_refused`,
+        `service_unavailable`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CreateNodeEnrollmentRequest"}
+      responses:
+        "201":
+          description: Created. The install command is shown once.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeEnrollmentCreated"}
+        default: {$ref: "#/components/responses/Problem"}
+  /node-enrollments/{id}:confirm:
+    post:
+      tags: [nodes]
+      operationId: confirmNodeEnrollment
+      summary: Confirm the key fingerprint of a record and make its pending node (p4-nodes 4.2 step 4)
+      description: |
+        The fingerprint the admin typed from the console of the host must equal the one of the record. One
+        transaction inserts the pending node row (the key of the record, the first free slot), moves the
+        record to approved and writes the audit row. The would-be PairTable, with the node counted as active,
+        must be valid (SC 8a.4). Errors: `not_found`, `fingerprint_mismatch`, `enrollment_state`,
+        `key_reused`, `node_limit_reached`, `address_refused`, `table_invalid`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ConfirmNodeEnrollmentRequest"}
+      responses:
+        "201":
+          description: The node row was made, pending.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeEnrollmentConfirmed"}
+        default: {$ref: "#/components/responses/Problem"}
+  /node-enrollments/{id}:reject:
+    post:
+      tags: [nodes]
+      operationId: rejectNodeEnrollment
+      summary: Withdraw a token or reject a pending record (p4-nodes 4.2 step 4)
+      description: 'Only an issued or a pending_approval record can be rejected. Errors: `not_found`, `enrollment_state`, `totp_fresh_required`.'
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Empty"}
+      responses:
+        "204": {description: Rejected.}
+        default: {$ref: "#/components/responses/Problem"}
+  /nodes:
+    get:
+      tags: [nodes]
+      operationId: listNodes
+      summary: Nodes (p4-nodes 9.2)
+      description: At most four exist (D25); the list is paged all the same.
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodePage"}
+        default: {$ref: "#/components/responses/Problem"}
+  /nodes/addresses-given-up:
+    get:
+      tags: [nodes]
+      operationId: listAddressesGivenUp
+      summary: Addresses the panel gave up and that are not yet safe to give back (SC 8a.4)
+      description: |
+        Read from the audit rows of a node removal and of an edit of an advertised address, which record the
+        old addresses. An address a node row holds now is left out, and so is one whose date has passed. The
+        fixed wait is 30 days. At most 100 rows, newest first.
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: The list.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AddressesGivenUp"}
+        default: {$ref: "#/components/responses/Problem"}
+  /nodes/{id}:
+    get:
+      tags: [nodes]
+      operationId: getNode
+      summary: One node (p4-nodes 9.2)
+      description: 'Errors: `not_found`.'
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "200":
+          description: The node.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeView"}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [nodes]
+      operationId: patchNode
+      summary: Edit the name and the proxy block of a node (p4-nodes 9.2)
+      description: |
+        A change of `proxy_blocked` reaches the nodes with the next PairTable the compiler writes; it cannot make a
+        valid table invalid, so none is judged. A blank or over-long name, an empty body and an unknown field are refused by the
+        schema, 400 `bad_request`; the handler's own checks of the same rules never see a value the schema let through.
+        Errors: `bad_request`, `not_found`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PatchNodeRequest"}
+      responses:
+        "200":
+          description: The node after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeView"}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [nodes]
+      operationId: removeNode
+      summary: Remove a node (p4-nodes 4.5, SC 8a.4)
+      description: |
+        Refused while the node is in a pair in the database (`node_paired`) and while the last table the log
+        carried or the hub's last signing event pairs it (`node_in_table`): change the pair first and wait for
+        the drain. The node's addresses are given up and listed by `GET /nodes/addresses-given-up`. Errors:
+        `not_found`, `node_paired`, `node_in_table`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "204": {description: Removed.}
+        default: {$ref: "#/components/responses/Problem"}
+  /nodes/{id}:approve:
+    post:
+      tags: [nodes]
+      operationId: approveNode
+      summary: Move a pending node to active (p4-nodes 4.2 step 5)
+      description: |
+        The table the log would carry with the node active must be valid (SC 8a.4). Errors: `not_found`,
+        `node_state`, `table_invalid`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Empty"}
+      responses:
+        "200":
+          description: The node after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeView"}
+        default: {$ref: "#/components/responses/Problem"}
+  /nodes/{id}:revoke:
+    post:
+      tags: [nodes]
+      operationId: revokeNode
+      summary: Revoke an active node, which is terminal (p4-nodes 4.5)
+      description: |
+        Queues the `node_revoked` job in the same transaction. Never refused for the state of the table: a
+        revocation is the answer to a compromise. A pending node is removed, not revoked. Errors: `not_found`,
+        `node_state`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Empty"}
+      responses:
+        "200":
+          description: The node after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeView"}
+        default: {$ref: "#/components/responses/Problem"}
+  /nodes/{id}/addresses:
+    put:
+      tags: [nodes]
+      operationId: putNodeAddresses
+      summary: Change the advertised addresses of a node (p4-nodes 9.2, SC 8a.4)
+      description: |
+        The old addresses are given up and listed by `GET /nodes/addresses-given-up`. A node that is in a pair
+        queues a `pair_change` job, which bumps the pair version of the Endpoints that use the pair and notifies
+        their tenants. Errors: `not_found`, `node_state`, `address_refused`, `table_invalid`, `upstream_loop`,
+        `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NodeAddressesRequest"}
+      responses:
+        "200":
+          description: The node after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeView"}
+        default: {$ref: "#/components/responses/Problem"}
+  /nodes/{id}/dns-requests:
+    post:
+      tags: [nodes]
+      operationId: createNodeDnsRequest
+      summary: Ask the hub to hold, release or fail back a node's DNS answer (SC 8a.4, Requests)
+      description: |
+        Writes a row of `node_dns_requests`, which only the hub decides, on its next tick, and never after 10 s.
+        An active node takes all three kinds. A revoked node takes `hold` and `release` (SC 8a.9 gives the hold as the
+        remedy until the revocation has reached the nodes); `force_failback` of a revoked node, and any kind for a pending
+        node, is `node_state`. Errors: `not_found`, `node_state`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NodeDnsRequestBody"}
+      responses:
+        "202":
+          description: The request was recorded.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeDnsRequestAccepted"}
+        default: {$ref: "#/components/responses/Problem"}
+  /pairs:
+    get:
+      tags: [nodes]
+      operationId: listPairs
+      summary: Node pairs (p4-nodes 9.2)
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PairPage"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [nodes]
+      operationId: createPair
+      summary: Make a pair (p4-nodes 9.2)
+      description: |
+        Both nodes must be active. The first pair is also the global pair, so it is made with `make_global`. A
+        `pair_change` job is queued in the same transaction. Errors: `node_state`, `second_peer`,
+        `global_pair_required`, `table_invalid`, `validation_failed`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PairRequest"}
+      responses:
+        "201":
+          description: The pair.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PairView"}
+        default: {$ref: "#/components/responses/Problem"}
+  /pairs/{id}:
+    put:
+      tags: [nodes]
+      operationId: updatePair
+      summary: Change the members of a pair (p4-nodes 9.2)
+      description: |
+        The same rules as the creation. Errors: `not_found`, `node_state`, `second_peer`, `table_invalid`,
+        `validation_failed`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PairRequest"}
+      responses:
+        "200":
+          description: The pair after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PairView"}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [nodes]
+      operationId: deletePair
+      summary: Dissolve a pair no Endpoint uses (p4-nodes 9.2, SC 8a.9 Replacement order)
+      description: |
+        In v1 every pair but the global one. Errors: `not_found`, `pair_in_use`, `table_invalid`,
+        `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "204": {description: Dissolved.}
+        default: {$ref: "#/components/responses/Problem"}
+  /settings/global-pair:
+    put:
+      tags: [nodes]
+      operationId: putGlobalPair
+      summary: Switch the global pair (p4-nodes 9.2)
+      description: 'Errors: `not_found`, `table_invalid`, `totp_fresh_required`.'
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/GlobalPairRequest"}
+      responses:
+        "200":
+          description: The global pair after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GlobalPairView"}
+        default: {$ref: "#/components/responses/Problem"}
+  /nodes/{id}/reports:
+    get:
+      tags: [nodes]
+      operationId: getNodeReports
+      summary: What a node reported that other people relied on (p4-nodes 4.5)
+      description: |
+        The claims taken on the proof observations of the node since `from` (default: 30 days back) and, when
+        given, no later than `to`, newest first, and the learned rows the node_revoked job could not delete. At most
+        200 claims come back: `claims_truncated` says more exist, and the admin walks back by sending the
+        `consumed_at` of the last claim as `to` (that instant is read again, so a claim may repeat). The report of a
+        node outlives its row. `kept_truncated` says the job's list of kept rows was cut. Errors: `not_found`.
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+        - name: from
+          in: query
+          required: false
+          schema: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        - name: to
+          in: query
+          required: false
+          schema: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+      responses:
+        "200":
+          description: The reports.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeReports"}
+        default: {$ref: "#/components/responses/Problem"}
+  /overview:
+    get:
+      tags: [nodes]
+      operationId: getOverview
+      summary: The system and the nodes at a glance (p4-nodes 9.2, T-339)
+      description: |
+        Every node (four at most, D25), the head of the configuration log, the QPS and cache hit rate summed over the nodes
+        that reported them, and the free DNS settings. The memory-only parts of a node (5.3 to 5.6) follow the hub.
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: The overview.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Overview"}
+        default: {$ref: "#/components/responses/Problem"}
+  /free-dns/counters:
+    get:
+      tags: [nodes]
+      operationId: listFreeDnsCounters
+      summary: The free DNS counters, hourly, by node, transport, outcome and rcode (p4-nodes 9.2, T-339)
+      description: |
+        No name and no address of any client is in a row (SC 5.2a). `from` is inclusive and `to` exclusive; the default is
+        the last 24 hours, and a window longer than 31 days, or one that ends before it starts, is `validation_failed`.
+        Errors: `validation_failed`.
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        - name: to
+          in: query
+          required: false
+          schema: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        - name: node_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        - {$ref: "#/components/parameters/Cursor"}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 500, default: 200}
+      responses:
+        "200":
+          description: One page, in time order.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FreeCounterPage"}
+        default: {$ref: "#/components/responses/Problem"}
+  /settings/free-dns:
+    get:
+      tags: [nodes]
+      operationId: getFreeDnsSettings
+      summary: The free DNS switch and rate (p4-nodes 9.2, T-556)
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FreeDnsSettings"}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      tags: [nodes]
+      operationId: putFreeDnsSettings
+      summary: Switch free DNS on or off and set its rate (p4-nodes 9.2, T-556)
+      description: |
+        The compiler sees the change by the version the database moves on every write. A `qps` of 0 or above the ceiling
+        of T-374 (2000 until it is measured) is `qps_out_of_range`. Errors: `qps_out_of_range`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FreeDnsRequest"}
+      responses:
+        "200":
+          description: The settings after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FreeDnsSettings"}
+        default: {$ref: "#/components/responses/Problem"}
+  /settings/domain:
+    get:
+      tags: [nodes]
+      operationId: getDomainSettings
+      summary: The domain settings (p4-nodes 9.2, 10.4)
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DomainSettings"}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      tags: [nodes]
+      operationId: putDomainSettings
+      summary: Change the zone and the hosts (p4-nodes 9.2, 10.4)
+      description: |
+        The body replaces the three values: an absent `panel_host` or `admin_host` clears the requested host. A change of
+        `dns_zone` from one value to another starts a transition of `transition_days` and queues `domain_change`. Errors:
+        `domain_invalid`, `transition_active`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DomainRequest"}
+      responses:
+        "200":
+          description: The settings after the change.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DomainSettings"}
+        default: {$ref: "#/components/responses/Problem"}
+  /settings/domain/impact:
+    get:
+      tags: [nodes]
+      operationId: getDomainImpact
+      summary: What a change of zone touches (p4-nodes 9.2)
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      responses:
+        "200":
+          description: The counts.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DomainImpact"}
+        default: {$ref: "#/components/responses/Problem"}
+  /certificates:
+    get:
+      tags: [nodes]
+      operationId: listCertificates
+      summary: Certificate rows, newest first (p4-nodes 4.3, 9.2)
+      description: Never the chain, never the sealed key. Rows of the private CAs are listed beside the uploaded ones.
+      x-ctrlz-auth: admin
+      x-ctrlz-rate: admin-read
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CertificatePage"}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [nodes]
+      operationId: uploadCertificate
+      summary: Upload a certificate chain and its key (p4-nodes 4.3, 9.2)
+      description: |
+        The chain and the key are checked before anything is stored: the key must be the leaf's, the leaf valid now and for
+        at least 7 days, the chain verified against the public roots embedded in the binary, and the names the rule of the
+        kind. The key is sealed to the intake key of its kind and is never stored, answered or logged in the clear. Errors:
+        `cert_invalid`, `cert_key_mismatch`, `cert_not_public`, `cert_expiring`, `service_unavailable`,
+        `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      x-ctrlz-max-body: 65536
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UploadCertificateRequest"}
+      responses:
+        "201":
+          description: Stored, active.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CertificateCreated"}
+        default: {$ref: "#/components/responses/Problem"}
+  /certificates/{id}:retire:
+    post:
+      tags: [nodes]
+      operationId: retireCertificate
+      summary: Retire an uploaded certificate (p4-nodes 4.3, 9.2)
+      description: |
+        The next `CertBundle` and `domain-apply` no longer use it. Only an active uploaded row can be retired; any other
+        is `not_found`. Errors: `not_found`, `totp_fresh_required`.
+      x-ctrlz-auth: admin-fresh
+      x-ctrlz-rate: admin-write
+      x-ctrlz-token: none
+      parameters:
+        - {$ref: "#/components/parameters/Id"}
+      responses:
+        "204": {description: Retired.}
+        default: {$ref: "#/components/responses/Problem"}
+components:
+  securitySchemes:
+    admin:
+      type: apiKey
+      in: cookie
+      name: __Host-ctrlz_admin
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.
+      schema: {type: string, maxLength: 128, pattern: *b64urlsome}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    Provider:
+      name: provider
+      in: path
+      required: true
+      schema: {$ref: "#/components/schemas/SmsProvider"}
+    TemplateKey:
+      name: key
+      in: path
+      required: true
+      schema: {type: string, maxLength: 32, pattern: *word}
+    Locale:
+      name: locale
+      in: path
+      required: true
+      schema: {type: string, maxLength: 2, enum: [fa, en]}
+  responses:
+    SessionExpired:
+      description: No admin session, or it is revoked, disabled or past its limit (`session_expired`).
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    RateLimited:
+      description: '`rate_limited`, with `Retry-After`.'
+      headers:
+        Retry-After:
+          description: Seconds to wait.
+          schema: {type: integer, minimum: 0, maximum: 86400}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Unavailable:
+      description: '`service_unavailable`: the database could not be reached.'
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Problem:
+      description: |
+        An error of spec 14.3. The status and `code` are the pair of that table;
+        the codes an operation can raise are in its description. `Retry-After`
+        accompanies 429 and 503 answers that have a wait.
+      headers:
+        Retry-After:
+          description: Seconds to wait.
+          schema: {type: integer, minimum: 0, maximum: 86400}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+  schemas:
+    Error:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string, maxLength: 64, pattern: *word}
+        request_id: {type: string, maxLength: 64, pattern: *b64url}
+        retry_after_s: {type: integer, minimum: 0, maximum: 86400}
+        fields:
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            required: [name, code]
+            properties:
+              name: {type: string, maxLength: 64, pattern: *word}
+              code: {type: string, maxLength: 64, pattern: *word}
+    Empty:
+      type: object
+      additionalProperties: false
+    SmsProvider:
+      type: string
+      maxLength: 16
+      enum: [sms_ir, melipayamak, noop]
+    LocaleCode:
+      type: string
+      maxLength: 2
+      enum: [fa, en]
+    RegistrationMode:
+      type: string
+      maxLength: 8
+      enum: [closed, invite, open]
+    AdminLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: {type: string, maxLength: 128, pattern: *content}
+        password: {type: string, maxLength: 2048, pattern: *prose}
+        totp_code: {type: string, maxLength: 64, pattern: *pasted}
+    AdminLoginResult:
+      type: object
+      required: [state]
+      properties:
+        state: {type: string, maxLength: 16, enum: [ready, setup_required]}
+    TotpCodeRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: {type: string, maxLength: 64, pattern: *pastedcontent}
+    FreshWindow:
+      type: object
+      required: [fresh_until]
+      properties:
+        fresh_until: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    AdminNotice:
+      type: object
+      required: [kind, at]
+      properties:
+        kind: {type: string, maxLength: 32, enum: [password_reset, totp_reset, sms_gateway_changed]}
+        at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    AdminMe:
+      type: object
+      required: [username, must_change_password, totp_enrolled, notices]
+      properties:
+        username: {type: string, maxLength: 128, pattern: *content}
+        must_change_password: {type: boolean}
+        totp_enrolled: {type: boolean}
+        fresh_until:
+          type: string
+          format: date-time
+          maxLength: 40
+          pattern: *datetime
+          description: Present while the five minute window is open.
+        notices:
+          type: array
+          maxItems: 16
+          items: {$ref: "#/components/schemas/AdminNotice"}
+    AdminPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password: {type: string, maxLength: 2048, pattern: *prose}
+        new_password: {type: string, maxLength: 2048, pattern: *prose}
+        totp_code: {type: string, maxLength: 64, pattern: *pasted}
+    AdminTotpSetup:
+      type: object
+      required: [secret, otpauth_uri]
+      properties:
+        secret: {type: string, maxLength: 128, pattern: *base32, description: The base32 text shown beside the QR code. Shown once.}
+        otpauth_uri: {type: string, maxLength: 512, pattern: *text}
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [phone]
+      properties:
+        phone: {type: string, maxLength: 64, pattern: *pastedcontent}
+        locale: {$ref: "#/components/schemas/LocaleCode"}
+    UserCreated:
+      type: object
+      required: [tenant_id, user_id, one_time_password]
+      properties:
+        tenant_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        user_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        one_time_password: {type: string, maxLength: 128, pattern: *text, description: Shown once.}
+    OneTimePasswordIssued:
+      type: object
+      required: [one_time_password, expires_at, revoked_sessions]
+      properties:
+        one_time_password: {type: string, maxLength: 128, pattern: *text, description: Shown once.}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        revoked_sessions: {type: integer, minimum: 0, maximum: 2147483647}
+    AdminUserRow:
+      type: object
+      required: [tenant_id, user_id, phone_e164, tenant_status, created_at]
+      properties:
+        tenant_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        user_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        phone_e164: {type: string, maxLength: 32, pattern: *text}
+        tenant_status: {type: string, maxLength: 16, pattern: *word}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_login_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        one_time_password_expires_at:
+          type: string
+          format: date-time
+          maxLength: 40
+          pattern: *datetime
+          description: Present while the user's password is still an admin-issued one-time password (10.7).
+    AdminUserPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/AdminUserRow"}
+        next_cursor: {type: string, maxLength: 128, pattern: *b64url}
+    CreateInviteRequest:
+      type: object
+      additionalProperties: false
+      required: [phone]
+      properties:
+        phone: {type: string, maxLength: 64, pattern: *pastedcontent}
+        locale: {$ref: "#/components/schemas/LocaleCode"}
+        ttl_hours: {type: integer, minimum: 1, maximum: 720, default: 72}
+    InviteCreated:
+      type: object
+      required: [id, link]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        link: {type: string, maxLength: 512, pattern: *text, description: 'https://<panel host>/invite#<signed token>. Shown once. A fragment never reaches a server.'}
+    InviteRow:
+      type: object
+      required: [id, phone_e164, locale, state, expires_at, created_at]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        phone_e164: {type: string, maxLength: 32, pattern: *text}
+        locale: {type: string, maxLength: 2, pattern: *word}
+        state: {type: string, maxLength: 8, enum: [pending, used, revoked, expired]}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    InvitePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/InviteRow"}
+        next_cursor: {type: string, maxLength: 128, pattern: *b64url}
+    RegistrationSettings:
+      type: object
+      required: [mode, open_grace_days, takeover_idle_days]
+      properties:
+        mode: {$ref: "#/components/schemas/RegistrationMode"}
+        open_grace_days: {type: integer, minimum: 0, maximum: 3650}
+        takeover_idle_days: {type: integer, minimum: 0, maximum: 3650}
+    RegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode: {$ref: "#/components/schemas/RegistrationMode"}
+        open_grace_days: {type: integer, minimum: 1, maximum: 365}
+    RegistrationImpact:
+      type: object
+      required: [graced, suspended_at_once]
+      properties:
+        graced: {type: integer, minimum: 0, maximum: 2147483647}
+        suspended_at_once: {type: integer, minimum: 0, maximum: 2147483647}
+    WebauthnConfig:
+      type: object
+      required: [allowed_origins, enabled]
+      properties:
+        rp_id: {type: string, maxLength: 253, pattern: *content}
+        allowed_origins:
+          type: array
+          maxItems: 16
+          items: {type: string, maxLength: 300, pattern: *text}
+        enabled: {type: boolean}
+    WebauthnRequest:
+      type: object
+      additionalProperties: false
+      required: [rp_id, enabled]
+      properties:
+        rp_id: {type: string, maxLength: 253, pattern: *content}
+        enabled: {type: boolean}
+    WebauthnImpact:
+      type: object
+      required: [credentials, users, enforced_users]
+      properties:
+        credentials: {type: integer, minimum: 0, maximum: 2147483647}
+        users: {type: integer, minimum: 0, maximum: 2147483647}
+        enforced_users: {type: integer, minimum: 0, maximum: 2147483647}
+    SmsGatewayRow:
+      type: object
+      required: [provider, role, configured]
+      properties:
+        provider: {$ref: "#/components/schemas/SmsProvider"}
+        role: {type: string, maxLength: 16, enum: [primary, fallback, disabled]}
+        configured: {type: boolean}
+        pending_confirmation:
+          type: boolean
+          description: >-
+            New credentials were saved and wait for the owner's confirmation at the console
+            (`ctrlz-admin sms confirm`). They carry no code until then; `configured` and
+            `hint` describe the active credentials.
+        pending_fingerprint:
+          type: string
+          maxLength: 16
+          pattern: '^[0-9a-f]{16}$'
+          description: >-
+            Names the pair that this PUT staged. Present only in the response to the PUT that
+            staged credentials, never in a listing. The console's confirmation needs it, so only the
+            session that staged a pair can have it confirmed; it reveals nothing of the credentials.
+        hint: {type: string, maxLength: 64, pattern: *text}
+        cost_per_message: {type: string, maxLength: 24, pattern: *money}
+        last_ok_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_error_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_error_code: {type: string, maxLength: 64, pattern: *text}
+        breaker_open_until: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    SmsGatewayList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 8
+          items: {$ref: "#/components/schemas/SmsGatewayRow"}
+    SmsGatewayRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        credentials:
+          type: object
+          description: The provider's credentials. Write-only.
+          maxProperties: 4
+          patternProperties:
+            '^[a-z][a-z0-9_]{0,31}$': {type: string, maxLength: 256, pattern: *content}
+          additionalProperties: false
+        cost_per_message:
+          type: string
+          maxLength: 24
+          pattern: *money
+          description: Rial, as a decimal string. An empty string clears the price.
+    SmsRoutingRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        primary: {$ref: "#/components/schemas/SmsProvider"}
+        fallback: {$ref: "#/components/schemas/SmsProvider"}
+    SmsTestRequest:
+      type: object
+      additionalProperties: false
+      required: [phone, template]
+      properties:
+        phone: {type: string, maxLength: 64, pattern: *pastedcontent}
+        template: {type: string, maxLength: 32, pattern: *word}
+        locale: {$ref: "#/components/schemas/LocaleCode"}
+    SmsTestQueued:
+      type: object
+      required: [outbox_id]
+      properties:
+        outbox_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    SmsOutboxStatus:
+      type: object
+      required: [state]
+      properties:
+        state: {type: string, maxLength: 8, enum: [pending, sent, failed]}
+        last_error: {type: string, maxLength: 128, pattern: *text}
+    SmsTemplateMapping:
+      type: object
+      required: [provider, provider_template_id, param_names]
+      properties:
+        provider: {type: string, maxLength: 16, pattern: *word}
+        provider_template_id: {type: string, maxLength: 18, pattern: *digits}
+        param_names:
+          type: array
+          maxItems: 8
+          items: {type: string, minLength: 1, maxLength: 64, pattern: *param}
+    SmsTemplateRow:
+      type: object
+      required: [key, locale, body, mappings]
+      properties:
+        key: {type: string, maxLength: 32, pattern: *word}
+        locale: {type: string, maxLength: 2, pattern: *word}
+        body: {type: string, maxLength: 1024, pattern: *prosebody}
+        mappings:
+          type: array
+          maxItems: 8
+          items: {$ref: "#/components/schemas/SmsTemplateMapping"}
+    SmsTemplateList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 32
+          items: {$ref: "#/components/schemas/SmsTemplateRow"}
+    SmsTemplateRequest:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body: {type: string, maxLength: 1024, pattern: *prosebody}
+    SmsProviderTemplateRequest:
+      type: object
+      additionalProperties: false
+      required: [provider_template_id, param_names]
+      properties:
+        provider_template_id: {type: string, minLength: 1, maxLength: 18, pattern: *digits}
+        param_names:
+          type: array
+          maxItems: 8
+          items: {type: string, minLength: 1, maxLength: 64, pattern: *param}
+    SmsLimits:
+      type: object
+      additionalProperties: false
+      required:
+        - otp_cap_phone
+        - otp_cap_phone_net
+        - otp_cap_ip
+        - otp_cap_net24
+        - otp_cap_phone_trusted
+        - otp_cap_net48
+        - otp_cap_global
+        - otp_cooldown_s
+        - otp_soft_pct
+        - sms_outbox_cap_daily
+      properties:
+        otp_cap_phone: {type: integer, minimum: 1, maximum: 2147483647}
+        otp_cap_phone_net: {type: integer, minimum: 1, maximum: 2147483647}
+        otp_cap_ip: {type: integer, minimum: 1, maximum: 2147483647}
+        otp_cap_net24: {type: integer, minimum: 1, maximum: 2147483647}
+        otp_cap_phone_trusted: {type: integer, minimum: 1, maximum: 2147483647}
+        otp_cap_net48: {type: integer, minimum: 1, maximum: 2147483647}
+        otp_cap_global: {type: integer, minimum: 1, maximum: 2147483647}
+        otp_cooldown_s: {type: integer, minimum: 10, maximum: 3600}
+        otp_soft_pct: {type: integer, minimum: 1, maximum: 100}
+        sms_cost_cap_daily:
+          type: string
+          maxLength: 24
+          pattern: *money
+          description: Rial, as a decimal string. Absent means no money cap.
+        sms_outbox_cap_daily: {type: integer, minimum: 0, maximum: 2147483647}
+    SmsDay:
+      type: object
+      required: [day, otp_count, outbox_count, cost]
+      properties:
+        day: {type: string, format: date, maxLength: 10, pattern: *date}
+        otp_count: {type: integer, minimum: 0, maximum: 2147483647}
+        outbox_count: {type: integer, minimum: 0, maximum: 2147483647}
+        cost: {type: string, maxLength: 24, pattern: *money}
+    SmsGatewayStat:
+      type: object
+      required: [provider, accepted, failed]
+      properties:
+        provider: {type: string, maxLength: 16, pattern: *word}
+        accepted: {type: integer, minimum: 0, maximum: 2147483647}
+        failed: {type: integer, minimum: 0, maximum: 2147483647}
+    SmsStats:
+      type: object
+      required: [days, gateways]
+      properties:
+        days:
+          type: array
+          maxItems: 400
+          items: {$ref: "#/components/schemas/SmsDay"}
+        gateways:
+          type: array
+          maxItems: 8
+          items: {$ref: "#/components/schemas/SmsGatewayStat"}
+    AuditRow:
+      type: object
+      required: [id, at, action, params]
+      properties:
+        id: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+        at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        admin_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        admin_name: {type: string, maxLength: 128, pattern: *content, description: "The user name of admin_id. Absent when the admin has been deleted: the row stays and shows the id alone."}
+        action: {type: string, maxLength: 64, pattern: *word}
+        target: {type: string, maxLength: 128, pattern: *text}
+        params: {$ref: "#/components/schemas/RowParams"}
+        ip: {type: string, maxLength: 64, pattern: *text}
+    RowParams:
+      type: object
+      description: The values an audit row or an alert was recorded with. Scalars and short lists of text, so a row never carries a structure the document does not bound.
+      maxProperties: 32
+      patternProperties:
+        '^[A-Za-z][A-Za-z0-9_.-]{0,63}$':
+          type: [string, integer, boolean, array]
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          maxLength: 256
+          pattern: *text
+          maxItems: 64
+          items: {type: string, maxLength: 128, pattern: *text}
+      additionalProperties: false
+      x-go-type: map[string]interface{}
+    AuditPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/AuditRow"}
+        next_cursor: {type: string, maxLength: 128, pattern: *b64url}
+    AlertRow:
+      type: object
+      required: [id, severity, kind, params, created_at]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        severity: {type: string, maxLength: 8, enum: [info, warning, critical]}
+        kind: {type: string, maxLength: 64, pattern: *word}
+        params: {$ref: "#/components/schemas/RowParams"}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        resolved_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    AlertPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/AlertRow"}
+        next_cursor: {type: string, maxLength: 128, pattern: *b64url}
+    CreateNodeEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [dns_bind_ip, dns_advertised_ip, proxy_bind_ip, proxy_advertised_ip]
+      properties:
+        bound_ip: {type: string, minLength: 2, maxLength: 45, pattern: *ip, description: Only this source address may enrol with the token.}
+        dns_bind_ip: {type: string, minLength: 2, maxLength: 45, pattern: *ip}
+        dns_advertised_ip: {type: string, minLength: 2, maxLength: 45, pattern: *ip}
+        proxy_bind_ip: {type: string, minLength: 2, maxLength: 45, pattern: *ip}
+        proxy_advertised_ip: {type: string, minLength: 2, maxLength: 45, pattern: *ip}
+    NodeEnrollmentCreated:
+      type: object
+      required: [id, expires_at, install_command]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        install_command: {type: string, maxLength: 2048, pattern: *text, description: Shown once. It holds the token.}
+    ConfirmNodeEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [fingerprint, name]
+      properties:
+        fingerprint: {type: string, minLength: 16, maxLength: 128, pattern: *fingerprint}
+        name: {type: string, minLength: 1, maxLength: 64, pattern: *content}
+    NodeEnrollmentConfirmed:
+      type: object
+      required: [node_id, slot]
+      properties:
+        node_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        slot: {type: integer, minimum: 1, maximum: 4}
+    NodeEnrollmentRow:
+      type: object
+      required: [id, state, created_at, expires_at]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        state: {type: string, maxLength: 16, enum: [issued, pending_approval, approved, rejected, expired]}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        expires_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        bound_ip: {type: string, maxLength: 45, pattern: *ip}
+        node_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        key_fingerprint: {type: string, maxLength: 64, pattern: *hex}
+        dns_bind_ip: {type: string, maxLength: 45, pattern: *ip}
+        dns_advertised_ip: {type: string, maxLength: 45, pattern: *ip}
+        proxy_bind_ip: {type: string, maxLength: 45, pattern: *ip}
+        proxy_advertised_ip: {type: string, maxLength: 45, pattern: *ip}
+        hostname: {type: string, maxLength: 253, pattern: *host}
+        os_release: {type: string, maxLength: 256, pattern: *text}
+        node_version: {type: string, maxLength: 256, pattern: *text}
+        enrolled_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        enrolled_from: {type: string, maxLength: 45, pattern: *ip}
+        approved_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        rejected_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    NodeEnrollmentPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/NodeEnrollmentRow"}
+        next_cursor: {type: string, maxLength: 128, pattern: *b64url}
+    NodeView:
+      type: object
+      description: |
+        What the database holds of a node and of its latest Heartbeat. The parts that live only in the memory
+        of the hub (the failover conditions, the drain state and a revocation still pending) are not here until
+        the hub writes them (p4-nodes 5.3 to 5.6).
+      required: [id, slot, name, status, resolve_mode, proxy_blocked, created_at, applied_seq, config_head, applied_seq_lag, dns_withdrawn, dns_hold, pending_requests]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        slot: {type: integer, minimum: 1, maximum: 4}
+        name: {type: string, maxLength: 64, pattern: *content}
+        status: {type: string, maxLength: 8, enum: [pending, active, revoked]}
+        resolve_mode: {type: string, maxLength: 16, enum: [recursive, upstream, mixed]}
+        proxy_blocked: {type: boolean}
+        dns_bind_ip: {type: string, maxLength: 45, pattern: *ip}
+        dns_advertised_ip: {type: string, maxLength: 45, pattern: *ip}
+        proxy_bind_ip: {type: string, maxLength: 45, pattern: *ip}
+        proxy_advertised_ip: {type: string, maxLength: 45, pattern: *ip}
+        key_fingerprint: {type: string, maxLength: 64, pattern: *hex}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        last_heartbeat_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        node_version: {type: string, maxLength: 64, pattern: *text}
+        unbound_version: {type: string, maxLength: 64, pattern: *text}
+        catalog_version: {type: string, maxLength: 64, pattern: *text}
+        blob_major_max: {type: integer, minimum: 0, maximum: 65535}
+        isolated: {type: boolean}
+        quarantined: {type: integer, minimum: 0, maximum: 2147483647}
+        qps: {type: integer, minimum: 0, maximum: 2147483647}
+        cache_hit_permille: {type: integer, minimum: 0, maximum: 1000}
+        applied_seq: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+        config_head: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+        applied_seq_lag: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+        dns_withdrawn: {type: boolean}
+        dns_hold: {type: boolean}
+        dns_last_failback_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        dns_flap_until: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        pair_peer_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        pending_requests: {type: integer, minimum: 0, maximum: 2147483647}
+    NodePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/NodeView"}
+        next_cursor: {type: string, maxLength: 128, pattern: *b64url}
+    AddressGivenUp:
+      type: object
+      required: [address, kind, given_up_at, safe_from]
+      properties:
+        address: {type: string, maxLength: 45, pattern: *ip}
+        kind: {type: string, maxLength: 8, enum: [dns, proxy]}
+        node_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        node_name: {type: string, maxLength: 64, pattern: *text}
+        given_up_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        safe_from: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    AddressesGivenUp:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/AddressGivenUp"}
+    TakenClaim:
+      type: object
+      required: [tenant_id, endpoint_id, claim_id, cidr, consumed_at]
+      properties:
+        tenant_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        endpoint_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        claim_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        cidr: {type: string, maxLength: 49, pattern: *ip}
+        consumed_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    KeptRow:
+      type: object
+      required: [tenant_id, endpoint_id]
+      properties:
+        tenant_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        endpoint_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    NodeReports:
+      type: object
+      required: [claims, claims_truncated, kept_rows, kept_truncated]
+      properties:
+        claims:
+          type: array
+          maxItems: 200
+          items: {$ref: "#/components/schemas/TakenClaim"}
+        claims_truncated: {type: boolean}
+        kept_rows:
+          type: array
+          maxItems: 500
+          items: {$ref: "#/components/schemas/KeptRow"}
+        kept_truncated: {type: boolean}
+    PatchNodeRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64, pattern: *content}
+        proxy_blocked: {type: boolean}
+    NodeAddressesRequest:
+      type: object
+      additionalProperties: false
+      required: [dns_advertised_ip, proxy_advertised_ip]
+      properties:
+        dns_advertised_ip: {type: string, maxLength: 45, pattern: *ip}
+        proxy_advertised_ip: {type: string, maxLength: 45, pattern: *ip}
+    NodeDnsRequestBody:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: {type: string, maxLength: 16, enum: [hold, release, force_failback]}
+    NodeDnsRequestAccepted:
+      type: object
+      required: [request_id]
+      properties:
+        request_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    PairRequest:
+      type: object
+      additionalProperties: false
+      required: [primary_node_id, fallback_node_id]
+      properties:
+        primary_node_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        fallback_node_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        make_global: {type: boolean}
+    PairView:
+      type: object
+      required: [id, primary_node_id, fallback_node_id, is_global, created_at]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        primary_node_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        fallback_node_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        is_global: {type: boolean}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    PairPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/PairView"}
+        next_cursor: {type: string, maxLength: 128, pattern: *b64url}
+    GlobalPairRequest:
+      type: object
+      additionalProperties: false
+      required: [pair_id]
+      properties:
+        pair_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    GlobalPairView:
+      type: object
+      required: [pair_id]
+      properties:
+        pair_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+    Overview:
+      type: object
+      required: [nodes, config_head, free_dns]
+      properties:
+        nodes:
+          type: array
+          maxItems: 16
+          items: {$ref: "#/components/schemas/NodeView"}
+        config_head: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+        qps: {type: integer, minimum: 0, maximum: 2147483647}
+        cache_hit_permille: {type: integer, minimum: 0, maximum: 1000}
+        free_dns: {$ref: "#/components/schemas/FreeDnsSettings"}
+    FreeDnsSettings:
+      type: object
+      required: [enabled, qps, version]
+      properties:
+        enabled: {type: boolean}
+        qps: {type: integer, minimum: 1, maximum: 50000}
+        version: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+    FreeDnsRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled, qps]
+      properties:
+        enabled: {type: boolean}
+        qps: {type: integer, minimum: 0, maximum: 2147483647}
+    FreeCounterRow:
+      type: object
+      required: [node_id, bucket_start, transport, outcome, rcode, count]
+      properties:
+        node_id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        bucket_start: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        transport: {type: string, maxLength: 3, enum: [udp, tcp]}
+        outcome: {type: string, minLength: 1, maxLength: 32, pattern: *word}
+        rcode: {type: integer, minimum: 0, maximum: 23}
+        count: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+    FreeCounterPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 500
+          items: {$ref: "#/components/schemas/FreeCounterRow"}
+        next_cursor: {type: string, maxLength: 256, pattern: *b64urlsome}
+    DomainSettings:
+      type: object
+      required: [apply_pending]
+      properties:
+        dns_zone: {type: string, minLength: 1, maxLength: 253, pattern: *host}
+        panel_host: {type: string, minLength: 1, maxLength: 253, pattern: *host}
+        admin_host: {type: string, minLength: 1, maxLength: 253, pattern: *host}
+        prev_dns_zone: {type: string, minLength: 1, maxLength: 253, pattern: *host}
+        transition_until: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        applied_panel_host: {type: string, minLength: 1, maxLength: 253, pattern: *host}
+        applied_admin_host: {type: string, minLength: 1, maxLength: 253, pattern: *host}
+        apply_pending: {type: boolean}
+    DomainRequest:
+      type: object
+      additionalProperties: false
+      required: [dns_zone]
+      properties:
+        dns_zone: {type: string, minLength: 1, maxLength: 253, pattern: *host}
+        panel_host: {type: string, minLength: 1, maxLength: 253, pattern: *host}
+        admin_host: {type: string, minLength: 1, maxLength: 253, pattern: *host}
+        transition_days: {type: integer, minimum: 1, maximum: 90, default: 30}
+    DomainImpact:
+      type: object
+      required: [endpoints, apple_profiles]
+      properties:
+        endpoints: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+        apple_profiles: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+    CertificateView:
+      type: object
+      required: [id, kind, source, state, names, not_before, not_after, created_at]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        kind: {type: string, maxLength: 20, enum: [wildcard, panel, admin, node_ca, zone_ca, block_root, block_intermediate]}
+        source: {type: string, maxLength: 8, enum: [issued, uploaded]}
+        state: {type: string, maxLength: 8, enum: [pending, active, retired, revoked]}
+        names:
+          type: array
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 253, pattern: '^[A-Za-z0-9*.-]+$'}
+        not_before: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        not_after: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+        created_at: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+    CertificatePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/CertificateView"}
+        next_cursor: {type: string, maxLength: 128, pattern: *b64url}
+    UploadCertificateRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, chain_pem, key_pem]
+      properties:
+        kind: {type: string, maxLength: 8, enum: [wildcard, panel, admin]}
+        # The examples satisfy the pattern and are not a certificate or a key: the boundary lint sends one as the baseline of the
+        # request, and the route answers it with cert_invalid.
+        chain_pem: {type: string, minLength: 64, maxLength: 32768, pattern: *pem, example: "-----BEGIN EXAMPLE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5\n-----END EXAMPLE-----"}
+        key_pem: {type: string, minLength: 64, maxLength: 8192, pattern: *pem, example: "-----BEGIN EXAMPLE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5\n-----END EXAMPLE-----"}
+    CertificateCreated:
+      type: object
+      required: [id, names, not_after]
+      properties:
+        id: {type: string, format: uuid, maxLength: 36, pattern: *uuid}
+        names:
+          type: array
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 253, pattern: '^[A-Za-z0-9*.-]+$'}
+        not_after: {type: string, format: date-time, maxLength: 40, pattern: *datetime}
+security:
+  - admin: []

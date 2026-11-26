@@ -1,0 +1,8 @@
+#!/bin/sh
+# Writes api/public-openapi.yaml from api/openapi.yaml (P3 6.5). `scripts/gen-public-openapi --check` fails when it is stale.
+set -eu
+cd "$(dirname "$0")/.."
+if [ "${1:-}" = "--check" ]; then
+  exec go run ./tools/genpublicapi -check
+fi
+exec go run ./tools/genpublicapi

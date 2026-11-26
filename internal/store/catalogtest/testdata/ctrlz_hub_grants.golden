@@ -1,0 +1,119 @@
+execute ctrlz.current_tenant_id()
+policy analytics_read_floors tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy announcement_reads tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy authorized_ips hub_secure_dns_only INSERT RESTRICTIVE using=- check=(source = 'secure_dns'::text)
+policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy block_pages tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy certificates hub_issue INSERT PERMISSIVE using=- check=((kind = ANY (ARRAY['node_ca'::text, 'zone_ca'::text])) AND (source = 'issued'::text))
+policy certificates hub_read SELECT PERMISSIVE using=(kind = ANY (ARRAY['wildcard'::text, 'node_ca'::text, 'zone_ca'::text])) check=-
+policy certificates hub_retire UPDATE PERMISSIVE using=((kind = ANY (ARRAY['node_ca'::text, 'zone_ca'::text])) AND (source = 'issued'::text)) check=((kind = ANY (ARRAY['node_ca'::text, 'zone_ca'::text])) AND (source = 'issued'::text))
+policy clients tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoint_ddns_hosts tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoint_groups tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoints hub_index SELECT PERMISSIVE using=true check=-
+policy endpoints tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy feedback_items tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy filter_preview_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy idempotency_keys tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy ip_claims tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy ip_proof_challenges hub_label SELECT PERMISSIVE using=true check=-
+policy ip_proof_challenges tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy job_outbox tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy notifications tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy phone_change_requests tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy policy_outbox hub_endpoint_set_only INSERT RESTRICTIVE using=- check=((aggregate_type = 'endpoint_set'::text) AND (aggregate_id = tenant_id))
+policy policy_outbox tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_download_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_filters tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_options tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_services tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profiles tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy recovery_codes tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy refresh_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy rule_folders tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy rules tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy schedule_windows tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy sessions tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy setup_share_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_assets tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_audit_log tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_entitlements tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenants tenant_isolation ALL PERMISSIVE using=(id = ctrlz.current_tenant_id()) check=(id = ctrlz.current_tenant_id())
+policy unblock_requests tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy users tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy webauthn_credentials tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+schema ctrlz USAGE
+table admin_jobs INSERT (kind, params)
+table alerts INSERT
+table authorized_ips INSERT (cidr, endpoint_id, last_seen_at, learned_by_node_id, source, tenant_id)
+table authorized_ips SELECT (cidr, endpoint_id, id, last_seen_at, source, tenant_id)
+table authorized_ips UPDATE (last_seen_at)
+table bundles SELECT
+table catalog_common_domains SELECT
+table catalog_filter SELECT
+table catalog_filter_mode SELECT
+table catalog_filter_table SELECT
+table catalog_infra_denylist SELECT
+table catalog_protected_domains SELECT
+table catalog_rewrites SELECT
+table catalog_service SELECT
+table catalog_service_alias SELECT
+table catalog_service_category SELECT
+table catalog_service_domain SELECT
+table catalog_versions SELECT
+table certificates INSERT (chain_pem, kind, names, not_after, not_before, source, state)
+table certificates SELECT (chain_pem, id, kind, names, not_after, not_before, source, state, wrapped_key_ct)
+table certificates UPDATE (state)
+table clients INSERT (created_by_node_id, endpoint_id, first_seen_at, label, last_seen_at, source, tenant_id)
+table clients SELECT (endpoint_id, id, label, last_seen_at, source, tenant_id)
+table clients UPDATE (last_seen_at)
+table config_log SELECT
+table config_snapshot SELECT
+table domain_settings SELECT
+table endpoint_types SELECT
+table endpoints SELECT (authorize_secure_dns, first_query_at, id, last_query_at, pair_override_node_a, pair_override_node_b, pair_version, tenant_id)
+table endpoints UPDATE (first_query_at, last_query_at)
+table free_dns_counter_batches INSERT
+table free_dns_counter_batches SELECT
+table free_dns_counters INSERT
+table free_dns_counters SELECT
+table free_dns_counters UPDATE
+table free_dns_settings SELECT (enabled, version)
+table geoip_versions SELECT
+table hub_endpoint_index SELECT
+table ip_claims SELECT (endpoint_id, id, last_seen_at, tenant_id)
+table ip_claims UPDATE (last_seen_at)
+table ip_proof_challenges SELECT (claim_id, consumed_at, expires_at, id, label, observed_at, tenant_id)
+table ip_proof_challenges UPDATE (observed_at, observed_by_node_id, observed_ip, observed_protocol, observed_rid_hash, txt_code_hash)
+table job_outbox INSERT
+table leases INSERT
+table leases SELECT
+table leases UPDATE
+table location_availability SELECT
+table locations SELECT
+table node_certs INSERT
+table node_certs SELECT
+table node_certs UPDATE
+table node_dns_requests SELECT
+table node_dns_requests UPDATE (decided_at, reason, state)
+table node_enrollments SELECT
+table node_enrollments UPDATE (cert_der, csr_der, dns_advertised_ip, dns_bind_ip, enrolled_at, enrolled_from, hostname, key_fingerprint, node_version, os_release, proxy_advertised_ip, proxy_bind_ip, spki_sha256, state)
+table node_location_configs SELECT
+table node_pairs SELECT
+table node_quarantine INSERT
+table node_quarantine SELECT
+table node_quarantine UPDATE
+table node_resolver_rules SELECT
+table node_upstreams SELECT
+table nodes SELECT
+table nodes UPDATE (applied_seq, cert_serial, dns_flap_until, dns_hold, dns_last_failback_at, dns_withdrawn, last_heartbeat_at, prev_cert_serial, version_info)
+table pair_event_state SELECT
+table pair_event_state UPDATE (last_table, version)
+table policy_artifacts SELECT
+table policy_outbox INSERT (aggregate_id, aggregate_type, batch_id, tenant_id)
+table profile_presets SELECT
+table public_settings SELECT
+table unblock_requests INSERT
+table update_status SELECT

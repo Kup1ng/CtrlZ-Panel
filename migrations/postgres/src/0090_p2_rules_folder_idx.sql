@@ -1,0 +1,16 @@
+-- P2, package B3 review round 12 (p2-B3-r12-2): an index for the rules of one folder.
+--
+-- The rule count of a folder, and the foreign key cascade of a folder or profile delete, look rules up by
+-- (tenant_id, profile_id, folder_id). Only the primary key, UNIQUE (tenant_id, profile_id, rule_key) and
+-- rules_profile_idx (tenant_id, profile_id) existed, so each folder walked every rule of its profile (or tenant):
+-- 500 folders over 10,000 rules was five million row visits for one page of rules, and a statement_timeout away from
+-- holding the connection pool. With this index a folder reads its own rules and a list reads the profile's once.
+--
+-- A new file and not an edit of an applied one (README, Rules). Plain CREATE INDEX: the migrator runs in a
+-- transaction, and a table of a feature that has not shipped is small.
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+CREATE INDEX rules_folder_idx ON ctrlz.rules (tenant_id, profile_id, folder_id);

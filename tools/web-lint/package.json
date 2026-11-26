@@ -1,0 +1,13 @@
+{
+  "name": "@ctrlz/web-lint",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "check": "node check-css.mjs && node check-rounded-field.mjs"
+  },
+  "devDependencies": {
+    "vitest": "5.1.0"
+  }
+}

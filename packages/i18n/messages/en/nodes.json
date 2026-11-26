@@ -1,0 +1,873 @@
+{
+  "nav": {
+    "overview": "Overview",
+    "nodes": "Nodes",
+    "pair": "Pair",
+    "domain": "Domain"
+  },
+  "pages": {
+    "overview": {
+      "title": "Overview",
+      "subtitle": "How the nodes are, and what free DNS is doing"
+    },
+    "nodes": {
+      "title": "Nodes",
+      "subtitle": "The nodes, the addresses of free DNS and the addresses given up"
+    },
+    "pair": {
+      "title": "Pair",
+      "subtitle": "Primary and fallback of each pair"
+    },
+    "domain": {
+      "title": "Domain",
+      "subtitle": "The zone, the hosts and their certificates"
+    },
+    "runbook": {
+      "title": "Node runbook",
+      "subtitle": "The steps that happen outside the panel"
+    },
+    "node": {
+      "title": "Node",
+      "subtitle": "The state, the answer and the requests of one node"
+    },
+    "enrol": {
+      "title": "Enrol a node",
+      "subtitle": "The install command, and the hosts waiting for it"
+    }
+  },
+  "notReported": "Not reported yet",
+  "status": {
+    "pending": "Waiting for approval",
+    "active": "Active",
+    "revoked": "Revoked"
+  },
+  "health": {
+    "serving": "Serving",
+    "held": "Held",
+    "withdrawn": "Withdrawn",
+    "out_of_touch": "Out of touch",
+    "no_contact": "No contact yet",
+    "isolated": "Isolated",
+    "pending": "Waiting for approval",
+    "revoked": "Revoked"
+  },
+  "hubHealth": {
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "down": "Down"
+  },
+  "overview": {
+    "kpiLabel": "Totals of the system",
+    "kpi": {
+      "serving": "Nodes serving",
+      "servingValue": "{serving} of {total}",
+      "qps": "Queries a second",
+      "qpsHint": "All nodes together",
+      "cache": "Cache hit rate",
+      "cacheHint": "Weighted by each node's queries",
+      "head": "Latest configuration",
+      "headHint": "The sequence number nodes must reach",
+      "free": "Free DNS"
+    },
+    "free": {
+      "on": "On",
+      "limit": "At most {qps} queries a second on each node",
+      "off": "Off"
+    },
+    "nodes": {
+      "title": "Nodes",
+      "gridLabel": "Health of the nodes",
+      "empty": {
+        "title": "No node yet",
+        "text": "A node appears here once it is enrolled and its fingerprint is confirmed."
+      },
+      "columns": {
+        "node": "Node",
+        "health": "State",
+        "contact": "Last contact",
+        "version": "Versions",
+        "lag": "Configuration",
+        "hub": "The hub's view"
+      },
+      "slot": "Slot {slot}",
+      "contactNever": "Never",
+      "versionNode": "Node <tech>{version}</tech>",
+      "versionUnbound": "Unbound <tech>{version}</tech>",
+      "versionCatalog": "Catalogue <tech>{version}</tech>",
+      "versionNone": "No versions yet",
+      "lag": {
+        "upToDate": "Up to date",
+        "behind": "{count, plural, one {# entry behind} other {# entries behind}}",
+        "applied": "Applied {applied} of {head}"
+      }
+    },
+    "counters": {
+      "title": "Free DNS queries",
+      "text": "What the nodes counted for people who use free DNS. Counts only: no name and no address is kept.",
+      "window": {
+        "label": "Period",
+        "day": "Last 24 hours",
+        "week": "Last 7 days"
+      },
+      "gridLabel": "Free DNS counters",
+      "empty": {
+        "title": "Nothing counted in this period",
+        "text": "Counts arrive from the nodes every few minutes while free DNS is on."
+      },
+      "columns": {
+        "node": "Node",
+        "transport": "Transport",
+        "outcome": "Outcome",
+        "rcode": "Response code",
+        "count": "Queries"
+      },
+      "total": "Total in this period: {count}",
+      "removedNode": "Removed node",
+      "truncated": "Only the first part of the period is shown. Choose a shorter period."
+    }
+  },
+  "outcome": {
+    "answered": "Answered",
+    "hop": "Dropped (loop guard)",
+    "off": "Refused, free DNS off",
+    "not_caught_up": "Refused, node behind",
+    "myip": "Address check",
+    "rd0": "Refused, no recursion asked",
+    "rate_limited": "Rate limited",
+    "prefix_share": "Over the share of a network",
+    "unvalidated_share": "Over the share of unproven sources",
+    "validated_share": "Over the share of proven sources",
+    "source_share": "Over the share of one address",
+    "over_budget": "Over the node's budget",
+    "isolated": "Isolated mode",
+    "over_miss_cap": "Too many lookups at once",
+    "other": "Other"
+  },
+  "nodes": {
+    "gridLabel": "Nodes",
+    "empty": {
+      "title": "No node yet",
+      "text": "A node appears here once it is enrolled and its fingerprint is confirmed."
+    },
+    "columns": {
+      "name": "Node",
+      "status": "State",
+      "dns": "DNS address",
+      "proxy": "Proxy address",
+      "contact": "Last contact",
+      "pair": "Pair"
+    },
+    "slot": "Slot {slot}",
+    "proxyBlocked": "Proxy blocked",
+    "pair": {
+      "none": "Not in a pair",
+      "with": "With {name}",
+      "unknownPeer": "With another node"
+    },
+    "noAddress": "None",
+    "contactNever": "Never",
+    "openRow": "Open the page of {name}"
+  },
+  "freeDns": {
+    "title": "Free DNS",
+    "text": "Anyone who types these addresses as their DNS gets plain answers with no filter and no account.",
+    "addresses": {
+      "title": "Addresses to give out",
+      "primary": "Primary (DNS1)",
+      "fallback": "Fallback (DNS2)",
+      "copy": "Copy the {role} address",
+      "none": "There is no global pair with an active node yet, so free DNS has no address to give out.",
+      "noneActive": "The global pair has no active node. Free DNS has no address to give out, and a revoked node of the pair is still advertised until the pair is changed."
+    },
+    "enabled": "Free DNS is on",
+    "enabledHint": "Turning it off is how free DNS is stopped on every node.",
+    "qps": {
+      "label": "Queries a second on each node",
+      "hint": "The most free queries a node answers a second. From {min}. The server holds the upper limit and says so if you pass it.",
+      "range": "Enter a whole number from {min}."
+    },
+    "warning": {
+      "title": "Free DNS users get no notice",
+      "text": "They have no account here. If the global pair changes, one of its nodes is removed or its address is edited, they stay on the old address until it stops answering."
+    },
+    "submit": "Save free DNS",
+    "saved": "Free DNS settings saved",
+    "loadingLabel": "Free DNS settings"
+  },
+  "givenUp": {
+    "title": "Addresses given up",
+    "text": "An address a node gave up when it was removed or when its address was edited. Give it back to the provider only on or after its date. The panel cannot see or enforce this.",
+    "freeWarning": "Free DNS users who typed an old address get no notice either.",
+    "gridLabel": "Addresses given up",
+    "empty": {
+      "title": "No address is waiting",
+      "text": "No node has given up an address that is still within its wait."
+    },
+    "columns": {
+      "address": "Address",
+      "kind": "Kind",
+      "node": "Node",
+      "gaveUp": "Given up",
+      "safeFrom": "Safe to give back from"
+    },
+    "kind": {
+      "dns": "DNS",
+      "proxy": "Proxy"
+    },
+    "removedNode": "Removed node",
+    "safeNow": "Safe now",
+    "safeIn": "{when}",
+    "wait": "The date is the time the panel gave the address up plus 30 days.",
+    "fixedNote": "A packet-filter rule or another limit on packets to the DNS listeners that anyone but Ctrl Z puts on a node host, and the block of a source, are steps outside the panel. The panel does not detect them.",
+    "runbook": "Open the runbook"
+  },
+  "runbook": {
+    "compromise": {
+      "title": "If a node is compromised",
+      "intro": "Do these in order. A revocation reaches the other nodes through the configuration log, so step 3 does not wait for it.",
+      "steps": {
+        "revoke": "Revoke the node on its page, with a fresh code.",
+        "replace": "Replace it in its pair with a node that already exists. When no slot is free, follow the replacement order on the Nodes page. If it is the primary of a pair, you may swap the roles first so that the other node becomes DNS1 for Plain DNS devices, but the revoked node stays in the pair until it is replaced.",
+        "stop": "Stop its host, or ask the provider to cut its address. Do not wait for the revocation to roll out.",
+        "keys": "After the revocation, replace the hub's proof key secret and restart the hub. The restart ends every open stream, and a proof that is in flight fails and the user starts it again. Then rotate the zone's wildcard key and certificate on the remaining nodes. With a public CA, revoke the old certificate with its own key, reason key compromise. With a private CA, rotate its root and have clients install it again if the old certificate lives too long.",
+        "transparency": "Look in the Certificate Transparency logs for certificates for the zone's names that the panel did not order, and have each one revoked.",
+        "caa": "Check again the CAA records that apply to the zone's names.",
+        "registrar": "Remove the node's name server from the parent zone's NS and glue at the registrar, or change the delegation if needed. If a step at a CA or the registrar fails while resolvers still ask the node, try it again later.",
+        "remove": "Remove the node here once no pair holds it, in the last table the log carried or in the hub's own. Keep its addresses until the date in the list on the Nodes page. A host that comes back is rebuilt from a clean install, enrols as a new node and is approved like any other."
+      },
+      "hold": "A hold does not isolate a node, so it is no step here. A revocation reaches the other nodes through the configuration log: until a node has applied it, that node still trusts the revoked one."
+    },
+    "retire": {
+      "title": "Retire a node",
+      "steps": {
+        "replace": "Replace the node in its pair with a node that already exists, and leave it running in no pair while its clients move.",
+        "parent": "Remove the node's NS record and its address from the parent zone at the registrar.",
+        "remove": "When every node has reached the configuration entry of the pair change, remove the node here and stop its host at once. A removed node would go on answering with its last policy.",
+        "giveBack": "Give each address back to the provider only after its date in the list on the Nodes page."
+      }
+    },
+    "move": {
+      "title": "Move a node to a new address",
+      "text": "Change the address here, and change the parent zone's address for the node's name server with it. Keep the old address attached to the host while it still reaches it, and give it back only after its date."
+    },
+    "free": {
+      "title": "Free DNS",
+      "steps": {
+        "listed": "If a node's DNS address appears in a list of open resolvers, or the provider warns that it will null-route it: ask the provider to filter the forged packets, and turn free DNS off on the Nodes page meanwhile.",
+        "resolver": "The system resolver of a node host must never be the DNS address of a node. The agent warns when it is.",
+        "interface": "A host that has another address in a different /24 network can give it to the free resolver as its outgoing interface when the agent is installed."
+      }
+    },
+    "outside": {
+      "title": "Outside the panel",
+      "text": "A packet-filter rule that anyone but Ctrl Z puts on a node host, and the block of a source, are steps at the host or at the provider. The panel does not see or enforce them."
+    },
+    "back": "Back to Nodes"
+  },
+  "node": {
+    "back": "Back to Nodes",
+    "loadingLabel": "Loading the node",
+    "notFound": {
+      "title": "Node not found",
+      "text": "It may have been removed. Go back to the list of nodes."
+    },
+    "summary": {
+      "title": "State",
+      "state": "State",
+      "hub": "The hub's view",
+      "contact": "Last contact",
+      "pair": "Pair",
+      "slot": "Slot",
+      "mode": "Resolving",
+      "created": "Enrolled",
+      "fingerprint": "Key fingerprint",
+      "versions": "Versions",
+      "config": "Configuration",
+      "proxy": "Proxy",
+      "proxyBlocked": "Blocked: other nodes do not hand out its proxy address",
+      "proxyOpen": "Open"
+    },
+    "mode": {
+      "recursive": "Recursive",
+      "upstream": "Upstream",
+      "mixed": "Mixed"
+    },
+    "revocationPending": {
+      "title": "Revocation not carried out yet",
+      "text": "The node has not yet applied the change that ends its access. Until it has, it can still be reached. The hub asks again every five minutes."
+    },
+    "failover": {
+      "title": "Answer and failover",
+      "text": "Whether the zone gives this node's address to clients, and what keeps it from coming back.",
+      "notActive": "Only an active node takes part in the answer.",
+      "revokedInPair": "This node is revoked and still in its pair. Revoking changes only its status: the zone keeps advertising it, and its peer still trusts it until the revocation reaches the nodes. Replace it in the pair now.",
+      "revokedHold": "Until the revocation has reached the nodes, hold this node to move the zone answer to its pair peer. A hold does not stop the host: follow the compromise runbook.",
+      "noPair": "This node is in no pair. Failover does not look at it, and a request can only clear its hold.",
+      "answer": "DNS answer",
+      "answerState": {
+        "advertised": "Advertised",
+        "standby": "Standby: its peer is advertised",
+        "unpaired": "In no pair",
+        "withdrawn": "Withdrawn from the answer",
+        "held": "Held by an admin"
+      },
+      "flapUntil": "Flapping: no automatic return before {when}",
+      "lastFailback": "Last return",
+      "unmet": {
+        "title": "Conditions for returning (F3)",
+        "none": "Every condition is met.",
+        "notNeeded": "This node is not withdrawn, so it needs no conditions to return.",
+        "names": {
+          "hub_fit": "The hub's own checks do not yet find it fit.",
+          "peer_view": "Its pair peer has not yet voted that it is up.",
+          "stable_period": "The stable period has not passed.",
+          "flapping": "It is flapping, so the automatic return waits.",
+          "held": "An admin holds it. Release it first."
+        },
+        "other": "Another condition: {name}"
+      },
+      "drain": {
+        "title": "Draining",
+        "states": {
+          "none": "Not draining",
+          "draining": "In progress: its clients are moving to the other node",
+          "done": "Done: its clients have moved"
+        },
+        "other": "Another state: {name}"
+      },
+      "peerViews": "What its peer and the hub's probes see",
+      "requests": "Requests waiting for the hub",
+      "holdNote": {
+        "title": "A hold does not isolate the node",
+        "text": "A held node still answers, still reports and still votes on its peer. If it is compromised, revoke it and follow the compromise runbook. Do not hold it."
+      },
+      "sent": "Request sent. The hub decides within ten seconds.",
+      "actions": {
+        "hold": {
+          "label": "Hold",
+          "row": "Hold {name}",
+          "title": "Hold {name}?",
+          "text": "The node leaves the answer at once and stays out until you release it. The hub refuses it when the node has no pair, when its peer is not fit, or when its peer is already withdrawn.",
+          "confirm": "Hold the node"
+        },
+        "release": {
+          "label": "Release",
+          "row": "Release {name}",
+          "title": "Release {name}?",
+          "text": "The hold ends, but the node stays withdrawn: the automatic return decides when it comes back. The hub refuses it when the node is not held.",
+          "confirm": "Release the node"
+        },
+        "force_failback": {
+          "label": "Force failback",
+          "row": "Force failback of {name}",
+          "title": "Force {name} back into the answer?",
+          "text": "The node's withdrawal and hold are cleared now, without waiting for the stable period. The hub refuses it unless the node is in a pair, is withdrawn and is fit.",
+          "confirm": "Force failback"
+        }
+      }
+    },
+    "lifecycle": {
+      "title": "Lifecycle",
+      "text": "Approval, revocation and removal each need a fresh code.",
+      "approve": {
+        "label": "Approve",
+        "row": "Approve {name}",
+        "title": "Approve {name}?",
+        "text": "The node starts to receive the configuration and can be put in a pair.",
+        "confirm": "Approve the node",
+        "done": "The node is approved.",
+        "addressTaken": "The DNS address of this host is already held by {name}, so the approval would be refused. No table holds two nodes with one DNS address. Replace the old node in this order."
+      },
+      "revoke": {
+        "label": "Revoke",
+        "row": "Revoke {name}",
+        "title": "Revoke {name}?",
+        "text": "This cannot be undone. The revocation reaches the other nodes through the configuration log, so until a node has applied it, that node still trusts this one. Stop the host and replace the node in its pair at once, as the compromise runbook says. The host comes back only by a clean reinstall and a new enrolment. The claims taken from its observations are listed on this page afterwards.",
+        "confirm": "Revoke the node",
+        "done": "The node is revoked.",
+        "runbook": "Compromise runbook"
+      },
+      "remove": {
+        "label": "Remove",
+        "row": "Remove {name}",
+        "title": "Remove {name}?",
+        "text": "The row is deleted. Its two addresses go on the list on the Nodes page, each with the date it can go back to the provider.",
+        "confirm": "Remove the node",
+        "done": "The node is removed.",
+        "conditionsTitle": "Before a node can be removed",
+        "conditions": {
+          "notPaired": "It is in no pair.",
+          "notInTable": "No table the hub still signs holds it. Wait until the nodes have applied the pair change."
+        },
+        "met": "Met",
+        "unmet": "Not met",
+        "checkedByServer": "Checked by the server",
+        "blocked": "It is in a pair with {peer}, so it cannot be removed. Change the pair first.",
+        "blockedUnknown": "It is in a pair, so it cannot be removed. Change the pair first.",
+        "freeNote": "Free DNS users who have set one of these addresses get no notice, because they have no account."
+      }
+    },
+    "addresses": {
+      "title": "Advertised addresses",
+      "text": "The addresses clients are given. The bind addresses are set at enrolment and do not change here.",
+      "dns": "DNS address",
+      "proxy": "Proxy address",
+      "bindDns": "DNS bind address",
+      "bindProxy": "Proxy bind address",
+      "invalid": "Enter an IPv4 or IPv6 address.",
+      "pairedNote": "This node is in a pair. A change queues a pair change: DNS1 or DNS2 changes for every device of the Endpoints that use this pair, and they get the Plain DNS notice. The old address goes on the list of addresses given up.",
+      "freeNote": "Change the address at the registrar too (the node's name server in the parent zone). The panel cannot do that.",
+      "submit": "Save addresses",
+      "saved": "The addresses are saved.",
+      "revoked": "A revoked node's addresses cannot be changed.",
+      "globalNote": "This is the global pair, so free DNS users have set this address too, and they get no notice. They keep the old address for as long as it answers."
+    },
+    "settings": {
+      "title": "Name and proxy",
+      "name": "Name",
+      "nameHint": "Up to 64 characters.",
+      "nameRequired": "Enter a name.",
+      "proxyBlocked": "Block the proxy of this node",
+      "proxyBlockedHint": "Other nodes stop giving this node's proxy address to their users.",
+      "submit": "Save",
+      "saved": "Saved."
+    },
+    "reports": {
+      "title": "What this node reported",
+      "text": "The claims taken from this node's observations, and the learned rows the revocation could not delete. Look from the time you think it was compromised.",
+      "window": "Since",
+      "days": "{days, plural, one {# day} other {# days}}",
+      "gridLabel": "Claims taken from the node",
+      "columns": {
+        "tenant": "Tenant",
+        "endpoint": "Endpoint",
+        "claim": "Claim",
+        "range": "Range",
+        "at": "Taken at"
+      },
+      "empty": {
+        "title": "No claim in this period",
+        "text": "Nothing was taken from this node's observations since then."
+      },
+      "more": "Show older claims",
+      "truncated": "More claims exist. Show older ones to read them.",
+      "kept": {
+        "title": "Learned rows that were not deleted",
+        "text": "The job that follows a revocation could not delete the rows of these endpoints.",
+        "row": "Tenant <tech>{tenant}</tech>, endpoint <tech>{endpoint}</tech>",
+        "cut": "The list was cut: more endpoints hold such rows.",
+        "none": "None."
+      },
+      "stalled": "The list is cut here. More claims share one second than the panel can page past, so claims older than this cannot be listed yet. Until the route can page them, the runbook step asks the operator to read them from the database or the audit log."
+    }
+  },
+  "enrol": {
+    "back": "Back to Nodes",
+    "form": {
+      "title": "New enrolment",
+      "text": "Give the new host's addresses. The command this makes works once and for 15 minutes.",
+      "bound": "Only from this address",
+      "boundHint": "Optional. The host's own public address: the enrolment is refused from any other source.",
+      "dnsBind": "DNS bind address",
+      "dnsAdvertised": "DNS advertised address",
+      "proxyBind": "Proxy bind address",
+      "proxyAdvertised": "Proxy advertised address",
+      "same": "The advertised addresses are the bind addresses",
+      "sameHint": "Turn it off only when the host sits behind 1:1 NAT.",
+      "required": "Enter an address.",
+      "invalid": "Enter an IPv4 or IPv6 address.",
+      "submit": "Create the install command",
+      "lost": "The answer did not arrive, so the command may exist without you seeing it. It stops working in 15 minutes. Look at the list below, reject it, and make a new one.",
+      "full": {
+        "title": "All four slots are taken",
+        "text": "A node that is waiting for approval or revoked still holds its slot, and a node in a pair cannot be removed. Replace a node in the order below."
+      }
+    },
+    "result": {
+      "title": "Install command",
+      "intro": "Run it on the new host (Ubuntu 24.04) as a user who can use sudo. It works once, for 15 minutes.",
+      "command": "Install command",
+      "copy": "Copy the install command",
+      "spaceNote": "It starts with a space on purpose, so the shell keeps it out of its history. Copy it whole.",
+      "expires": "Works until {when}"
+    },
+    "list": {
+      "title": "Enrolments",
+      "text": "A host that has called in waits here for you to compare its fingerprint.",
+      "gridLabel": "Enrolments",
+      "empty": {
+        "title": "No enrolment",
+        "text": "Create an install command above. The host appears here when it calls in."
+      },
+      "columns": {
+        "host": "Host",
+        "state": "State",
+        "addresses": "Addresses",
+        "actions": "Actions"
+      },
+      "state": {
+        "issued": "Waiting for the host",
+        "pending_approval": "Waiting for your confirmation",
+        "approved": "Confirmed",
+        "rejected": "Rejected",
+        "expired": "Expired"
+      },
+      "noHost": "Not called in yet",
+      "expires": "Works until {when}",
+      "called": "Called in {when}",
+      "from": "From <tech>{ip}</tech>",
+      "dns": "DNS",
+      "proxy": "Proxy",
+      "compare": "Compare and confirm",
+      "compareRow": "Compare and confirm {host}",
+      "reject": "Reject",
+      "rejectRow": "Reject the enrolment of {host}",
+      "open": "Open the node",
+      "openRow": "Open the node of {host}",
+      "unnamed": "An unnamed host"
+    },
+    "reject": {
+      "title": "Reject this enrolment?",
+      "text": "The host's token is spent. To enrol it again, make a new install command.",
+      "confirm": "Reject the enrolment",
+      "done": "The enrolment is rejected."
+    },
+    "confirm": {
+      "title": "Confirm the node",
+      "text": "Compare what the host printed with the record below. Type the fingerprint from the host's console. Do not paste it from this page.",
+      "missingTitle": "This enrolment is not in the list",
+      "missing": "It may have been confirmed, rejected or expired. Look at the list.",
+      "closed": "This enrolment is already {state}, so it cannot be confirmed.",
+      "record": "What the host sent",
+      "fingerprint": "Fingerprint on this page",
+      "host": "Host",
+      "os": "Operating system",
+      "version": "Node version",
+      "source": "Called in from",
+      "when": "At",
+      "typed": "Fingerprint from the host's console",
+      "typedHint": "The 64 digits the install script prints. Colons and spaces do not matter.",
+      "check": {
+        "empty": "Type the fingerprint the host shows.",
+        "partial": "So far it matches. Keep typing.",
+        "mismatch": "It does not match this record. Do not confirm: it may be another host.",
+        "match": "It matches the record."
+      },
+      "addresses": "I compared the four addresses with what the host shows",
+      "name": "Name of the node",
+      "nameHint": "Shown in the panel. Up to 64 characters.",
+      "nameRequired": "Enter a name.",
+      "submit": "Confirm the node",
+      "done": "The node is confirmed. It waits for approval on its page."
+    },
+    "pendingBanner": {
+      "title": "{count, plural, one {A host is waiting for your confirmation} other {# hosts are waiting for your confirmation}}",
+      "open": "Open the enrolments"
+    }
+  },
+  "pair": {
+    "loadingLabel": "Pairs",
+    "create": "New pair",
+    "stale": "That pair is not there any more.",
+    "global": {
+      "title": "The global pair",
+      "text": "Free DNS and every Endpoint use this pair. The first node answers, and the second stands behind it.",
+      "none": {
+        "title": "No global pair yet",
+        "text": "The first pair you make becomes the global pair. Until then no address is given out."
+      },
+      "primary": "Primary",
+      "fallback": "Fallback",
+      "answering": "Answering now",
+      "copy": "Copy the address of the {role} node"
+    },
+    "advertised": {
+      "primary": "{name}: the primary",
+      "fallback": "{name}: the fallback, because the primary is withdrawn",
+      "none": "No node: both are withdrawn",
+      "unknown": "Not known yet",
+      "revoked": "{name}: revoked, and still the node advertised",
+      "revokedMember": "Revoked and still in this pair: the zone keeps advertising it until the pair is changed. Replace it now."
+    },
+    "grid": {
+      "title": "Pairs",
+      "label": "Pairs",
+      "columns": {
+        "answering": "Answering now",
+        "scope": "Used by",
+        "actions": "Actions",
+        "pair": "Pair"
+      },
+      "global": "Global pair",
+      "unused": "No Endpoint uses it",
+      "empty": {
+        "title": "No pair yet",
+        "text": "Make the first pair with the plus button above."
+      },
+      "made": "Made {date}"
+    },
+    "actions": {
+      "edit": "Edit",
+      "editRow": "Edit the pair of {primary} and {fallback}",
+      "makeGlobal": "Make global",
+      "makeGlobalRow": "Make the pair of {primary} and {fallback} global",
+      "remove": "Remove",
+      "removeRow": "Remove the pair of {primary} and {fallback}",
+      "removeGlobalRow": "The pair of {primary} and {fallback} cannot be removed: it is the global pair"
+    },
+    "form": {
+      "createTitle": "New pair",
+      "editTitle": "Edit the pair",
+      "createText": "Choose a primary node and a fallback node. Only an active node that is in no other pair is offered.",
+      "editText": "Swap the roles, or put another node in place of one of the two.",
+      "primary": "Primary node",
+      "fallback": "Fallback node",
+      "pick": "Choose a node",
+      "makeGlobal": "Make this the global pair",
+      "makeGlobalHint": "Free DNS and every Endpoint will use it.",
+      "makeGlobalForced": "There is no global pair yet, so this one becomes it.",
+      "submitCreate": "Make the pair",
+      "submitEdit": "Save the pair",
+      "notOffered": {
+        "pending": "waiting for approval",
+        "revoked": "revoked",
+        "inPair": "already paired with {peer}"
+      },
+      "notEnough": {
+        "title": "Not enough nodes",
+        "text": "A pair needs two active nodes that are in no other pair. Enrol and approve a node first."
+      },
+      "refusal": {
+        "title": "This change is not sent",
+        "missing": "Choose both nodes.",
+        "sameNode": "A node cannot be its own fallback.",
+        "same": "Nothing differs from the pair as it is.",
+        "duplicateAddress": "{names} advertise the same address, and the table holds no two nodes with one address. Change an address on the node page first.",
+        "mixedFamilies": "The two nodes of a pair must both use IPv4 or both IPv6 ({names})."
+      },
+      "swap": "Swap the roles",
+      "swapRow": "Swap the roles of {primary} and {fallback}",
+      "notLoaded": {
+        "title": "The pairs are not loaded",
+        "text": "Whether a global pair exists is not known yet, so a pair cannot be made now. Wait for the list, or reload the page."
+      }
+    },
+    "warnings": {
+      "title": "What this change does",
+      "intro": "The panel does not read what each node has applied. Read these before you save."
+    },
+    "warning": {
+      "primaryWithdrawn": "{names} is withdrawn (dead, new or held), so as soon as this is saved the answer goes to the fallback.",
+      "primaryHeld": "{names} held by an admin. A held node is withdrawn, so the answer goes to its peer. Release it first if you do not want that.",
+      "fallbackHeld": "{names} is held. Because the primary is withdrawn, saving clears the hold and raises an alert. The answer stays on the fallback until the primary returns by itself, after you release it if it is held.",
+      "fallbackNew": "{names} has no peer today. Beside a withdrawn primary the answer goes to it at once, with no check that it has the latest configuration.",
+      "bothWithdrawn": "{names} are both withdrawn, so the answer can go to a node that is not answering. Look at both node pages before you save.",
+      "twoNew": "{names} are both new to a pair. Pair one new node at a time, each once its configuration is at the head.",
+      "behind": "{names} may be behind on the configuration (not up to date, or not heard from lately). Nothing moves the answer off a node that is only behind. Open its page and check first.",
+      "swap": "No peer changes ({names}), so nothing checks the nodes: the answer moves at once to the node that answers after this, which may be behind. Check the node page first. If the node that would answer is not the one you want, hold it, or use Force failback.",
+      "heldFallbackFirst": "{names} is held and stands behind the primary you are changing. Release it, or replace it, before you change the primary."
+    },
+    "switch": {
+      "title": "Make the pair of {primary} and {fallback} global?",
+      "text": "Free DNS and every Endpoint move to the addresses of this pair. Devices that hold the old addresses get the usual notice.",
+      "free": "Free DNS users have no account and get no notice: they stay on the old address for as long as it answers.",
+      "confirm": "Make global",
+      "done": "The global pair changed"
+    },
+    "remove": {
+      "title": "Remove the pair of {primary} and {fallback}?",
+      "text": "The two nodes stay and are no longer a pair. No Endpoint has a pair of its own, so no device is affected. A node in no pair is left out of automatic failover.",
+      "confirm": "Remove the pair",
+      "done": "The pair was removed"
+    },
+    "saved": {
+      "create": "The pair was made",
+      "edit": "The pair was saved"
+    },
+    "notes": {
+      "title": "Before you change a pair",
+      "text": "The panel does not see what each node has applied, so a changed pair can give the answer to a node that is new, dead, held or behind.",
+      "items": {
+        "withdrawn": {
+          "title": "A withdrawn primary gives the answer to the fallback",
+          "text": "If the primary of a changed pair is withdrawn (new, dead or held), the answer goes to its fallback at once. When the fallback is held, the change clears its hold and raises an alert. The answer returns to the primary by itself, and after you release it if it was held."
+        },
+        "both": {
+          "title": "Two withdrawn nodes",
+          "text": "Beside a revoked fallback, and in two pairs that hold the same two nodes in both orders, the answer can go to a withdrawn primary, which may be new, dead or held."
+        },
+        "oneAtATime": {
+          "title": "One new node at a time",
+          "text": "Pair one new node at a time, each once its configuration is at the head. Release or replace a held fallback before you change the primary it stands behind."
+        },
+        "noPeer": {
+          "title": "A change that brings no new peer is not checked",
+          "text": "Swapping the roles, or making an existing pair global, changes no peer, so nothing checks the nodes and the answer moves at once to a node that may be behind. Check the node page first. If the node that would answer is not the one you want, hold it, or use Force failback."
+        }
+      },
+      "slots": {
+        "title": "All four slots are taken",
+        "text": "A node waiting for approval holds a slot too. To replace a node, put an existing node in its place in its pair (when no node is free, first remove a pair that no Endpoint uses), remove the old node once it can be removed, and only then approve the new one and pair it."
+      },
+      "runbook": "Read the node runbook"
+    }
+  },
+  "domain": {
+    "loadingLabel": "Domain",
+    "status": {
+      "title": "The domain now",
+      "text": "What the panel asks for, and what is serving.",
+      "notSet": "Not set",
+      "noRequest": "No host asked for",
+      "serving": "Serving now: <tech>{host}</tech>",
+      "transition": "Transition",
+      "both": "The nodes answer for <tech>{old}</tech> and <tech>{current}</tech>",
+      "until": "until {when}",
+      "passkey": "The passkey RP ID is not changed here. Change it on the <link>Settings page</link>."
+    },
+    "apply": {
+      "pending": {
+        "title": "Apply pending",
+        "text": "The panel holds values that the web tier does not serve yet. The old hosts keep serving until the apply step is run on the server."
+      },
+      "done": "What the panel asks for is what is serving.",
+      "command": {
+        "title": "Apply on the server",
+        "text": "Run this in the deploy folder of the server that runs the panel. It checks each value again, puts the certificate of each host in place and restarts the web parts together.",
+        "copy": "Copy the apply command",
+        "again": "If it says the run did not finish, run it again: repeating it is safe."
+      }
+    },
+    "form": {
+      "title": "Change the domain",
+      "text": "The DNS zone, and the hosts of the panel and the admin.",
+      "dns_zone": "DNS zone",
+      "panel_host": "Panel host",
+      "admin_host": "Admin host",
+      "hint": {
+        "dns_zone": "Starts with {prefix} and holds your own domain. Setup values and links use it at once.",
+        "panel_host": "Where customers sign in. Leave it empty to ask for no change: the host the server runs with keeps serving.",
+        "admin_host": "Where this console is. Leave it empty to ask for no change."
+      },
+      "problem": {
+        "grammar": "{field} is not a host name: letters, digits and hyphens, in labels separated by dots.",
+        "tooLong": "{field} is too long.",
+        "zonePrefix": "The zone starts with {prefix}, as in {example}.",
+        "zoneShort": "After {prefix} the zone needs a domain of your own, as in {example}.",
+        "underZone": "{field} cannot be {zone} or a name under it: the names of the zone belong to the nodes.",
+        "same": "The panel and the admin need two different hosts."
+      },
+      "zoneRequired": "Write the DNS zone.",
+      "days": {
+        "label": "Transition, in days",
+        "hint": "For this long the nodes answer for the old zone too. From {min} to {max}.",
+        "range": "Write a whole number from {min} to {max}."
+      },
+      "running": "A transition is running until {until}. The zone cannot change again until it ends.",
+      "applyNote": "Saving does not change the web tier. Run the apply step on the server after it (shown above).",
+      "submit": "Save the domain",
+      "saved": "The domain was saved. It is not in force until the apply step is run."
+    },
+    "impact": {
+      "title": "What this change touches",
+      "counts": "{endpoints} Endpoints and {profiles} Apple profiles already made point at the old zone.",
+      "text": "The nodes answer for both zones for {days} days. After that, a device that still holds the old name stops working until it is set up again.",
+      "failed": "The numbers could not be read.",
+      "retry": "Try again"
+    },
+    "certs": {
+      "title": "Certificates",
+      "text": "The wildcard of the zone, and the certificates of the panel and admin hosts. Upload a public chain with its key. The private CAs' own rows are listed and cannot be changed here.",
+      "gridLabel": "Certificates",
+      "columns": {
+        "kind": "Kind",
+        "names": "Names",
+        "state": "State",
+        "until": "Valid until",
+        "actions": "Actions"
+      },
+      "kinds": {
+        "wildcard": "Wildcard of the zone",
+        "panel": "Panel host",
+        "admin": "Admin host",
+        "node_ca": "Node CA",
+        "zone_ca": "Zone CA",
+        "block_root": "Block page root",
+        "block_intermediate": "Block page intermediate"
+      },
+      "source": {
+        "issued": "Issued by the panel",
+        "uploaded": "Uploaded"
+      },
+      "state": {
+        "pending": "Pending",
+        "active": "Active",
+        "retired": "Retired",
+        "revoked": "Revoked"
+      },
+      "expiresIn": "{days} days left",
+      "expired": "Expired",
+      "empty": {
+        "title": "No certificate yet",
+        "text": "Until you upload a public chain, the hosts run on the private CA."
+      },
+      "retire": "Retire",
+      "retireRow": "Retire the {kind} certificate for {names}",
+      "retireTitle": "Retire the {kind} certificate?",
+      "retireText": "It is no longer chosen. A host it covered uses another active certificate that covers it, or the private CA when none does, once the apply step is run on the server.",
+      "retireConfirm": "Retire the certificate",
+      "retired": "The certificate was retired",
+      "upload": {
+        "open": "Upload a certificate",
+        "title": "Upload a certificate",
+        "text": "Say what the certificate is for, and give its chain and its private key. The server checks that the chain is public, that it covers the names the kind needs, that the key is the certificate's, and that it is not about to expire.",
+        "kind": "Kind of certificate",
+        "pickKind": "Choose a kind",
+        "kindHint": {
+          "wildcard": "Covers the zone and the names under it, the ones of the setup check included.",
+          "panel": "Covers the panel host.",
+          "admin": "Covers the admin host."
+        },
+        "chain": "Certificate chain",
+        "chainHint": "The certificate of the host first, then the chain up to a public root, as PEM.",
+        "key": "Private key",
+        "keyHint": "The key of that certificate, as PEM. It is read in this page only and is not kept.",
+        "file": "Choose a file",
+        "chooseFile": "Choose a file for {field}",
+        "showWord": "Show",
+        "hideWord": "Hide",
+        "show": "Show {field}",
+        "hide": "Hide {field}",
+        "clearWord": "Clear",
+        "clear": "Clear {field}",
+        "problem": {
+          "kind": "Choose the kind of certificate.",
+          "empty": "Paste the text, or choose a file.",
+          "tooShort": "This text is too short to be a PEM.",
+          "tooLong": "This text is larger than is allowed.",
+          "shape": "This is not PEM: it must start with a BEGIN line and hold only base64 after it.",
+          "notCertificate": "There is no certificate in this text.",
+          "keyInChain": "A private key was in this text. It was removed from this box and not kept. Put the key in the key box, and the certificates here.",
+          "isKey": "This is a private key, not a certificate. Put it in the key box.",
+          "notKey": "There is no private key in this text.",
+          "isCertificate": "This is a certificate, not a key. The private key goes here.",
+          "unreadable": "The file could not be read."
+        },
+        "submit": "Upload",
+        "done": "The certificate was uploaded and is valid until {when}",
+        "lost": "No answer came, and the certificate may have been stored. The list was read again: if it is not there, send it again."
+      }
+    }
+  },
+  "replacement": {
+    "title": "All four slots are taken",
+    "intro": "A node waiting for approval, or revoked, still holds its slot, and a node in a pair cannot be removed. To replace a node, go in this order.",
+    "steps": {
+      "put": "Put a node that already exists in the old node's place in its pair. When no node is free, first remove a pair that no Endpoint uses: every pair but the global one.",
+      "remove": "Remove the old node once it can be removed.",
+      "approve": "Only then approve the new host, enrolled earlier or into the freed slot, and pair it."
+    },
+    "address": "A new host whose DNS address the old node holds cannot be approved while the old node exists, whatever slot is free.",
+    "runbook": "Read the node runbook"
+  }
+}

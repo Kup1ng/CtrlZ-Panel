@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>DNSSettings</key>
+			<dict>
+				<key>DNSProtocol</key>
+				<string>HTTPS</string>
+				<key>ServerAddresses</key>
+				<array>
+					<string>203.0.113.10</string>
+					<string>203.0.113.11</string>
+				</array>
+				<key>ServerURL</key>
+				<string>https://abcdefghijklmnopqrstuvwxy2.dns.example.com/abcdefghijklmnopqrstuvwxyz234567</string>
+			</dict>
+			<key>PayloadDisplayName</key>
+			<string>Ctrl Z DNS over HTTPS</string>
+			<key>PayloadIdentifier</key>
+			<string>com.ctrlz.dns.0197a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b.dns</string>
+			<key>PayloadType</key>
+			<string>com.apple.dnsSettings.managed</string>
+			<key>PayloadUUID</key>
+			<string>BE76425A-777C-5E64-B404-AC63CB2B7B78</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>PayloadDescription</key>
+	<string>Encrypted DNS settings from Ctrl Z.</string>
+	<key>PayloadDisplayName</key>
+	<string>Ctrl Z - Home phone</string>
+	<key>PayloadIdentifier</key>
+	<string>com.ctrlz.dns.0197a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b</string>
+	<key>PayloadOrganization</key>
+	<string>Ctrl Z</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>426B346F-9DF7-58F8-A94A-0AEECF29B715</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>
