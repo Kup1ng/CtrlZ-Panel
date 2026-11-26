@@ -25,7 +25,7 @@ var requiredGroups = map[string]int{
 	"zone-answer": 65, "zone-failover": 119, "pair-table-validate": 67,
 	// P4 gate (T-541, T-545): the node's apply rules, run by a reference model here and
 	// by the node's table writer there.
-	"pair-table-apply": 29,
+	"pair-table-apply": 30,
 }
 
 // extraGroups are groups the module has that section 15 does not list by name:

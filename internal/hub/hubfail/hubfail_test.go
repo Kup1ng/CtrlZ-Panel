@@ -143,6 +143,10 @@ func (d *db) HubNodeStateWrite(_ context.Context, rows []store.HubNodeState) err
 		return errors.New("cannot write")
 	}
 	for _, r := range rows {
+		// As the upsert does: the drain columns of a row whose drain the hub has not seen stay as they are.
+		if prev, ok := d.states[r.Node]; ok && !r.DrainKnown {
+			r.Drain, r.DrainSince = prev.Drain, prev.DrainSince
+		}
 		d.states[r.Node] = r
 	}
 	d.stateWrites++
@@ -170,9 +174,21 @@ func (c *clock) add(d time.Duration) {
 	c.mu.Unlock()
 }
 
-type lease struct{ held bool }
+// lease counts its questions, and from dropAt on (when set) says it is lost, so a test can take the lease away between two
+// questions of one tick.
+type lease struct {
+	held   bool
+	calls  int
+	dropAt int
+}
 
-func (l *lease) Held() bool { return l.held }
+func (l *lease) Held() bool {
+	l.calls++
+	if l.dropAt > 0 && l.calls >= l.dropAt {
+		return false
+	}
+	return l.held
+}
 
 type sent struct {
 	node uuid.UUID // zero for a broadcast

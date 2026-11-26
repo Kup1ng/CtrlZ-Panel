@@ -9599,7 +9599,7 @@ mutants:
     edits:
       - file: internal/lint/composekeys_test.go
         old: |-
-          if (len(parts) < 3 || parts[len(parts)-1] != "ro") && composeWritableBind[name] != v {
+          if (len(parts) < 3 || parts[len(parts)-1] != "ro") && composeWritableBinds[name] != v {
         new: |-
           if false {
     must_fail:

@@ -208,8 +208,8 @@ func (s *Store) HubFailDecide(ctx context.Context, id uuid.UUID, state, reason s
 }
 
 // HubNodeState is what the hub knows of one node's return and drain, kept for the admin page (migration 0103, T-542). The hub
-// decides from its memory and never reads this back: it is a view, and a start of the hub writes every row again. A zero time is
-// NULL.
+// decides from its memory and never reads this back: it is a view, and a start of the hub writes the F3 columns of every row again
+// (the drain columns only for a drain it has seen, DrainKnown). A zero time is NULL.
 type HubNodeState struct {
 	Node uuid.UUID
 	// F3Unmet names, in the page's vocabulary, the conditions that keep a withdrawn or held node out (hub_fit, peer_view,
@@ -220,13 +220,18 @@ type HubNodeState struct {
 	// Drain is none, draining or done; DrainSince is when the hub saw the node apply the table that stopped advertising it.
 	Drain      string
 	DrainSince time.Time
+	// DrainKnown says this process has seen the node advertised (or draining), so it can tell none from draining. A hub that has not
+	// (it just started, or took the lease) says nothing of the drain: the stored drain_state and drain_since are left as the last
+	// hub wrote them, and a row that does not exist yet starts as none.
+	DrainKnown bool
 }
 
 // qHubNodeState names its row by the whole primary key, so a statement that meets another on a row meets it alone: the loop
 // writes the rows one at a time in node id order (HubNodeStateWrite) and the hub-decider lease makes it their only writer.
-const qHubNodeState = `INSERT INTO ctrlz.node_dns_state (node_id, f3_unmet, f3_due_at, drain_state, drain_since) VALUES ($1, $2, $3, $4, $5)
+const qHubNodeState = `INSERT INTO ctrlz.node_dns_state AS s (node_id, f3_unmet, f3_due_at, drain_state, drain_since) VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (node_id) DO UPDATE SET f3_unmet = EXCLUDED.f3_unmet, f3_due_at = EXCLUDED.f3_due_at,
-  drain_state = EXCLUDED.drain_state, drain_since = EXCLUDED.drain_since`
+  drain_state = CASE WHEN $6 THEN EXCLUDED.drain_state ELSE s.drain_state END,
+  drain_since = CASE WHEN $6 THEN EXCLUDED.drain_since ELSE s.drain_since END`
 
 // HubNodeStateWrite writes the rows in one transaction, in node id order. A node that is not in `nodes` (removed since the hub
 // read the membership) fails the batch with a foreign key error and nothing is written; the loop writes again on its next tick.
@@ -239,7 +244,7 @@ func (s *Store) HubNodeStateWrite(ctx context.Context, states []HubNodeState) er
 			if unmet == nil {
 				unmet = []string{}
 			}
-			if _, err := g.tx.Exec(g.ctx, qHubNodeState, r.Node, unmet, nullTime(r.F3DueAt), r.Drain, nullTime(r.DrainSince)); err != nil {
+			if _, err := g.tx.Exec(g.ctx, qHubNodeState, r.Node, unmet, nullTime(r.F3DueAt), r.Drain, nullTime(r.DrainSince), r.DrainKnown); err != nil {
 				return sanitize(err)
 			}
 		}

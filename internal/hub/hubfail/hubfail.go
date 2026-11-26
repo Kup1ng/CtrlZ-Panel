@@ -175,6 +175,8 @@ type Loop struct {
 	drains     map[uuid.UUID]*zone.Drain
 	drainSince map[uuid.UUID]time.Time
 	drainFed   map[uuid.UUID]uint64
+	drainSeen  map[uuid.UUID]bool
+	fullAt     stamp
 	written    map[uuid.UUID]store.HubNodeState
 	stateFail  stamp
 	ctx        context.Context
@@ -197,7 +199,7 @@ func New(cfg Config) *Loop {
 	return &Loop{
 		cfg: cfg, round: map[uuid.UUID]stamp{}, entered: map[uuid.UUID]stamp{}, fed: map[uuid.UUID]stamp{},
 		pvVer: map[uuid.UUID]uint64{}, pushedTo: map[uuid.UUID]stamp{}, cannot: map[uuid.UUID]bool{},
-		drains: map[uuid.UUID]*zone.Drain{}, drainSince: map[uuid.UUID]time.Time{}, drainFed: map[uuid.UUID]uint64{}, written: map[uuid.UUID]store.HubNodeState{},
+		drains: map[uuid.UUID]*zone.Drain{}, drainSince: map[uuid.UUID]time.Time{}, drainFed: map[uuid.UUID]uint64{}, drainSeen: map[uuid.UUID]bool{}, written: map[uuid.UUID]store.HubNodeState{},
 	}
 }
 

@@ -246,3 +246,69 @@ func TestHubFailCommitUnderTwoHubsAtOnceKeepsOneEventsFlags(t *testing.T) {
 		}
 	}
 }
+
+// GP-r1-4: the upsert of node_dns_state as ctrlz_hub, under its column grants and the table's CHECKs. It writes two rows, rewrites
+// one with another list and a NULL time, keeps the drain columns of a row whose drain the hub has not seen, writes nothing of a
+// batch that names an unknown node, and what it wrote reads back through the admin's NodeGet.
+func TestHubNodeStateWriteUpsertsUnderTheHubGrants(t *testing.T) {
+	f := newHubFx(t)
+	a, b := f.addNode(t, 1), f.addNode(t, 2)
+	due := time.Now().UTC().Truncate(time.Millisecond).Add(time.Minute)
+	since := time.Now().UTC().Truncate(time.Millisecond).Add(-time.Minute)
+	if err := f.hub.HubNodeStateWrite(f.ctx, []store.HubNodeState{
+		{Node: b, F3Unmet: []string{"held"}, Drain: "none"},
+		{Node: a, F3Unmet: []string{"hub_fit", "stable_period"}, F3DueAt: due, Drain: "draining", DrainSince: since, DrainKnown: true},
+	}); err != nil {
+		t.Fatalf("the first write: %v", err)
+	}
+	admin := f.db.Store(f.ctx, t, store.RoleAdmin)
+	read := func(id uuid.UUID) store.NodeRow {
+		t.Helper()
+		var row store.NodeRow
+		err := admin.WithGlobal(f.ctx, store.TxOpts{}, func(g store.GlobalTx) error {
+			r, ok, err := g.NodeGet(id)
+			if err == nil && !ok {
+				err = errors.New("the node is not there")
+			}
+			row = r
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return row
+	}
+	ra := read(a)
+	if len(ra.F3Unmet) != 2 || ra.F3Unmet[0] != "hub_fit" || ra.F3DueAt == nil || !ra.F3DueAt.Equal(due) ||
+		ra.DrainState == nil || *ra.DrainState != "draining" || ra.DrainSince == nil || !ra.DrainSince.Equal(since) {
+		t.Fatalf("node a reads back as %+v", ra)
+	}
+	if rb := read(b); len(rb.F3Unmet) != 1 || rb.F3DueAt != nil || rb.DrainState == nil || *rb.DrainState != "none" || rb.DrainSince != nil {
+		t.Fatalf("node b reads back as %+v", rb)
+	}
+
+	// Rewritten with another list and no due time; the hub has not seen the drain of a, so its drain columns stay.
+	if err := f.hub.HubNodeStateWrite(f.ctx, []store.HubNodeState{{Node: a, F3Unmet: nil, Drain: "none"}}); err != nil {
+		t.Fatalf("the rewrite: %v", err)
+	}
+	ra = read(a)
+	if len(ra.F3Unmet) != 0 || ra.F3DueAt != nil || ra.DrainState == nil || *ra.DrainState != "draining" || ra.DrainSince == nil || !ra.DrainSince.Equal(since) {
+		t.Fatalf("node a after the rewrite: %+v", ra)
+	}
+	// Once the hub knows, none is written, and the CHECK (none <=> no drain_since) holds.
+	if err := f.hub.HubNodeStateWrite(f.ctx, []store.HubNodeState{{Node: a, Drain: "none", DrainKnown: true}}); err != nil {
+		t.Fatalf("the write of a known none: %v", err)
+	}
+	if ra = read(a); ra.DrainState == nil || *ra.DrainState != "none" || ra.DrainSince != nil {
+		t.Fatalf("node a after a known none: %+v", ra)
+	}
+
+	// One node the table does not have fails the whole batch, and the row of the other stays as it was.
+	err := f.hub.HubNodeStateWrite(f.ctx, []store.HubNodeState{{Node: b, F3Unmet: []string{"flapping"}, Drain: "none"}, {Node: uuid.New(), Drain: "none"}})
+	if err == nil {
+		t.Fatal("a batch with an unknown node was written")
+	}
+	if rb := read(b); len(rb.F3Unmet) != 1 || rb.F3Unmet[0] != "held" {
+		t.Fatalf("node b after the failed batch: %+v", rb)
+	}
+}

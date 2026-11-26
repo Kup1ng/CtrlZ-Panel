@@ -365,11 +365,15 @@ export interface paths {
          * Change the Passkey RP ID, or switch Passkey on or off
          * @description Takes no origins: the server writes `https://<panel host>`. Refuses an RP
          *     ID that is not the panel host or a suffix of it, and one that is a public
-         *     suffix (`co.ir`, a bare TLD). In production `enabled = true` is refused
-         *     until real-domain acceptance (P4). A change of RP ID ends an unfinished
+         *     suffix (`co.ir`, a bare TLD). In production `enabled = true` is accepted
+         *     only over an applied public panel certificate (the chain verifies to the
+         *     public roots, covers the host the panel is served on, and no domain change
+         *     waits to be applied); otherwise it is refused with 422 `cert_not_public`.
+         *     A change of RP ID ends an unfinished
          *     `webauthn_rp_change` job (a newer change replaces it), so `conflict` means
          *     another admin changed it at the same moment and this one retries.
-         *     Errors: `validation_failed`, `conflict`, `totp_fresh_required`.
+         *     Errors: `validation_failed`, `conflict`, `totp_fresh_required`,
+         *     `cert_not_public`.
          */
         put: operations["putWebauthn"];
         post?: never;

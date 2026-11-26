@@ -252,3 +252,122 @@ func TestRowsAreWrittenAgainAfterAFailedWriteAndAfterTheLease(t *testing.T) {
 		t.Fatal("the rows were not written again after the lease came back")
 	}
 }
+
+// GP-r1-1: a hub that takes the lease again (a restart, or a failover) does not know the drain of a node that is still withdrawn,
+// and must not write "none" over the "done" the last hub wrote. A node it sees advertised again does get its "none".
+//
+// Fails if: HubNodeState.DrainKnown is not set from what the process has seen (the row of A is overwritten with none).
+func TestADrainTheHubHasNotSeenIsNotOverwrittenWithNone(t *testing.T) {
+	w := newWorld(t)
+	w.settled()
+	w.str.open[uid(nodeB)] = true
+	w.tick()
+	w.run(40*time.Second, w.traffic(true, true))
+	w.holdA()
+	w.run(3*time.Second, nil)
+	w.heartbeat(nodeA, w.pvAt(w.loop.Version(), nodeB), nil)
+	w.run(365*time.Second, w.traffic(true, true))
+	before := w.db.state(nodeA)
+	if before.Drain != hubfail.DrainDone || before.DrainSince.IsZero() {
+		t.Fatalf("setup: A is %v", before)
+	}
+
+	w.lease.held = false
+	w.run(2*time.Second, nil)
+	w.lease.held = true
+	w.run(30*time.Second, w.traffic(true, true))
+	if w.db.writes() == 0 || !w.db.node(nodeA).Withdrawn {
+		t.Fatal("setup: the hub did not decide again or A was returned")
+	}
+	if got := w.db.state(nodeA); got.Drain != before.Drain || !got.DrainSince.Equal(before.DrainSince) {
+		t.Fatalf("a hub that has not seen A advertised rewrote its drain: %v, was %v", got, before)
+	}
+	if b := w.db.state(nodeB); b.Drain != hubfail.DrainNone {
+		t.Fatalf("B: %v", b)
+	}
+}
+
+// GP-r3-1: the hub that took the lease again learns a returned node has no drain from the table that advertises it, not from a
+// drain it saw (it saw none). That is the only way the stored "done" of a node that is serving again becomes "none".
+//
+// Fails if: feedDrains marks a node as seen only when it is draining (A keeps drain_state done for good after F3 returns it).
+func TestARestartedHubClearsTheStoredDrainOfANodeItSeesAdvertisedAgain(t *testing.T) {
+	w := newWorld(t)
+	w.settled()
+	w.str.open[uid(nodeB)] = true
+	w.tick()
+	w.run(40*time.Second, w.traffic(true, true))
+	w.holdA()
+	w.run(3*time.Second, nil)
+	w.heartbeat(nodeA, w.pvAt(w.loop.Version(), nodeB), nil)
+	w.run(365*time.Second, w.traffic(true, true))
+	if before := w.db.state(nodeA); before.Drain != hubfail.DrainDone {
+		t.Fatalf("setup: A is %v", before)
+	}
+
+	// The restart: this process never saw A drain.
+	w.lease.held = false
+	w.run(2*time.Second, nil)
+	w.lease.held = true
+	w.run(30*time.Second, w.traffic(true, true))
+	if got := w.db.state(nodeA); got.Drain != hubfail.DrainDone || !w.db.node(nodeA).Withdrawn {
+		t.Fatalf("setup: the restarted hub touched A: %v", got)
+	}
+
+	w.db.mu.Lock()
+	w.db.reqs = append(w.db.reqs, store.HubFailRequest{ID: uid(92), Node: uid(nodeA), Kind: "release", RequestedAt: w.clk.Now()})
+	w.db.mu.Unlock()
+	w.run(zone.Inputs().Stable+60*time.Second, w.traffic(true, true))
+	if w.db.node(nodeA).Withdrawn {
+		t.Fatal("setup: A was not returned")
+	}
+	if a := w.db.state(nodeA); a.Drain != hubfail.DrainNone || !a.DrainSince.IsZero() {
+		t.Fatalf("a node that serves again keeps its stored drain: %v", a)
+	}
+}
+
+// GP-r1-10: the tick checks the lease at its start, and the rows are written at its end. A hub whose lease went in between
+// writes nothing.
+//
+// Fails if: publishState writes without asking the lease again.
+func TestAHubThatLostTheLeaseDuringTheTickWritesNoRows(t *testing.T) {
+	w := newWorld(t)
+	w.settled()
+	w.str.open[uid(nodeB)] = true
+	w.db.mu.Lock()
+	w.db.failState = true
+	w.db.mu.Unlock()
+	w.run(20*time.Second, w.traffic(true, true)) // quiet ticks with rows waiting to be written
+	before := w.lease.calls
+	w.run(time.Second, nil)
+	perTick := w.lease.calls - before
+	w.db.mu.Lock()
+	w.db.failState = false
+	w.db.mu.Unlock()
+	w.lease.dropAt = w.lease.calls + perTick // the last question of the next tick is the one before the write
+	w.run(time.Second, nil)
+	if n := w.db.writes(); n != 0 {
+		t.Fatalf("%d writes by a hub whose lease was gone", n)
+	}
+}
+
+// GP-r1-10: the write carries no fence, so the leader writes every row again from time to time; a stale row that got in after the
+// lease moved does not stay for good.
+//
+// Fails if: publishState never writes an unchanged row again.
+func TestRowsAreRewrittenFromTimeToTime(t *testing.T) {
+	w := newWorld(t)
+	w.settled()
+	w.str.open[uid(nodeB)] = true
+	w.run(20*time.Second, w.traffic(true, true))
+	if w.db.writes() == 0 {
+		t.Fatal("setup: nothing was written")
+	}
+	w.db.mu.Lock()
+	w.db.states[uid(nodeA)] = store.HubNodeState{Node: uid(nodeA), Drain: hubfail.DrainDraining, DrainSince: w.clk.Now(), DrainKnown: true}
+	w.db.mu.Unlock() // what a hub that lost the lease mid-write left
+	w.run(6*time.Minute, w.traffic(true, true))
+	if got := w.db.state(nodeA); got.Drain != hubfail.DrainNone {
+		t.Fatalf("the stale row stayed: %v", got)
+	}
+}

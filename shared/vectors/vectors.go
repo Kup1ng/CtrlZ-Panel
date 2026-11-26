@@ -167,7 +167,7 @@ func runGroup(t *testing.T, g *GroupFile, h Harness) {
 	case g.Group == "telemetry-validate":
 		runTelemetryValidateGroup(t, g)
 	case g.Group == "pair-table-apply":
-		runPairTableApplyGroup(t, g)
+		runPairTableApplyGroup(t, g, h)
 	case g.Group == "zone-answer":
 		runZoneAnswerGroup(t, g)
 	case g.Group == "quarantine":

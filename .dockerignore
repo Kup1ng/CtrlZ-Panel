@@ -1,6 +1,7 @@
 .git
 .claude
 secrets/
+deploy/chrony/nts
 **/node_modules
 **/.next
 *.exe

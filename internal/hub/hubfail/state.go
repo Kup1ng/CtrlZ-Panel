@@ -34,13 +34,21 @@ const (
 	DrainDone     = "done"
 )
 
+// stateRefresh is how often every row is written again though nothing changed. The write is not fenced by the lease, so a hub that
+// lost it mid-write can leave a stale row; the leader's own view does not change, and without this it would never replace it.
+const stateRefresh = 5 * time.Minute
+
 func (l *Loop) resetState() {
 	l.tbl, l.tblVer = nil, 0
 	l.drains = map[uuid.UUID]*zone.Drain{}
 	l.drainSince = map[uuid.UUID]time.Time{}
 	l.drainFed = map[uuid.UUID]uint64{}
-	// A hub that takes the lease again writes every row once more, whatever another hub wrote meanwhile.
+	l.drainSeen = map[uuid.UUID]bool{}
+	// A hub that takes the lease again writes every row once more, whatever another hub wrote meanwhile. It writes the drain of a
+	// node only for a drain it has seen (drainSeen): the drain lives in memory, so a restart cannot tell a withdrawn node that was
+	// draining from one that never drained, and must not overwrite the stored answer with a quiet "none" (GP-r1-1).
 	l.written = map[uuid.UUID]store.HubNodeState{}
+	l.fullAt = stamp{}
 }
 
 // rememberTable keeps the table an event just signed (flags after the event) as the one nodes are asked to apply: the drain of a
@@ -85,13 +93,17 @@ func (l *Loop) feedDrains() {
 		case !d.Draining():
 			delete(l.drainSince, id)
 		}
+		// Advertised in a table this process fed, or draining: from here the hub knows what the drain of the node is, none included.
+		if d.Draining() || zone.Advertised(l.tbl, nil, zone.NodeID(id)) {
+			l.drainSeen[id] = true
+		}
 	}
 }
 
 // nodeState is the row of one node now.
 func (l *Loop) nodeState(now time.Time, id uuid.UUID) store.HubNodeState {
 	nid := zone.NodeID(id)
-	st := store.HubNodeState{Node: id, Drain: DrainNone}
+	st := store.HubNodeState{Node: id, Drain: DrainNone, DrainKnown: l.drainSeen[id]}
 	if names, ok := l.f3Unmet(now, nid); ok {
 		st.F3Unmet = names
 		if len(names) > 0 && onlyTiming(names) {
@@ -143,7 +155,7 @@ func onlyTiming(names []string) bool {
 }
 
 func sameState(a, b store.HubNodeState) bool {
-	if a.Node != b.Node || a.Drain != b.Drain || !a.F3DueAt.Equal(b.F3DueAt) || !a.DrainSince.Equal(b.DrainSince) || len(a.F3Unmet) != len(b.F3Unmet) {
+	if a.Node != b.Node || a.Drain != b.Drain || a.DrainKnown != b.DrainKnown || !a.F3DueAt.Equal(b.F3DueAt) || !a.DrainSince.Equal(b.DrainSince) || len(a.F3Unmet) != len(b.F3Unmet) {
 		return false
 	}
 	for i := range a.F3Unmet {
@@ -157,10 +169,16 @@ func sameState(a, b store.HubNodeState) bool {
 // publishState writes the rows that changed since the last write, in one transaction. A failed write is tried again on the next
 // tick; it never ends the tick and never stops the hub (the page is a view), and its warning is rate-limited.
 func (l *Loop) publishState(ctx context.Context, now time.Time) {
+	// The tick checked the lease at its start, and a slow tick can outlast it: a hub that no longer decides writes nothing (the
+	// write itself carries no fence, so the periodic full write below is what repairs a row a stale writer got in, GP-r1-10).
+	if l.cfg.Lease == nil || !l.cfg.Lease.Held() {
+		return
+	}
+	full := now.Sub(l.fullAt.t) >= stateRefresh
 	var batch []store.HubNodeState
 	for _, t := range l.Targets() {
 		st := l.nodeState(now, t.ID)
-		if prev, ok := l.written[t.ID]; ok && sameState(prev, st) {
+		if prev, ok := l.written[t.ID]; ok && !full && sameState(prev, st) {
 			continue
 		}
 		batch = append(batch, st)
@@ -178,5 +196,8 @@ func (l *Loop) publishState(ctx context.Context, now time.Time) {
 	}
 	for _, st := range batch {
 		l.written[st.Node] = st
+	}
+	if full {
+		l.fullAt = stamp{now}
 	}
 }

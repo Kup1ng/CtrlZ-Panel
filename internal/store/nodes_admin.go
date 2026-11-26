@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/Kup1ng/CtrlZ-Panel/internal/appclock"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -249,7 +250,25 @@ func scanNode(row pgx.Row) (NodeRow, error) {
 		&n.DNSWithdrawn, &n.DNSHold, &n.DNSLastFailback, &n.DNSFlapUntil, &n.PairPeer, &pending,
 		&n.F3Unmet, &n.F3DueAt, &n.DrainState, &n.DrainSince)
 	n.Slot, n.PendingRequests = int(slot), int(pending)
+	n.DrainState = drainShown(n.DrainState, n.DrainSince, appclock.Now())
 	return n, err
+}
+
+// drainDoneAfter is zone.Inputs().DrainDone (SC 8a.6: a withdrawn node's drain is done 360 s after it began); a test holds the two
+// equal, because the store does not import the zone package for one number.
+const drainDoneAfter = 360 * time.Second
+
+// drainShown is the drain state the page shows. A row the hub left as "draining" and no hub has seen since (a restart or a change
+// of the lease holder in the middle of the drain: the new hub cannot tell a drain from none and leaves the columns alone, GP-r1-1)
+// would otherwise show "draining" for good, though "done" is nothing but the time since drain_since. So the read applies the same
+// rule the hub does; a hub that has seen the drain writes "done" itself at the same moment, and a row that is "none" or "done"
+// is never touched.
+func drainShown(state *string, since *time.Time, now time.Time) *string {
+	if state == nil || *state != "draining" || since == nil || now.Sub(*since) < drainDoneAfter {
+		return state
+	}
+	done := "done"
+	return &done
 }
 
 const qNodesPage = `SELECT ` + nodeColumns + ` FROM ` + nodeFrom + ` WHERE ($1::uuid IS NULL OR n.id > $1) ORDER BY n.id LIMIT $2`

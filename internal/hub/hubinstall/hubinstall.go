@@ -548,7 +548,7 @@ func (h *Handler) serveBundle(w http.ResponseWriter, r *http.Request, rest strin
 		notFound(w)
 		return
 	}
-	if file == "manifest.json" {
+	if file == manifestFile {
 		w.Header().Set("Content-Type", "application/json")
 		armWrite(w)
 		w.Header().Set("Content-Length", strconv.Itoa(len(c.raw)))
@@ -564,6 +564,9 @@ func (h *Handler) serveBundle(w http.ResponseWriter, r *http.Request, rest strin
 	}
 	h.sendFile(w, r, ver, c, file, "bundle", BundleMaxTime, alive)
 }
+
+// manifestFile is the one file of a bundle that its manifest does not list.
+const manifestFile = "manifest.json"
 
 // ErrNoFile is what OpenBundleFile returns for a bundle or a path that is not served: the same answer for an unknown
 // version, an unverified manifest, a name the manifest does not list and a file that is not what it says.
@@ -583,6 +586,12 @@ func (h *Handler) OpenBundleFile(version uint64, rel string) (*os.File, int64, e
 		return nil, 0, ErrNoFile
 	}
 	size, found := c.sizes[rel]
+	if rel == manifestFile {
+		// The manifest lists every file but itself, so it has no size to look up. It is served as the install door serves it:
+		// the bytes bundle() verified (GN-r1-2). The file is opened and must still hold exactly those bytes, so a file that was
+		// replaced since the check is not served as the verified one.
+		size, found = uint64(len(c.raw)), true
+	}
 	if !found {
 		return nil, 0, ErrNoFile
 	}
@@ -594,6 +603,13 @@ func (h *Handler) OpenBundleFile(version uint64, rel string) (*os.File, int64, e
 	f, err := root.OpenFile(rel, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, 0, ErrNoFile
+	}
+	if rel == manifestFile {
+		raw, err := io.ReadAll(io.LimitReader(f, int64(len(c.raw))+1))
+		if err != nil || !bytes.Equal(raw, c.raw) {
+			f.Close()
+			return nil, 0, ErrNoFile
+		}
 	}
 	st, err := f.Stat()
 	if err != nil || !st.Mode().IsRegular() || uint64(st.Size()) != size {

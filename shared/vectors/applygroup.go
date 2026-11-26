@@ -178,8 +178,23 @@ func (c *ApplyCase) Names() (nodes, pairs []string) {
 	return nodes, pairs
 }
 
-func runPairTableApplyGroup(t *testing.T, g *GroupFile) {
-	RunPairTableApplyGroup(t, g, ReferenceApply{})
+// runPairTableApplyGroup is the group inside Run. The apply rules are the node's table writer, which no evaluator Harness has, so
+// the group runs through h only when h is an ApplyHarness. The reference harness runs the reference model, which is what the
+// panel's own test of the model is. Any other harness does not run it, and says so: running the panel's model for it and
+// reporting green would say a node conforms that nobody tested (GP-r1-11). A node runs the group itself with RunPairTableApply.
+// It is not a t.Skip, because a skip in a node's Run would fail the skip check of CI for a group that node runs on its own.
+// It reports whether the group ran.
+func runPairTableApplyGroup(t *testing.T, g *GroupFile, h Harness) bool {
+	switch hh := h.(type) {
+	case ApplyHarness:
+		RunPairTableApplyGroup(t, g, hh)
+	case Reference:
+		RunPairTableApplyGroup(t, g, ReferenceApply{})
+	default:
+		t.Log("pair-table-apply is not run by this harness (no ApplyHarness): run the group with vectors.RunPairTableApply")
+		return false
+	}
+	return true
 }
 
 // RunPairTableApply runs the group through a harness that is not the reference
@@ -426,7 +441,11 @@ func (m *refApplyNode) Step(_ int, s *ApplyStep, now int64) (ApplyObserved, erro
 func (m *refApplyNode) push(s *ApplyStep, now int64) (string, hubv1.PushRefusal, error) {
 	refuse := func(r hubv1.PushRefusal) (string, hubv1.PushRefusal, error) {
 		m.refusals++
-		m.lastRefusal, m.latestRefusal = r, r
+		m.lastRefusal = r
+		// A refused lower version leaves PanelStale as it was (SC 15, 8a.5): it must not replace the refusal that set it.
+		if r != hubv1.PushRefusal_PUSH_REFUSAL_LOWER_VERSION {
+			m.latestRefusal = r
+		}
 		return "refused", r, nil
 	}
 	hubNow := now + m.offset
