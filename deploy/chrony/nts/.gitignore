@@ -1,0 +1,3 @@
+# The hub writes the NTS leaf and its key here (spec 7.10). Never commit them.
+*
+!.gitignore

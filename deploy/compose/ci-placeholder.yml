@@ -1,0 +1,21 @@
+# Override for the Go CI (scripts/compose-smoke.sh): the two web containers run a static busybox page instead of
+# the Next.js images of deploy/docker/web.Dockerfile. That CI has no HeroUI token and no CDN, so it cannot build
+# those images, and what it judges (the Go services, the networks, the secrets) does not need them. The web
+# images are built and run by scripts/ci-web.sh (spec 3.2, 17.1), which does not use this file.
+#
+# The image is not named here: the smoke script puts the one the Compose file pins by digest for caddy-init into
+# CTRLZ_WEB_PANEL_IMAGE and CTRLZ_WEB_ADMIN_IMAGE, so the digest has one place. Never use this file for a real stack.
+services:
+  web-panel:
+    command: ["httpd", "-f", "-p", "3000", "-h", "/www"]
+    volumes:
+      - ./web-placeholder:/www:ro
+    # The base file's check asks Next for /fa/login, which busybox has no such page for.
+    healthcheck: !override
+      disable: true
+  web-admin:
+    command: ["httpd", "-f", "-p", "3000", "-h", "/www"]
+    volumes:
+      - ./web-placeholder:/www:ro
+    healthcheck: !override
+      disable: true

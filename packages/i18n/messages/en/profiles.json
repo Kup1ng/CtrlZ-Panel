@@ -1,0 +1,363 @@
+{
+  "frame": {
+    "tabsLabel": "Sections of profile {name}",
+    "tabs": {
+      "filters": "Filters",
+      "services": "Services",
+      "rules": "Rules",
+      "options": "Options"
+    },
+    "duplicate": "Duplicate",
+    "delete": "Delete",
+    "export": "Export",
+    "duplicateAria": "Duplicate profile {name}",
+    "deleteAria": "Delete profile {name}",
+    "exportAria": "Export profile {name}",
+    "subtitle": "Last changed {when}",
+    "disabledUntil": "Disabled until {when}",
+    "endpoints": "Endpoints",
+    "endpointsAria": "Endpoints of profile {name}",
+    "addEndpoint": "Add Endpoint",
+    "addEndpointAria": "Add Endpoint for profile {name}",
+    "noEndpoint": "Not attached to any Endpoint yet",
+    "loading": "Loading the profile",
+    "back": "Back to profiles",
+    "lockAria": "Lock profile {name}"
+  },
+  "lock": {
+    "banner": {
+      "title": "This profile is locked",
+      "text": "You cannot change anything in it until you unlock it.",
+      "message": "Lock message: {message}",
+      "unlock": "Unlock",
+      "unlockAria": "Unlock profile {name}"
+    },
+    "dialog": {
+      "lockTitle": "Lock profile {name}",
+      "unlockTitle": "Unlock {name}",
+      "lockText": "While it is locked nothing in the profile can change without this password. Reading and exporting stay open.",
+      "unlockText": "Enter the lock password of this profile.",
+      "needTitle": "A lock password is needed",
+      "needText": "This change takes a locked profile away from an Endpoint or a client. Enter the lock password of each of them.",
+      "needAnyText": "This change may take a locked profile away from an Endpoint or a client. Fill in the lock passwords you know; a password the change does not need is ignored.",
+      "needMoreText": "That was not enough: more locked profiles are involved. Fill in the passwords you know, and keep the ones you typed.",
+      "password": "Lock password",
+      "passwordFor": "Lock password of “{name}”",
+      "passwordHint": "6 to 128 characters. It belongs to this profile alone and is not your account password.",
+      "message": "Lock message",
+      "messageHint": "Optional, up to 256 characters. Whoever opens the profile sees it.",
+      "lock": "Lock",
+      "unlock": "Unlock",
+      "continue": "Continue",
+      "wrong": "The password of “{name}” is not right."
+    }
+  },
+  "counters": {
+    "endpoints": "Endpoints",
+    "filters": "Filters",
+    "services": "Services",
+    "rules": "Rules",
+    "options": "Options",
+    "aria": "{count} {label}, profile {name}"
+  },
+  "kinds": {
+    "custom": {
+      "name": "Custom",
+      "text": "Starts empty. You put in whatever you need."
+    },
+    "developer": {
+      "name": "Developer",
+      "text": "Cuts ads and trackers and stops malware."
+    },
+    "gaming": {
+      "name": "Gaming",
+      "text": "Blocks malware and phishing and stays out of the way of games."
+    },
+    "kids": {
+      "name": "Kids",
+      "text": "Blocks adult content, gambling and dating, and turns on safe search."
+    },
+    "privacy": {
+      "name": "Privacy",
+      "text": "Blocks trackers and device telemetry strictly."
+    },
+    "productivity": {
+      "name": "Focus",
+      "text": "Blocks social networks, games and other distractions."
+    },
+    "vpn_replacement": {
+      "name": "VPN replacement",
+      "text": "Sends traffic through a fitting location automatically."
+    }
+  },
+  "card": {
+    "info": "About the {name} filter",
+    "status": {
+      "blocked": "Blocked",
+      "allowed": "Allowed"
+    },
+    "mode": "Mode {mode}",
+    "toggle": "{name} filter"
+  },
+  "list": {
+    "label": "Profiles",
+    "loading": "Loading profiles",
+    "empty": "You have no profiles yet.",
+    "emptyText": "A profile is a set of filters, services and rules that an Endpoint uses.",
+    "create": "Create profile",
+    "searchEmpty": "No profile has this name.",
+    "searchEmptyText": "Check the spelling or clear the search.",
+    "summary": "{count, plural, one {# profile} other {# profiles}}, sorted by {sort}",
+    "sortBy": {
+      "changed": "last change",
+      "name": "name"
+    },
+    "menu": {
+      "import": "Import profile",
+      "sortName": "Sort by name",
+      "sortNameOn": "Sort by name (current)",
+      "sortChanged": "Sort by last change",
+      "sortChangedOn": "Sort by last change (current)"
+    },
+    "new": "New",
+    "locked": "Locked",
+    "disabled": "Disabled",
+    "noEndpoint": "Not attached to an Endpoint",
+    "endpointCount": "{count, plural, one {# Endpoint} other {# Endpoints}}",
+    "endpointsAria": "{count, plural, one {# Endpoint} other {# Endpoints}}, profile {name}",
+    "redirect": {
+      "location": "redirects to {where}",
+      "unknown": "redirects",
+      "auto": "redirects automatically",
+      "random": "redirects to a random location",
+      "ip": "redirects to an IP address",
+      "host": "redirects to a host name"
+    }
+  },
+  "dialogs": {
+    "nameHint": "1 to {max, number} characters.",
+    "flagged": "{count, plural, one {# destination is not available yet and acts as Bypass.} other {# destinations are not available yet and act as Bypass.}}",
+    "add": {
+      "title": "Create profile",
+      "name": "Profile name",
+      "kind": "Profile type",
+      "submit": "Create",
+      "created": "Profile “{name}” was created."
+    },
+    "import": {
+      "title": "Import profile",
+      "text": "Choose the JSON file that Ctrl Z exported. It becomes a new profile, with no lock.",
+      "drop": "Drop the file here",
+      "dropHint": "JSON only, up to {max, number} MB.",
+      "choose": "Choose file",
+      "chooseAria": "Choose a profile file",
+      "nothing": "Choose a file first.",
+      "remove": "Remove file {name}",
+      "size": "{kb} KB",
+      "tooLarge": "The file is larger than 4 MB.",
+      "unreadable": "The file could not be read. Choose it again.",
+      "problems": "This file cannot be imported",
+      "wholeFile": "Whole file",
+      "submit": "Import",
+      "imported": "Profile “{name}” was imported.",
+      "more": "There may be more problems after these. Fix these and import again."
+    },
+    "duplicate": {
+      "title": "Duplicate profile {name}",
+      "text": "The copy has the same filters, services, rules and options as “{name}”, and no lock.",
+      "name": "Name of the copy",
+      "defaultName": "Copy of {name}",
+      "submit": "Duplicate",
+      "done": "A copy named “{name}” was created.",
+      "iranianTitle": "This profile cannot be duplicated",
+      "iranianText": "A rule or service redirects a name on the Iranian list. In the Rules and Services tabs, find the rows marked “acts as Bypass”, set each to Block or Bypass, then duplicate again. The pointers are positions in the exported file.",
+      "iranianRules": "Open the Rules of this profile",
+      "iranianServices": "Open the Services of this profile"
+    },
+    "delete": {
+      "title": "Delete profile {name}?",
+      "text": "The filters, services, rules and options of “{name}” are removed and cannot be brought back.",
+      "inUseTitle": "It is still in use",
+      "inUseText": "A profile cannot be deleted while an Endpoint or a schedule uses it. Move them to another profile first.",
+      "submit": "Delete",
+      "done": "Profile “{name}” was deleted.",
+      "lockedTitle": "It is locked",
+      "lockedText": "A locked profile cannot be deleted. Unlock it first (Options, Lock Profile), then delete it."
+    },
+    "job": {
+      "import": "Importing a profile",
+      "duplicate": "Duplicating a profile"
+    },
+    "jobRunning": {
+      "title": "A large job is already running",
+      "text": "This request was not started. Wait for that job to end, then try again.",
+      "show": "Show the running job"
+    }
+  },
+  "filters": {
+    "title": "Filters",
+    "help": {
+      "malware": {
+        "body": "Blocks domains known to spread malware or to control infected devices."
+      },
+      "ads-trackers": {
+        "body": "Blocks the ads and trackers that follow what you do on sites and in apps. Relaxed, Balanced and Strict set how far it goes."
+      },
+      "adult": {
+        "body": "Blocks adult sites. It has two modes: Relaxed and Strict."
+      },
+      "ai": {
+        "body": "Blocks AI services and tools."
+      },
+      "clickbait": {
+        "body": "Blocks sites that collect visits with bait headlines and thin content."
+      },
+      "crypto": {
+        "body": "Blocks cryptocurrency sites and services, miners included."
+      },
+      "dating": {
+        "body": "Blocks dating sites and apps."
+      },
+      "drugs": {
+        "body": "Blocks sites that present or sell illegal drugs."
+      },
+      "dynamic-dns": {
+        "body": "Blocks dynamic DNS domains, which are sometimes used to hide a malware server."
+      },
+      "file-hosting": {
+        "body": "Blocks file hosting and sharing services."
+      },
+      "gambling": {
+        "body": "Blocks gambling and betting sites."
+      },
+      "games": {
+        "body": "Blocks online game sites and services."
+      },
+      "government": {
+        "body": "Blocks government sites."
+      },
+      "iot-telemetry": {
+        "body": "Blocks the automatic reports that smart home devices send to their makers."
+      },
+      "new-domains": {
+        "body": "Blocks domains that were just registered, which are often used for scams and malware. It has two modes: last week and last month. Domains ending in .ir or .ایران are not covered by this filter, because their registration date is not published anywhere."
+      },
+      "phishing": {
+        "body": "Blocks fake sites built to steal passwords and bank details."
+      },
+      "social": {
+        "body": "Blocks social networks."
+      },
+      "torrents": {
+        "body": "Blocks torrent sites and trackers."
+      },
+      "url-shorteners": {
+        "body": "Blocks link shorteners, since they hide where a link really goes."
+      },
+      "vpn-dns": {
+        "body": "Blocks VPN and alternative DNS services that can get around the profile's filters."
+      },
+      "1hosts-lite": {
+        "body": "A light list with few mistakes, for ads and trackers."
+      },
+      "1hosts-xtra": {
+        "body": "A wider list than Lite. It covers more and also blocks harmless sites more often."
+      },
+      "adguard-dns": {
+        "body": "The official DNS filter list for ads and trackers."
+      },
+      "hagezi-light": {
+        "body": "A light list for the fewest mistakes."
+      },
+      "hagezi-normal": {
+        "body": "A balanced list for ads, trackers and malware."
+      },
+      "hagezi-pro": {
+        "body": "A wider list with more coverage. Fits most advanced users."
+      },
+      "hagezi-pro-plus": {
+        "body": "A stricter list than Pro. Harmless sites are blocked more often."
+      },
+      "hagezi-tif": {
+        "body": "A threat list of malware, phishing and scam domains."
+      },
+      "hagezi-ultimate": {
+        "body": "The strictest list of this family. Only for someone who accepts allowing sites by hand now and then."
+      },
+      "oisd-basic": {
+        "body": "A small, careful list that almost never blocks a harmless site."
+      },
+      "oisd-full": {
+        "body": "The full list, with more coverage than Basic."
+      },
+      "stevenblack-unified": {
+        "body": "The well-known unified list for ads and malware."
+      }
+    },
+    "native": "Native filters",
+    "gridLabel": "Native filters of profile {name}",
+    "summary": "{on} of {total} filters on",
+    "navLabel": "Kind of filter",
+    "tabNative": "Native",
+    "tabThirdParty": "3rd Party",
+    "loading": "Loading filters",
+    "empty": "No filters available",
+    "emptyText": "The list of filters is empty for now. Try again in a moment.",
+    "unavailable": "Not available now",
+    "deprecated": "Deprecated",
+    "deprecatedNote": "This filter is no longer updated. You can turn it off, but it cannot be turned on again.",
+    "unavailableNote": "The data of this filter is not ready yet.",
+    "modeButton": "Mode of the {name} filter: {mode}",
+    "modeTitle": "Mode of the {name} filter",
+    "modeGroup": "Modes of the {name} filter",
+    "modeLevel": "Strength {level} of {max}",
+    "modes": {
+      "relaxed": {
+        "name": "Relaxed",
+        "text": "The least blocking. A site is rarely closed by mistake."
+      },
+      "balanced": {
+        "name": "Balanced",
+        "text": "Good coverage with few mistakes. Fits most profiles."
+      },
+      "strict": {
+        "name": "Strict",
+        "text": "The most coverage. Sometimes a harmless site or app is blocked too."
+      },
+      "last_week": {
+        "name": "Last week",
+        "text": "Domains registered in the last 7 days."
+      },
+      "last_month": {
+        "name": "Last month",
+        "text": "Domains registered in the last 28 days."
+      }
+    },
+    "newDomains": {
+      "title": ".ir and .ایران domains are not covered",
+      "warning": "Domains ending in .ir or .ایران are not covered by this filter, because their registration date is not published anywhere.",
+      "ok": "Got it"
+    }
+  },
+  "thirdParty": {
+    "title": "Third-party lists",
+    "gridLabel": "Third-party lists of profile {name}",
+    "summary": "{on} of {total} lists on",
+    "back": "Back to native filters",
+    "empty": "No lists available",
+    "advanced": {
+      "title": "Advanced mode",
+      "text": "Outside groups keep these lists, and they may block a harmless site too. If you are not sure, the native filters are enough."
+    },
+    "many": {
+      "title": "More than one list is on",
+      "text": "These lists overlap, and each list adds more mistaken blocks. If a site does not open for no reason, turn one off."
+    }
+  },
+  "services": {
+    "title": "Services"
+  },
+  "out_of_range": "Out of range.",
+  "not_available": "Not available yet.",
+  "unknown": "Not recognised."
+}

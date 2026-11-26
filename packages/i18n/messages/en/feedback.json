@@ -1,0 +1,57 @@
+{
+  "error": {
+    "title": "Something went wrong",
+    "notFoundTitle": "Not found",
+    "notFoundText": "This item does not exist, or you cannot access it.",
+    "reference": "Reference code",
+    "referenceHint": "If it keeps happening, send this code to support."
+  },
+  "empty": {
+    "title": "Nothing to show",
+    "text": "Nothing has been added yet."
+  },
+  "showcase": {
+    "title": "Feedback and row samples",
+    "subtitle": "For checking the look only. Closed in production.",
+    "empty": "Empty state",
+    "emptyAction": "Add an item",
+    "error": "Error state",
+    "rows": "List rows",
+    "dense": "Dense rows",
+    "dialog": "Dialog",
+    "openDialog": "Open a tall dialog",
+    "openLocked": "Open a locked dialog",
+    "lockedTitle": "Locked dialog",
+    "lockedLine": "Escape and a click outside do not close this one. Only its own buttons do.",
+    "openConfirm": "Open a tall confirmation",
+    "confirmTitle": "Sample confirmation",
+    "confirmKeep": "Keep it",
+    "dialogTitle": "Sample dialog",
+    "dialogLine": "One line of long text that only fills the dialog body, so that it has to scroll inside.",
+    "dialogSwitch": "Change the value",
+    "dialogDone": "Close the dialog",
+    "profileOne": "Home",
+    "profileTwo": "Office",
+    "profileNew": "New profile",
+    "endpointLine": "Endpoint: home router",
+    "counters": {
+      "filters": "Filters",
+      "services": "Services",
+      "rules": "Rules",
+      "options": "Options"
+    },
+    "ruleBlocked": "Blocked",
+    "ruleAllowed": "Allowed",
+    "copy": "Copy",
+    "move": "Move",
+    "edit": "Edit",
+    "remove": "Delete",
+    "switchLabel": "Enabled",
+    "select": "Select row",
+    "selected": "Selected row",
+    "createSample": "Create a sample",
+    "profileNumbered": "Profile {n, number}",
+    "switcher": "Profile switcher, twelve profiles",
+    "onboarding": "Checklist with done steps"
+  }
+}

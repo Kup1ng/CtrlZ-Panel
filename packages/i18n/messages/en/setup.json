@@ -1,0 +1,280 @@
+{
+  "title": "Device setup",
+  "copyNote": "Closing this window empties the clipboard, whatever it holds by then, so something you copied from another app after this value is lost too. The value carries your access, so paste it before you close. If the browser refuses at that moment, the clipboard is emptied when you come back to this tab. The clipboard history that Windows and some other systems keep is out of our reach: clear it yourself.",
+  "unavailable": {
+    "title": "Setup is not ready yet",
+    "text": "The administrator has to set the domain and the DNS addresses. After that this section works by itself."
+  },
+  "share": {
+    "title": "Endpoint setup",
+    "notFoundTitle": "This link does not work",
+    "notFoundText": "The link has expired, was revoked, has run out of uses or was not typed correctly. Ask whoever sent it to make a new one.",
+    "tabs": "Setup page sections",
+    "corner": "Language and theme",
+    "languageUse": "Changing the language opens the page again and uses one of this link's uses.",
+    "expires": "This link is valid until {date}.",
+    "notReadyTitle": "Setup is not ready yet",
+    "notReadyText": "The service is not ready for this Endpoint yet. Try again in a little while, or ask whoever sent the link. This visit did not use up one of the link's uses.",
+    "types": {
+      "windows": "Windows",
+      "mac": "Mac",
+      "linux": "Linux",
+      "ios": "iOS",
+      "android": "Android",
+      "chrome": "Chrome",
+      "firefox": "Firefox",
+      "edge": "Edge",
+      "brave": "Brave",
+      "other_browser": "Other Browser",
+      "apple_tv": "Apple TV",
+      "android_tv": "Android TV",
+      "fire_tv": "Fire TV",
+      "samsung_tv": "Samsung TV",
+      "other_tv": "Other TV",
+      "asus_merlin": "Asus Merlin",
+      "dd_wrt": "DD-WRT",
+      "firewalla": "Firewalla",
+      "fresh_tomato": "Fresh Tomato",
+      "gl_inet": "GL.iNet",
+      "openwrt": "OpenWRT",
+      "opnsense": "OPNsense",
+      "pfsense": "pfSense",
+      "synology": "Synology",
+      "ubiquiti": "Ubiquiti",
+      "windows_server": "Windows Server",
+      "generic_linux": "Generic Linux",
+      "tailscale": "Tailscale",
+      "other_router": "Other Router",
+      "other_endpoint": "Other Endpoint"
+    }
+  },
+  "resolvers": {
+    "title": "Resolvers",
+    "dialogTitle": "Resolvers: {name}",
+    "configure": "Help me configure",
+    "configureAria": "Help me configure Endpoint {name}",
+    "resolverId": "Endpoint ID in DNS",
+    "legacy": {
+      "title": "Plain DNS (not encrypted)",
+      "hint": "For devices that only take a DNS address. It only works from a network whose address you have claimed.",
+      "off": "Plain DNS is off for this Endpoint. These addresses will not answer until you turn it on in the Endpoint's edit dialog.",
+      "dns1": "DNS 1 (primary)",
+      "dns2": "DNS 2 (fallback)"
+    },
+    "secure": {
+      "title": "Secure DNS (encrypted)",
+      "hint": "For browsers, phones and apps that take encrypted DNS. DNS 1 always comes first."
+    },
+    "protocols": {
+      "plain": "Plain DNS",
+      "doh": "DoH",
+      "doh3": "DoH3",
+      "dot": "DoT",
+      "doq": "DoQ"
+    },
+    "rows": {
+      "doh": "DoH URL",
+      "doh3": "DoH3 URL (HTTP/3)",
+      "doh3Hint": "The same URL as DoH, opened over HTTP/3. It has no stamp of its own.",
+      "dot": "DoT host",
+      "doq": "DoQ host"
+    },
+    "bootstrap": {
+      "first": "Bootstrap IP 1 (primary)",
+      "second": "Bootstrap IP 2 (fallback)"
+    },
+    "stamps": {
+      "title": "DNS Stamps",
+      "guide": "If your app takes one stamp, use the first one. If it takes a list, add both address stamps.",
+      "hostname": "{protocol}: host name stamp",
+      "several": "For apps that take several stamps",
+      "address": "{protocol}: address stamp {ip}"
+    }
+  },
+  "wizard": {
+    "title": "Setup guide",
+    "loading": "Loading the steps",
+    "steps": "Steps",
+    "goto": "Go to step {n} of {total}",
+    "stepOf": "Step {n} of {total}",
+    "previous": "Previous",
+    "next": "Next",
+    "version": "Version",
+    "openAddresses": "Open the Addresses page",
+    "values": {
+      "host": "Host name",
+      "doh_url": "DoH URL",
+      "dns1": "DNS 1 (primary)",
+      "dns2": "DNS 2 (fallback)",
+      "resolved_conf": "Config file text"
+    },
+    "shareClaim": "Plain DNS only works for a network whose address the Endpoint’s owner has claimed. If it does not work, ask the owner to check that."
+  },
+  "verify": {
+    "title": "Setup check",
+    "hint": "After you set it up, check that this device uses this Endpoint.",
+    "start": "Start the check",
+    "again": "Check again",
+    "stop": "Stop the check",
+    "states": {
+      "idle": "Not checked yet.",
+      "pending": "Waiting for a query from this device…",
+      "partial": "A query arrived, but not through this Endpoint. Check the device's setup again.",
+      "confirming": "Found it. Confirming once more…",
+      "timeout": "Nothing was seen for two minutes. Check the setup and try again.",
+      "success": "The setup is right and the device uses this Endpoint."
+    },
+    "over": "(over {protocol})",
+    "protocols": {
+      "udp": "Plain DNS (UDP)",
+      "tcp": "Plain DNS (TCP)",
+      "doh": "DoH",
+      "doh3": "DoH3",
+      "dot": "DoT",
+      "doq": "DoQ"
+    },
+    "otherClient": "The query came from another client of this Endpoint.",
+    "manualHint": "The automatic check is not on in this installation. Run one of these commands on the device. It asks over Plain DNS, so it does not test an encrypted setup.",
+    "nslookup": "nslookup command",
+    "dig": "dig command",
+    "manualResult": "If you get an address, some Endpoint of this service holds this network’s claim, and it may not be this one. A refusal means no Endpoint holds it. An empty answer means the check cannot tell.",
+    "manualClaims": "Networks this Endpoint holds",
+    "manualNoClaims": "This Endpoint holds no network that identifies devices now, so an address in the answer belongs to another Endpoint.",
+    "manualGrace": "in grace",
+    "manualGraceUntil": "in grace until {date}",
+    "manualCompare": "If the answer is inside one of these networks, the device uses this Endpoint."
+  },
+  "client": {
+    "label": "Client",
+    "self": "The Endpoint itself",
+    "search": "Search clients",
+    "loading": "Searching",
+    "none": "No client found"
+  },
+  "configure": {
+    "dialogTitle": "Help me configure: {name}",
+    "back": "Back",
+    "intro": "How do you want to set up your device?",
+    "pickAutomatic": "Pick a device or app. Automatic setup is ready for these.",
+    "pickManual": "Pick a device or app to be guided step by step.",
+    "entries": {
+      "automatic": {
+        "title": "Automatic setup",
+        "text": "A profile or setting ready to install"
+      },
+      "manual": {
+        "title": "Manual setup",
+        "text": "Step by step for each device"
+      },
+      "resolvers": {
+        "title": "See resolvers",
+        "text": "Every address and stamp, ready to copy"
+      },
+      "link": {
+        "title": "Copy setup link",
+        "text": "A link that opens without an account"
+      }
+    },
+    "appleIntro": "Build the profile and install it on the device with the QR code or the link.",
+    "generatorIntro": "Copy this text and use it as it is.",
+    "noAutomatic": "There is no automatic setup for this device. Follow the manual steps.",
+    "startGuide": "Start the manual steps",
+    "dialogTitleClient": "Help me configure: {name}, client {client}"
+  },
+  "platforms": {
+    "groups": {
+      "computer": "Computer",
+      "mobile": "Mobile",
+      "browser": "Browser",
+      "tv": "TV",
+      "router": "Router"
+    },
+    "names": {
+      "windows": "Windows",
+      "mac": "Mac",
+      "linux": "Linux",
+      "ios": "iPhone and iPad",
+      "android": "Android",
+      "chrome": "Chrome",
+      "firefox": "Firefox",
+      "edge": "Edge",
+      "brave": "Brave",
+      "apple-tv": "Apple TV",
+      "android-tv": "Android TV",
+      "fire-tv": "Fire TV",
+      "samsung-tv": "Samsung TV",
+      "router": "Router"
+    }
+  },
+  "generators": {
+    "windows-doh": "Windows commands",
+    "firefox-policy": "Firefox policy",
+    "chromium-policy": "Chrome, Edge and Brave policy",
+    "android-private-dns": "Private DNS host name",
+    "address-list": "Addresses to enter"
+  },
+  "apple": {
+    "protocol": "Profile protocol",
+    "advanced": "Advanced settings",
+    "client": "Client",
+    "ssids": "Excluded Wi-Fi networks",
+    "ssidsHint": "The DNS profile is not used on these networks. Up to 50 names.",
+    "domains": "Excluded domains",
+    "domainsHint": "These domains go through the device's normal DNS. Up to 100 domains.",
+    "folder": "Domains from a folder",
+    "folderHint": "The folder's domains are added to the list above.",
+    "folderNone": "No folder",
+    "common": "Exclude common domains",
+    "commonHint": "A list of widely used domains that should not go through the filter.",
+    "prohibit": "Prevent disablement",
+    "prohibitHint": "Only works on supervised Apple devices.",
+    "add": "Add",
+    "addTo": "Add to {name}",
+    "added": "{name}: added entries",
+    "counter": "{count} of {max}",
+    "problems": {
+      "empty": "Nothing typed.",
+      "too_long": "This is longer than allowed.",
+      "invalid": "This is not valid.",
+      "duplicate": "This is already added.",
+      "full": "You have reached the limit of {max}."
+    },
+    "unsignedTitle": "The profile is not signed",
+    "unsignedText": "When you install it, the Apple device says the profile is not verified. That is expected and has nothing to do with how safe the DNS is.",
+    "create": "Create the profile link",
+    "qrTitle": "QR code to download the profile",
+    "qrHint": "Scan it with the camera of the Apple device.",
+    "download": "Download the profile",
+    "linkLabel": "Download link",
+    "expires": "Valid until {when}",
+    "staleTitle": "Download it again",
+    "staleText": "The endpoint ID or the DNS addresses changed after you downloaded the profile. Build a new profile and install it again."
+  },
+  "link": {
+    "another": "Make another link",
+    "intro": "You create a link that shows the setup guide of this Endpoint with no sign-in. It stops working when the ID is rotated or the link is revoked.",
+    "client": "Client of the link",
+    "lifetime": "Lifetime",
+    "ttl": {
+      "1": "One hour",
+      "24": "24 hours",
+      "168": "Seven days"
+    },
+    "create": "Create the setup link",
+    "copyLabel": "Setup link",
+    "qrTitle": "QR code of the setup link",
+    "expires": "Valid until {when}",
+    "once": "This link is shown only this once. After you close the dialog it cannot be seen again.",
+    "activeTitle": "Active links",
+    "none": "You have no active link.",
+    "uses": "Opened {uses} of {max} times",
+    "revoke": "Revoke",
+    "revokeAria": "Revoke the setup link of {name}, valid until {when}"
+  },
+  "leave": {
+    "title": "Leave and lose the link?",
+    "text": "The link on this screen is shown only once. If you leave now you cannot see it again, and it stays active until it ends or you revoke it.",
+    "keep": "Stay here",
+    "go": "Leave anyway"
+  }
+}
