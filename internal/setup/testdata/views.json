@@ -1,0 +1,158 @@
+[
+  {
+    "name": "v4-no-client",
+    "rid": "abcdefghijklmnopqrstuvwxy2",
+    "token": "abcdefghijklmnopqrstuvwxyz234567",
+    "client": "",
+    "zone": "dns.example.com",
+    "primary": "203.0.113.10",
+    "fallback": "203.0.113.20",
+    "host": "abcdefghijklmnopqrstuvwxy2.dns.example.com",
+    "doh_url": "https://abcdefghijklmnopqrstuvwxy2.dns.example.com/abcdefghijklmnopqrstuvwxyz234567",
+    "stamps": {
+      "doh": {
+        "hostname_stamp": "sdns://AgAAAAAAAAAAAAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUuY29tIS9hYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ejIzNDU2N4wyMDMuMC4xMTMuMTAMMjAzLjAuMTEzLjIw",
+        "address_stamps": [
+          {
+            "ip": "203.0.113.10",
+            "stamp": "sdns://AgAAAAAAAAAADDIwMy4wLjExMy4xMAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUuY29tIS9hYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ejIzNDU2N4wyMDMuMC4xMTMuMTAMMjAzLjAuMTEzLjIw"
+          },
+          {
+            "ip": "203.0.113.20",
+            "stamp": "sdns://AgAAAAAAAAAADDIwMy4wLjExMy4yMAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUuY29tIS9hYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ejIzNDU2N4wyMDMuMC4xMTMuMTAMMjAzLjAuMTEzLjIw"
+          }
+        ]
+      },
+      "dot": {
+        "hostname_stamp": "sdns://AwAAAAAAAAAAAAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUuY29tjDIwMy4wLjExMy4xMAwyMDMuMC4xMTMuMjA",
+        "address_stamps": [
+          {
+            "ip": "203.0.113.10",
+            "stamp": "sdns://AwAAAAAAAAAADDIwMy4wLjExMy4xMAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUuY29tjDIwMy4wLjExMy4xMAwyMDMuMC4xMTMuMjA"
+          },
+          {
+            "ip": "203.0.113.20",
+            "stamp": "sdns://AwAAAAAAAAAADDIwMy4wLjExMy4yMAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUuY29tjDIwMy4wLjExMy4xMAwyMDMuMC4xMTMuMjA"
+          }
+        ]
+      },
+      "doq": {
+        "hostname_stamp": "sdns://BAAAAAAAAAAAAAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUuY29tjDIwMy4wLjExMy4xMAwyMDMuMC4xMTMuMjA",
+        "address_stamps": [
+          {
+            "ip": "203.0.113.10",
+            "stamp": "sdns://BAAAAAAAAAAADDIwMy4wLjExMy4xMAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUuY29tjDIwMy4wLjExMy4xMAwyMDMuMC4xMTMuMjA"
+          },
+          {
+            "ip": "203.0.113.20",
+            "stamp": "sdns://BAAAAAAAAAAADDIwMy4wLjExMy4yMAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUuY29tjDIwMy4wLjExMy4xMAwyMDMuMC4xMTMuMjA"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "v4-client",
+    "rid": "abcdefghijklmnopqrstuvwxy2",
+    "token": "abcdefghijklmnopqrstuvwxyz234567",
+    "client": "kid-phone",
+    "zone": "dns.example.com",
+    "primary": "203.0.113.10",
+    "fallback": "203.0.113.20",
+    "host": "abcdefghijklmnopqrstuvwxy2-kid-phone.dns.example.com",
+    "doh_url": "https://abcdefghijklmnopqrstuvwxy2-kid-phone.dns.example.com/abcdefghijklmnopqrstuvwxyz234567",
+    "stamps": {
+      "doh": {
+        "hostname_stamp": "sdns://AgAAAAAAAAAAAAA0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIta2lkLXBob25lLmRucy5leGFtcGxlLmNvbSEvYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoyMzQ1NjeMMjAzLjAuMTEzLjEwDDIwMy4wLjExMy4yMA",
+        "address_stamps": [
+          {
+            "ip": "203.0.113.10",
+            "stamp": "sdns://AgAAAAAAAAAADDIwMy4wLjExMy4xMAA0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIta2lkLXBob25lLmRucy5leGFtcGxlLmNvbSEvYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoyMzQ1NjeMMjAzLjAuMTEzLjEwDDIwMy4wLjExMy4yMA"
+          },
+          {
+            "ip": "203.0.113.20",
+            "stamp": "sdns://AgAAAAAAAAAADDIwMy4wLjExMy4yMAA0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIta2lkLXBob25lLmRucy5leGFtcGxlLmNvbSEvYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoyMzQ1NjeMMjAzLjAuMTEzLjEwDDIwMy4wLjExMy4yMA"
+          }
+        ]
+      },
+      "dot": {
+        "hostname_stamp": "sdns://AwAAAAAAAAAAAAA0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIta2lkLXBob25lLmRucy5leGFtcGxlLmNvbYwyMDMuMC4xMTMuMTAMMjAzLjAuMTEzLjIw",
+        "address_stamps": [
+          {
+            "ip": "203.0.113.10",
+            "stamp": "sdns://AwAAAAAAAAAADDIwMy4wLjExMy4xMAA0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIta2lkLXBob25lLmRucy5leGFtcGxlLmNvbYwyMDMuMC4xMTMuMTAMMjAzLjAuMTEzLjIw"
+          },
+          {
+            "ip": "203.0.113.20",
+            "stamp": "sdns://AwAAAAAAAAAADDIwMy4wLjExMy4yMAA0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIta2lkLXBob25lLmRucy5leGFtcGxlLmNvbYwyMDMuMC4xMTMuMTAMMjAzLjAuMTEzLjIw"
+          }
+        ]
+      },
+      "doq": {
+        "hostname_stamp": "sdns://BAAAAAAAAAAAAAA0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIta2lkLXBob25lLmRucy5leGFtcGxlLmNvbYwyMDMuMC4xMTMuMTAMMjAzLjAuMTEzLjIw",
+        "address_stamps": [
+          {
+            "ip": "203.0.113.10",
+            "stamp": "sdns://BAAAAAAAAAAADDIwMy4wLjExMy4xMAA0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIta2lkLXBob25lLmRucy5leGFtcGxlLmNvbYwyMDMuMC4xMTMuMTAMMjAzLjAuMTEzLjIw"
+          },
+          {
+            "ip": "203.0.113.20",
+            "stamp": "sdns://BAAAAAAAAAAADDIwMy4wLjExMy4yMAA0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIta2lkLXBob25lLmRucy5leGFtcGxlLmNvbYwyMDMuMC4xMTMuMTAMMjAzLjAuMTEzLjIw"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "v6-pair",
+    "rid": "abcdefghijklmnopqrstuvwxy2",
+    "token": "abcdefghijklmnopqrstuvwxyz234567",
+    "client": "",
+    "zone": "dns.example.org",
+    "primary": "2001:db8::10",
+    "fallback": "2001:db8::20",
+    "host": "abcdefghijklmnopqrstuvwxy2.dns.example.org",
+    "doh_url": "https://abcdefghijklmnopqrstuvwxy2.dns.example.org/abcdefghijklmnopqrstuvwxyz234567",
+    "stamps": {
+      "doh": {
+        "hostname_stamp": "sdns://AgAAAAAAAAAAAAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUub3JnIS9hYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ejIzNDU2N45bMjAwMTpkYjg6OjEwXQ5bMjAwMTpkYjg6OjIwXQ",
+        "address_stamps": [
+          {
+            "ip": "2001:db8::10",
+            "stamp": "sdns://AgAAAAAAAAAADlsyMDAxOmRiODo6MTBdACphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5Mi5kbnMuZXhhbXBsZS5vcmchL2FiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6MjM0NTY3jlsyMDAxOmRiODo6MTBdDlsyMDAxOmRiODo6MjBd"
+          },
+          {
+            "ip": "2001:db8::20",
+            "stamp": "sdns://AgAAAAAAAAAADlsyMDAxOmRiODo6MjBdACphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5Mi5kbnMuZXhhbXBsZS5vcmchL2FiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6MjM0NTY3jlsyMDAxOmRiODo6MTBdDlsyMDAxOmRiODo6MjBd"
+          }
+        ]
+      },
+      "dot": {
+        "hostname_stamp": "sdns://AwAAAAAAAAAAAAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUub3JnjlsyMDAxOmRiODo6MTBdDlsyMDAxOmRiODo6MjBd",
+        "address_stamps": [
+          {
+            "ip": "2001:db8::10",
+            "stamp": "sdns://AwAAAAAAAAAADlsyMDAxOmRiODo6MTBdACphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5Mi5kbnMuZXhhbXBsZS5vcmeOWzIwMDE6ZGI4OjoxMF0OWzIwMDE6ZGI4OjoyMF0"
+          },
+          {
+            "ip": "2001:db8::20",
+            "stamp": "sdns://AwAAAAAAAAAADlsyMDAxOmRiODo6MjBdACphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5Mi5kbnMuZXhhbXBsZS5vcmeOWzIwMDE6ZGI4OjoxMF0OWzIwMDE6ZGI4OjoyMF0"
+          }
+        ]
+      },
+      "doq": {
+        "hostname_stamp": "sdns://BAAAAAAAAAAAAAAqYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eTIuZG5zLmV4YW1wbGUub3JnjlsyMDAxOmRiODo6MTBdDlsyMDAxOmRiODo6MjBd",
+        "address_stamps": [
+          {
+            "ip": "2001:db8::10",
+            "stamp": "sdns://BAAAAAAAAAAADlsyMDAxOmRiODo6MTBdACphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5Mi5kbnMuZXhhbXBsZS5vcmeOWzIwMDE6ZGI4OjoxMF0OWzIwMDE6ZGI4OjoyMF0"
+          },
+          {
+            "ip": "2001:db8::20",
+            "stamp": "sdns://BAAAAAAAAAAADlsyMDAxOmRiODo6MjBdACphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5Mi5kbnMuZXhhbXBsZS5vcmeOWzIwMDE6ZGI4OjoxMF0OWzIwMDE6ZGI4OjoyMF0"
+          }
+        ]
+      }
+    }
+  }
+]

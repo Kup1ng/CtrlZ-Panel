@@ -1,0 +1,239 @@
+execute ctrlz.credential_state(p_one_time boolean, p_expires_at timestamp with time zone, p_needs_second_factor boolean)
+execute ctrlz.current_tenant_id()
+execute ctrlz.one_time_expiry(p_one_time boolean, p_expires_at timestamp with time zone)
+execute ctrlz.upstream_udp_ip(p_address text)
+execute ctrlz_fn.admin_account_bootstrap(p_username text, p_password_hash text)
+execute ctrlz_fn.admin_account_reset(p_admin_id uuid, p_password_hash text, p_drop_totp boolean)
+execute ctrlz_fn.admin_account_set_password(p_admin_id uuid, p_password_hash text)
+execute ctrlz_fn.admin_account_totp_enable(p_admin_id uuid, p_step bigint)
+execute ctrlz_fn.admin_create_user(p_phone text, p_password_hash text, p_locale text)
+execute ctrlz_fn.admin_one_time_state(p_user_id uuid)
+execute ctrlz_fn.admin_reissue_one_time_password(p_user_id uuid, p_password_hash text)
+execute ctrlz_fn.admin_revoke_user_sessions(p_user_id uuid)
+execute ctrlz_fn.admin_sms_stats(p_days integer)
+execute ctrlz_fn.admin_throttle_hit(p_scope text, p_key bytea, p_max integer, p_window_seconds integer)
+execute ctrlz_fn.admin_throttle_refund(p_scope text, p_key bytea, p_window_seconds integer, p_epoch bigint)
+execute ctrlz_fn.admin_throttle_reset(p_scope text, p_key bytea)
+execute ctrlz_fn.admin_totp_replace(p_admin_id uuid, p_old bytea, p_new bytea)
+execute ctrlz_fn.audit_lock()
+execute ctrlz_fn.auth_tickets_revoke(p_user_id uuid)
+execute ctrlz_fn.node_pairs_lock()
+execute ctrlz_fn.node_taken_claims(p_node_id uuid, p_since_unix bigint)
+execute ctrlz_fn.node_upstreams_lock()
+policy analytics_read_floors tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy announcement_reads tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy announcements announcements_admin ALL PERMISSIVE using=true check=true
+policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy block_pages tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy certificates admin_read SELECT PERMISSIVE using=true check=-
+policy certificates admin_retire UPDATE PERMISSIVE using=(source = 'uploaded'::text) check=(source = 'uploaded'::text)
+policy certificates admin_upload INSERT PERMISSIVE using=- check=((kind = ANY (ARRAY['wildcard'::text, 'panel'::text, 'admin'::text])) AND (source = 'uploaded'::text) AND (state = 'active'::text))
+policy clients tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoint_ddns_hosts tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoint_groups tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy endpoints admin_read SELECT PERMISSIVE using=true check=-
+policy endpoints tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy feedback_items admin_read SELECT PERMISSIVE using=true check=-
+policy feedback_items tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy filter_preview_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy idempotency_keys tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy ip_claims admin_read SELECT PERMISSIVE using=true check=-
+policy ip_claims tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy ip_proof_challenges tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy job_outbox tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy notifications tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy phone_change_requests tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy policy_outbox tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_download_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_filters tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_options tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profile_services tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy profiles admin_read SELECT PERMISSIVE using=true check=-
+policy profiles tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy recovery_codes tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy refresh_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy rule_folders tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy rules tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy schedule_windows tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy sessions tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy setup_share_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_assets tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_audit_log tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenant_entitlements tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy tenants admin_read SELECT PERMISSIVE using=true check=-
+policy tenants tenant_isolation ALL PERMISSIVE using=(id = ctrlz.current_tenant_id()) check=(id = ctrlz.current_tenant_id())
+policy unblock_requests tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy users admin_read SELECT PERMISSIVE using=true check=-
+policy users tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy webauthn_credentials admin_read SELECT PERMISSIVE using=true check=-
+policy webauthn_credentials tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+schema ctrlz USAGE
+schema ctrlz_fn USAGE
+table admin_jobs INSERT
+table admin_jobs SELECT
+table admin_jobs UPDATE (finished_at, progress, state)
+table admin_sessions DELETE
+table admin_sessions INSERT
+table admin_sessions SELECT
+table admin_sessions UPDATE
+table admin_tenant_summary SELECT
+table admin_users SELECT
+table admin_users UPDATE (disabled_at, last_login_at, password_hash, pending_notice, totp_last_step, totp_secret_ct)
+table alerts SELECT
+table alerts UPDATE
+table announcements DELETE
+table announcements INSERT
+table announcements SELECT
+table announcements UPDATE
+table audit_log INSERT
+table audit_log SELECT
+table bundles INSERT
+table bundles SELECT
+table bundles UPDATE
+table catalog_common_domains INSERT
+table catalog_common_domains SELECT
+table catalog_common_domains UPDATE
+table catalog_filter INSERT
+table catalog_filter SELECT
+table catalog_filter UPDATE
+table catalog_filter_mode INSERT
+table catalog_filter_mode SELECT
+table catalog_filter_mode UPDATE
+table catalog_filter_table INSERT
+table catalog_filter_table SELECT
+table catalog_filter_table UPDATE
+table catalog_infra_denylist INSERT
+table catalog_infra_denylist SELECT
+table catalog_infra_denylist UPDATE
+table catalog_no_redirect_domain DELETE
+table catalog_no_redirect_domain INSERT
+table catalog_no_redirect_domain SELECT
+table catalog_no_redirect_domain UPDATE
+table catalog_protected_domains INSERT
+table catalog_protected_domains SELECT
+table catalog_protected_domains UPDATE
+table catalog_rewrites INSERT
+table catalog_rewrites SELECT
+table catalog_rewrites UPDATE
+table catalog_service INSERT
+table catalog_service SELECT
+table catalog_service UPDATE
+table catalog_service_alias INSERT
+table catalog_service_alias SELECT
+table catalog_service_alias UPDATE
+table catalog_service_category INSERT
+table catalog_service_category SELECT
+table catalog_service_category UPDATE
+table catalog_service_domain INSERT
+table catalog_service_domain SELECT
+table catalog_service_domain UPDATE
+table catalog_versions INSERT
+table catalog_versions SELECT
+table catalog_versions UPDATE
+table certificates INSERT (chain_pem, kind, names, not_after, not_before, source, state, wrapped_key_ct)
+table certificates SELECT (chain_pem, created_at, id, kind, names, not_after, not_before, source, state, updated_at)
+table certificates UPDATE (state)
+table config_log SELECT
+table config_snapshot SELECT
+table domain_settings SELECT
+table domain_settings UPDATE (admin_host, changed_at, dns_zone, panel_host, prev_dns_zone, transition_until)
+table endpoint_types INSERT
+table endpoint_types SELECT
+table endpoint_types UPDATE
+table endpoints SELECT (admin_hold, admin_state, first_query_at, id, last_query_at, tenant_id, type)
+table endpoints UPDATE (admin_hold)
+table feedback_items SELECT
+table feedback_items UPDATE (admin_reply, replied_at, status)
+table free_dns_counters SELECT
+table free_dns_settings SELECT
+table free_dns_settings UPDATE (enabled, qps)
+table geoip_versions INSERT
+table geoip_versions SELECT
+table geoip_versions UPDATE
+table invites INSERT (created_by, expires_at, id, locale, phone_e164, token_hash)
+table invites SELECT (created_at, expires_at, id, locale, phone_e164, revoked_at, used_at)
+table invites UPDATE (revoked_at)
+table ip_claims SELECT
+table ip_claims UPDATE (approved_by_admin, state)
+table job_outbox INSERT
+table location_availability DELETE
+table location_availability INSERT
+table location_availability SELECT
+table location_availability UPDATE
+table locations INSERT
+table locations SELECT
+table locations UPDATE
+table node_certs SELECT
+table node_certs UPDATE
+table node_dns_requests INSERT (kind, node_id, requested_by)
+table node_dns_requests SELECT
+table node_enrollments INSERT (bound_ip, expires_at, token_hash)
+table node_enrollments SELECT
+table node_enrollments UPDATE (approved_at, approved_by, node_id, rejected_at, state)
+table node_location_configs DELETE
+table node_location_configs INSERT
+table node_location_configs SELECT
+table node_location_configs UPDATE
+table node_pairs DELETE
+table node_pairs INSERT
+table node_pairs SELECT
+table node_pairs UPDATE
+table node_quarantine SELECT
+table node_quarantine UPDATE
+table node_resolver_rules DELETE
+table node_resolver_rules INSERT
+table node_resolver_rules SELECT
+table node_resolver_rules UPDATE
+table node_spki_retired INSERT
+table node_spki_retired SELECT
+table node_upstreams DELETE
+table node_upstreams INSERT
+table node_upstreams SELECT
+table node_upstreams UPDATE
+table nodes DELETE
+table nodes INSERT (applied_seq, cert_serial, created_at, dns_advertised_ip, dns_bind_ip, id, last_heartbeat_at, name, prev_cert_serial, proxy_advertised_ip, proxy_bind_ip, proxy_blocked, resolve_mode, slot, spki_sha256, updated_at, version_info)
+table nodes SELECT
+table nodes UPDATE (dns_advertised_ip, name, proxy_advertised_ip, proxy_blocked, resolve_mode, status)
+table notifications INSERT
+table pair_event_state SELECT
+table plans SELECT
+table policy_artifacts SELECT
+table policy_outbox INSERT
+table profile_presets INSERT
+table profile_presets SELECT
+table profile_presets UPDATE
+table profiles SELECT (id, kind, lock_state, locked_at, name, tenant_id)
+table profiles UPDATE (lock_message, lock_password_hash, lock_state, locked_at, locked_by)
+table public_settings SELECT
+table public_settings UPDATE
+table refresh_tokens SELECT (id, revoked_at, tenant_id, user_id)
+table sessions SELECT (created_at, id, last_seen_at, revoked_at, tenant_id, user_id)
+table sms_deliveries SELECT
+table sms_gateways INSERT
+table sms_gateways SELECT
+table sms_gateways UPDATE
+table sms_outbox INSERT (created_by, gateway_id, id, kind, locale, params_ct, phone_e164, template_key)
+table sms_outbox SELECT (attempts, created_at, created_by, gateway_id, id, kind, last_error, sent_at, state)
+table sms_provider_templates DELETE
+table sms_provider_templates INSERT
+table sms_provider_templates SELECT
+table sms_provider_templates UPDATE
+table sms_templates INSERT
+table sms_templates SELECT
+table sms_templates UPDATE
+table system_settings SELECT
+table system_settings UPDATE
+table tenant_entitlements INSERT
+table tenant_entitlements SELECT
+table tenant_entitlements UPDATE
+table tenants SELECT
+table tenants UPDATE (admin_hold, status)
+table update_status INSERT
+table update_status SELECT
+table update_status UPDATE
+table users SELECT (created_at, enforce_lift_at, enforce_passkey, id, last_login_at, locale, must_reset, onboarding_hints, onboarding_state, passkey_review_at, password_changed_at, password_expires_at, phone_e164, phone_verified_at, role, tenant_id, theme, totp_enabled_at, totp_last_step, totp_pending_at, updated_at)
+table webauthn_config SELECT
+table webauthn_config UPDATE
+table webauthn_credentials SELECT (id, rp_id, stale_at, tenant_id, user_id)
