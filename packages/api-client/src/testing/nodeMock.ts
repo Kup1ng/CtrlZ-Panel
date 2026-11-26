@@ -192,15 +192,17 @@ export function createNodeMock(initial: Partial<NodeMockState> = {}): {state: No
       const kind = (call.body as {kind: "hold" | "release" | "force_failback"}).kind;
       // The route's own rule: an active node takes all three kinds, a revoked one only a hold (SC 8a.9), a pending one none.
       if (n.status !== "active" && !(n.status === "revoked" && kind === "hold")) return fail(409, "node_state");
-      // The hub writes the unmet conditions of a held node on its tick; the mock does it at once, as it applies the hold at once.
+      // The hub writes the unmet conditions on its tick; the mock does it at once, as it applies the request at once. As the hub does
+      // (hubfail f3Unmet), it names conditions only for a withdrawn node: the held one first, the stable period last. A node still in the
+      // answer has none.
       if (kind === "hold") {
         n.dns_hold = true;
-        n.f3_unmet = ["held"];
+        n.f3_unmet = n.dns_withdrawn ? ["held", "stable_period"] : [];
         delete n.f3_due_at;
       }
       if (kind === "release") {
         n.dns_hold = false;
-        n.f3_unmet = [];
+        n.f3_unmet = n.dns_withdrawn ? ["stable_period"] : [];
       }
       return ok({request_id: newId()}, 202);
     }),

@@ -135,8 +135,21 @@ for (const {lang, dir} of LANGS) {
       // The request is decided on the hub's next tick: the mock applies a hold at once, and the page reads the node again.
       await expect(page.getByTestId("request-release")).toBeEnabled();
       await expect(page.getByTestId("request-hold")).toBeDisabled();
-      // The hub then names the hold as the condition that keeps the node out (the mock writes it at once, as it applies the hold).
-      await expect(page.getByTestId("node-failover").locator('[data-condition="held"]')).toContainText(N("node.failover.unmet.names.held"));
+      // The node is still in the answer, so F3 does not apply and the hub names no condition; a hold must not read as "every condition is met".
+      await expect(page.getByTestId("node-failover").getByTestId("f3-not-needed")).toBeVisible();
+      await expect(page.getByTestId("node-failover").getByTestId("f3-none")).toHaveCount(0);
+    });
+
+    test("T-542: holding a withdrawn node names the hold among the conditions of F3 that keep it out (GW-r1-2)", async ({page, context, baseURL}) => {
+      const w = world();
+      w.state.nodes.find((n) => n.id === w.b.id)!.dns_withdrawn = true;
+      await openAdmin(context, baseURL, {handlers: w.handlers});
+      await goto(page, w.b.id, "tehran-2");
+      await page.getByTestId("request-hold").click();
+      await page.getByTestId("confirm-hold").click();
+      const unmet = page.getByTestId("node-failover").getByTestId("f3-unmet");
+      await expect(unmet.locator('[data-condition="held"]')).toContainText(N("node.failover.unmet.names.held"));
+      await expect(unmet.locator('[data-condition="stable_period"]')).toBeVisible();
     });
 
     test("T-542: Release and Force failback send their own kinds, and the buttons follow the state the database holds", async ({page, context, baseURL}) => {

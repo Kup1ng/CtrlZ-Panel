@@ -55,7 +55,9 @@ export function NodeFailover({node, pairs, nodes}: {node: NodeView; pairs?: read
     </div>
   );
 
-  const unmet = !node.dns_withdrawn && !node.dns_hold ? (
+  // F3 applies only to a withdrawn node, held or not: the hub writes no conditions for a node that is still in the answer (hubfail f3Unmet),
+  // so an empty list of a held node that is not withdrawn must not read as "every condition is met".
+  const unmet = !node.dns_withdrawn ? (
     <span data-testid="f3-not-needed">{t("node.failover.unmet.notNeeded")}</span>
   ) : hub.f3_unmet === undefined ? (
     notReported

@@ -110,14 +110,22 @@ describe("the P4 admin mock", () => {
     expect(state.givenUp.map((g) => g.kind).sort()).toEqual(["dns", "dns", "proxy"]);
   });
 
-  it("names the hold as the unmet condition, as the hub writes it, and clears it on a release (T-542)", () => {
+  it("names the hold as an unmet condition of a withdrawn node, as the hub writes it, and drops it on a release (T-542)", () => {
+    const a = nodeFixture({slot: 1, dns_withdrawn: true});
+    const {handlers, state} = createNodeMock({nodes: [a]});
+    const send = (kind: string) => handlers["POST /nodes/{id}/dns-requests"]!(call("POST", `/nodes/${a.id}/dns-requests`, {kind}), undefined as never);
+    send("hold");
+    expect(state.nodes[0]).toMatchObject({dns_hold: true, f3_unmet: ["held", "stable_period"]});
+    send("release");
+    expect(state.nodes[0]).toMatchObject({dns_hold: false, f3_unmet: ["stable_period"]});
+  });
+
+  it("writes no condition for a held node that is still in the answer, as the hub does (GW-r1-2)", () => {
     const a = nodeFixture({slot: 1});
     const {handlers, state} = createNodeMock({nodes: [a]});
     const send = (kind: string) => handlers["POST /nodes/{id}/dns-requests"]!(call("POST", `/nodes/${a.id}/dns-requests`, {kind}), undefined as never);
     send("hold");
-    expect(state.nodes[0]).toMatchObject({dns_hold: true, f3_unmet: ["held"]});
-    send("release");
-    expect(state.nodes[0]).toMatchObject({dns_hold: false, f3_unmet: []});
+    expect(state.nodes[0]).toMatchObject({dns_hold: true, f3_unmet: []});
   });
 
   it("refuses to remove a node that a pair holds, and a pair of two nodes already paired", () => {

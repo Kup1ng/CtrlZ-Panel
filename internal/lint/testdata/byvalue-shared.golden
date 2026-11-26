@@ -37,6 +37,7 @@ shared/names/user.go::parseUser
 shared/policy/eval.go::Decide
 shared/policy/eval.go::DecideWithPre
 shared/policy/eval.go::Post
+shared/policy/eval.go::PostDefault
 shared/policy/eval.go::Pre
 shared/policy/eval.go::eval.baseFinal
 shared/policy/eval.go::eval.complete
@@ -84,6 +85,8 @@ shared/zone/eval.go::Evaluator.Columns
 shared/zone/eval.go::Evaluator.HeadNotice
 shared/zone/eval.go::Evaluator.Heartbeat
 shared/zone/eval.go::Evaluator.ProbeRound
+shared/zone/eval.go::Evaluator.TimerDue
+shared/zone/eval.go::Evaluator.Unmet
 shared/zone/eval.go::Evaluator.allHold
 shared/zone/eval.go::Evaluator.dead
 shared/zone/eval.go::Evaluator.fit

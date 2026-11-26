@@ -42,8 +42,8 @@ import (
 //     shm_size, profiles and volumes (the entries of each service). A service that is not in a table may have
 //     none of that key.
 //  4. Whatever the tables say, no volume source may be the secrets directory (or hold the word), the Docker
-//     socket or a path outside the repository, and every bind mount of a host path is read-only. These hold if
-//     someone edits the tables.
+//     socket or a path outside the repository, and every bind mount of a host path is read-only, save the one
+//     entry of composeWritableBind. These hold if someone edits the tables.
 //  5. Every named volume, network, secret and dependency a service uses is declared, and every secret entry of
 //     a service is a plain name (the long form can name a target path or a mode).
 //
@@ -117,7 +117,9 @@ func realComposeTables() composeTables {
 				"./postgres/watchdog.sh:/ctrlz-postgres/watchdog.sh:ro",
 			},
 			// P4 3.3: the hub writes hub_tls.spki to hub_public, admin reads it; both read the signed bundles and root.json.
-			"hub": {"hub_public:/var/lib/ctrlz/hub_public", "../../deploy/bundles:/var/lib/ctrlz/bundles:ro", "artifacts:/var/lib/ctrlz/artifacts:ro"},
+			"hub": {"hub_public:/var/lib/ctrlz/hub_public", "../../deploy/bundles:/var/lib/ctrlz/bundles:ro", "artifacts:/var/lib/ctrlz/artifacts:ro",
+				// P4 7.10, T-087: the one writable bind mount (composeWritableBind).
+				"../../deploy/chrony/nts:/var/lib/ctrlz/nts"},
 			// P4 6.5: the compiler, which runs in the worker, writes the artifact store; the hub reads it.
 			"worker":       {"artifacts:/var/lib/ctrlz/artifacts"},
 			"admin":        {"hub_public:/var/lib/ctrlz/hub_public:ro", "../../deploy/bundles:/var/lib/ctrlz/bundles:ro"},
@@ -272,6 +274,13 @@ func composeTopLevelProblems(doc map[string]any) (problems []string, volumes, ne
 	return problems, volumes, networks, secrets
 }
 
+// composeWritableBind is the one host path a service may mount writable, by exact service and entry, and it is a constant
+// here and not a table row so that an edit of the tables cannot open a second one. The hub issues the NTS leaf of the panel
+// host's chrony into this directory (spec 7.10): chrony is a host service that reads the two files by path, so a named
+// volume would hide them from it. The directory holds the public certificate and one key file of a leaf that only
+// serverAuth NTS-KE uses.
+var composeWritableBind = map[string]string{"hub": "../../deploy/chrony/nts:/var/lib/ctrlz/nts"}
+
 // composeVolumeProblems judges the volume entries of one service: the exact table, then the clauses that hold
 // whatever the table says (rule point 4 and the declared-volume half of point 5).
 func composeVolumeProblems(name string, vols []string, table []string, named map[string]bool) []string {
@@ -292,7 +301,7 @@ func composeVolumeProblems(name string, vols []string, table []string, named map
 				out = append(out, fmt.Sprintf("%s mounts the volume %s, which the file does not declare", name, src))
 			}
 		default:
-			if len(parts) < 3 || parts[len(parts)-1] != "ro" {
+			if (len(parts) < 3 || parts[len(parts)-1] != "ro") && composeWritableBind[name] != v {
 				out = append(out, fmt.Sprintf("%s mounts the host path %s writable: a bind mount is read-only", name, v))
 			}
 			// One of two homes only: the compose directory, or a directory of the repository two levels up.
@@ -611,6 +620,17 @@ func TestComposeVolumeClausesHoldWhateverTheTableSays(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("%s: no problem says %q although the table allows it; got %v", tc.entry, tc.want, p)
+		}
+	}
+	// The one writable bind belongs to its service and to that exact entry.
+	w := composeWritableBind["hub"]
+	if p := composeVolumeProblems("hub", []string{w}, []string{w}, declared); len(p) != 0 {
+		t.Errorf("the hub's writable bind is refused: %v", p)
+	}
+	for _, bad := range []struct{ svc, entry string }{{"worker", w}, {"hub", "../../deploy/chrony/other:/var/lib/ctrlz/nts"}, {"hub", "../../deploy/chrony/nts:/var/lib/ctrlz/nts:rw"}} {
+		p := composeVolumeProblems(bad.svc, []string{bad.entry}, []string{bad.entry}, declared)
+		if len(p) == 0 || !strings.Contains(strings.Join(p, " "), "writable") {
+			t.Errorf("%s %s: the writable clause did not refuse it: %v", bad.svc, bad.entry, p)
 		}
 	}
 	for _, ok := range []string{"pgdata:/var/lib/postgresql", "./a/b:/c:ro", "../../migrations/x:/c:ro"} {
