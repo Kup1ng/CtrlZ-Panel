@@ -68,6 +68,9 @@ type node struct {
 	// zeroOnly makes a kDropped drop the number 0 alone: a legacy key with any other
 	// value is not dropped but unknown.
 	zeroOnly bool
+	// strOnly makes a kRange refuse a JSON number: the loader reads the key into a Go string
+	// (fragment.packets), so 5 fails to decode there while "5" and "1-3" pass.
+	strOnly bool
 	// firstOnly makes a kDropped drop only on the first outbound, the one the SOCKS inbound
 	// feeds. A hop can be handed the UDP of the outbound before it, so a key that is idle
 	// for the first outbound (mux xudp keys) is an unknown key on a hop.
@@ -198,6 +201,9 @@ func bnum(lo, hi int64) *node { return &node{k: kInt, lim: &limit{lo, hi}} }
 
 // brange is a whole number, or "x-y", with both ends in [lo, hi] and x not above y.
 func brange(lo, hi int64) *node { return &node{k: kRange, lim: &limit{lo, hi}} }
+
+// brangeStr is a brange that must be written as a string, never as a JSON number.
+func brangeStr(lo, hi int64) *node { return &node{k: kRange, lim: &limit{lo, hi}, strOnly: true} }
 
 // port is a whole number from 1 to 65535.
 func port() *node { return bnum(1, 65535) }

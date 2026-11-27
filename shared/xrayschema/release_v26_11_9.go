@@ -168,7 +168,7 @@ func wireguardSettings() *node {
 func freedomSettings() *node {
 	return obj(
 		f("fragment", obj(
-			f("packets", oneOf(enumOf(false, "tlshello"), brange(1, 10))),
+			f("packets", oneOf(enumOf(false, "tlshello"), brangeStr(1, 10))),
 			f("length", brange(1, 1500)), f("interval", brange(0, 100)),
 		)),
 		f("domainStrategy", dropped()), f("targetStrategy", dropped()), f("userLevel", dropped()),

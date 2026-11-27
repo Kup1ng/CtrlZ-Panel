@@ -34,6 +34,9 @@ func fits(n *node, v *val) string {
 	case kRange:
 		switch v.k {
 		case 'n':
+			if n.strOnly {
+				return rangeText(n.lim)
+			}
 			if !wholeIn(v.s, n.lim) {
 				return rangeText(n.lim)
 			}
@@ -329,16 +332,21 @@ func allHex(s string) bool {
 }
 
 // key32OK reads a WireGuard key as ParseWireGuardKey does: 64 hex digits, or base64 of
-// 32 bytes where "-" and "_" stand for "+" and "/". The loader trims one trailing "="
-// and decodes with the Raw encodings, so a key with no padding is as valid as one with.
+// 32 bytes. The loader trims one trailing "=", then decodes the string unchanged with the
+// standard alphabet when it holds "+" or "/", and with the URL alphabet otherwise. It does
+// not convert characters, so a key that mixes the two alphabets fails there and must fail
+// here (a kind may be narrower than the loader, never wider).
 func key32OK(s string) bool {
 	if len(s) == 64 && allHex(s) {
 		_, err := hex.DecodeString(s)
 		return err == nil
 	}
 	s = strings.TrimSuffix(s, "=")
-	s = strings.NewReplacer("-", "+", "_", "/").Replace(s)
-	b, err := base64.RawStdEncoding.DecodeString(s)
+	enc := base64.RawURLEncoding
+	if strings.ContainsAny(s, "+/") {
+		enc = base64.RawStdEncoding
+	}
+	b, err := enc.DecodeString(s)
 	return err == nil && len(b) == 32
 }
 

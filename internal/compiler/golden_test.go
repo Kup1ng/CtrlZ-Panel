@@ -76,7 +76,9 @@ func rowsOf(name string, pj *vectors.ProfileJSON, f *vectors.FixtureFile, maps *
 	o.BlockTTL, o.RedirectTTL, o.BypassTTL = ttl(pj.Options.BlockTTL), ttl(pj.Options.RedirectTTL), ttl(pj.Options.BypassTTL)
 	if b := pj.Options.BlockResponse; b != nil {
 		o.BlockResponse, o.BlockV4, o.BlockV6 = b.Mode, b.V4, b.V6
-		if b.Mode != "custom" && (b.V4 != "" || b.V6 != "") {
+		// The compiler takes OPTS.block_page_hash from the profile's block page blob (p4b-proxy 11),
+		// not from an options row, so a fixture that names a hash is not reproducible from rows here.
+		if (b.Mode != "custom" && (b.V4 != "" || b.V6 != "")) || b.PageHash != "" {
 			exact = false
 		}
 	}

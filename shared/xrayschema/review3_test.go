@@ -128,7 +128,7 @@ func TestKindsOfListedKeys(t *testing.T) {
 			return strings.Replace(wireguard(``), `"address":["10.0.0.2/32"]`, `"address":`+v, 1)
 		},
 			[]string{`["10.0.0.2/32","fd00::2/128"]`, `["10.0.0.2"]`}, []string{`[]`, `["10.0.0.2/33"]`, `["a.example"]`, `["1.1.1.1","1.1.1.2","1.1.1.3","1.1.1.4","1.1.1.5","1.1.1.6","1.1.1.7","1.1.1.8","1.1.1.9"]`}},
-		{"freedom packets", hopOf(`"fragment":{"packets":VALUE}`), []string{str("tlshello"), str("1-10"), `5`, str("3"), str("TLSHELLO")}, []string{str("0"), `11`, str("1-11"), str("tlshello2")}},
+		{"freedom packets", hopOf(`"fragment":{"packets":VALUE}`), []string{str("tlshello"), str("1-10"), str("3"), str("TLSHELLO")}, []string{str("0"), `11`, str("1-11"), str("tlshello2"), `5`, `1`}},
 		{"freedom length", hopOf(`"fragment":{"length":VALUE}`), []string{`1`, `1500`, str("100-200")}, []string{`0`, `1501`, str("200-100"), str("-1"), str("1-70000"), str("a"), str("1,2"), str("1-"), str(" 1")}},
 		{"freedom interval", hopOf(`"fragment":{"interval":VALUE}`), []string{`0`, `100`, str("10-20")}, []string{`-1`, `101`, str("1-99999")}},
 		{"tls serverName", stream(`"security":"tls","tlsSettings":{"serverName":VALUE}`), []string{str("a.example"), str("203.0.113.7")}, []string{str("localhost"), `1`}},

@@ -27,7 +27,7 @@ var requiredGroups = map[string]int{
 	// by the node's table writer there.
 	"pair-table-apply": 30,
 	// P4b B1 (SC 14, p4b-proxy 7.2, 7.3): the Xray allow-list and the share link converter.
-	"xray": 142, "sharelink": 46, "grants": 39,
+	"xray": 145, "sharelink": 46, "grants": 39,
 }
 
 // extraGroups are groups the module has that section 15 does not list by name:

@@ -89,6 +89,19 @@ func TestKindsAsWideAsTheLoader(t *testing.T) {
 	if !key32OK(wgKey) || !key32OK(strings.TrimSuffix(wgKey, "=")) {
 		t.Errorf("padded or unpadded key refused: %q", wgKey)
 	}
+	// B1-r1-3: the loader converts no character. A key with a URL-only and a standard-only
+	// character fails there, whichever pair it holds.
+	std := strings.Repeat("A", 41)
+	for _, k := range []string{std + "-+", std + "_/", std + "+-", std + "/_", std + "-/", std + "_+"} {
+		if key32OK(k) {
+			t.Errorf("a key that mixes the alphabets passed: %q", k)
+		}
+	}
+	for _, k := range []string{strings.Repeat("A", 42) + "+", strings.Repeat("A", 42) + "/", strings.Repeat("A", 42) + "-", strings.Repeat("A", 42) + "_"} {
+		if !key32OK(k) {
+			t.Errorf("a key of one alphabet refused: %q", k)
+		}
+	}
 	for _, k := range []string{strings.TrimSuffix(wgKey, "=") + "==", strings.TrimSuffix(wgKey, "=")[:42], ""} {
 		if key32OK(k) {
 			t.Errorf("key %q passed", k)
