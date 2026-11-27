@@ -1,0 +1,78 @@
+{
+  "versions": [
+    {
+      "id": "11",
+      "name": "Windows 11",
+      "steps": [
+        {
+          "title": "Open the network settings",
+          "text": "Open Settings, Network & internet, then Wi-Fi or Ethernet, and open the properties of that connection."
+        },
+        {
+          "title": "Make DNS manual",
+          "text": "Next to DNS server assignment choose Edit, pick Manual and turn IPv4 on."
+        },
+        {
+          "title": "Enter the addresses",
+          "text": "Put the first one in Preferred DNS and the second in Alternate DNS.",
+          "show": [
+            "dns1",
+            "dns2"
+          ]
+        },
+        {
+          "title": "Require encryption",
+          "text": "For both servers set DNS encryption to Encrypted only (DNS over HTTPS). If it asks for a manual template, give it this address.",
+          "show": [
+            "doh_url"
+          ]
+        },
+        {
+          "title": "Save",
+          "text": "Press Save. Encrypted only stops Windows from falling back to unencrypted DNS for the IPv4 servers you entered. If your network also hands out IPv6 DNS, untick Internet Protocol Version 6 in the properties of the connection, or those servers keep working unencrypted and outside this Endpoint."
+        },
+        {
+          "title": "Check the setup",
+          "text": "A few seconds after saving, run this check to see that the device uses this Endpoint.",
+          "verify": true
+        }
+      ]
+    },
+    {
+      "id": "10",
+      "name": "Windows 10",
+      "steps": [
+        {
+          "title": "Allow this network",
+          "text": "Plain DNS only works for a network whose address you have claimed. Turn Plain DNS on for the Endpoint, then claim and prove this network's address on the Addresses page.",
+          "link": "ips"
+        },
+        {
+          "title": "Open the network adapters",
+          "text": "Open Control Panel, Network and Sharing Center, then Change adapter settings."
+        },
+        {
+          "title": "IPv4 properties",
+          "text": "Right-click your connection, choose Properties and open Internet Protocol Version 4."
+        },
+        {
+          "title": "Enter the addresses",
+          "text": "Choose Use the following DNS server addresses. Put the first in Preferred and the second in Alternate.",
+          "show": [
+            "dns1",
+            "dns2"
+          ]
+        },
+        {
+          "title": "Encrypt in your browser",
+          "text": "Windows 10 has no system-wide encrypted DNS. For encryption, set up your browser with its own guide as well."
+        },
+        {
+          "title": "Check the setup",
+          "text": "A few seconds after saving, run this check to see that the device uses this Endpoint.",
+          "verify": true
+        }
+      ]
+    }
+  ]
+}

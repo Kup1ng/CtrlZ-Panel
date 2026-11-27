@@ -1,0 +1,4090 @@
+{
+  "format": 1,
+  "group": "zone-answer",
+  "fixture": "",
+  "cases": [
+    {
+      "id": "za-001",
+      "why": "primary healthy: the primary is answered, TTL 30",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-002",
+      "why": "primary withdrawn: the fallback",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-003",
+      "why": "fallback withdrawn: the primary",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-004",
+      "why": "both withdrawn, as on a node behind a rollout: the primary",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-005",
+      "why": "both withdrawn with a local view: the primary",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "C",
+        "panel_stale": true,
+        "peer_down": [
+          "A",
+          "B"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-006",
+      "why": "pair with no fallback: the primary even when withdrawn",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": ""
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-007",
+      "why": "unknown rid: the global pair, same shape of answer",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "cccccccccccccccccccccccccc.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "cccccccccccccccccccccccccc.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-008",
+      "why": "Endpoint whose pair_id is missing from the table: the global pair",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "bbbbbbbbbbbbbbbbbbbbbbbbbb.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "bbbbbbbbbbbbbbbbbbbbbbbbbb.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-009",
+      "why": "client label under a known rid",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa-laptop.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa-laptop.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-010",
+      "why": "the Endpoint's own pair wins over the global pair",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p9",
+            "primary": "C",
+            "fallback": ""
+          },
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p9"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-011",
+      "why": "unknown rid takes the global pair, not the first pair",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p9",
+            "primary": "C",
+            "fallback": ""
+          },
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p9"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "cccccccccccccccccccccccccc.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "cccccccccccccccccccccccccc.dns.ctrlz.test. 30 IN A 93.184.216.12"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-020",
+      "why": "no table in use: a HostResolver name is REFUSED",
+      "table": null,
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "REFUSED",
+        "aa": false,
+        "answer": [],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-021",
+      "why": "no table in use: the apex NS is REFUSED",
+      "table": null,
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "dns.ctrlz.test",
+      "qtype": "NS",
+      "expect": {
+        "rcode": "REFUSED",
+        "aa": false,
+        "answer": [],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-022",
+      "why": "no table in use: ns1 is REFUSED",
+      "table": null,
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "ns1.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "REFUSED",
+        "aa": false,
+        "answer": [],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-023",
+      "why": "no table in use: the apex SOA is answered",
+      "table": null,
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "dns.ctrlz.test",
+      "qtype": "SOA",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-024",
+      "why": "no table in use: verify names are answered as usual",
+      "table": null,
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "mfrggzdfmztwq2lknnwg23tpoa.verify.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "mfrggzdfmztwq2lknnwg23tpoa.verify.dns.ctrlz.test. 0 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-025",
+      "why": "a table with no pair and an empty global pair: a HostResolver name is REFUSED",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": null,
+        "global": ""
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "REFUSED",
+        "aa": false,
+        "answer": [],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-026",
+      "why": "a table with no pair and an empty global pair: the apex NS is answered",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": null,
+        "global": ""
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "dns.ctrlz.test",
+      "qtype": "NS",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "dns.ctrlz.test. 3600 IN NS ns1.dns.ctrlz.test.",
+          "dns.ctrlz.test. 3600 IN NS ns2.dns.ctrlz.test.",
+          "dns.ctrlz.test. 3600 IN NS ns3.dns.ctrlz.test."
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-030",
+      "why": "local mode: the primary is PeerDown for the fallback",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": true,
+        "peer_down": [
+          "A"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-031",
+      "why": "local mode: the primary is PeerDown for a third node",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "C",
+        "panel_stale": true,
+        "peer_down": [
+          "A"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-032",
+      "why": "local mode: the primary never marks itself down",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "A",
+        "panel_stale": true,
+        "peer_down": [
+          "A"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-033",
+      "why": "a PeerDown view counts only while the panel is stale",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": [
+          "A"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-034",
+      "why": "primary withdrawn by the hub, fallback PeerDown from a third node: a local view never undoes a hub withdrawal",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "C",
+        "panel_stale": true,
+        "peer_down": [
+          "B"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-035",
+      "why": "primary withdrawn by the hub, fallback PeerDown from the primary itself: the fallback",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "A",
+        "panel_stale": true,
+        "peer_down": [
+          "B"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-036",
+      "why": "fallback withdrawn, primary PeerDown: the primary",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "C",
+        "panel_stale": true,
+        "peer_down": [
+          "A"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-040",
+      "why": "revoked primary, not withdrawn: the fallback",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-041",
+      "why": "revoked primary, no flags at all, as after a restart that deleted them: the fallback",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "C",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-042",
+      "why": "revoked primary, local mode with the fallback PeerDown: the fallback",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "C",
+        "panel_stale": true,
+        "peer_down": [
+          "B"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-043",
+      "why": "revoked fallback beside a primary that is not withdrawn, primary PeerDown seen from the fallback: the primary",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": true,
+        "peer_down": [
+          "A"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-044",
+      "why": "revoked fallback, primary PeerDown seen from a third node: the primary",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "C",
+        "panel_stale": true,
+        "peer_down": [
+          "A"
+        ]
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-045",
+      "why": "revoked primary beside a withdrawn fallback: the fallback",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-046",
+      "why": "withdrawn primary beside a revoked fallback: the primary",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-047",
+      "why": "both revoked: the primary",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-048",
+      "why": "a revoked primary in a pair with no fallback: the primary",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": ""
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-050",
+      "why": "IPv4 pair: A is answered",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-051",
+      "why": "IPv4 pair: AAAA is NODATA with the zone SOA",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "AAAA",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-052",
+      "why": "IPv6 pair: AAAA is answered",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "2606:2800:220:1::1",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "2606:2800:220:1::2",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "AAAA",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test. 30 IN AAAA 2606:2800:220:1::1"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-053",
+      "why": "IPv6 pair: A is NODATA",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "2606:2800:220:1::1",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "2606:2800:220:1::2",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-054",
+      "why": "other types are NODATA: TXT",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "TXT",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-055",
+      "why": "other types are NODATA: ANY",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "ANY",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-056",
+      "why": "failover does not change the NODATA",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "aaaaaaaaaaaaaaaaaaaaaaaaaa.dns.ctrlz.test",
+      "qtype": "AAAA",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-057",
+      "why": "malformed name under the zone: NXDOMAIN with the SOA",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "toolong.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NXDOMAIN",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-058",
+      "why": "a name with two labels: NXDOMAIN",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "x.y.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NXDOMAIN",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-060",
+      "why": "a verify label: the node's own address, TTL 0, unchanged by failover",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "mfrggzdfmztwq2lknnwg23tpoa.verify.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "mfrggzdfmztwq2lknnwg23tpoa.verify.dns.ctrlz.test. 0 IN A 93.184.216.11"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-061",
+      "why": "verify.\u003czone\u003e itself, the empty non-terminal: NODATA with the SOA, never NXDOMAIN, type A",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "verify.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-062",
+      "why": "verify.\u003czone\u003e itself, the empty non-terminal: NODATA with the SOA, never NXDOMAIN, type AAAA",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "verify.dns.ctrlz.test",
+      "qtype": "AAAA",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-063",
+      "why": "verify.\u003czone\u003e itself, the empty non-terminal: NODATA with the SOA, never NXDOMAIN, type TXT",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "verify.dns.ctrlz.test",
+      "qtype": "TXT",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-064",
+      "why": "verify.\u003czone\u003e itself, the empty non-terminal: NODATA with the SOA, never NXDOMAIN, type ANY",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "verify.dns.ctrlz.test",
+      "qtype": "ANY",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-070",
+      "why": "_acme-challenge TXT with an active AcmeChallenge: its value, TTL 0",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [
+        {
+          "fqdn": "_acme-challenge.dns.ctrlz.test",
+          "value": "tok-one"
+        },
+        {
+          "fqdn": "_acme-challenge.verify.dns.ctrlz.test",
+          "value": "tok-two"
+        }
+      ],
+      "self_ip": "93.184.216.11",
+      "qname": "_acme-challenge.dns.ctrlz.test",
+      "qtype": "TXT",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "_acme-challenge.dns.ctrlz.test. 0 IN TXT \"tok-one\""
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-071",
+      "why": "_acme-challenge.verify TXT with an active AcmeChallenge: its value",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [
+        {
+          "fqdn": "_acme-challenge.dns.ctrlz.test",
+          "value": "tok-one"
+        },
+        {
+          "fqdn": "_acme-challenge.verify.dns.ctrlz.test",
+          "value": "tok-two"
+        }
+      ],
+      "self_ip": "93.184.216.11",
+      "qname": "_acme-challenge.verify.dns.ctrlz.test",
+      "qtype": "TXT",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "_acme-challenge.verify.dns.ctrlz.test. 0 IN TXT \"tok-two\""
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-072",
+      "why": "_acme-challenge TXT with none: NODATA with the SOA, never NXDOMAIN",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "_acme-challenge.dns.ctrlz.test",
+      "qtype": "TXT",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-073",
+      "why": "_acme-challenge.verify TXT with none: NODATA with the SOA",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "_acme-challenge.verify.dns.ctrlz.test",
+      "qtype": "TXT",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-074",
+      "why": "_acme-challenge A: NODATA",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [
+        {
+          "fqdn": "_acme-challenge.dns.ctrlz.test",
+          "value": "tok-one"
+        },
+        {
+          "fqdn": "_acme-challenge.verify.dns.ctrlz.test",
+          "value": "tok-two"
+        }
+      ],
+      "self_ip": "93.184.216.11",
+      "qname": "_acme-challenge.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-075",
+      "why": "_acme-challenge answered with no table in use",
+      "table": null,
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [
+        {
+          "fqdn": "_acme-challenge.dns.ctrlz.test",
+          "value": "tok-one"
+        },
+        {
+          "fqdn": "_acme-challenge.verify.dns.ctrlz.test",
+          "value": "tok-two"
+        }
+      ],
+      "self_ip": "93.184.216.11",
+      "qname": "_acme-challenge.dns.ctrlz.test",
+      "qtype": "TXT",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "_acme-challenge.dns.ctrlz.test. 0 IN TXT \"tok-one\""
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-080",
+      "why": "apex NS: ns\u003cslot\u003e of every node that is not revoked, TTL 3600",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "dns.ctrlz.test",
+      "qtype": "NS",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "dns.ctrlz.test. 3600 IN NS ns1.dns.ctrlz.test.",
+          "dns.ctrlz.test. 3600 IN NS ns2.dns.ctrlz.test.",
+          "dns.ctrlz.test. 3600 IN NS ns3.dns.ctrlz.test."
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-081",
+      "why": "apex NS leaves out a revoked node",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "dns.ctrlz.test",
+      "qtype": "NS",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "dns.ctrlz.test. 3600 IN NS ns1.dns.ctrlz.test.",
+          "dns.ctrlz.test. 3600 IN NS ns3.dns.ctrlz.test."
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-082",
+      "why": "apex NS is not changed by failover",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "dns.ctrlz.test",
+      "qtype": "NS",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "dns.ctrlz.test. 3600 IN NS ns1.dns.ctrlz.test.",
+          "dns.ctrlz.test. 3600 IN NS ns2.dns.ctrlz.test.",
+          "dns.ctrlz.test. 3600 IN NS ns3.dns.ctrlz.test."
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-083",
+      "why": "ns1 of an IPv4 node: A is its dns_ip, TTL 3600",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "ns1.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "ns1.dns.ctrlz.test. 3600 IN A 93.184.216.10"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-084",
+      "why": "ns1 of an IPv4 node: AAAA is NODATA",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "ns1.dns.ctrlz.test",
+      "qtype": "AAAA",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-085",
+      "why": "ns1 of an IPv6 node: AAAA is its dns_ip",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "2606:2800:220:1::1",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "2606:2800:220:1::2",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "ns1.dns.ctrlz.test",
+      "qtype": "AAAA",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "ns1.dns.ctrlz.test. 3600 IN AAAA 2606:2800:220:1::1"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-086",
+      "why": "ns1 of an IPv6 node: A is NODATA",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "2606:2800:220:1::1",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "2606:2800:220:1::2",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "ns1.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-087",
+      "why": "ns2 of a revoked node: NODATA with the SOA, never NXDOMAIN",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": true,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "ns2.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-088",
+      "why": "ns4 of a slot no node holds: NODATA with the SOA",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "ns4.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [],
+        "authority": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ]
+      }
+    },
+    {
+      "id": "za-089",
+      "why": "ns3 is the address of its own slot whatever the pair does",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "ns3.dns.ctrlz.test",
+      "qtype": "A",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "ns3.dns.ctrlz.test. 3600 IN A 93.184.216.12"
+        ],
+        "authority": []
+      }
+    },
+    {
+      "id": "za-090",
+      "why": "apex SOA is not changed by failover",
+      "table": {
+        "version": 0,
+        "nodes": [
+          {
+            "id": "A",
+            "dns_ip": "93.184.216.10",
+            "slot": 1,
+            "revoked": false,
+            "withdrawn": true
+          },
+          {
+            "id": "B",
+            "dns_ip": "93.184.216.11",
+            "slot": 2,
+            "revoked": false,
+            "withdrawn": false
+          },
+          {
+            "id": "C",
+            "dns_ip": "93.184.216.12",
+            "slot": 3,
+            "revoked": false,
+            "withdrawn": false
+          }
+        ],
+        "pairs": [
+          {
+            "id": "p1",
+            "primary": "A",
+            "fallback": "B"
+          }
+        ],
+        "global": "p1"
+      },
+      "local": {
+        "self": "B",
+        "panel_stale": false,
+        "peer_down": []
+      },
+      "endpoints": [
+        {
+          "rid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pair": "p1"
+        },
+        {
+          "rid": "bbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pair": "zz"
+        }
+      ],
+      "acme": [],
+      "self_ip": "93.184.216.11",
+      "qname": "dns.ctrlz.test",
+      "qtype": "SOA",
+      "expect": {
+        "rcode": "NOERROR",
+        "aa": true,
+        "answer": [
+          "dns.ctrlz.test. 30 IN SOA ns1.dns.ctrlz.test. hostmaster.dns.ctrlz.test. 1 3600 600 86400 30"
+        ],
+        "authority": []
+      }
+    }
+  ]
+}
