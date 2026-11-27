@@ -1,0 +1,53 @@
+# Override for the browser tests of spec 17.1: Caddy and the two web containers, built locally, with
+# no API behind them. In mock mode the browser answers /api/v1 itself (context.route), so nothing
+# else is needed, and https://panel.localhost reaches the panel through the real Caddy, which proves
+# its headers and lets `__Host-` cookies exist.
+#
+#   docker compose -f docker-compose.yml -f e2e.yml up -d --wait caddy-init caddy web-panel web-admin
+#
+# Its project name is its own. `ctrlz` is the project of the main stack and of `scripts/ci.sh`; a
+# second project with that name would share its containers, networks and volumes, and a `down -v`
+# would take the main stack's data. The two projects still compete for host ports 80 and 443, so
+# they cannot run at the same time: bring this one down first (`down -v`). The base file also fixes the
+# subnets of `app` and `backend`, which Docker refuses to create twice, so that is a second reason.
+name: ctrlz-e2e
+
+services:
+  caddy:
+    # The base file waits for api and admin. Mock mode has neither, and the web containers are enough.
+    depends_on: !override
+      caddy-init: {condition: service_completed_successfully}
+      web-panel: {condition: service_started}
+      web-admin: {condition: service_started}
+
+  web-panel:
+    # Built by `docker build -f deploy/docker/web.Dockerfile --build-arg APP=panel --build-arg CTRLZ_VERSION="$(node scripts/ctrlz-version.mjs)" -t ctrlz/web-panel:e2e .`
+    # (spec 3.2). Never pulled: the tag exists only on this machine. The base file runs the same image under
+    # its own default tag; this one names the build of the e2e run.
+    image: ${CTRLZ_WEB_PANEL_IMAGE:-ctrlz/web-panel:e2e}
+    pull_policy: never
+    environment:
+      # The lab pages (spec 6.3, 8.10): the dialogs, states and rows specs use them. Production
+      # Compose never sets this, and routes.spec.ts checks the (lab) layout still honours it.
+      CTRLZ_LAB: "1"
+      # Empty in every run but the one that proves the web healthcheck: a wrong value makes every page a 500
+      # while the process stays up (spec 15.3), so the container must go unhealthy (merge item A14).
+      # The base file does not pass it: P4 decides how the real domain reaches this variable (open question 12).
+      CTRLZ_VERIFY_ORIGIN: ${CTRLZ_VERIFY_ORIGIN:-}
+
+  web-admin:
+    image: ${CTRLZ_WEB_ADMIN_IMAGE:-ctrlz/web-admin:e2e}
+    pull_policy: never
+
+# The base file gives every network a fixed bridge name (p6-ops 9.5, for the host firewall table). A bridge name exists once on a
+# host, and this project runs next to others (two e2e stacks, or one beside the install), so here Docker picks the names again.
+# e2e-offline.yml adds its own driver option to `ingress` on top of the empty set.
+networks:
+  ingress: {driver_opts: !reset null}
+  hub_ingress: {driver_opts: !reset null}
+  web: {driver_opts: !reset null}
+  app: {driver_opts: !reset null}
+  egress: {driver_opts: !reset null}
+  vk_api: {driver_opts: !reset null}
+  vk_admin: {driver_opts: !reset null}
+  backend: {driver_opts: !reset null}

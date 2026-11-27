@@ -1,0 +1,330 @@
+/*
+ * The app shell (spec 8). Owned by WP6. Unlayered, like tokens.css and base.css,
+ * so these rules win over HeroUI's layered ones without raising specificity.
+ * Logical properties only; tools/web-lint/check-css.mjs fails on left/right here, and
+ * on every other ban of spec 16.1 that applies to CSS.
+ */
+
+/* ---- 8.2 RTL corrections ------------------------------------------------ */
+
+/*
+ * In RTL the sidebar is passed side="right" so that it sits at the inline start of
+ * the row. Stock `.sidebar--right { order: 1 }` assumes LTR and would move it to
+ * the visual left.
+ */
+.sidebar--right:dir(rtl) {
+  order: 0;
+}
+
+.sidebar {
+  --sidebar-width: 280px;
+}
+
+/* WF has no top bar on desktop, only a header per page. The Navbar exists for the mobile hamburger. */
+@media (width >= 48rem) {
+  .app-layout__header {
+    display: none;
+  }
+}
+
+/* WF: the mobile sidebar is a full-screen panel, stock is 80vw. */
+.sidebar__mobile-sheet[data-placement="left"],
+.sidebar__mobile-sheet[data-placement="right"] {
+  width: 100vw;
+  max-width: none;
+}
+
+/* ---- 8.8 Banners share the height with the layout ----------------------- */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.shell > [data-app-layout] {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.shell .sidebar {
+  height: 100%;
+}
+
+.banner-stack {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 2);
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4) 0;
+  /* Two long banners on a phone would otherwise fill the whole height and push the layout, with its menu and bell, out of the screen:
+     the stack may take two fifths of it and scrolls inside. */
+  max-height: 40dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.banner-stack > button {
+  align-self: flex-start;
+}
+
+/* Keyboard users jump past the sidebar. Hidden until it takes focus. Its radius is the .skip-link row of radius.table.ts. */
+.skip-link {
+  position: absolute;
+  inset-block-start: calc(var(--spacing) * 2);
+  inset-inline-start: calc(var(--spacing) * 2);
+  z-index: 100;
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  background: var(--surface);
+  color: var(--foreground);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* ---- Sidebar chrome ----------------------------------------------------- */
+
+.shell-sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--spacing) * 1);
+  min-width: 0;
+}
+
+.shell-logo {
+  width: calc(var(--spacing) * 6);
+  height: calc(var(--spacing) * 6);
+  flex-shrink: 0;
+}
+
+.shell-logo-trigger {
+  min-width: 0;
+  justify-content: flex-start;
+  gap: calc(var(--spacing) * 2);
+}
+
+.shell-logo-name {
+  font-weight: 600;
+}
+
+/* Collapsed to the icon rail (48px): only the mark stays. */
+.sidebar[data-state="collapsed"] .shell-logo-name,
+.sidebar[data-state="collapsed"] .shell-bell {
+  display: none;
+}
+
+.sidebar[data-state="collapsed"] .shell-logo-trigger {
+  padding-inline: 0;
+  justify-content: center;
+}
+
+/* ---- Main column -------------------------------------------------------- */
+
+.shell-page {
+  inline-size: 100%;
+  max-inline-size: 90rem;
+  margin-inline: auto;
+  padding-inline: calc(var(--spacing) * 4);
+  padding-block: 0 calc(var(--spacing) * 10);
+  outline: none;
+}
+
+@media (width >= 48rem) {
+  .shell-page {
+    padding-inline: calc(var(--spacing) * 6);
+  }
+}
+
+/* ---- 8.4 Page header ---------------------------------------------------- */
+
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 3);
+  padding-block: calc(var(--spacing) * 8) calc(var(--spacing) * 5);
+}
+
+.page-header__row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 3);
+  min-width: 0;
+}
+
+/* The profile switcher (T-123). Below md it takes a line of its own above the title: beside it the title of a phone was cut to three letters. */
+.page-header__leading {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+@media (width < 48rem) {
+  /* Only a row that has one: a plain row keeps truncating its title in place. The title then takes the rest of its line (basis 0) and is cut with an ellipsis, so the buttons never wrap under it. */
+  .page-header__row:has(> .page-header__leading) {
+    flex-wrap: wrap;
+  }
+
+  .page-header__row:has(> .page-header__leading) .page-header__text {
+    flex: 1 1 0;
+  }
+
+  .page-header__leading {
+    flex-basis: 100%;
+  }
+}
+
+.page-header__icon {
+  /* radius: the .page-header__icon row of radius.table.ts */
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--spacing) * 10);
+  height: calc(var(--spacing) * 10);
+  background: var(--default);
+  color: var(--foreground);
+}
+
+.page-header__text {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.page-header__title {
+  font-size: var(--text-xl);
+  line-height: 1.4;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-header__subtitle {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-header__tools {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  margin-inline-start: auto;
+}
+
+.page-header__search-inline {
+  inline-size: calc(var(--spacing) * 64);
+}
+
+/* Below md the field lives under the title and the button is gone (T-115). */
+.page-header__search-mobile {
+  inline-size: 100%;
+}
+
+@media (width < 48rem) {
+  .page-header__search-inline,
+  .page-header__search-button {
+    display: none;
+  }
+}
+
+@media (width >= 48rem) {
+  .page-header__search-mobile {
+    display: none;
+  }
+}
+
+/* ---- 8.12 Onboarding ---------------------------------------------------- */
+
+.onboarding {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 3);
+  margin-block-end: calc(var(--spacing) * 6);
+}
+
+.onboarding__head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 3);
+}
+
+.onboarding__steps {
+  display: grid;
+  gap: calc(var(--spacing) * 3);
+  /* Cells never get narrower than a card needs, so a narrow content column (768px with the sidebar open) shows one column. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+}
+
+/* ---- 8.7 404 ------------------------------------------------------------ */
+
+.not-found {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-block: calc(var(--spacing) * 16);
+}
+
+.not-found--standalone {
+  min-block-size: 100dvh;
+  padding-inline: calc(var(--spacing) * 4);
+}
+
+/* ItemCard truncates its text to one line (w-fit truncate). In a narrow cell that
+   lets the description run under the action, so these cards wrap instead. */
+.onboarding .item-card__title,
+.onboarding .item-card__description {
+  width: auto;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+/* ---- Admin user menu (WP10, spec 13) ------------------------------------ */
+
+/* The trigger is a ghost button the width of the sidebar: avatar, name, and under it the fresh-TOTP line. */
+.admin-user-trigger {
+  inline-size: 100%;
+  min-inline-size: 0;
+  justify-content: flex-start;
+  gap: calc(var(--spacing) * 2);
+  block-size: auto;
+  padding-block: calc(var(--spacing) * 2);
+}
+
+.admin-user-text {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: start;
+}
+
+.admin-user-name {
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.admin-user-fresh {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* Collapsed to the icon rail: only the avatar stays. */
+.sidebar[data-state="collapsed"] .admin-user-text {
+  display: none;
+}
+
+.sidebar[data-state="collapsed"] .admin-user-trigger {
+  padding-inline: 0;
+  justify-content: center;
+}

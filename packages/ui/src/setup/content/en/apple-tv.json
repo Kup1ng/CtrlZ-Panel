@@ -1,0 +1,62 @@
+{
+  "versions": [
+    {
+      "id": "14",
+      "name": "tvOS 14+",
+      "steps": [
+        {
+          "title": "Allow this network",
+          "text": "Plain DNS only works for a network whose address you have claimed. Turn Plain DNS on for the Endpoint, then claim and prove this network's address on the Addresses page.",
+          "link": "ips"
+        },
+        {
+          "title": "Open the network settings",
+          "text": "Open Settings, Network, your network and then Configure DNS."
+        },
+        {
+          "title": "Enter the addresses",
+          "text": "Choose Manual, enter the first one, then add the second.",
+          "show": [
+            "dns1",
+            "dns2"
+          ]
+        },
+        {
+          "title": "For encryption",
+          "text": "This method is not encrypted. For encrypted DNS use Automatic Setup to build the Apple profile and install it with Apple Configurator."
+        },
+        {
+          "title": "Try it on the TV",
+          "text": "The check on this page tests the device you are reading it on, not the TV, so it is not offered here. Open an app on the TV to see that it connects."
+        }
+      ]
+    },
+    {
+      "id": "13",
+      "name": "tvOS 13 or older",
+      "steps": [
+        {
+          "title": "Allow this network",
+          "text": "Plain DNS only works for a network whose address you have claimed. Turn Plain DNS on for the Endpoint, then claim and prove this network's address on the Addresses page.",
+          "link": "ips"
+        },
+        {
+          "title": "Open the network settings",
+          "text": "Open Settings, Network, your network and then Configure DNS."
+        },
+        {
+          "title": "Enter the addresses",
+          "text": "Choose Manual, enter the first one, then add the second.",
+          "show": [
+            "dns1",
+            "dns2"
+          ]
+        },
+        {
+          "title": "Try it on the TV",
+          "text": "The check on this page tests the device you are reading it on, not the TV, so it is not offered here. Open an app on the TV to see that it connects."
+        }
+      ]
+    }
+  ]
+}

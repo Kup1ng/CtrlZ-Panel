@@ -1,0 +1,230 @@
+// Policy records carried in the ordered config log (contract section 12).
+// No message here carries tenant_id: the node never learns who owns what (R18).
+syntax = "proto3";
+
+package ctrlz.policy.v1;
+
+import "ctrlz/common/v1/common.proto";
+
+option go_package = "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/policy/v1;policyv1";
+
+enum BlobKind {
+  BLOB_KIND_UNSPECIFIED = 0;
+  BLOB_KIND_PROFILE = 1;
+  BLOB_KIND_BLOCK_PAGE = 2;
+}
+
+enum TableKind {
+  TABLE_KIND_UNSPECIFIED = 0;
+  TABLE_KIND_FILTER = 1;
+  TABLE_KIND_SERVICE = 2;
+  TABLE_KIND_CATEGORY = 3;
+}
+
+enum UnblockMode {
+  UNBLOCK_MODE_UNSPECIFIED = 0;
+  UNBLOCK_MODE_NONE = 1;
+  UNBLOCK_MODE_REQUEST = 2;
+  UNBLOCK_MODE_URL = 3;
+}
+
+enum RevocationKind {
+  REVOCATION_KIND_UNSPECIFIED = 0;
+  REVOCATION_KIND_ENDPOINT = 1;
+  REVOCATION_KIND_CLAIM = 2;
+  REVOCATION_KIND_GRANTS_BY_ENDPOINT = 3;
+}
+
+message ConfigEntry {
+  uint64 seq = 1;
+  ctrlz.common.v1.EntryClass class = 2;
+  bytes prev_hash = 3;
+  int64 created_at = 4;
+  repeated BlobRef put_blobs = 5;
+  repeated bytes del_blobs = 6;
+  repeated EndpointRecord put_endpoints = 7;
+  repeated bytes del_endpoints = 8;
+  repeated ClaimRecord put_claims = 9;
+  repeated bytes del_claims = 10;
+  PairTable pair_table = 11;
+  CatalogRef catalog = 12;
+  uint32 min_blob_major = 13;
+  // The free DNS value in force, carried only by an entry that changes it
+  // (contract 5.2a). Absent: the value in force is unchanged.
+  FreeDns free_dns = 14;
+}
+
+// The install-wide free DNS switch and budget (Plan.md D55, contract 5.2a).
+// version is the version of free_dns_settings. wire.DecodeEntry refuses a qps of
+// 0 or above wire.MaxFreeQPS, and a version of 0.
+message FreeDns {
+  bool enabled = 1;
+  uint32 qps = 2;
+  uint64 version = 3;
+}
+
+message BlobRef {
+  bytes hash = 1;
+  uint64 size = 2;
+  BlobKind kind = 3;
+}
+
+message EndpointRecord {
+  bytes endpoint_id = 1;
+  bytes rid_hash = 2;
+  bytes doh_token_hash = 3;
+  ctrlz.common.v1.AdminState admin_state = 4;
+  bool legacy_dns = 5;
+  bool require_authorized_ips = 6;
+  bool expose_ip = 7;
+  bool authorize_secure_dns = 8;
+  ctrlz.common.v1.AnalyticsLevel analytics_level = 9;
+  bytes pair_id = 10;
+  uint32 pair_version = 11;
+  StackRecord base = 12;
+  ScheduleRecord schedule = 13;
+  repeated ClientRecord clients = 14;
+  repeated ctrlz.common.v1.Prefix authorized = 15;
+  uint32 client_cap = 16;
+  uint32 grant_cap = 17;
+  // The first 16 bytes of the SHA-256 of "ctrlz-account-v1\x00" and the 16 bytes of
+  // the tenant's id (identity.AccountHash), or empty. The record still holds no
+  // tenant_id (R18); this is a one-way label that tells which Endpoints share an
+  // account. A node takes an empty one as the Endpoint's own id (P4b 3.4).
+  bytes account_hash = 18;
+}
+
+// merged_options is one 96-byte CZPB OPTS record, precomputed by the compiler
+// for the pair of profiles so the hot path never merges (R27).
+message StackRecord {
+  bytes profile1_hash = 1;
+  bytes profile2_hash = 2;
+  bytes merged_options = 3;
+  uint32 max_depth = 4;
+  bool has_dest_geo = 5;
+  bool explicit = 6;
+}
+
+message ScheduleRecord {
+  string zone = 1;
+  int32 base_offset = 2;
+  repeated OffsetTransition transitions = 3;
+  bytes grid = 4;
+  repeated WindowRecord windows = 5;
+}
+
+message OffsetTransition {
+  int64 at = 1;
+  int32 offset = 2;
+}
+
+message WindowRecord {
+  bytes window_id = 1;
+  StackRecord stack = 2;
+}
+
+message ClientRecord {
+  bytes client_id = 1;
+  bytes client_hash = 2;
+  StackRecord stack = 3;
+  ctrlz.common.v1.AnalyticsLevel analytics_override = 4;
+  bool has_analytics_override = 5;
+}
+
+message ClaimRecord {
+  bytes claim_id = 1;
+  bytes endpoint_id = 2;
+  ctrlz.common.v1.Prefix prefix = 3;
+}
+
+// version orders the withdrawal flags of pushes (contract 8a.4): it is 0 in every
+// log table and never goes backwards. The log carries the membership, and a node
+// takes only the flags and the version from a push (contract 8a.7).
+message PairTable {
+  uint64 version = 1;
+  int64 expires_at = 2;
+  bytes global_pair_id = 3;
+  repeated NodeEntry nodes = 4;
+  repeated Pair pairs = 5;
+}
+
+// dns_ip and proxy_ip are nodes.dns_advertised_ip and nodes.proxy_advertised_ip,
+// what clients and peers reach; the bind addresses never enter the table because
+// they differ behind 1:1 NAT. A node finds its own entry by node_id, never by
+// comparing addresses.
+//
+// spki_sha256 is empty for a revoked node and 32 bytes otherwise (contract 8a.4,
+// Versions). dns_withdrawn is set only by the hub in a push, is false in every
+// log table, and never stops the node serving.
+//
+// slot, 1 to 4, is nodes.slot and names the node's name server ns<slot>
+// (contract 8a.3).
+message NodeEntry {
+  bytes node_id = 1;
+  bytes dns_ip = 2;
+  bytes proxy_ip = 3;
+  bytes spki_sha256 = 4;
+  bool proxy_blocked = 5;
+  bool dns_withdrawn = 6;
+  uint32 slot = 7;
+}
+
+// primary is the address advertised to hostname clients. fallback is advertised
+// only while the primary is withdrawn or revoked or, on a node in local mode, the
+// node's own view marks the primary down (contract 8a.2 Target, 8a.5), and may be
+// empty.
+//
+// location_bitmap is indexed by location wire id (R1): bit i of byte i/8.
+message Pair {
+  bytes pair_id = 1;
+  bytes primary = 2;
+  bytes fallback = 3;
+  bytes location_bitmap = 4;
+}
+
+message CatalogRef {
+  uint64 catalog_version = 1;
+  bytes key = 2;
+  repeated TableRef tables = 3;
+  repeated LocationEntry locations = 4;
+  uint32 sysnames_version = 5;
+}
+
+// wire_id for a filter table is (filter_id << 16) | mode_wire. That packing is
+// an implementation decision of this module: the contract gives TableRef one
+// u32 and FLTS records carry (filter_id, mode_wire), so the pair has to fit.
+message TableRef {
+  uint32 wire_id = 1;
+  TableKind kind = 2;
+  bytes hash = 3;
+  uint64 size = 4;
+}
+
+message LocationEntry {
+  uint32 wire_id = 1;
+  string country = 2;
+  string city = 3;
+  string label = 4;
+}
+
+message BlockPage {
+  string title = 1;
+  string message = 2;
+  bytes logo_hash = 3;
+  UnblockMode unblock_mode = 4;
+  string unblock_url = 5;
+  // PNG bytes of the logo, at most 256 KiB; logo_hash is their SHA-256. Both or
+  // neither (P4b 3.4). The node serves the page from this blob alone.
+  bytes logo = 6;
+  // The profile the page belongs to (16 bytes). The node knows no profile id of its
+  // own and an unblock request needs one (P4b 3.4).
+  bytes profile_id = 7;
+}
+
+message Revocation {
+  uint64 rev_seq = 1;
+  RevocationKind kind = 2;
+  repeated bytes ids = 3;
+  int64 issued_at = 4;
+  int64 expires_at = 5;
+}

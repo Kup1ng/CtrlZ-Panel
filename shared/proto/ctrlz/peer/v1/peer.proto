@@ -1,0 +1,43 @@
+// Node to node grant forwarding inside a pair (contract sections 10.3, 10.4, 12).
+// mTLS only. The peer certificate's SPKI must equal a non-empty spki_sha256 of the
+// PairTable of the receiver's applied log entry, never of a push (contract 8a.7),
+// so a revoked node is refused once the receiver applies the entry that empties it.
+syntax = "proto3";
+
+package ctrlz.peer.v1;
+
+option go_package = "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/peer/v1;peerv1";
+
+service PeerNode {
+  rpc Forward(stream GrantForward) returns (stream GrantAck);
+  rpc Revoke(GrantRevoke) returns (RevokeAck);
+}
+
+message GrantForward {
+  bytes grant_id = 1;
+  bytes endpoint_id = 2;
+  bytes source_prefix = 3;
+  bytes name_wire = 4;
+  uint32 location = 5;
+  bytes dial_host_wire = 6;
+  uint32 grant_kind = 7;
+  int64 expires_at = 8;
+  uint64 sender_config_seq = 9;
+  // The client of the Endpoint whose query decided the Grant, as its 16-byte
+  // client_hash, or empty when the Endpoint's own profile decided (P4b 3.4). The
+  // receiver needs it to pick the stack AcceptGrant runs with, because a client
+  // can have a profile of its own. source_prefix is always a full-length prefix.
+  bytes client_hash = 10;
+}
+
+message GrantAck {
+  bytes grant_id = 1;
+  bool accepted = 2;
+}
+
+message GrantRevoke {
+  bytes endpoint_id = 1;
+  uint64 rev_seq = 2;
+}
+
+message RevokeAck {}

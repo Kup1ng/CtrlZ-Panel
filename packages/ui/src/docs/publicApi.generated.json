@@ -1,0 +1,6023 @@
+{
+ "title": "Ctrl Z public API",
+ "version": "0.2.0-p1",
+ "description": "The public API of Ctrl Z: the operations an API token may call.\n\nMake a token in Preferences, API. A token is `read` or `write` for good, may be limited to some addresses, and lives 365 days. Send it as `Authorization: Bearer ctz_...`. A `read` token cannot call an operation that changes anything. A request that carries a session cookie as well is refused, and so is a token on an operation that is not in this document.\n\nErrors are `Error` bodies. A token that is not live is `401 token_invalid`; `403 token_read_only`, `403 token_ip_not_allowed`, `403 token_not_allowed` and `403 account_suspended` say why a live one was refused; `429 rate_limited` carries `Retry-After`.",
+ "server": "/api/v1",
+ "tags": [
+  {
+   "name": "account",
+   "description": "The signed-in user's own account."
+  },
+  {
+   "name": "endpoints",
+   "description": "Endpoints, their groups, schedules and clients."
+  },
+  {
+   "name": "profiles",
+   "description": "Profiles, their documents, the lock, and the batch jobs."
+  },
+  {
+   "name": "options",
+   "description": "The options of a profile, the Default Rule among them."
+  },
+  {
+   "name": "filters",
+   "description": "The catalog of filters and the filters a profile turns on."
+  },
+  {
+   "name": "services",
+   "description": "The services a profile blocks, bypasses or redirects."
+  },
+  {
+   "name": "service-categories",
+   "description": "The catalog of services and their categories."
+  },
+  {
+   "name": "rule-folders",
+   "description": "The folders of a profile's custom rules and their export and upload."
+  },
+  {
+   "name": "custom-rules",
+   "description": "The custom rules of a profile."
+  },
+  {
+   "name": "locations",
+   "description": "The locations a profile may use."
+  },
+  {
+   "name": "authorized-ips",
+   "description": "The addresses authorized to use an Endpoint."
+  }
+ ],
+ "shared": {
+  "Problem": "An error of spec 14.3. The status and `code` are the pair of that table;\nthe codes an operation can raise are in its description. `Retry-After`\naccompanies 429 and 503 answers that have a wait."
+ },
+ "operations": [
+  {
+   "id": "getLimits",
+   "tag": "account",
+   "method": "GET",
+   "path": "/account/limits",
+   "summary": "The quotas in force, read only",
+   "token": "read",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One number per quota.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Limits"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "listCatalogFilters",
+   "tag": "filters",
+   "method": "GET",
+   "path": "/catalog/filters",
+   "summary": "The 20 Native and 12 3rd Party filters with their modes",
+   "token": "read",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Every filter.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "CatalogFilterList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Names in both languages, the state of each filter and, for a filter with several modes, its modes in wire order\nwith the default marked. A filter with one mode lists none. New Domains does not cover names under `.ir` or\n`.ایران`, because their registration date is not published anywhere (D45): the panel says so when the filter is\nswitched on or its mode is changed, and the same sentence is in the filter's explanation."
+  },
+  {
+   "id": "listCatalogServices",
+   "tag": "service-categories",
+   "method": "GET",
+   "path": "/catalog/services",
+   "summary": "The service categories and the services of the catalog",
+   "token": "read",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Every category and service.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "CatalogServiceList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "listTimezones",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/catalog/timezones",
+   "summary": "The time zones a schedule may use",
+   "token": "read",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The zones.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "TimezoneList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "The region zones of the Go time zone database the panel embeds, which the compiler resolves too."
+  },
+  {
+   "id": "listEndpointGroups",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/endpoint-groups",
+   "summary": "The tenant's Endpoint groups",
+   "token": "read",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The groups, oldest first.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "GroupList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "createEndpointGroup",
+   "tag": "endpoints",
+   "method": "POST",
+   "path": "/endpoint-groups",
+   "summary": "Create a group, and move Endpoints into it",
+   "token": "write",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "201",
+     "description": "The group.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Group"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `validation_failed` (`max_endpoint_groups` exceeded).",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "GroupCreate",
+    "required": true
+   }
+  },
+  {
+   "id": "patchEndpointGroup",
+   "tag": "endpoints",
+   "method": "PATCH",
+   "path": "/endpoint-groups/{gid}",
+   "summary": "Rename a group",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "gid",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The group.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Group"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "request": {
+    "mediaType": "application/json",
+    "ref": "GroupRename",
+    "required": true
+   }
+  },
+  {
+   "id": "deleteEndpointGroup",
+   "tag": "endpoints",
+   "method": "DELETE",
+   "path": "/endpoint-groups/{gid}",
+   "summary": "Delete a group; its Endpoints stay, with no group",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "gid",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "listEndpointTypes",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/endpoint-types",
+   "summary": "The 30 Endpoint types, in the order of the seed",
+   "token": "read",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The types.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "EndpointTypeList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "listEndpoints",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/endpoints",
+   "summary": "The tenant's Endpoints, one page",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "group",
+     "in": "query",
+     "required": false,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "type",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "limits": "1 to 32 characters"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "required": false,
+     "type": "\"pending\" | \"active\"",
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "q",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "description": "A case-insensitive part of the name.",
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "sort",
+     "in": "query",
+     "required": false,
+     "type": "\"created\" | \"name\"",
+     "description": "`created` is newest first (the default); `name` is alphabetical.",
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "description": "Opaque. Take it from `next_cursor`; a value that does not decode, or was made for another list order, is `bad_request`. Longer than Cursor because the position of an alphabetical page carries the name.",
+     "limits": "1 to 600 characters"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "required": false,
+     "type": "integer",
+     "limits": "1 to 100"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "EndpointPage"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "createEndpoints",
+   "tag": "endpoints",
+   "method": "POST",
+   "path": "/endpoints",
+   "summary": "Create one Endpoint per name",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "required": true,
+     "type": "string",
+     "description": "1 to 64 characters of `A-Z a-z 0-9 _ -`. A replay with the same request gives the same answer and no second effect; the same key with another request is `idempotency_key_reused`.",
+     "limits": "1 to 64 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "201",
+     "description": "The Endpoints, in the order of the names.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "EndpointCreated"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `validation_failed` (`max_endpoints` exceeded, a name, a profile), `destinations_lost`, `idempotency_key_reused`, `conflict`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "EndpointCreate",
+    "required": true
+   }
+  },
+  {
+   "id": "getEndpoint",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/endpoints/{id}",
+   "summary": "One Endpoint",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The Endpoint.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Endpoint"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "patchEndpoint",
+   "tag": "endpoints",
+   "method": "PATCH",
+   "path": "/endpoints/{id}",
+   "summary": "Change an Endpoint",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The Endpoint.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Endpoint"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `destinations_lost`, `validation_failed`\n(`needs_authorized_ip`, `same_profile`), `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "EndpointPatch",
+    "required": true
+   }
+  },
+  {
+   "id": "listAuthorizedIps",
+   "tag": "authorized-ips",
+   "method": "GET",
+   "path": "/endpoints/{id}/authorized-ips",
+   "summary": "The authorized addresses of an Endpoint, newest first",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "q",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "description": "A part of the address, as text.",
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "description": "Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.",
+     "limits": "1 to 128 characters"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "required": false,
+     "type": "integer",
+     "limits": "1 to 100"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "AuthorizedPage"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "`is_current` marks the row that holds the address of this request: its delete is refused (spec 5 rule 1)."
+  },
+  {
+   "id": "addAuthorizedIps",
+   "tag": "authorized-ips",
+   "method": "POST",
+   "path": "/endpoints/{id}/authorized-ips",
+   "summary": "Add up to 100 addresses or subnets",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "201",
+     "description": "The rows made.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "AuthorizedAdded"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "IPv4 /16 or narrower, IPv6 /32 or narrower. Any refused prefix refuses the request, each named by its index in `cidrs`.\nErrors: `validation_failed` (`invalid`, `out_of_range`, `exists`, `duplicate`, `max_authorized_ips` exceeded).",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "AuthorizedAdd",
+    "required": true
+   }
+  },
+  {
+   "id": "patchAuthorizedIp",
+   "tag": "authorized-ips",
+   "method": "PATCH",
+   "path": "/endpoints/{id}/authorized-ips/{aid}",
+   "summary": "Opt a row in or out of the automatic cleanup",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "aid",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The row.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "AuthorizedIP"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Turning it on while the Endpoint requires authorized IPs needs the lock passwords. Errors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "AuthorizedPatch",
+    "required": true
+   }
+  },
+  {
+   "id": "deleteAuthorizedIps",
+   "tag": "authorized-ips",
+   "method": "POST",
+   "path": "/endpoints/{id}/authorized-ips:delete",
+   "summary": "Delete authorized addresses",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "All or none. The row that holds the address of the request, and the last row of an Endpoint that requires authorized IPs,\nare not deleted: `validation_failed` with `current_address` or `last_authorized` on the indexes of `ids`. While Require is\non the lock passwords are needed: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "AuthorizedDelete",
+    "required": true
+   }
+  },
+  {
+   "id": "listClients",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/endpoints/{id}/clients",
+   "summary": "The clients of an Endpoint, newest first",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "q",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "group",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "inactive_days",
+     "in": "query",
+     "required": false,
+     "type": "integer",
+     "limits": "1 to 3650"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "description": "Opaque. Take it from `next_cursor`; a value that does not decode is `bad_request`.",
+     "limits": "1 to 128 characters"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "required": false,
+     "type": "integer",
+     "limits": "1 to 100"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ClientPage"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "`count` is how many clients match the filter, whatever the page."
+  },
+  {
+   "id": "createClient",
+   "tag": "endpoints",
+   "method": "POST",
+   "path": "/endpoints/{id}/clients",
+   "summary": "Add a custom client",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "201",
+     "description": "The client.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Client"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "The label is given or derived from the alias; `default` is the hub's own. Errors: `profile_locked`,\n`invalid_credentials`, `too_many_attempts`, `destinations_lost`, `validation_failed` (`exists`, `reserved`,\n`max_clients_per_endpoint` exceeded), `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "ClientCreate",
+    "required": true
+   }
+  },
+  {
+   "id": "patchClient",
+   "tag": "endpoints",
+   "method": "PATCH",
+   "path": "/endpoints/{id}/clients/{cid}",
+   "summary": "Change a client",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "cid",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The client.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Client"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `destinations_lost`, `validation_failed`,\n`server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "ClientPatch",
+    "required": true
+   }
+  },
+  {
+   "id": "batchClients",
+   "tag": "endpoints",
+   "method": "POST",
+   "path": "/endpoints/{id}/clients:batch",
+   "summary": "Edit or delete clients by id or by a selector",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "How many clients were changed, and whether matches remain.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ClientBatchResult"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Exactly one of `ids` and `selector`. A selector resolves at most 500 clients in the write; `more` says matches\nremain, so the caller repeats. Errors: as for a change of one client.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "ClientBatch",
+    "required": true
+   }
+  },
+  {
+   "id": "listDdnsHosts",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/endpoints/{id}/ddns-hosts",
+   "summary": "The Dynamic DNS hosts of an Endpoint",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The hosts, oldest first.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "DdnsHostList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "createDdnsHost",
+   "tag": "endpoints",
+   "method": "POST",
+   "path": "/endpoints/{id}/ddns-hosts",
+   "summary": "Add a Dynamic DNS host",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "201",
+     "description": "The host.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "DdnsHost"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "At most five an Endpoint. A host never proves an address (spec 4.5). Errors: `validation_failed` (`invalid`, `exceeded`,\n`exists` on `/hostname`, `max_ddns_hosts` exceeded).",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "DdnsHostCreate",
+    "required": true
+   }
+  },
+  {
+   "id": "deleteDdnsHost",
+   "tag": "endpoints",
+   "method": "POST",
+   "path": "/endpoints/{id}/ddns-hosts/{hid}:delete",
+   "summary": "Delete a Dynamic DNS host and the addresses it learned",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "hid",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "The rows the host learned go through the same rules as an authorized delete (spec 5). Errors: `validation_failed`\n(`current_address`, `last_authorized`), `profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "LockPasswordsBody",
+    "required": true
+   }
+  },
+  {
+   "id": "getEndpointGenerator",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/endpoints/{id}/generators",
+   "summary": "One generated setup text",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "generator",
+     "in": "query",
+     "required": true,
+     "type": "string",
+     "description": "The id of a generator of the registry, such as `windows-doh`, `firefox-policy`, `chromium-policy`, `android-private-dns` or `address-list`.",
+     "limits": "1 to 32 characters"
+    },
+    {
+     "name": "client",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "description": "A client label of the Endpoint (SC 3.1). Without it the view is the Endpoint's own.",
+     "limits": "1 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The text, as `text/plain`."
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "The output of one generator of the registry (P3 8.2) as `text/plain`: Windows commands, a Firefox or a Chromium policy, the\nAndroid Private DNS host, the addresses for a router or a TV. The text carries the DoH token. Errors: `not_found` for a\ngenerator that is not in the registry, `setup_unavailable` while no domain or no pair is set."
+  },
+  {
+   "id": "getEndpointResolvers",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/endpoints/{id}/resolvers",
+   "summary": "The values to set a device up with",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "client",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "description": "A client label of the Endpoint (SC 3.1). Without it the view is the Endpoint's own.",
+     "limits": "1 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The view.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ResolverView"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "The Resolver view of one Endpoint and, with `client`, of one of its clients (P3 8.1): the host, the DoH URL, the Legacy\nDNS addresses, the bootstrap addresses and the DNS Stamps. It carries the DoH token. While no domain or no pair is set\n`ready` is false and `reason` says which."
+  },
+  {
+   "id": "getEndpointSchedule",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/endpoints/{id}/schedule",
+   "summary": "The schedule of an Endpoint",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The zone and the windows, ordered by start.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Schedule"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "putEndpointSchedule",
+   "tag": "endpoints",
+   "method": "PUT",
+   "path": "/endpoints/{id}/schedule",
+   "summary": "Replace the schedule of an Endpoint",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The schedule as stored.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Schedule"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "The windows are in minutes of the week, Sunday 00:00 being 0, in multiples of 30. Errors: `profile_locked`,\n`invalid_credentials`, `too_many_attempts`, `destinations_lost`, `validation_failed` (`grid`, `overlap`, `exceeded`),\n`server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "SchedulePut",
+    "required": true
+   }
+  },
+  {
+   "id": "deleteEndpoint",
+   "tag": "endpoints",
+   "method": "POST",
+   "path": "/endpoints/{id}:delete",
+   "summary": "Delete an Endpoint",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `endpoint_held`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "LockPasswordsBody",
+    "required": true
+   }
+  },
+  {
+   "id": "rotateEndpointResolver",
+   "tag": "endpoints",
+   "method": "POST",
+   "path": "/endpoints/{id}:rotate-resolver",
+   "summary": "Draw a new resolver id and DoH token",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The Endpoint, with its new resolver id.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Endpoint"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Every device must be set up again and every share and download link of the Endpoint ends. Errors:\n`profile_locked`, `invalid_credentials`, `too_many_attempts`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "LockPasswordsBody",
+    "required": true
+   }
+  },
+  {
+   "id": "exportEndpoints",
+   "tag": "endpoints",
+   "method": "GET",
+   "path": "/endpoints/export",
+   "summary": "The Endpoints as a CSV file",
+   "token": "read",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The file, as `text/csv`."
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "`text/csv`, UTF-8 with a byte order mark. Columns: name, type, group, profile, profile 2, status, admin state,\nanalytics, resolver id, host, Legacy DNS, last query (RFC 3339 UTC), created. Never the DoH token. A cell that\nstarts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading apostrophe."
+  },
+  {
+   "id": "batchEndpoints",
+   "tag": "endpoints",
+   "method": "POST",
+   "path": "/endpoints:batch",
+   "summary": "Move, edit or delete a selection of Endpoints",
+   "token": "write",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "200",
+     "description": "How many Endpoints the operation touched.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "AffectedCount"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Up to 500 ids. A delete or a change that takes a locked profile away needs its lock password in `lock_passwords`.\nErrors: `profile_locked`, `invalid_credentials`, `too_many_attempts`, `endpoint_held`, `destinations_lost`,\n`validation_failed`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "EndpointBatch",
+    "required": true
+   }
+  },
+  {
+   "id": "getJob",
+   "tag": "profiles",
+   "method": "GET",
+   "path": "/jobs/{id}",
+   "summary": "One job",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The job.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Job"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `server_busy` when the answer of a finished job is large and the tenant already holds its share of answers that clients have not read yet; retry."
+  },
+  {
+   "id": "getActiveJob",
+   "tag": "profiles",
+   "method": "GET",
+   "path": "/jobs/active",
+   "summary": "The tenant's queued or running job, if any",
+   "token": "read",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The job, or none.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ActiveJob"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "listProfiles",
+   "tag": "profiles",
+   "method": "GET",
+   "path": "/profiles",
+   "summary": "The tenant's profiles with their counters",
+   "token": "read",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Oldest first.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ProfileList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "createProfile",
+   "tag": "profiles",
+   "method": "POST",
+   "path": "/profiles",
+   "summary": "Create a profile from one of the seven types",
+   "token": "write",
+   "parameters": [],
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created. `flagged` counts the destinations of the type the profile cannot use yet.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ProfileCreated"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `validation_failed` (the name, the kind, `max_profiles` exceeded).",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "ProfileCreate",
+    "required": true
+   }
+  },
+  {
+   "id": "getProfile",
+   "tag": "profiles",
+   "method": "GET",
+   "path": "/profiles/{id}",
+   "summary": "One profile",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The profile.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Profile"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "renameProfile",
+   "tag": "profiles",
+   "method": "PATCH",
+   "path": "/profiles/{id}",
+   "summary": "Rename a profile",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The profile.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Profile"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `validation_failed`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "ProfileRename",
+    "required": true
+   }
+  },
+  {
+   "id": "deleteProfile",
+   "tag": "profiles",
+   "method": "DELETE",
+   "path": "/profiles/{id}",
+   "summary": "Delete an unlocked profile",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `profile_in_use` (an Endpoint or a schedule window uses it)."
+  },
+  {
+   "id": "disableProfile",
+   "tag": "profiles",
+   "method": "PUT",
+   "path": "/profiles/{id}/disabled",
+   "summary": "Disable a profile for a while or until a moment",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The profile.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Profile"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `validation_failed`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "ProfileDisable",
+    "required": true
+   }
+  },
+  {
+   "id": "enableProfile",
+   "tag": "profiles",
+   "method": "DELETE",
+   "path": "/profiles/{id}/disabled",
+   "summary": "Switch a disabled profile back on",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The profile.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Profile"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`."
+  },
+  {
+   "id": "exportProfile",
+   "tag": "profiles",
+   "method": "GET",
+   "path": "/profiles/{id}/export",
+   "summary": "The profile as a document, in canonical form",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The document. The same profile gives the same bytes.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ProfileDocument"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `server_busy` when the process has no room to build the document now; the tenant may retry."
+  },
+  {
+   "id": "listProfileFilters",
+   "tag": "filters",
+   "method": "GET",
+   "path": "/profiles/{id}/filters",
+   "summary": "The filters the profile has switched on or off",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The filters of the profile.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ProfileFilterList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "New Domains does not cover names under `.ir` or `.ایران`, because their registration date is not published anywhere\n(D45). The panel shows this sentence when the filter is switched on or its mode is changed."
+  },
+  {
+   "id": "setProfileFilter",
+   "tag": "filters",
+   "method": "PUT",
+   "path": "/profiles/{id}/filters/{filter_id}",
+   "summary": "Switch a filter on or off and choose its mode",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "filter_id",
+     "in": "path",
+     "required": true,
+     "type": "string",
+     "limits": "0 to 64 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The filter.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ProfileFilter"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `validation_failed`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "ProfileFilterSet",
+    "required": true
+   }
+  },
+  {
+   "id": "listFolders",
+   "tag": "rule-folders",
+   "method": "GET",
+   "path": "/profiles/{id}/folders",
+   "summary": "The rule folders of the profile",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The folders.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "FolderList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `server_busy` when the answer is large and the tenant already holds its share of answers that clients have not read yet; retry."
+  },
+  {
+   "id": "createFolder",
+   "tag": "rule-folders",
+   "method": "POST",
+   "path": "/profiles/{id}/folders",
+   "summary": "Create a folder",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Folder"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `validation_failed`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "FolderCreate",
+    "required": true
+   }
+  },
+  {
+   "id": "updateFolder",
+   "tag": "rule-folders",
+   "method": "PATCH",
+   "path": "/profiles/{id}/folders/{folder_id}",
+   "summary": "Edit a folder",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "folder_id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The folder.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Folder"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `validation_failed`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "FolderPatch",
+    "required": true
+   }
+  },
+  {
+   "id": "deleteFolder",
+   "tag": "rule-folders",
+   "method": "DELETE",
+   "path": "/profiles/{id}/folders/{folder_id}",
+   "summary": "Delete a folder and the rules in it",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "folder_id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`."
+  },
+  {
+   "id": "exportFolderRules",
+   "tag": "rule-folders",
+   "method": "GET",
+   "path": "/profiles/{id}/folders/{folder_id}/export",
+   "summary": "Export Rules of a folder as a rules document",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "folder_id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The document.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "RulesDocument"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `server_busy` when the process has no room to build the document now; the tenant may retry."
+  },
+  {
+   "id": "uploadFolderRules",
+   "tag": "rule-folders",
+   "method": "POST",
+   "path": "/profiles/{id}/folders/{folder_id}:upload",
+   "summary": "Upload Folder, merging a rules document into a folder",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "folder_id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "required": true,
+     "type": "string",
+     "description": "1 to 64 characters of `A-Z a-z 0-9 _ -`. A replay with the same request gives the same answer and no second effect; the same key with another request is `idempotency_key_reused`.",
+     "limits": "1 to 64 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "What each rule came to.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "BatchResult"
+     }
+    },
+    {
+     "status": "202",
+     "description": "Queued as a job.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Job"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Never deletes. A key that lives in another folder is a `conflict`. Above 1,000 rules the request is a job and\nanswers 202. Errors: `profile_locked`, `validation_failed`, `idempotency_key_reused`, `job_running`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "RulesUpload",
+    "required": true
+   }
+  },
+  {
+   "id": "getProfileLocations",
+   "tag": "locations",
+   "method": "GET",
+   "path": "/profiles/{id}/locations",
+   "summary": "The locations the profile may use, optionally limited to some services",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "services",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "description": "Comma separated slugs, at most 100.",
+     "limits": "1 to 7000 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The set.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "LocationSet"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `validation_failed` (an unknown slug, or more than 100)."
+  },
+  {
+   "id": "getOptions",
+   "tag": "options",
+   "method": "GET",
+   "path": "/profiles/{id}/options",
+   "summary": "The options of the profile",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The options that are set.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Options"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "patchOptions",
+   "tag": "options",
+   "method": "PATCH",
+   "path": "/profiles/{id}/options",
+   "summary": "Set or clear options",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The options.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Options"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `validation_failed`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "OptionsPatch",
+    "required": true
+   }
+  },
+  {
+   "id": "listRules",
+   "tag": "custom-rules",
+   "method": "GET",
+   "path": "/profiles/{id}/rules",
+   "summary": "One page of the profile's rules",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "folder",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "q",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "limits": "0 to 253 characters"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "required": false,
+     "type": "\"enabled\" | \"disabled\" | \"expired\"",
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "action",
+     "in": "query",
+     "required": false,
+     "type": "\"block\" | \"bypass\" | \"redirect\" | \"inherit\"",
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "sort",
+     "in": "query",
+     "required": false,
+     "type": "\"pattern\" | \"created\" | \"updated\"",
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "required": false,
+     "type": "string",
+     "description": "Opaque. Take it from `next_cursor`; a value that does not decode, or an empty one, is `bad_request`. Longer than Cursor because a pattern-sort position carries the rule key (up to 347 bytes), so the longest form is 7+1+347+1+36+1+36 = 429 bytes, 572 characters.",
+     "limits": "1 to 600 characters"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "required": false,
+     "type": "integer",
+     "limits": "1 to 100"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "A page.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "RulePage"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "`folder` is a folder id or `root`; `q` is lowered, split on dots and matched as a substring of the rule key, a\nlabel with a non-ASCII letter by its A-label; `sort` is `pattern`, `created` or `updated`.\nErrors: `server_busy` when the page is large and the tenant already holds its share of answers that clients have not read yet; retry."
+  },
+  {
+   "id": "createRules",
+   "tag": "custom-rules",
+   "method": "POST",
+   "path": "/profiles/{id}/rules",
+   "summary": "Create rules, one per pattern",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "201",
+     "description": "The new rules.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "RuleList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "All or none. At most 1,000 patterns, so it always runs inline. Errors: `profile_locked`, `validation_failed`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "RulesCreate",
+    "required": true
+   }
+  },
+  {
+   "id": "updateRule",
+   "tag": "custom-rules",
+   "method": "PATCH",
+   "path": "/profiles/{id}/rules/{rule_id}",
+   "summary": "Edit one rule",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "rule_id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The rule.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Rule"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `validation_failed`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "RulePatch",
+    "required": true
+   }
+  },
+  {
+   "id": "deleteRule",
+   "tag": "custom-rules",
+   "method": "DELETE",
+   "path": "/profiles/{id}/rules/{rule_id}",
+   "summary": "Delete one rule",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "rule_id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`."
+  },
+  {
+   "id": "transferRule",
+   "tag": "custom-rules",
+   "method": "POST",
+   "path": "/profiles/{id}/rules/{rule_id}:transfer",
+   "summary": "Copy or move one rule",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "rule_id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "What the rule came to.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "BatchResult"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "The batch semantics for one id. Errors: `profile_locked`, `validation_failed`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "RuleTransfer",
+    "required": true
+   }
+  },
+  {
+   "id": "batchRules",
+   "tag": "custom-rules",
+   "method": "POST",
+   "path": "/profiles/{id}/rules:batch",
+   "summary": "Copy, move, edit, enable, disable or delete a selection of rules",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "required": true,
+     "type": "string",
+     "description": "1 to 64 characters of `A-Z a-z 0-9 _ -`. A replay with the same request gives the same answer and no second effect; the same key with another request is `idempotency_key_reused`.",
+     "limits": "1 to 64 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "What each item came to.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "BatchResult"
+     }
+    },
+    {
+     "status": "202",
+     "description": "Queued as a job.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Job"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "`ids` or a `selector`, exactly one. Above 1,000 rules the request is a job and answers 202. Errors:\n`profile_locked`, `validation_failed`, `idempotency_key_reused`, `job_running`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "RulesBatch",
+    "required": true
+   }
+  },
+  {
+   "id": "listProfileServices",
+   "tag": "services",
+   "method": "GET",
+   "path": "/profiles/{id}/services",
+   "summary": "The services the profile has",
+   "token": "read",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The services of the profile.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ProfileServiceList"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ]
+  },
+  {
+   "id": "setProfileService",
+   "tag": "services",
+   "method": "PUT",
+   "path": "/profiles/{id}/services/{slug}",
+   "summary": "Set the state of one service",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "slug",
+     "in": "path",
+     "required": true,
+     "type": "string",
+     "limits": "0 to 64 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The service.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ProfileService"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`, `validation_failed` (`iranian_name` for a Redirect on a service that is never proxied).",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "ProfileServiceSet",
+    "required": true
+   }
+  },
+  {
+   "id": "deleteProfileService",
+   "tag": "services",
+   "method": "DELETE",
+   "path": "/profiles/{id}/services/{slug}",
+   "summary": "Remove a service from the profile",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "slug",
+     "in": "path",
+     "required": true,
+     "type": "string",
+     "limits": "0 to 64 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Removed."
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Errors: `profile_locked`."
+  },
+  {
+   "id": "batchProfileServices",
+   "tag": "services",
+   "method": "POST",
+   "path": "/profiles/{id}/services:batch",
+   "summary": "Set or remove several services at once",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "What each slug came to.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "BatchResult"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "`op: set` upserts each slug with the given state (Choose Service Add, the group actions), `op: delete` removes\nthem. At most 2,000 slugs, so it always runs inline. Errors: `profile_locked`, `validation_failed`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "ServicesBatch",
+    "required": true
+   }
+  },
+  {
+   "id": "duplicateProfile",
+   "tag": "profiles",
+   "method": "POST",
+   "path": "/profiles/{id}:duplicate",
+   "summary": "Duplicate a profile under a new name",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "type": "uuid",
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "required": true,
+     "type": "string",
+     "description": "1 to 64 characters of `A-Z a-z 0-9 _ -`. A replay with the same request gives the same answer and no second effect; the same key with another request is `idempotency_key_reused`.",
+     "limits": "1 to 64 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ProfileCreated"
+     }
+    },
+    {
+     "status": "202",
+     "description": "Queued as a job.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Job"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "Export of the source followed by Import of that document. The copy is unlocked; a locked profile can be\nduplicated. Above 1,000 rules the request is a job and answers 202.\nErrors: `validation_failed`, `idempotency_key_reused`, `job_running`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "ProfileDuplicate",
+    "required": true
+   }
+  },
+  {
+   "id": "importProfile",
+   "tag": "profiles",
+   "method": "POST",
+   "path": "/profiles:import",
+   "summary": "Import a profile document",
+   "token": "write",
+   "parameters": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "required": true,
+     "type": "string",
+     "description": "1 to 64 characters of `A-Z a-z 0-9 _ -`. A replay with the same request gives the same answer and no second effect; the same key with another request is `idempotency_key_reused`.",
+     "limits": "1 to 64 characters"
+    }
+   ],
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "ProfileCreated"
+     }
+    },
+    {
+     "status": "202",
+     "description": "Queued as a job.",
+     "body": {
+      "mediaType": "application/json",
+      "ref": "Job"
+     }
+    },
+    {
+     "status": "default",
+     "shared": "Problem"
+    }
+   ],
+   "description": "The body carries the file as base64, at most 4 MiB before encoding, so the handler can explain every\nproblem (`validation_failed` with JSON pointers). Above 1,000 rules the request is a job and answers 202.\nErrors: `validation_failed`, `idempotency_key_reused`, `job_running`, `server_busy`.",
+   "request": {
+    "mediaType": "application/json",
+    "ref": "DocumentUpload",
+    "required": true
+   }
+  }
+ ],
+ "schemas": {
+  "ActiveJob": {
+   "name": "ActiveJob",
+   "type": "object",
+   "fields": [
+    {
+     "name": "job",
+     "type": "Job",
+     "required": false,
+     "ref": "Job"
+    }
+   ]
+  },
+  "AffectedCount": {
+   "name": "AffectedCount",
+   "type": "object",
+   "fields": [
+    {
+     "name": "affected",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    }
+   ]
+  },
+  "AuthorizedAdd": {
+   "name": "AuthorizedAdd",
+   "type": "object",
+   "fields": [
+    {
+     "name": "cidrs",
+     "type": "[string]",
+     "required": true,
+     "limits": "at most 100 items"
+    }
+   ]
+  },
+  "AuthorizedAdded": {
+   "name": "AuthorizedAdded",
+   "type": "object",
+   "fields": [
+    {
+     "name": "items",
+     "type": "[AuthorizedIP]",
+     "required": true,
+     "limits": "at most 100 items",
+     "ref": "AuthorizedIP"
+    }
+   ]
+  },
+  "AuthorizedDelete": {
+   "name": "AuthorizedDelete",
+   "type": "object",
+   "fields": [
+    {
+     "name": "ids",
+     "type": "[uuid]",
+     "required": true,
+     "limits": "at most 500 items"
+    },
+    {
+     "name": "lock_passwords",
+     "type": "LockPasswords",
+     "required": false,
+     "limits": "at most 8 items",
+     "ref": "LockPasswords"
+    }
+   ]
+  },
+  "AuthorizedIP": {
+   "name": "AuthorizedIP",
+   "type": "object",
+   "fields": [
+    {
+     "name": "cidr",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 43 characters"
+    },
+    {
+     "name": "city",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 128 characters"
+    },
+    {
+     "name": "cleanup_opt_in",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "created_at",
+     "type": "date-time",
+     "required": true,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "is_current",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "isp",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 128 characters"
+    },
+    {
+     "name": "last_seen_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "source",
+     "type": "\"manual\" | \"secure_dns\" | \"ddns\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    }
+   ]
+  },
+  "AuthorizedPage": {
+   "name": "AuthorizedPage",
+   "type": "object",
+   "fields": [
+    {
+     "name": "items",
+     "type": "[AuthorizedIP]",
+     "required": true,
+     "limits": "at most 100 items",
+     "ref": "AuthorizedIP"
+    },
+    {
+     "name": "next_cursor",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 128 characters"
+    }
+   ]
+  },
+  "AuthorizedPatch": {
+   "name": "AuthorizedPatch",
+   "type": "object",
+   "fields": [
+    {
+     "name": "cleanup_opt_in",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "lock_passwords",
+     "type": "LockPasswords",
+     "required": false,
+     "limits": "at most 8 items",
+     "ref": "LockPasswords"
+    }
+   ]
+  },
+  "BatchItem": {
+   "name": "BatchItem",
+   "type": "object",
+   "fields": [
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "index",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "outcome",
+     "type": "\"created\" | \"updated\" | \"skipped\" | \"conflict\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    }
+   ]
+  },
+  "BatchResult": {
+   "name": "BatchResult",
+   "type": "object",
+   "fields": [
+    {
+     "name": "conflict",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "created",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "flagged",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "items",
+     "type": "[BatchItem]",
+     "required": true,
+     "limits": "at most 10000 items",
+     "ref": "BatchItem"
+    },
+    {
+     "name": "skipped",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "updated",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    }
+   ]
+  },
+  "BlockResponseOption": {
+   "name": "BlockResponseOption",
+   "type": "object",
+   "fields": [
+    {
+     "name": "mode",
+     "type": "\"zero\" | \"nxdomain\" | \"refused\" | \"custom\" | \"branded\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "v4",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 15 characters"
+    },
+    {
+     "name": "v6",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 45 characters"
+    }
+   ]
+  },
+  "CatalogFilter": {
+   "name": "CatalogFilter",
+   "type": "object",
+   "fields": [
+    {
+     "name": "id",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"native\" | \"third_party\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "modes",
+     "type": "[ModeRef]",
+     "required": true,
+     "limits": "at most 8 items",
+     "ref": "ModeRef"
+    },
+    {
+     "name": "name_en",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 128 characters"
+    },
+    {
+     "name": "name_fa",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 128 characters"
+    },
+    {
+     "name": "state",
+     "type": "\"available\" | \"unavailable\" | \"deprecated\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    }
+   ]
+  },
+  "CatalogFilterList": {
+   "name": "CatalogFilterList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "filters",
+     "type": "[CatalogFilter]",
+     "required": true,
+     "limits": "at most 1000 items",
+     "ref": "CatalogFilter"
+    }
+   ]
+  },
+  "CatalogService": {
+   "name": "CatalogService",
+   "type": "object",
+   "fields": [
+    {
+     "name": "category_id",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "logo_ref",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 256 characters"
+    },
+    {
+     "name": "name_en",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 128 characters"
+    },
+    {
+     "name": "name_fa",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 128 characters"
+    },
+    {
+     "name": "redirect_allowed",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "region_limited",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "risk_flag",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "slug",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "state",
+     "type": "\"available\" | \"deprecated\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    }
+   ]
+  },
+  "CatalogServiceList": {
+   "name": "CatalogServiceList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "categories",
+     "type": "[Category]",
+     "required": true,
+     "limits": "at most 100 items",
+     "ref": "Category"
+    },
+    {
+     "name": "services",
+     "type": "[CatalogService]",
+     "required": true,
+     "limits": "at most 5000 items",
+     "ref": "CatalogService"
+    }
+   ]
+  },
+  "Category": {
+   "name": "Category",
+   "type": "object",
+   "fields": [
+    {
+     "name": "id",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "name_en",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 128 characters"
+    },
+    {
+     "name": "name_fa",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 128 characters"
+    }
+   ]
+  },
+  "Client": {
+   "name": "Client",
+   "type": "object",
+   "fields": [
+    {
+     "name": "alias",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "analytics_level",
+     "type": "\"none\" | \"some\" | \"full\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "first_seen_at",
+     "type": "date-time",
+     "required": true,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "group_name",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "hostname",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 253 characters"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "ip",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 45 characters"
+    },
+    {
+     "name": "is_custom",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "last_seen_at",
+     "type": "date-time",
+     "required": true,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "mac",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 17 characters"
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile2_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "source",
+     "type": "\"auto\" | \"manual\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    }
+   ]
+  },
+  "ClientBatch": {
+   "name": "ClientBatch",
+   "type": "object",
+   "fields": [
+    {
+     "name": "clear",
+     "type": "[\"alias\" | \"group_name\" | \"profile_id\" | \"profile2_id\" | \"analytics_level\"]",
+     "required": false,
+     "limits": "at most 5 items"
+    },
+    {
+     "name": "confirm_destinations",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "ids",
+     "type": "[uuid]",
+     "required": false,
+     "limits": "at most 500 items"
+    },
+    {
+     "name": "lock_passwords",
+     "type": "LockPasswords",
+     "required": false,
+     "limits": "at most 8 items",
+     "ref": "LockPasswords"
+    },
+    {
+     "name": "op",
+     "type": "\"edit\" | \"delete\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "selector",
+     "type": "ClientSelector",
+     "required": false,
+     "ref": "ClientSelector"
+    },
+    {
+     "name": "set",
+     "type": "ClientBatchSet",
+     "required": false,
+     "ref": "ClientBatchSet"
+    }
+   ]
+  },
+  "ClientBatchResult": {
+   "name": "ClientBatchResult",
+   "type": "object",
+   "fields": [
+    {
+     "name": "affected",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "more",
+     "type": "boolean",
+     "required": true
+    }
+   ]
+  },
+  "ClientBatchSet": {
+   "name": "ClientBatchSet",
+   "type": "object",
+   "fields": [
+    {
+     "name": "alias",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "analytics_level",
+     "type": "\"none\" | \"some\" | \"full\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "group_name",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile2_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    }
+   ]
+  },
+  "ClientCreate": {
+   "name": "ClientCreate",
+   "type": "object",
+   "fields": [
+    {
+     "name": "alias",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "analytics_level",
+     "type": "\"none\" | \"some\" | \"full\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "confirm_destinations",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "group_name",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 36 characters"
+    },
+    {
+     "name": "lock_passwords",
+     "type": "LockPasswords",
+     "required": false,
+     "limits": "at most 8 items",
+     "ref": "LockPasswords"
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile2_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    }
+   ]
+  },
+  "ClientPage": {
+   "name": "ClientPage",
+   "type": "object",
+   "fields": [
+    {
+     "name": "count",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "items",
+     "type": "[Client]",
+     "required": true,
+     "limits": "at most 100 items",
+     "ref": "Client"
+    },
+    {
+     "name": "next_cursor",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 128 characters"
+    }
+   ]
+  },
+  "ClientPatch": {
+   "name": "ClientPatch",
+   "type": "object",
+   "fields": [
+    {
+     "name": "alias",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "analytics_level",
+     "type": "\"none\" | \"some\" | \"full\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "clear",
+     "type": "[\"alias\" | \"group_name\" | \"profile_id\" | \"profile2_id\" | \"analytics_level\"]",
+     "required": false,
+     "limits": "at most 5 items"
+    },
+    {
+     "name": "confirm_destinations",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "group_name",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "lock_passwords",
+     "type": "LockPasswords",
+     "required": false,
+     "limits": "at most 8 items",
+     "ref": "LockPasswords"
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile2_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    }
+   ]
+  },
+  "ClientSelector": {
+   "name": "ClientSelector",
+   "type": "object",
+   "fields": [
+    {
+     "name": "all",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "inactive_days",
+     "type": "integer",
+     "required": false,
+     "limits": "1 to 3650"
+    }
+   ]
+  },
+  "DdnsHost": {
+   "name": "DdnsHost",
+   "type": "object",
+   "fields": [
+    {
+     "name": "hostname",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 253 characters"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "last_error",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 255 characters"
+    },
+    {
+     "name": "last_ips",
+     "type": "[string]",
+     "required": true,
+     "limits": "at most 16 items"
+    },
+    {
+     "name": "last_resolved_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    }
+   ]
+  },
+  "DdnsHostCreate": {
+   "name": "DdnsHostCreate",
+   "type": "object",
+   "fields": [
+    {
+     "name": "hostname",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 253 characters"
+    }
+   ]
+  },
+  "DdnsHostList": {
+   "name": "DdnsHostList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "hosts",
+     "type": "[DdnsHost]",
+     "required": true,
+     "limits": "at most 5 items",
+     "ref": "DdnsHost"
+    }
+   ]
+  },
+  "DefaultRedirect": {
+   "name": "DefaultRedirect",
+   "type": "object",
+   "fields": [
+    {
+     "name": "country",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 2 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"location\" | \"auto\" | \"random\" | \"ip\" | \"host\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    }
+   ]
+  },
+  "DefaultRuleOption": {
+   "name": "DefaultRuleOption",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "DocDefaultRule": {
+   "name": "DocDefaultRule",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "target",
+     "type": "DocTarget",
+     "required": false,
+     "ref": "DocTarget"
+    }
+   ]
+  },
+  "DocFilter": {
+   "name": "DocFilter",
+   "type": "object",
+   "fields": [
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "id",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "mode",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 16 characters"
+    }
+   ]
+  },
+  "DocFolder": {
+   "name": "DocFolder",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"standard\" | \"do_not_log\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 31 characters"
+    },
+    {
+     "name": "ref",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 32 characters"
+    },
+    {
+     "name": "target",
+     "type": "DocTarget",
+     "required": false,
+     "ref": "DocTarget"
+    }
+   ]
+  },
+  "DocOptions": {
+   "name": "DocOptions",
+   "type": "object",
+   "fields": [
+    {
+     "name": "block_exfiltration",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "block_response",
+     "type": "BlockResponseOption",
+     "required": false,
+     "ref": "BlockResponseOption"
+    },
+    {
+     "name": "block_ttl",
+     "type": "integer",
+     "required": false,
+     "limits": "1 to 86400"
+    },
+    {
+     "name": "bypass_ttl",
+     "type": "integer",
+     "required": false,
+     "limits": "1 to 86400"
+    },
+    {
+     "name": "cname_flattening",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "default_rule",
+     "type": "DocDefaultRule",
+     "required": false,
+     "ref": "DocDefaultRule"
+    },
+    {
+     "name": "disable_dnssec",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "dns64",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "ecs",
+     "type": "ECSOption",
+     "required": false,
+     "ref": "ECSOption"
+    },
+    {
+     "name": "rebind_protection",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "redirect_ttl",
+     "type": "integer",
+     "required": false,
+     "limits": "1 to 86400"
+    },
+    {
+     "name": "restricted_youtube",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "safe_search",
+     "type": "boolean",
+     "required": false
+    }
+   ]
+  },
+  "DocRule": {
+   "name": "DocRule",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\" | \"inherit\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "comment",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "expires_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "folder",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 32 characters"
+    },
+    {
+     "name": "pattern",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 260 characters"
+    },
+    {
+     "name": "target",
+     "type": "DocTarget",
+     "required": false,
+     "ref": "DocTarget"
+    }
+   ]
+  },
+  "DocService": {
+   "name": "DocService",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "slug",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "target",
+     "type": "DocTarget",
+     "required": false,
+     "ref": "DocTarget"
+    }
+   ]
+  },
+  "DocTarget": {
+   "name": "DocTarget",
+   "type": "object",
+   "fields": [
+    {
+     "name": "host",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 255 characters"
+    },
+    {
+     "name": "ipv4",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 15 characters"
+    },
+    {
+     "name": "ipv6",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 45 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"location\" | \"auto\" | \"random\" | \"ip\" | \"host\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "location",
+     "type": "LocationKey",
+     "required": false,
+     "ref": "LocationKey"
+    }
+   ]
+  },
+  "DocumentUpload": {
+   "name": "DocumentUpload",
+   "type": "object",
+   "description": "The file as base64, at most 4 MiB before encoding. The handler checks it, so every problem is explained.",
+   "fields": [
+    {
+     "name": "document",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 5592420 characters"
+    }
+   ]
+  },
+  "ECSOption": {
+   "name": "ECSOption",
+   "type": "object",
+   "fields": [
+    {
+     "name": "mode",
+     "type": "\"none\" | \"auto\" | \"custom\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "v4",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 18 characters"
+    },
+    {
+     "name": "v6",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 50 characters"
+    }
+   ]
+  },
+  "Endpoint": {
+   "name": "Endpoint",
+   "type": "object",
+   "fields": [
+    {
+     "name": "admin_hold",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "admin_state",
+     "type": "\"enabled\" | \"soft_disabled\" | \"hard_disabled\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "analytics_level",
+     "type": "\"none\" | \"some\" | \"full\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "apple_profile_stale",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "authorize_ddns",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "authorize_secure_dns",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "comment",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 255 characters"
+    },
+    {
+     "name": "counts",
+     "type": "EndpointCounts",
+     "required": true,
+     "ref": "EndpointCounts"
+    },
+    {
+     "name": "created_at",
+     "type": "date-time",
+     "required": true,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "expose_ip",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "first_query_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "group_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "has_schedule",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "last_query_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "legacy_dns",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "prevent_deactivation",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile2_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "require_authorized_ips",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "resolver_id",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 26 characters"
+    },
+    {
+     "name": "schedule_timezone",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "status",
+     "type": "\"pending\" | \"active\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "type",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 32 characters"
+    },
+    {
+     "name": "updated_at",
+     "type": "date-time",
+     "required": true,
+     "limits": "0 to 40 characters"
+    }
+   ]
+  },
+  "EndpointBatch": {
+   "name": "EndpointBatch",
+   "type": "object",
+   "fields": [
+    {
+     "name": "clear",
+     "type": "[\"group_id\" | \"profile2_id\"]",
+     "required": false,
+     "limits": "at most 2 items"
+    },
+    {
+     "name": "confirm_destinations",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "group_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "ids",
+     "type": "[uuid]",
+     "required": true,
+     "limits": "at most 500 items"
+    },
+    {
+     "name": "lock_passwords",
+     "type": "LockPasswords",
+     "required": false,
+     "limits": "at most 8 items",
+     "ref": "LockPasswords"
+    },
+    {
+     "name": "op",
+     "type": "\"move\" | \"edit\" | \"delete\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "set",
+     "type": "EndpointBatchSet",
+     "required": false,
+     "ref": "EndpointBatchSet"
+    }
+   ]
+  },
+  "EndpointBatchSet": {
+   "name": "EndpointBatchSet",
+   "type": "object",
+   "fields": [
+    {
+     "name": "admin_state",
+     "type": "\"enabled\" | \"soft_disabled\" | \"hard_disabled\"",
+     "required": false,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "analytics_level",
+     "type": "\"none\" | \"some\" | \"full\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile2_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    }
+   ]
+  },
+  "EndpointCounts": {
+   "name": "EndpointCounts",
+   "type": "object",
+   "fields": [
+    {
+     "name": "authorized_ips",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "claims_waiting",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "clients",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    }
+   ]
+  },
+  "EndpointCreate": {
+   "name": "EndpointCreate",
+   "type": "object",
+   "fields": [
+    {
+     "name": "analytics_level",
+     "type": "\"none\" | \"some\" | \"full\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "authorize_ddns",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "authorize_secure_dns",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "comment",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 255 characters"
+    },
+    {
+     "name": "confirm_destinations",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "expose_ip",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "group_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "legacy_dns",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "names",
+     "type": "[string]",
+     "required": true,
+     "limits": "at most 100 items"
+    },
+    {
+     "name": "prevent_deactivation",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile2_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "type",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 32 characters"
+    }
+   ]
+  },
+  "EndpointCreated": {
+   "name": "EndpointCreated",
+   "type": "object",
+   "fields": [
+    {
+     "name": "endpoints",
+     "type": "[Endpoint]",
+     "required": true,
+     "limits": "at most 100 items",
+     "ref": "Endpoint"
+    }
+   ]
+  },
+  "EndpointPage": {
+   "name": "EndpointPage",
+   "type": "object",
+   "fields": [
+    {
+     "name": "by_status",
+     "type": "object",
+     "required": true
+    },
+    {
+     "name": "by_type",
+     "type": "object",
+     "required": true
+    },
+    {
+     "name": "items",
+     "type": "[Endpoint]",
+     "required": true,
+     "limits": "at most 100 items",
+     "ref": "Endpoint"
+    },
+    {
+     "name": "next_cursor",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 600 characters"
+    }
+   ]
+  },
+  "EndpointPatch": {
+   "name": "EndpointPatch",
+   "type": "object",
+   "fields": [
+    {
+     "name": "admin_state",
+     "type": "\"enabled\" | \"soft_disabled\" | \"hard_disabled\"",
+     "required": false,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "analytics_level",
+     "type": "\"none\" | \"some\" | \"full\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "authorize_ddns",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "authorize_secure_dns",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "clear",
+     "type": "[\"group_id\" | \"profile2_id\" | \"comment\"]",
+     "required": false,
+     "limits": "at most 3 items"
+    },
+    {
+     "name": "comment",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 255 characters"
+    },
+    {
+     "name": "confirm_destinations",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "expose_ip",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "group_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "legacy_dns",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "lock_passwords",
+     "type": "LockPasswords",
+     "required": false,
+     "limits": "at most 8 items",
+     "ref": "LockPasswords"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "prevent_deactivation",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile2_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "require_authorized_ips",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "schedule_timezone",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "type",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 32 characters"
+    }
+   ]
+  },
+  "EndpointRef": {
+   "name": "EndpointRef",
+   "type": "object",
+   "fields": [
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    }
+   ]
+  },
+  "EndpointType": {
+   "name": "EndpointType",
+   "type": "object",
+   "fields": [
+    {
+     "name": "icon",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 32 characters"
+    },
+    {
+     "name": "key",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 32 characters"
+    },
+    {
+     "name": "name_en",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "name_fa",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "position",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 1000"
+    }
+   ]
+  },
+  "EndpointTypeList": {
+   "name": "EndpointTypeList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "types",
+     "type": "[EndpointType]",
+     "required": true,
+     "limits": "at most 100 items",
+     "ref": "EndpointType"
+    }
+   ]
+  },
+  "Error": {
+   "name": "Error",
+   "type": "object",
+   "fields": [
+    {
+     "name": "code",
+     "type": "string",
+     "required": true,
+     "description": "A stable machine-readable code. The message is localised by the client.",
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "fields",
+     "type": "[object]",
+     "required": false,
+     "limits": "at most 100 items"
+    },
+    {
+     "name": "request_id",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "retry_after_s",
+     "type": "integer",
+     "required": false,
+     "limits": "0 to 86400"
+    }
+   ]
+  },
+  "Folder": {
+   "name": "Folder",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"standard\" | \"do_not_log\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "location_unavailable",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 31 characters"
+    },
+    {
+     "name": "rule_count",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "FolderCreate": {
+   "name": "FolderCreate",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"standard\" | \"do_not_log\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 31 characters"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "FolderList": {
+   "name": "FolderList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "folders",
+     "type": "[Folder]",
+     "required": true,
+     "limits": "at most 500 items",
+     "ref": "Folder"
+    }
+   ]
+  },
+  "FolderPatch": {
+   "name": "FolderPatch",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "clear",
+     "type": "[\"action\"]",
+     "required": false,
+     "limits": "at most 1 items"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 31 characters"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "Group": {
+   "name": "Group",
+   "type": "object",
+   "fields": [
+    {
+     "name": "endpoint_count",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    }
+   ]
+  },
+  "GroupCreate": {
+   "name": "GroupCreate",
+   "type": "object",
+   "fields": [
+    {
+     "name": "endpoint_ids",
+     "type": "[uuid]",
+     "required": false,
+     "limits": "at most 500 items"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 64 characters"
+    }
+   ]
+  },
+  "GroupList": {
+   "name": "GroupList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "groups",
+     "type": "[Group]",
+     "required": true,
+     "limits": "at most 100 items",
+     "ref": "Group"
+    }
+   ]
+  },
+  "GroupRename": {
+   "name": "GroupRename",
+   "type": "object",
+   "fields": [
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 64 characters"
+    }
+   ]
+  },
+  "IpAddress": {
+   "name": "IpAddress",
+   "type": "string"
+  },
+  "Job": {
+   "name": "Job",
+   "type": "object",
+   "fields": [
+    {
+     "name": "error",
+     "type": "Error",
+     "required": false,
+     "ref": "Error"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"rules_batch\" | \"upload\" | \"import\" | \"duplicate\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "progress",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "result",
+     "type": "BatchResult",
+     "required": false,
+     "ref": "BatchResult"
+    },
+    {
+     "name": "state",
+     "type": "\"queued\" | \"running\" | \"done\" | \"failed\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "total",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    }
+   ]
+  },
+  "Limits": {
+   "name": "Limits",
+   "type": "object",
+   "fields": [
+    {
+     "name": "max_api_tokens",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "max_authorized_ips",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "max_clients_per_endpoint",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "max_endpoints",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "max_ip_claims",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "max_profiles",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "max_publishes_per_hour",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "max_realtime_sessions",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "max_rules_per_profile",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "max_rules_per_request",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "max_wildcards_per_profile",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    }
+   ]
+  },
+  "LocationKey": {
+   "name": "LocationKey",
+   "type": "object",
+   "fields": [
+    {
+     "name": "city",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "country",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 2 characters"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    }
+   ]
+  },
+  "LocationRef": {
+   "name": "LocationRef",
+   "type": "object",
+   "fields": [
+    {
+     "name": "city",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "country",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 2 characters"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    }
+   ]
+  },
+  "LocationSet": {
+   "name": "LocationSet",
+   "type": "object",
+   "fields": [
+    {
+     "name": "auto_random",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "locations",
+     "type": "[LocationRef]",
+     "required": true,
+     "limits": "at most 5000 items",
+     "ref": "LocationRef"
+    }
+   ]
+  },
+  "LockPassword": {
+   "name": "LockPassword",
+   "type": "object",
+   "fields": [
+    {
+     "name": "password",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 2048 characters"
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    }
+   ]
+  },
+  "LockPasswords": {
+   "name": "LockPasswords",
+   "type": "[LockPassword]",
+   "description": "The lock password of every locked profile the change takes away from an identity (spec 3.3). At most 8.",
+   "items": "LockPassword",
+   "ref": "LockPassword"
+  },
+  "LockPasswordsBody": {
+   "name": "LockPasswordsBody",
+   "type": "object",
+   "fields": [
+    {
+     "name": "lock_passwords",
+     "type": "LockPasswords",
+     "required": false,
+     "limits": "at most 8 items",
+     "ref": "LockPasswords"
+    }
+   ]
+  },
+  "ModeRef": {
+   "name": "ModeRef",
+   "type": "object",
+   "fields": [
+    {
+     "name": "default",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "mode",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 16 characters"
+    }
+   ]
+  },
+  "NewFolder": {
+   "name": "NewFolder",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"standard\" | \"do_not_log\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 31 characters"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "Options": {
+   "name": "Options",
+   "type": "object",
+   "fields": [
+    {
+     "name": "block_exfiltration",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "block_response",
+     "type": "BlockResponseOption",
+     "required": false,
+     "ref": "BlockResponseOption"
+    },
+    {
+     "name": "block_ttl",
+     "type": "integer",
+     "required": false,
+     "limits": "1 to 86400"
+    },
+    {
+     "name": "bypass_ttl",
+     "type": "integer",
+     "required": false,
+     "limits": "1 to 86400"
+    },
+    {
+     "name": "cname_flattening",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "default_location_unavailable",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "default_rule",
+     "type": "DefaultRuleOption",
+     "required": false,
+     "ref": "DefaultRuleOption"
+    },
+    {
+     "name": "disable_dnssec",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "dns64",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "ecs",
+     "type": "ECSOption",
+     "required": false,
+     "ref": "ECSOption"
+    },
+    {
+     "name": "rebind_protection",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "redirect_ttl",
+     "type": "integer",
+     "required": false,
+     "limits": "1 to 86400"
+    },
+    {
+     "name": "restricted_youtube",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "safe_search",
+     "type": "boolean",
+     "required": false
+    }
+   ]
+  },
+  "OptionsPatch": {
+   "name": "OptionsPatch",
+   "type": "object",
+   "fields": [
+    {
+     "name": "block_exfiltration",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "block_response",
+     "type": "BlockResponseOption",
+     "required": false,
+     "ref": "BlockResponseOption"
+    },
+    {
+     "name": "block_ttl",
+     "type": "integer",
+     "required": false,
+     "limits": "1 to 86400"
+    },
+    {
+     "name": "bypass_ttl",
+     "type": "integer",
+     "required": false,
+     "limits": "1 to 86400"
+    },
+    {
+     "name": "clear",
+     "type": "[\"default_rule\" | \"block_exfiltration\" | \"rebind_protection\" | \"disable_dnssec\" | \"block_ttl\" | \"redirect_ttl\" | \"bypass_ttl\" | \"block_response\" | \"ecs\" | \"dns64\" | \"cname_flattening\" | \"safe_search\" | \"restricted_youtube\"]",
+     "required": false,
+     "limits": "at most 13 items"
+    },
+    {
+     "name": "cname_flattening",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "default_rule",
+     "type": "DefaultRuleOption",
+     "required": false,
+     "ref": "DefaultRuleOption"
+    },
+    {
+     "name": "disable_dnssec",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "dns64",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "ecs",
+     "type": "ECSOption",
+     "required": false,
+     "ref": "ECSOption"
+    },
+    {
+     "name": "rebind_protection",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "redirect_ttl",
+     "type": "integer",
+     "required": false,
+     "limits": "1 to 86400"
+    },
+    {
+     "name": "restricted_youtube",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "safe_search",
+     "type": "boolean",
+     "required": false
+    }
+   ]
+  },
+  "Profile": {
+   "name": "Profile",
+   "type": "object",
+   "fields": [
+    {
+     "name": "counts",
+     "type": "ProfileCounts",
+     "required": true,
+     "ref": "ProfileCounts"
+    },
+    {
+     "name": "created_at",
+     "type": "date-time",
+     "required": true,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "default_redirect",
+     "type": "DefaultRedirect",
+     "required": false,
+     "ref": "DefaultRedirect"
+    },
+    {
+     "name": "disabled_until",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "endpoints",
+     "type": "[EndpointRef]",
+     "required": true,
+     "limits": "at most 1000 items",
+     "ref": "EndpointRef"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"custom\" | \"developer\" | \"gaming\" | \"kids\" | \"privacy\" | \"productivity\" | \"vpn_replacement\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "lock_message",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 256 characters"
+    },
+    {
+     "name": "locked",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "locked_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "updated_at",
+     "type": "date-time",
+     "required": true,
+     "limits": "0 to 40 characters"
+    }
+   ]
+  },
+  "ProfileCounts": {
+   "name": "ProfileCounts",
+   "type": "object",
+   "fields": [
+    {
+     "name": "endpoints",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "filters",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "options",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "rules",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "services",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    }
+   ]
+  },
+  "ProfileCreate": {
+   "name": "ProfileCreate",
+   "type": "object",
+   "fields": [
+    {
+     "name": "kind",
+     "type": "\"custom\" | \"developer\" | \"gaming\" | \"kids\" | \"privacy\" | \"productivity\" | \"vpn_replacement\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 64 characters"
+    }
+   ]
+  },
+  "ProfileCreated": {
+   "name": "ProfileCreated",
+   "type": "object",
+   "fields": [
+    {
+     "name": "flagged",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 2147483647"
+    },
+    {
+     "name": "profile",
+     "type": "Profile",
+     "required": true,
+     "ref": "Profile"
+    }
+   ]
+  },
+  "ProfileDisable": {
+   "name": "ProfileDisable",
+   "type": "object",
+   "fields": [
+    {
+     "name": "for",
+     "type": "\"5m\" | \"1h\" | \"1d\"",
+     "required": false,
+     "limits": "0 to 2 characters"
+    },
+    {
+     "name": "until",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    }
+   ]
+  },
+  "ProfileDocument": {
+   "name": "ProfileDocument",
+   "type": "object",
+   "description": "Profile document, version 1 (spec 6.1). The content of a profile and nothing of its identity. A location is\nnamed by its key, a folder by a `ref` local to the document. The type of a profile (spec 5) is such a document\nwithout `name`.",
+   "fields": [
+    {
+     "name": "filters",
+     "type": "[DocFilter]",
+     "required": false,
+     "limits": "at most 1000 items",
+     "ref": "DocFilter"
+    },
+    {
+     "name": "folders",
+     "type": "[DocFolder]",
+     "required": false,
+     "limits": "at most 500 items",
+     "ref": "DocFolder"
+    },
+    {
+     "name": "format",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 32 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"custom\" | \"developer\" | \"gaming\" | \"kids\" | \"privacy\" | \"productivity\" | \"vpn_replacement\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "options",
+     "type": "DocOptions",
+     "required": false,
+     "ref": "DocOptions"
+    },
+    {
+     "name": "rules",
+     "type": "[DocRule]",
+     "required": false,
+     "limits": "at most 10000 items",
+     "ref": "DocRule"
+    },
+    {
+     "name": "services",
+     "type": "[DocService]",
+     "required": false,
+     "limits": "at most 5000 items",
+     "ref": "DocService"
+    },
+    {
+     "name": "version",
+     "type": "integer",
+     "required": true,
+     "limits": "1 to 1000"
+    }
+   ]
+  },
+  "ProfileDuplicate": {
+   "name": "ProfileDuplicate",
+   "type": "object",
+   "fields": [
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 64 characters"
+    }
+   ]
+  },
+  "ProfileFilter": {
+   "name": "ProfileFilter",
+   "type": "object",
+   "fields": [
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "filter_id",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "mode",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 16 characters"
+    }
+   ]
+  },
+  "ProfileFilterList": {
+   "name": "ProfileFilterList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "filters",
+     "type": "[ProfileFilter]",
+     "required": true,
+     "limits": "at most 1000 items",
+     "ref": "ProfileFilter"
+    }
+   ]
+  },
+  "ProfileFilterSet": {
+   "name": "ProfileFilterSet",
+   "type": "object",
+   "fields": [
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "mode",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 16 characters"
+    }
+   ]
+  },
+  "ProfileList": {
+   "name": "ProfileList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "items",
+     "type": "[Profile]",
+     "required": true,
+     "limits": "at most 1000 items",
+     "ref": "Profile"
+    }
+   ]
+  },
+  "ProfileRename": {
+   "name": "ProfileRename",
+   "type": "object",
+   "fields": [
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 64 characters"
+    }
+   ]
+  },
+  "ProfileService": {
+   "name": "ProfileService",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "iranian_bypass",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "location_unavailable",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "slug",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "ProfileServiceList": {
+   "name": "ProfileServiceList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "services",
+     "type": "[ProfileService]",
+     "required": true,
+     "limits": "at most 5000 items",
+     "ref": "ProfileService"
+    }
+   ]
+  },
+  "ProfileServiceSet": {
+   "name": "ProfileServiceSet",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "ResolverView": {
+   "name": "ResolverView",
+   "type": "object",
+   "fields": [
+    {
+     "name": "bootstrap",
+     "type": "[IpAddress]",
+     "required": false,
+     "limits": "at most 2 items",
+     "ref": "IpAddress"
+    },
+    {
+     "name": "client",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "doh_url",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 512 characters"
+    },
+    {
+     "name": "host",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 253 characters"
+    },
+    {
+     "name": "legacy",
+     "type": "object",
+     "required": false
+    },
+    {
+     "name": "protocols",
+     "type": "[\"plain\" | \"doh\" | \"doh3\" | \"dot\" | \"doq\"]",
+     "required": true,
+     "limits": "at most 5 items"
+    },
+    {
+     "name": "ready",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "reason",
+     "type": "\"zone_missing\" | \"pair_missing\"",
+     "required": false,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "resolver_id",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 26 characters"
+    },
+    {
+     "name": "stamps",
+     "type": "object",
+     "required": false
+    }
+   ]
+  },
+  "Rule": {
+   "name": "Rule",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\" | \"inherit\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "comment",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "created_at",
+     "type": "date-time",
+     "required": true,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "expires_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "folder_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "iranian_bypass",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "key",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 260 characters"
+    },
+    {
+     "name": "location_unavailable",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "match_kind",
+     "type": "\"domain\" | \"subdomains\" | \"glob\" | \"dest_cc\" | \"dest_as\" | \"src_cc\"",
+     "required": true,
+     "limits": "0 to 16 characters"
+    },
+    {
+     "name": "negated",
+     "type": "boolean",
+     "required": true
+    },
+    {
+     "name": "pattern",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 260 characters"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    },
+    {
+     "name": "updated_at",
+     "type": "date-time",
+     "required": true,
+     "limits": "0 to 40 characters"
+    }
+   ]
+  },
+  "RuleEditSet": {
+   "name": "RuleEditSet",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\" | \"inherit\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "comment",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "expires_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "expires_in",
+     "type": "\"1h\" | \"1d\" | \"1w\" | \"1m\"",
+     "required": false,
+     "limits": "0 to 2 characters"
+    },
+    {
+     "name": "folder_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "RuleList": {
+   "name": "RuleList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "rules",
+     "type": "[Rule]",
+     "required": true,
+     "limits": "at most 1000 items",
+     "ref": "Rule"
+    }
+   ]
+  },
+  "RulePage": {
+   "name": "RulePage",
+   "type": "object",
+   "fields": [
+    {
+     "name": "items",
+     "type": "[Rule]",
+     "required": true,
+     "limits": "at most 100 items",
+     "ref": "Rule"
+    },
+    {
+     "name": "next_cursor",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 600 characters"
+    }
+   ]
+  },
+  "RulePatch": {
+   "name": "RulePatch",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\" | \"inherit\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "clear",
+     "type": "[\"comment\" | \"expires\" | \"folder\"]",
+     "required": false,
+     "limits": "at most 3 items"
+    },
+    {
+     "name": "comment",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "expires_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "expires_in",
+     "type": "\"1h\" | \"1d\" | \"1w\" | \"1m\"",
+     "required": false,
+     "limits": "0 to 2 characters"
+    },
+    {
+     "name": "folder_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "pattern",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 260 characters"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "RuleSelector": {
+   "name": "RuleSelector",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\" | \"inherit\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "folder",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "q",
+     "type": "string",
+     "required": false,
+     "limits": "0 to 253 characters"
+    },
+    {
+     "name": "status",
+     "type": "\"enabled\" | \"disabled\" | \"expired\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    }
+   ]
+  },
+  "RuleTransfer": {
+   "name": "RuleTransfer",
+   "type": "object",
+   "fields": [
+    {
+     "name": "dest_folder_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "dest_profile_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "dest_root",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "new_folder",
+     "type": "NewFolder",
+     "required": false,
+     "ref": "NewFolder"
+    },
+    {
+     "name": "op",
+     "type": "\"copy\" | \"move\"",
+     "required": true,
+     "limits": "0 to 4 characters"
+    }
+   ]
+  },
+  "RulesBatch": {
+   "name": "RulesBatch",
+   "type": "object",
+   "fields": [
+    {
+     "name": "clear",
+     "type": "[\"comment\" | \"expires\" | \"folder\"]",
+     "required": false,
+     "limits": "at most 3 items"
+    },
+    {
+     "name": "dest_folder_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "dest_profile_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "dest_root",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "ids",
+     "type": "[uuid]",
+     "required": false,
+     "limits": "at most 10000 items"
+    },
+    {
+     "name": "new_folder",
+     "type": "NewFolder",
+     "required": false,
+     "ref": "NewFolder"
+    },
+    {
+     "name": "op",
+     "type": "\"copy\" | \"move\" | \"edit\" | \"enable\" | \"disable\" | \"delete\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "selector",
+     "type": "RuleSelector",
+     "required": false,
+     "ref": "RuleSelector"
+    },
+    {
+     "name": "set",
+     "type": "RuleEditSet",
+     "required": false,
+     "ref": "RuleEditSet"
+    }
+   ]
+  },
+  "RulesCreate": {
+   "name": "RulesCreate",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\" | \"inherit\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "comment",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "expires_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "expires_in",
+     "type": "\"1h\" | \"1d\" | \"1w\" | \"1m\"",
+     "required": false,
+     "limits": "0 to 2 characters"
+    },
+    {
+     "name": "folder_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "patterns",
+     "type": "[string]",
+     "required": true,
+     "limits": "at most 1000 items"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "RulesDocument": {
+   "name": "RulesDocument",
+   "type": "object",
+   "description": "Rules document, version 1 (spec 6.3), the file of Export Rules and Upload Folder.",
+   "fields": [
+    {
+     "name": "format",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 32 characters"
+    },
+    {
+     "name": "rules",
+     "type": "[RulesDocumentRule]",
+     "required": true,
+     "limits": "at most 10000 items",
+     "ref": "RulesDocumentRule"
+    },
+    {
+     "name": "version",
+     "type": "integer",
+     "required": true,
+     "limits": "1 to 1000"
+    }
+   ]
+  },
+  "RulesDocumentRule": {
+   "name": "RulesDocumentRule",
+   "type": "object",
+   "description": "A rule of a rules document (spec 6.3), the rule item of a profile document without `folder`, since every rule goes into the folder of the path.",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\" | \"inherit\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "comment",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "expires_at",
+     "type": "date-time",
+     "required": false,
+     "limits": "0 to 40 characters"
+    },
+    {
+     "name": "pattern",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 260 characters"
+    },
+    {
+     "name": "target",
+     "type": "DocTarget",
+     "required": false,
+     "ref": "DocTarget"
+    }
+   ]
+  },
+  "RulesUpload": {
+   "name": "RulesUpload",
+   "type": "object",
+   "description": "The rules document as base64, at most 4 MiB before encoding, and how it is merged into the folder (`new_only` by default).",
+   "fields": [
+    {
+     "name": "document",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 5592420 characters"
+    },
+    {
+     "name": "mode",
+     "type": "\"new_only\" | \"upsert\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    }
+   ]
+  },
+  "Schedule": {
+   "name": "Schedule",
+   "type": "object",
+   "fields": [
+    {
+     "name": "timezone",
+     "type": "string",
+     "required": true,
+     "limits": "0 to 64 characters"
+    },
+    {
+     "name": "windows",
+     "type": "[ScheduleWindow]",
+     "required": true,
+     "limits": "at most 64 items",
+     "ref": "ScheduleWindow"
+    }
+   ]
+  },
+  "SchedulePut": {
+   "name": "SchedulePut",
+   "type": "object",
+   "fields": [
+    {
+     "name": "confirm_destinations",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "lock_passwords",
+     "type": "LockPasswords",
+     "required": false,
+     "limits": "at most 8 items",
+     "ref": "LockPasswords"
+    },
+    {
+     "name": "timezone",
+     "type": "string",
+     "required": true,
+     "limits": "1 to 64 characters"
+    },
+    {
+     "name": "windows",
+     "type": "[ScheduleWindowIn]",
+     "required": true,
+     "limits": "at most 128 items",
+     "ref": "ScheduleWindowIn"
+    }
+   ]
+  },
+  "ScheduleWindow": {
+   "name": "ScheduleWindow",
+   "type": "object",
+   "fields": [
+    {
+     "name": "end",
+     "type": "integer",
+     "required": true,
+     "limits": "30 to 10080"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile2_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "start",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 10050"
+    }
+   ]
+  },
+  "ScheduleWindowIn": {
+   "name": "ScheduleWindowIn",
+   "type": "object",
+   "fields": [
+    {
+     "name": "end",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 10080"
+    },
+    {
+     "name": "id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile_id",
+     "type": "uuid",
+     "required": true,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "profile2_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    },
+    {
+     "name": "start",
+     "type": "integer",
+     "required": true,
+     "limits": "0 to 10080"
+    }
+   ]
+  },
+  "ServicesBatch": {
+   "name": "ServicesBatch",
+   "type": "object",
+   "fields": [
+    {
+     "name": "action",
+     "type": "\"block\" | \"bypass\" | \"redirect\"",
+     "required": false,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "required": false
+    },
+    {
+     "name": "op",
+     "type": "\"set\" | \"delete\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "slugs",
+     "type": "[string]",
+     "required": true,
+     "limits": "at most 2000 items"
+    },
+    {
+     "name": "target",
+     "type": "Target",
+     "required": false,
+     "ref": "Target"
+    }
+   ]
+  },
+  "Target": {
+   "name": "Target",
+   "type": "object",
+   "description": "Where a Redirect goes. A request names a location by `location_id`; `location` is in responses only, read by\nid, so a row whose location left the set can still be shown.",
+   "fields": [
+    {
+     "name": "host",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 255 characters"
+    },
+    {
+     "name": "ipv4",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 15 characters"
+    },
+    {
+     "name": "ipv6",
+     "type": "string",
+     "required": false,
+     "limits": "1 to 45 characters"
+    },
+    {
+     "name": "kind",
+     "type": "\"location\" | \"auto\" | \"random\" | \"ip\" | \"host\"",
+     "required": true,
+     "limits": "0 to 8 characters"
+    },
+    {
+     "name": "location",
+     "type": "LocationKey",
+     "required": false,
+     "ref": "LocationKey"
+    },
+    {
+     "name": "location_id",
+     "type": "uuid",
+     "required": false,
+     "limits": "0 to 36 characters"
+    }
+   ]
+  },
+  "TimezoneList": {
+   "name": "TimezoneList",
+   "type": "object",
+   "fields": [
+    {
+     "name": "zones",
+     "type": "[string]",
+     "required": true,
+     "limits": "at most 1000 items"
+    }
+   ]
+  }
+ }
+}

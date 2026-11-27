@@ -1,0 +1,64 @@
+# Extends the default rules with exceptions that are exact: each names the rule, the path it may be
+# in and the VALUES it exists for (the secret captured by the rule must equal one of them). A key
+# that is not on a list below is reported wherever it is, in a test file or under the fixtures path
+# included, so a real key pasted next to a canary does not pass. A new test canary that the generic
+# rule reports needs its value added here, in ci/gitleaks/ and in ci/publish.json in the same
+# change (CI review round 7, ci-r7-1). Real secrets live in Docker secrets, never in the tree.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "The golden-vector catalog key: a fixed, public 16-byte test key"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^shared/vectors/fixtures/base\.json$''']
+regexTarget = "secret"
+regexes = ['''^00112233445566778899aabbccddeeff$''']
+
+[[allowlists]]
+description = "Passwords that registration and password tests feed to the code under test"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''_test\.go$''']
+regexTarget = "secret"
+regexes = ['''^(Marble-Island-Copper-6620|Granite-lantern-Harbor-4471-quill|qwertyuiop1234)$''']
+
+[[allowlists]]
+description = "SMS gateway credentials and canaries that tests plant to prove they never reach a log or a response"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''_test\.go$''']
+regexTarget = "secret"
+regexes = ['''^(key-sms-ir-123456|TESTKEY-abcdef-1234567|abcdefgh12345678|CANARY-SMSIR-KEY-0001|CANARY-IR-KEY-9d41|proof-key-canary-9f3a)$''']
+
+[[allowlists]]
+description = "Passwords in the shape gen-secrets.sh writes, which the Valkey and deploy lints feed to their parsers"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^internal/lint/[A-Za-z0-9_]+_test\.go$''']
+regexTarget = "secret"
+regexes = ['''^(Zq3vNn7hQw1xKs9d|Zq3vNn7hQw1xKs9dApi|Hk8mTr2vBc5yLp4wAdm)$''']
+
+[[allowlists]]
+description = "The two Go names an internal/lint test names (argon2.IDKey, crypto/subtle), which the generic rule takes for a key when a word like key or credentials stands next to them. The exact values and the lint tests only, like every other entry here; a new false positive gets its own exact entry (CI review round 10, ci-r10-5, which replaced the shape that round 9 had allowed and that hid a real key of the same shape)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^internal/lint/[A-Za-z0-9_]+_test\.go$''']
+regexTarget = "secret"
+regexes = ['''^(argon2\.IDKey|crypto/subtle)$''']
+
+# Spec 16.2: the HeroUI install token lives in the environment of a build machine and nowhere else.
+# The CLI sends it to HeroUI's CDN, so it must not be written into a file, and an `_authToken` line
+# in an .npmrc would send it to the npm registry instead.
+[[rules]]
+id = "heroui-auth-token-assignment"
+description = "A literal assignment of the HeroUI install token. Reading it from the environment (${NAME}, $NAME, env=NAME) is how it is meant to be used."
+regex = '''HEROUI_AUTH_TOKEN["']?(\s*=\s*|:\s+)["']?[^\s"'$<{(`]'''
+keywords = ["heroui_auth_token"]
+
+[[rules]]
+id = "npmrc-auth-token"
+description = "An _authToken line in an .npmrc"
+path = '''(^|[\\/])\.npmrc$'''
+regex = '''_authToken\s*='''
+keywords = ["_authtoken"]

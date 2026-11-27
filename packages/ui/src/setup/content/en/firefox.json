@@ -1,0 +1,30 @@
+{
+  "versions": [
+    {
+      "id": "browser",
+      "name": "Firefox",
+      "steps": [
+        {
+          "title": "Open the privacy settings",
+          "text": "Open Settings, Privacy & Security and scroll to DNS over HTTPS."
+        },
+        {
+          "title": "Max Protection",
+          "text": "Choose Max Protection. In the other modes Firefox may fall back to unencrypted DNS."
+        },
+        {
+          "title": "Give it this address",
+          "text": "Choose a provider, pick Custom and enter this address.",
+          "show": [
+            "doh_url"
+          ]
+        },
+        {
+          "title": "Check the setup",
+          "text": "A few seconds after saving, run this check to see that the device uses this Endpoint.",
+          "verify": true
+        }
+      ]
+    }
+  ]
+}
