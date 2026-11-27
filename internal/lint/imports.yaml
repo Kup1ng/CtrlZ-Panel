@@ -137,7 +137,7 @@ third_party:
   - path: github.com/riverqueue/river
     why: the queue of the batch jobs of P2 (spec 3.5), run poll-only by the worker
   - path: github.com/riverqueue/river/riverdriver
-    why: the executor and driver interfaces River's executors are wrapped over (internal/riverpoll, store.PollDriver)
+    why: the executor and driver interfaces River's executors are wrapped over (internal/riverpoll)
   - path: github.com/riverqueue/river/riverdriver/riverpgxv5
     why: River's driver over the pool of the worker role, built in the store and nowhere else
   - path: github.com/riverqueue/river/rivertype

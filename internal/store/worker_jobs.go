@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/riverqueue/river/riverdriver"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/riverpoll"
@@ -21,38 +20,12 @@ func (s *Store) RiverDriver() (*PollDriver, error) {
 	if s.role != RoleWorker {
 		return nil, ErrWrongRole
 	}
-	return &PollDriver{Driver: riverpgxv5.New(s.pool)}, nil
+	return riverpoll.NewDriver[pgx.Tx](riverpgxv5.New(s.pool)), nil
 }
 
-// PollDriver is River's pgx driver that says it cannot listen and notify. River's client sends a NOTIFY (the function pg_notify) on
-// every insert unless the driver says it has none, and PollOnly in the client config does not stop that: the function is
-// revoked from every role (catalog_reach.yaml, wal-writes-and-notifications; nothing of the module notifies, rule no-notify), so
-// the call fails with 42501 and aborts the transaction of the insert, and the drain never moves a row. The worker polls.
-type PollDriver struct{ *riverpgxv5.Driver }
-
-// GetExecutor is River's executor with the calls that would notify replaced (see package riverpoll: the executor decides about
-// NOTIFY on its own, for the leader's resignation, and the revoke of pg_notify would fail it at every shutdown).
-func (d *PollDriver) GetExecutor() riverdriver.Executor {
-	return riverpoll.Executor(d.Driver.GetExecutor())
-}
-
-// UnwrapExecutor is River's executor of a pgx transaction, with the same replacement.
-func (d *PollDriver) UnwrapExecutor(tx pgx.Tx) riverdriver.ExecutorTx {
-	return riverpoll.ExecutorTx(d.Driver.UnwrapExecutor(tx))
-}
-
-// UnwrapTx gives back the pgx transaction of an executor this driver handed out. River's own UnwrapTx asserts the concrete
-// type of its executor, which riverpoll's wrapper is not, so the wrapper is taken off first. In River v0.51.2 only its test
-// helper calls it; when River is bumped, re-check this method together with GetExecutor and UnwrapExecutor.
-func (d *PollDriver) UnwrapTx(e riverdriver.ExecutorTx) pgx.Tx {
-	return d.Driver.UnwrapTx(riverpoll.Unwrap(e))
-}
-
-// SupportsListener says there is no LISTEN.
-func (*PollDriver) SupportsListener() bool { return false }
-
-// SupportsListenNotify says there is no NOTIFY.
-func (*PollDriver) SupportsListenNotify() bool { return false }
+// PollDriver is River's pgx driver that says it cannot listen and notify (see riverpoll.Driver). It is an alias so that no
+// exported declaration of this package names pgx.Tx: the transaction type is River's own, and only River calls the driver.
+type PollDriver = riverpoll.Driver[pgx.Tx]
 
 // JobOutboxRow is a claimed row of job_outbox: the tenant is the column of the row, never a value of its args.
 type JobOutboxRow struct {

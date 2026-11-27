@@ -11,7 +11,7 @@ import (
 	"github.com/riverqueue/river/rivertype"
 )
 
-// River's driver decides about NOTIFY in two places. The client asks Driver.SupportsListenNotify, which PollDriver
+// River's driver decides about NOTIFY in two places. The client asks Driver.SupportsListenNotify, which Driver
 // answers with false. The executor asks its own cached capabilities, read from an unexported field of the embedded
 // driver that only a Yugabyte server turns off, and passes them as a flag into the SQL of the leader's resignation
 // (and of JobCancel): that SQL calls pg_notify when the flag is true. pg_notify is closed to every login role
@@ -20,7 +20,37 @@ import (
 // seconds), so a restarted worker waited that long before it led, and the shutdown itself was slowed by the retries.
 //
 // The revoke has a reason that still holds (a role that can notify can fill the cluster's one notification queue), so the
-// fix is not a grant. The executors this package wraps (store.PollDriver hands them out) replace the three calls that would notify, and nothing else.
+// fix is not a grant. The executors this package wraps (Driver hands them out) replace the three calls that would notify, and nothing else.
+
+// Driver is River's driver that says it cannot listen and notify, and hands out the wrapped executors. River's client sends a
+// NOTIFY on every insert unless the driver says it has none, and PollOnly in the client config does not stop that: the function
+// pg_notify is revoked from every role (catalog_reach.yaml, wal-writes-and-notifications; nothing of the module notifies, rule
+// no-notify), so the call would fail with 42501, abort the transaction of the insert, and the drain would never move a row. The
+// worker polls. It is generic over the driver's transaction type so that this package names no database driver and the store
+// (the only place that may) picks the type: River's UnwrapTx has to return it, and River is the only caller.
+type Driver[TTx any] struct{ riverdriver.Driver[TTx] }
+
+// NewDriver wraps River's driver d.
+func NewDriver[TTx any](d riverdriver.Driver[TTx]) *Driver[TTx] { return &Driver[TTx]{Driver: d} }
+
+// GetExecutor is River's executor with the calls that would notify replaced.
+func (d *Driver[TTx]) GetExecutor() riverdriver.Executor { return Executor(d.Driver.GetExecutor()) }
+
+// UnwrapExecutor is River's executor of a driver transaction, with the same replacement.
+func (d *Driver[TTx]) UnwrapExecutor(tx TTx) riverdriver.ExecutorTx {
+	return ExecutorTx(d.Driver.UnwrapExecutor(tx))
+}
+
+// UnwrapTx gives back the transaction of an executor this driver handed out. River's own UnwrapTx asserts the concrete type of
+// its executor, which the wrapper is not, so the wrapper is taken off first. In River v0.51.2 only its test helper calls it;
+// when River is bumped, re-check this method together with GetExecutor and UnwrapExecutor.
+func (d *Driver[TTx]) UnwrapTx(e riverdriver.ExecutorTx) TTx { return d.Driver.UnwrapTx(Unwrap(e)) }
+
+// SupportsListener says there is no LISTEN.
+func (*Driver[TTx]) SupportsListener() bool { return false }
+
+// SupportsListenNotify says there is no NOTIFY.
+func (*Driver[TTx]) SupportsListenNotify() bool { return false }
 
 // pollExecutor wraps River's executor of the pool.
 type pollExecutor struct{ riverdriver.Executor }
