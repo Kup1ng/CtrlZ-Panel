@@ -1,0 +1,204 @@
+-- P1 auth review round 16, area database, fix gate (finding db-r16-21; rule lock-order, "inside a rank").
+--
+-- The definer half of the class "the rows of one table are locked in one order by every statement that can
+-- touch several of them". Migration 0050 ordered admin_revoke_user_sessions because a Go statement orders the
+-- tables it writes; the test that guarded the class read only the tables that a Go constant orders, and only
+-- plpgsql bodies, so a table whose several multi-row writers all lived in functions (and one of them is
+-- LANGUAGE sql) was never judged. catalogtest TestDefinerWritesLockInKeyOrder now reads every function of
+-- every language and fails for a table that two statements write in plan order, or that a Go statement orders
+-- and a function does not. It found these, and they take the shape of internal/store/locks.go:
+--
+--   auth_tickets   auth_tickets_revoke (a user's open tickets) and worker_sweep_tickets (the expired ones) can
+--                  meet on the expired but unconsumed tickets of one user in opposite orders. Both take their
+--                  rows through the ordered locking subselect; the sweep skips rows somebody holds, so it never
+--                  waits.
+--   users          keytool_totp_declare_lost, worker_enforce_clear_without_live and worker_sweep_pending_totp
+--                  update several users each. The first two wait for a row somebody holds (they must reach
+--                  every row of their set) and take them in key order; the sweep skips held rows, as every
+--                  sweep does.
+--   auth_throttle  its key is composite, so there is no id to order by: worker_sweep_throttle skips the rows
+--                  somebody holds and so never waits (a statement that never waits cannot be the waiting side
+--                  of a cycle), and admin_throttle_reset, the one other statement that can touch several
+--                  rows, is then the only one that waits.
+--
+-- The signatures, owners, grants and ranks are those of the functions they replace (a bodies-only
+-- CREATE OR REPLACE). A new file and not an edit of an applied one (README, Rules).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+SET ROLE ctrlz_auth;
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.auth_tickets_revoke(p_user_id uuid)
+RETURNS void
+LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+  UPDATE ctrlz.auth_tickets t SET consumed_at = pg_catalog.now()
+  WHERE t.id = ANY (ARRAY(SELECT x.id FROM ctrlz.auth_tickets x
+        WHERE x.subject_tenant = ctrlz.current_tenant_id() AND x.subject_user = p_user_id
+          AND x.kind IN ('mfa', 'reset') AND x.consumed_at IS NULL
+        ORDER BY x.id FOR NO KEY UPDATE))
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.worker_sweep_tickets(p_limit integer)
+RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_n integer;
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 THEN
+    RETURN 0;
+  END IF;
+  DELETE FROM ctrlz.auth_tickets t WHERE t.id = ANY (ARRAY(SELECT s.id FROM ctrlz.auth_tickets s
+        WHERE s.expires_at < pg_catalog.now()
+        ORDER BY s.id LIMIT LEAST(p_limit, 10000) FOR UPDATE SKIP LOCKED))
+    AND t.expires_at < pg_catalog.now();
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN v_n;
+END
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.worker_sweep_throttle(p_limit integer)
+RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_n integer;
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 THEN
+    RETURN 0;
+  END IF;
+  -- auth_throttle_hit moves window_start forward in place, so the window a hit has just
+  -- reopened must survive: the outer statement asks again. The rows are taken once, as an
+  -- array (an InitPlan: a semi-join over a locking, limited subselect may be rescanned and
+  -- pick the next rows), and a row somebody holds is left for the next pass.
+  DELETE FROM ctrlz.auth_throttle t WHERE (t.scope, t.key) = ANY (ARRAY(SELECT (s.scope, s.key) FROM ctrlz.auth_throttle s
+        WHERE s.window_start < pg_catalog.now() - interval '1 day'
+        LIMIT LEAST(p_limit, 10000) FOR UPDATE SKIP LOCKED))
+    AND t.window_start < pg_catalog.now() - interval '1 day';
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN v_n;
+END
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.worker_sweep_pending_totp(p_limit integer)
+RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant uuid := ctrlz.current_tenant_id();
+  v_n      integer;
+BEGIN
+  IF v_tenant IS NULL OR p_limit IS NULL OR p_limit < 1 THEN
+    RETURN 0;
+  END IF;
+  -- The outer predicate repeats EVERY predicate of the subselect. Under READ COMMITTED a
+  -- user who restarted the setup after the subselect read (a new seed and a new
+  -- totp_pending_at) is re-read for this UPDATE and judged by this WHERE alone; without
+  -- the 15 minute test the sweep cleared the seed the user was about to confirm.
+  UPDATE ctrlz.users u SET totp_secret_ct = NULL, totp_pending_at = NULL
+   WHERE u.id = ANY (ARRAY(SELECT s.id FROM ctrlz.users s
+                   WHERE s.tenant_id = v_tenant AND s.totp_enabled_at IS NULL
+                     AND s.totp_pending_at < pg_catalog.now() - interval '15 minutes'
+                   ORDER BY s.id LIMIT LEAST(p_limit, 10000) FOR NO KEY UPDATE SKIP LOCKED))
+     AND u.tenant_id = v_tenant AND u.totp_enabled_at IS NULL
+     AND u.totp_pending_at < pg_catalog.now() - interval '15 minutes';
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN v_n;
+END
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.worker_enforce_clear_without_live(p_rp_id text)
+RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant uuid := ctrlz.current_tenant_id();
+  v_n      integer;
+BEGIN
+  IF v_tenant IS NULL OR p_rp_id IS NULL OR p_rp_id = ''
+     OR NOT EXISTS (SELECT 1 FROM ctrlz.webauthn_config c WHERE c.rp_id = p_rp_id) THEN
+    RETURN 0;
+  END IF;
+  -- Every user of the set must be reached, so the rows are waited for, in key order (not skipped).
+  UPDATE ctrlz.users u SET enforce_passkey = false
+   WHERE u.id = ANY (ARRAY(SELECT x.id FROM ctrlz.users x
+                   WHERE x.tenant_id = v_tenant AND x.enforce_passkey
+                     AND NOT EXISTS (SELECT 1 FROM ctrlz.webauthn_credentials w
+                                     WHERE w.tenant_id = x.tenant_id AND w.user_id = x.id
+                                       AND w.stale_at IS NULL AND w.rp_id = p_rp_id)
+                   ORDER BY x.id FOR NO KEY UPDATE))
+     AND u.tenant_id = v_tenant AND u.enforce_passkey;
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  IF v_n > 0 THEN
+    INSERT INTO ctrlz.notifications (tenant_id, kind, severity, params)
+    VALUES (v_tenant, 'passkey_enforce_cleared', 'warning', pg_catalog.jsonb_build_object('users', v_n));
+    INSERT INTO ctrlz.tenant_audit_log (tenant_id, user_id, action, target, params)
+    VALUES (v_tenant, NULL, 'passkey.enforce_cleared', NULL,
+            pg_catalog.jsonb_build_object('rp_id', p_rp_id, 'users', v_n));
+  END IF;
+  RETURN v_n;
+END
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.keytool_totp_declare_lost(p_key_number integer, p_user_ids uuid[], p_cts bytea[])
+RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_tenant uuid := ctrlz.current_tenant_id();
+  v_n      integer;
+BEGIN
+  IF v_tenant IS NULL OR p_key_number IS NULL OR p_key_number NOT BETWEEN 1 AND 65535
+     OR p_user_ids IS NULL OR p_cts IS NULL
+     OR pg_catalog.cardinality(p_user_ids) <> pg_catalog.cardinality(p_cts)
+     OR pg_catalog.cardinality(p_user_ids) = 0 THEN
+    RETURN 0;
+  END IF;
+  IF pg_catalog.cardinality(p_user_ids) > 20000 THEN
+    RAISE EXCEPTION 'keytool_totp_declare_lost: at most 20000 seeds per call' USING ERRCODE = '22023';
+  END IF;
+  -- Header: 'C' 'Z', format version 1, then the key number as two bytes (keyring). The users of the list are
+  -- locked first, in key order, by the ordered subselect; the rest of the predicate judges each one.
+  UPDATE ctrlz.users u
+     SET totp_secret_ct = NULL, totp_enabled_at = NULL, totp_last_step = NULL
+    FROM unnest(p_user_ids, p_cts) AS l(id, ct)
+   WHERE u.id = ANY (ARRAY(SELECT x.id FROM ctrlz.users x
+                   WHERE x.tenant_id = v_tenant AND x.id = ANY (p_user_ids)
+                   ORDER BY x.id FOR NO KEY UPDATE))
+     AND u.tenant_id = v_tenant AND u.id = l.id AND u.totp_enabled_at IS NOT NULL
+     AND u.totp_secret_ct IS NOT NULL
+     -- The ciphertext listed for this user is still the one stored.
+     AND u.totp_secret_ct = l.ct
+     AND pg_catalog.octet_length(u.totp_secret_ct) >= 5
+     AND pg_catalog.get_byte(u.totp_secret_ct, 0) = 67
+     AND pg_catalog.get_byte(u.totp_secret_ct, 1) = 90
+     AND pg_catalog.get_byte(u.totp_secret_ct, 2) = 1
+     AND pg_catalog.get_byte(u.totp_secret_ct, 3) * 256 + pg_catalog.get_byte(u.totp_secret_ct, 4) = p_key_number;
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  IF v_n > 0 THEN
+    INSERT INTO ctrlz.notifications (tenant_id, kind, severity, params)
+    VALUES (v_tenant, 'totp_lost', 'warning', '{}');
+    INSERT INTO ctrlz.tenant_audit_log (tenant_id, user_id, action, target, params)
+    VALUES (v_tenant, NULL, 'totp.declared_lost', NULL,
+            pg_catalog.jsonb_build_object('key_number', p_key_number, 'users', v_n));
+  END IF;
+  RETURN v_n;
+END
+$$;
+-- +goose StatementEnd
+
+RESET ROLE;

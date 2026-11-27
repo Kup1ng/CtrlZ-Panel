@@ -1,0 +1,12 @@
+# Files that may touch localStorage, sessionStorage, document.cookie, indexedDB, caches or cookieStore (ctrlz/no-storage, spec 14.4). One path per
+# line, from the repository root, then " # reason". Nothing here may hold a token, ticket, code,
+# phone or Me data: the reason must say what the key holds.
+packages/ui/src/hooks/useHaptics.ts # spec 8.11: the haptics switch, "0" or "1", read in try/catch
+packages/ui/src/dialog/useUrlDialog.ts # spec 9: a flag that this tab pushed the dialog's history entry, so close() can go back
+packages/api-client/src/session.ts # spec 14.7: a flag that the saved language was applied once in this tab session, cleared at logout
+packages/api-client/src/activity.ts # spec 11.4 (wp4-r9-3): the admin's non-secret last-input timestamp, shared by tabs
+packages/ui/src/shell/AppShell.tsx # spec 8: the sidebar_state cookie, "true" or "false", a layout preference the server reads to render the first paint
+packages/ui/src/theme/useTheme.ts # spec 4.3: the ctrlz_theme cookie, one of the four theme names, read by RootDocument so the first paint has no flash
+packages/api-client/src/clipboard.ts # gate-r5-8: the one writer of the system clipboard; it remembers that it copied a one-time secret and overwrites it with an empty string at close and at logout; gate-r6-6: a flag "1" in sessionStorage (never the secret) so the next page of the tab retries a wipe that the browser refused; gate-r7-10: a BroadcastChannel "ctrlz-clip" that carries only the words held, clear and query (a copy exists, the clipboard is clear, a page asks), never the secret
+packages/ui/src/profiles/rules/useRuleView.ts # P2 9.6 (T-196): the list size of the Rules screens, "large" or "small", read in try/catch
+packages/ui/src/freeDns/freeDnsModel.ts # P4 T-557: per Endpoint, the IPv4 address of this browser for which the add-address reminder was closed, read and written in try/catch; removed again at every end of a session (onSessionEnd, V1-r1-6); no token, code or Me data

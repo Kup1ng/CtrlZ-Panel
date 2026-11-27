@@ -1,0 +1,30 @@
+{
+  "versions": [
+    {
+      "id": "browser",
+      "name": "Brave",
+      "steps": [
+        {
+          "title": "Open the security settings",
+          "text": "Open Settings, Privacy and security, then Security."
+        },
+        {
+          "title": "Turn secure DNS on",
+          "text": "Turn on Use secure DNS and choose the Custom option."
+        },
+        {
+          "title": "Give it this address",
+          "text": "Enter this address as the custom provider and save.",
+          "show": [
+            "doh_url"
+          ]
+        },
+        {
+          "title": "Check the setup",
+          "text": "A few seconds after saving, run this check to see that the device uses this Endpoint.",
+          "verify": true
+        }
+      ]
+    }
+  ]
+}

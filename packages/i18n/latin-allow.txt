@@ -1,0 +1,57 @@
+# Latin words that may appear in a Persian message. One word per line, then
+# " # reason". A new word needs a reason a reviewer accepts: Persian has a word
+# for almost everything, and a product name or a protocol is the exception.
+Ctrl # product name
+Z # product name
+English # the language's own name in the language switch
+Passkey # the name users see in browsers and phones
+TOTP # protocol name, shown beside the app's code field
+OTP # same, for the one-time SMS code
+SMS # used as is in Persian text
+DNS # product category
+IP # used as is
+API # the name of the interface, as in the sidebar entry and its help text
+GSM # the name of the SMS character set, as in "GSM-7", shown in the template editor count
+QR # the name of the scan code, as in "QR code"
+RP # the WebAuthn term in the name of the "RP ID" field
+VPN # the service category users know by this name, as in the "VPN replacement" profile type
+A # the DNS record type, in the Destinations dialog's A or CNAME choice
+CNAME # the DNS record type
+IPv # the start of "IPv4" and "IPv6", the address family names
+JSON # the file format of a profile export, as in "JSON file"
+DNSSEC # the signature check of DNS, a protocol name, in the Profile Options row
+TTL # the time an answer may be kept, a protocol term, in the Profile Options rows
+ECS # EDNS client subnet, a protocol term, in the Profile Options row
+NXDOMAIN # the DNS answer code that says a name does not exist, shown as a choice of Block response
+REFUSED # the DNS answer code that refuses a query, shown as a choice of Block response
+AAAA # the DNS record type of an IPv6 address, beside A
+ir # the country suffix of Iranian domain names, as in the New Domains warning
+CSV # the file format of the Endpoints export, as in "Export CSV"
+Plain # the name of the setting "Plain DNS" (unencrypted DNS), the UI name of Legacy DNS (Plan.md 1536), shown in the Endpoint dialog
+Secure # the name of the setting "Authorize by Secure DNS", the encrypted DNS the Endpoint is set up with
+Dynamic # the name of the setting "Authorize by Dynamic DNS", the service that keeps a host name at an address
+Resolver # the name of the Resolver ID that an Endpoint has, as in the Resolvers dialog
+DoH # protocol name (DNS over HTTPS), in the DoH token that a new Resolver ID changes
+TCP # the transport name, as in the proof of an address ("a TXT query over TCP")
+UDP # the transport name, as in the proof of an address
+TXT # the DNS record type that carries the proof code
+DoT # protocol name (DNS over TLS), in the protocol the proof query came over
+DoQ # protocol name (DNS over QUIC), in the protocol the proof query came over
+dig # the command a person runs for the proof query
+nslookup # the command a person runs for the proof query
+MAC # the hardware address of a client, as in "Hostname, MAC and IP"
+Enter # the name of the key on a keyboard, in the hint of the Schedule grid
+HTTP # the protocol name, in "DoH3 (HTTP/3)"
+Stamp # the name of the sdns:// format that DNS apps take ("DNS Stamp")
+Bootstrap # the name of the field in DNS apps ("Bootstrap IPs")
+Authorization # the name of the HTTP header that carries an API token
+Bearer # the scheme word of that header
+ctz # the prefix of an API token value, as in "ctz_..."
+OpenAPI # the name of the standard of the API file, offered for download on the API documentation page
+YAML # the format of that file, as written in its extension
+NS # record type, as in "the NS record" of the node runbook
+Unbound # name of the resolver software, shown beside its version
+NAT # the network term, as in "1:1 NAT" of the node enrolment
+sudo # the name of the command the install command runs under
+PEM # name of the certificate text format, as in "PEM format" of the certificate upload
+CAA # record type that names the authorities allowed to issue certificates for a zone, as in the compromise runbook

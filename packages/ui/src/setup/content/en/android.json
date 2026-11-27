@@ -1,0 +1,30 @@
+{
+  "versions": [
+    {
+      "id": "9",
+      "name": "Android 9 and later",
+      "steps": [
+        {
+          "title": "Open Private DNS",
+          "text": "Open Settings, Network & internet, Private DNS. If you can't find it, search the settings for Private DNS."
+        },
+        {
+          "title": "Choose the host name",
+          "text": "Pick Private DNS provider hostname, not Automatic, and enter this name.",
+          "show": [
+            "host"
+          ]
+        },
+        {
+          "title": "Save",
+          "text": "Press Save. If it will not connect, check the name again."
+        },
+        {
+          "title": "Check the setup",
+          "text": "A few seconds after saving, run this check to see that the device uses this Endpoint.",
+          "verify": true
+        }
+      ]
+    }
+  ]
+}

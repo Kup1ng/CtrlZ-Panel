@@ -1,0 +1,59 @@
+# Override for the offline run of spec 17.4: the same containers, on networks with no route out, and
+# the mock smoke set run against them. Nothing needs the internet, and any attempt is already a
+# failure of the guard (17.2). This file adds the other half of the proof: that a request which did
+# try would have had nowhere to go.
+#
+#   docker compose -f docker-compose.yml -f e2e.yml -f e2e-offline.yml up -d --wait caddy-init caddy web-panel web-admin
+#
+# Run by step 10e of scripts/ci-web.sh, on the stack of 2026-11-23 (merge item 10e). Its project name is `ctrlz-e2e`, never `ctrlz`.
+#
+# Spec 17.4 says `internal: true`, and the base file explains why that cannot be the whole answer:
+# Docker publishes no port from an internal network, and Caddy's ports 80 and 443 are the way the
+# browser gets in. So the network that carries them (`ingress`) is a plain bridge with IP masquerade
+# off: the published ports still work, since replies to a connection that came in go back through the
+# same bridge, and a container that opens a connection of its own has no NAT to leave through.
+# `egress` and `hub_ingress` are the other plain bridges, and they go internal. `scripts/ci-web.sh`
+# checks the result from inside Caddy, because an offline run on a network that is not closed proves
+# nothing: a request to a public address must fail there before the smoke set counts.
+name: ctrlz-e2e
+
+networks:
+  ingress:
+    driver: bridge
+    # No IPv6 here: the base file's ULA range is NAT66 and the masquerade switch below is IPv4's.
+    enable_ipv6: false
+    ipam: !override
+      config:
+        - subnet: 10.213.79.0/24
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+  egress:
+    internal: true
+  hub_ingress:
+    internal: true
+
+# Measured by the first real run (Docker Desktop on Windows, Docker 29.9): the masquerade switch above does NOT close the route. Docker
+# Desktop's virtual machine sits behind the host's own NAT, which translates the unmasqueraded source address, so Caddy reached
+# http://1.1.1.1/ and got Cloudflare's 301 while ingress was "off". On a Linux host the switch would have been enough; the run must not
+# depend on which host it is on, so Caddy's route is cut from inside its own network namespace.
+#
+# `offline-cut` shares Caddy's namespace (network_mode), holds NET_ADMIN for one command and exits. Caddy itself is not changed: it still runs as
+# uid 65532 with one capability, as in production. The private ranges keep a route through the bridge gateway because the replies to a
+# connection that came in through a published port go back to the address of the host side of the port (a private one on Docker Desktop), and a
+# connection with no way back would break the published ports as well. Every other destination, that is every public address, has no route
+# at all, and a connect() to one fails at once with "Network unreachable". The probe in scripts/ci-web.sh asks Caddy for 1.1.1.1 to check that.
+services:
+  offline-cut:
+    image: busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+    network_mode: "service:caddy"
+    restart: "no"
+    user: "0:0"
+    cap_drop: ["ALL"]
+    cap_add: ["NET_ADMIN"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    pids_limit: 16
+    # 10.213.79.1 is the ingress gateway of this file (subnet above). A failure of any step fails the container, and so the run.
+    command: ["sh", "-c", "ip route add 10.0.0.0/8 via 10.213.79.1 && ip route add 172.16.0.0/12 via 10.213.79.1 && ip route add 192.168.0.0/16 via 10.213.79.1 && ip route del default"]
+    depends_on:
+      caddy: {condition: service_started}
