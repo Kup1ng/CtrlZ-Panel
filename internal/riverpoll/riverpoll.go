@@ -34,6 +34,16 @@ func Executor(e riverdriver.Executor) riverdriver.Executor { return pollExecutor
 // ExecutorTx wraps River's executor of a transaction with the notifying calls replaced.
 func ExecutorTx(e riverdriver.ExecutorTx) riverdriver.ExecutorTx { return pollExecutorTx{e} }
 
+// Unwrap takes the wrapper off an executor of a transaction. River's own driver turns an executor back into its pgx
+// transaction (Driver.UnwrapTx) with a forced assertion on its own concrete type, so a wrapped one would panic there. An
+// executor that is not one of ours is returned as it is.
+func Unwrap(e riverdriver.ExecutorTx) riverdriver.ExecutorTx {
+	if w, ok := e.(pollExecutorTx); ok {
+		return w.ExecutorTx
+	}
+	return e
+}
+
 func (e pollExecutor) Begin(ctx context.Context) (riverdriver.ExecutorTx, error) {
 	tx, err := e.Executor.Begin(ctx)
 	if err != nil {

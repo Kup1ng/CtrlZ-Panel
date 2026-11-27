@@ -41,6 +41,13 @@ func (d *PollDriver) UnwrapExecutor(tx pgx.Tx) riverdriver.ExecutorTx {
 	return riverpoll.ExecutorTx(d.Driver.UnwrapExecutor(tx))
 }
 
+// UnwrapTx gives back the pgx transaction of an executor this driver handed out. River's own UnwrapTx asserts the concrete
+// type of its executor, which riverpoll's wrapper is not, so the wrapper is taken off first. In River v0.51.2 only its test
+// helper calls it; when River is bumped, re-check this method together with GetExecutor and UnwrapExecutor.
+func (d *PollDriver) UnwrapTx(e riverdriver.ExecutorTx) pgx.Tx {
+	return d.Driver.UnwrapTx(riverpoll.Unwrap(e))
+}
+
 // SupportsListener says there is no LISTEN.
 func (*PollDriver) SupportsListener() bool { return false }
 
