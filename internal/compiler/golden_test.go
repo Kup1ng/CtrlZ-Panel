@@ -78,6 +78,8 @@ func rowsOf(name string, pj *vectors.ProfileJSON, f *vectors.FixtureFile, maps *
 		o.BlockResponse, o.BlockV4, o.BlockV6 = b.Mode, b.V4, b.V6
 		// The compiler takes OPTS.block_page_hash from the profile's block page blob (p4b-proxy 11),
 		// not from an options row, so a fixture that names a hash is not reproducible from rows here.
+		// TODO(p4b-proxy 11): when the compiler reads that blob, add it to these rows and drop the `|| b.PageHash != ""`
+		// clause, or opt-rebind-page (fixtures/base.json) stays uncompared with the compiler's OPTS.block_page_hash.
 		if (b.Mode != "custom" && (b.V4 != "" || b.V6 != "")) || b.PageHash != "" {
 			exact = false
 		}
