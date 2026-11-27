@@ -1,0 +1,70 @@
+import {describe, expect, it} from "vitest";
+
+import {claimHolds, identifies, isIpv4, pairIsIpv6, shouldRemind} from "./freeDnsModel.ts";
+
+// T-557: the rules of the reminder and of the IPv6 pair warning.
+
+describe("claimHolds", () => {
+  it("matches an address inside the prefix and refuses one outside it", () => {
+    expect(claimHolds("203.0.113.7/32", "203.0.113.7")).toBe(true);
+    expect(claimHolds("203.0.113.7/32", "203.0.113.8")).toBe(false);
+    expect(claimHolds("198.51.100.0/24", "198.51.100.200")).toBe(true);
+    expect(claimHolds("198.51.100.0/24", "198.51.101.1")).toBe(false);
+    expect(claimHolds("192.0.2.64/26", "192.0.2.127")).toBe(true);
+    expect(claimHolds("192.0.2.64/26", "192.0.2.128")).toBe(false);
+  });
+  it("holds nothing for what is not an IPv4 prefix and address", () => {
+    expect(claimHolds("2001:db8::/48", "203.0.113.7")).toBe(false);
+    expect(claimHolds("203.0.113.0/33", "203.0.113.7")).toBe(false);
+    expect(claimHolds("203.0.113.0", "203.0.113.7")).toBe(false);
+    expect(claimHolds("203.0.113.0/24", "2001:db8::1")).toBe(false);
+  });
+  it("a /0 holds every address", () => {
+    expect(claimHolds("0.0.0.0/0", "8.8.8.8")).toBe(true);
+  });
+});
+
+describe("shouldRemind", () => {
+  const base = {enabled: true as boolean | null, legacyDns: true, ip: "203.0.113.9" as string | undefined, claims: [] as {cidr: string; state: string}[] | undefined, closedFor: null as string | null};
+  it("shows for an unclaimed IPv4 address while free DNS is on", () => {
+    expect(shouldRemind(base)).toBe(true);
+  });
+  it("is quiet while the switch is off or not known: the text is the one that depends on it", () => {
+    expect(shouldRemind({...base, enabled: false})).toBe(false);
+    expect(shouldRemind({...base, enabled: null})).toBe(false);
+  });
+  it("is quiet without Plain DNS, for an IPv6 browser, and while the claims are unread", () => {
+    expect(shouldRemind({...base, legacyDns: false})).toBe(false);
+    expect(shouldRemind({...base, ip: "2001:db8::9"})).toBe(false);
+    expect(shouldRemind({...base, ip: undefined})).toBe(false);
+    expect(shouldRemind({...base, claims: undefined})).toBe(false);
+  });
+  it("counts an active and a grace claim that holds the address, and no other state", () => {
+    expect(shouldRemind({...base, claims: [{cidr: "203.0.113.9/32", state: "active"}]})).toBe(false);
+    expect(shouldRemind({...base, claims: [{cidr: "203.0.113.0/24", state: "grace"}]})).toBe(false);
+    expect(shouldRemind({...base, claims: [{cidr: "203.0.113.9/32", state: "pending_proof"}]})).toBe(true);
+    expect(shouldRemind({...base, claims: [{cidr: "203.0.113.9/32", state: "suspended"}]})).toBe(true);
+    expect(shouldRemind({...base, claims: [{cidr: "203.0.113.10/32", state: "active"}]})).toBe(true);
+  });
+  it("stays closed for the address it was closed for, and comes back when the address changes", () => {
+    expect(shouldRemind({...base, closedFor: "203.0.113.9"})).toBe(false);
+    expect(shouldRemind({...base, closedFor: "203.0.113.8"})).toBe(true);
+  });
+});
+
+describe("pairIsIpv6, identifies, isIpv4", () => {
+  it("is IPv6 when either address is", () => {
+    expect(pairIsIpv6("2001:db8::53", "2001:db8::54")).toBe(true);
+    expect(pairIsIpv6("203.0.113.53", "2001:db8::54")).toBe(true);
+    expect(pairIsIpv6("203.0.113.53", "203.0.113.54")).toBe(false);
+    expect(pairIsIpv6(undefined, undefined)).toBe(false);
+  });
+  it("identifies only active and grace", () => {
+    expect(["active", "grace", "pending_proof", "suspended"].map((state) => identifies({state}))).toEqual([true, true, false, false]);
+  });
+  it("reads a dotted quad only", () => {
+    expect(isIpv4("203.0.113.7")).toBe(true);
+    expect(isIpv4("203.0.113.256")).toBe(false);
+    expect(isIpv4("2001:db8::1")).toBe(false);
+  });
+});

@@ -1,0 +1,784 @@
+-- P4, package W2 (docs/specs/p4-nodes.md 3.2 and 3.3): the schema of nodes, the hub, the compiler and
+-- free DNS. Every item of 3.2, in its order:
+--
+--  1. What PS marks as a P4 addition: the nodes failover columns, the status CHECK without draining, the
+--     terminal-revoked trigger, the embedded-IPv4 CHECKs on the two nodes addresses; pair_event_state;
+--     node_dns_requests; node_pairs_one_peer; D on node_pairs for the admin and the narrowed admin grants on
+--     nodes; free_dns_settings with its version trigger, free_dns_counters, free_dns_counter_batches and
+--     free_dns_public(); upstream_udp_ip, the node_upstreams CHECKs and node_upstreams_no_loop; the
+--     worker's endpoints reads; the status column for ctrlz_auth.
+--  2. Nothing: nodes.blob_major_max is read from version_info.
+--  3. node_enrollments gets the record SC 8a.11 L2 freezes, with the trigger that freezes it; nodes.spki_sha256
+--     is unique and node_spki_retired remembers every key once admitted; prev_cert_serial; the dedupe index
+--     of node_quarantine.
+--  4. admin_jobs.kind gains pair_change, domain_change and node_revoked; the hub may insert domain_change only.
+--  5. certificates: zone_ca, names, source, row-level security with a named policy per role.
+--  6. domain_settings: changed_at, the hostname CHECKs, the applied_* columns, and the grants of the new login
+--     role ctrlz_domain_apply (bootstrap/10-cluster.sql creates it).
+--  7. ip_proof_challenges_protocol takes doh3: migration 0075 did it already, nothing to do here.
+--  8. Nothing: version_info keeps what the spec says.
+--  9. The grants of the P3 hand-over: the hub's learned rows, the reporting-node columns and
+--     ctrlz_fn.node_taken_claims; the worker's reads for the log pruning; the compiler's U on
+--     catalog_versions.state.
+--
+-- Choices the spec leaves open, made here:
+--  * A trigger or CHECK that runs with the rights of the writing role may call nothing that role cannot run.
+--    pg_advisory_xact_lock is the one function of ctrlz_auth alone (bootstrap/20-database.sql, catalog_reach.yaml),
+--    so the two constraint triggers that serialise take their lock through ctrlz_fn.node_pairs_lock() and
+--    ctrlz_fn.node_upstreams_lock() (EXECUTE for ctrlz_admin, the one role that writes what they guard), the way
+--    ctrlz_fn.audit_lock() does it for the audit chain. The table owner, ctrlz_migrator, holds neither the
+--    functions nor USAGE on ctrlz_fn, so a write of node_pairs, of nodes.dns_advertised_ip or dns_bind_ip, or of
+--    kind, address or bootstrap_ip of node_upstreams as ctrlz_migrator fails at commit with 42501 (the migrator
+--    cannot SET ROLE ctrlz_admin either). Only ctrlz_admin writes these columns; a later migration that must
+--    write them disables the trigger for the statement (the owner may ALTER TABLE ... DISABLE TRIGGER), checks
+--    the loop itself and enables it again, or grants the migrator the two functions in that migration. (The
+--    tests write these rows over the superuser connection, which is not the owner.)
+--  * The same reason gives the compiler and the worker ctrlz_fn.config_log_lock() (the lock of PS 10 that P4 6.1
+--    and 8 take), and the compiler USAGE on ctrlz_fn (item 10 at the end of the file).
+--  * ctrlz_tenant's table-level SELECT and INSERT on authorized_ips and clients are replaced by column lists
+--    without learned_by_node_id and created_by_node_id: the reporting node is the hub's and the worker's.
+--  * certificates: the hub's write limits are the WITH CHECK of two policies, which says in the database what the
+--    spec's "a trigger refuses any other hub write" says, and ctrlz_admin may insert only an uploaded, active row
+--    of kind wildcard, panel or admin.
+--  * ip_proof_challenges: ctrlz_auth sees the challenges a node observed (policy auth_node_reports) so that
+--    ctrlz_fn.node_taken_claims can list, across tenants, the claims taken on one node's observations (4.5).
+--    Its other functions state their tenant in every statement, so the wider read changes nothing for them.
+--  * node_taken_claims takes the start of the window as Unix seconds: catalog check 24 refuses a definer function
+--    that takes a timestamp, because a time handed in would be the application clock deciding in the database.
+--  * node_enrollments' hostname is the grammar of RFC 1123 labels in either case (a Linux hostname may hold upper
+--    case); the hostnames of domain_settings are lower case (spec 3.2 item 6).
+--
+-- A new file and not an edit of an applied one (README, Rules).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+-- The role is made by bootstrap, which the migrator cannot do. Say so plainly on a database whose
+-- bootstrap predates this file.
+-- +goose StatementBegin
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'ctrlz_domain_apply') THEN
+    RAISE EXCEPTION 'role ctrlz_domain_apply does not exist: run the CREATE ROLE and ALTER ROLE lines for it from migrations/postgres/bootstrap/10-cluster.sql and 15-role-bounds.sql and the GRANT CONNECT of 20-database.sql, as the superuser (pg_hba.conf and the pg_domain_apply_password secret too)';
+  END IF;
+END
+$$;
+-- +goose StatementEnd
+
+-- 1a. nodes -------------------------------------------------------------------------------------
+
+-- Nothing writes draining, so no row holds it; a database that somehow does gets the closest state that
+-- is still in the table.
+UPDATE ctrlz.nodes SET status = 'active' WHERE status = 'draining';
+ALTER TABLE ctrlz.nodes DROP CONSTRAINT nodes_status_check;
+ALTER TABLE ctrlz.nodes ADD CONSTRAINT nodes_status_check CHECK (status IN ('pending', 'active', 'revoked'));
+
+-- The failover state the hub alone writes (SC 8a.4), and the serial the previous certificate had while a
+-- renewed one has not yet been used (4.3).
+ALTER TABLE ctrlz.nodes
+  ADD COLUMN prev_cert_serial      text,
+  ADD COLUMN dns_withdrawn         boolean NOT NULL DEFAULT false,
+  ADD COLUMN dns_hold              boolean NOT NULL DEFAULT false,
+  ADD COLUMN dns_last_failback_at  timestamptz,
+  ADD COLUMN dns_flap_until        timestamptz;
+
+-- The five forms that embed an IPv4 address (SC 11) and every prefix length shorter than the address (inet
+-- equality includes the length, so 203.0.113.5/24 never equals 203.0.113.5), so that equality compares one
+-- form: the admin routes refuse them, and so does the database for a write that skips them
+-- (node_upstreams_no_loop compares by equality). Only pg_catalog functions are called: the hub's heartbeat
+-- writes evaluate this CHECK too, and the hub holds no helper of ours.
+ALTER TABLE ctrlz.nodes ADD CONSTRAINT nodes_dns_advertised_ip_form CHECK (dns_advertised_ip IS NULL OR (
+  pg_catalog.masklen(dns_advertised_ip) = (CASE pg_catalog.family(dns_advertised_ip) WHEN 4 THEN 32 ELSE 128 END)
+  AND NOT (
+    dns_advertised_ip <<= '::ffff:0:0/96'::pg_catalog.inet OR dns_advertised_ip <<= '64:ff9b::/96'::pg_catalog.inet
+    OR dns_advertised_ip <<= '::/96'::pg_catalog.inet OR dns_advertised_ip <<= '2002::/16'::pg_catalog.inet
+    OR dns_advertised_ip <<= '2001::/32'::pg_catalog.inet)));
+ALTER TABLE ctrlz.nodes ADD CONSTRAINT nodes_dns_bind_ip_form CHECK (dns_bind_ip IS NULL OR (
+  pg_catalog.masklen(dns_bind_ip) = (CASE pg_catalog.family(dns_bind_ip) WHEN 4 THEN 32 ELSE 128 END)
+  AND NOT (
+    dns_bind_ip <<= '::ffff:0:0/96'::pg_catalog.inet OR dns_bind_ip <<= '64:ff9b::/96'::pg_catalog.inet
+    OR dns_bind_ip <<= '::/96'::pg_catalog.inet OR dns_bind_ip <<= '2002::/16'::pg_catalog.inet
+    OR dns_bind_ip <<= '2001::/32'::pg_catalog.inet)));
+
+-- A key once admitted is never admitted again (4.2 step 4): unique on the node row, and remembered after
+-- the row is revoked, removed or never confirmed.
+CREATE UNIQUE INDEX nodes_spki_sha256_uq ON ctrlz.nodes (spki_sha256);
+
+CREATE TABLE ctrlz.node_spki_retired (
+  spki_sha256 bytea PRIMARY KEY CHECK (pg_catalog.octet_length(spki_sha256) = 32),
+  retired_at  timestamptz NOT NULL DEFAULT pg_catalog.now()
+);
+
+-- status moves one way: pending to active, active to revoked, and a write that leaves it as it was is no
+-- move. For every role, the table owner included.
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.nodes_revoked_terminal() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND NOT ((OLD.status = 'pending' AND NEW.status = 'active') OR (OLD.status = 'active' AND NEW.status = 'revoked')) THEN
+    RAISE EXCEPTION 'a node moves from pending to active and from active to revoked only, not from % to %', OLD.status, NEW.status
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'nodes_revoked_terminal';
+  END IF;
+  RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.nodes_revoked_terminal() FROM PUBLIC;
+CREATE TRIGGER nodes_revoked_terminal BEFORE UPDATE OF status ON ctrlz.nodes
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.nodes_revoked_terminal();
+
+-- The key of a node that is revoked or removed goes to node_spki_retired. The writer of the status is
+-- ctrlz_admin, which therefore holds INSERT on that table (it holds the node removal too, so the reach is
+-- the one it has over the table the key lived in).
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.node_spki_retire() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_spki bytea;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    v_spki := OLD.spki_sha256;
+  ELSIF NEW.status = 'revoked' AND OLD.status IS DISTINCT FROM 'revoked' THEN
+    v_spki := NEW.spki_sha256;
+  END IF;
+  IF v_spki IS NOT NULL THEN
+    INSERT INTO ctrlz.node_spki_retired (spki_sha256) VALUES (v_spki) ON CONFLICT DO NOTHING;
+  END IF;
+  RETURN NULL;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.node_spki_retire() FROM PUBLIC;
+CREATE TRIGGER node_spki_retire_on_revoke AFTER UPDATE OF status ON ctrlz.nodes
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.node_spki_retire();
+CREATE TRIGGER node_spki_retire_on_delete AFTER DELETE ON ctrlz.nodes
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.node_spki_retire();
+
+-- 1b. The hub's decision state ------------------------------------------------------------------
+
+-- One row: the version of the last signing event and its signed PairTable, written in the transaction
+-- that writes the event's flags (SC 8a.4, Publication).
+CREATE TABLE ctrlz.pair_event_state (
+  singleton  boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  version    bigint NOT NULL DEFAULT 0 CHECK (version >= 0),
+  last_table bytea,
+  updated_at timestamptz NOT NULL DEFAULT pg_catalog.now()
+);
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON ctrlz.pair_event_state
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.touch_updated_at();
+INSERT INTO ctrlz.pair_event_state DEFAULT VALUES;
+
+-- The admin asks, the hub decides on its tick. requested_at and state take their defaults, so only the
+-- database sets the first and only the hub writes a decision (grants below).
+CREATE TABLE ctrlz.node_dns_requests (
+  id           uuid PRIMARY KEY DEFAULT pg_catalog.uuidv7(),
+  node_id      uuid NOT NULL REFERENCES ctrlz.nodes (id) ON DELETE CASCADE,
+  kind         text NOT NULL CHECK (kind IN ('hold', 'release', 'force_failback')),
+  requested_by uuid REFERENCES ctrlz.admin_users (id) ON DELETE SET NULL,
+  requested_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  state        text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'done', 'refused', 'expired')),
+  reason       text CHECK (reason IS NULL OR pg_catalog.char_length(reason) <= 64),
+  decided_at   timestamptz
+);
+
+-- Each node is in pairs with at most one other node, so (A, B) beside (B, A) is accepted and (A, B) beside
+-- (A, C) is refused: the rule wire.ValidatePairTable applies on every node. A deferred constraint trigger, so
+-- a pair can be swapped in two statements, with the lock of ctrlz_fn.node_pairs_lock() so that two
+-- transactions cannot both pass.
+SET ROLE ctrlz_auth;
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.node_pairs_lock() RETURNS void
+LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$ SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('ctrlz.node_pairs_one_peer', 0)) $$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.node_pairs_lock() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.node_pairs_lock() TO ctrlz_admin;
+
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.node_upstreams_lock() RETURNS void
+LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$ SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('ctrlz.node_upstreams_no_loop', 0)) $$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.node_upstreams_lock() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.node_upstreams_lock() TO ctrlz_admin;
+RESET ROLE;
+
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.node_pairs_one_peer() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  PERFORM ctrlz_fn.node_pairs_lock();
+  IF EXISTS (
+    SELECT 1 FROM ctrlz.node_pairs p
+    WHERE p.id <> NEW.id
+      AND ((p.primary_node_id = NEW.primary_node_id AND p.fallback_node_id <> NEW.fallback_node_id)
+        OR (p.fallback_node_id = NEW.primary_node_id AND p.primary_node_id <> NEW.fallback_node_id)
+        OR (p.primary_node_id = NEW.fallback_node_id AND p.fallback_node_id <> NEW.primary_node_id)
+        OR (p.fallback_node_id = NEW.fallback_node_id AND p.primary_node_id <> NEW.primary_node_id))
+  ) THEN
+    RAISE EXCEPTION 'a node is in pairs with at most one other node'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'node_pairs_one_peer';
+  END IF;
+  RETURN NULL;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.node_pairs_one_peer() FROM PUBLIC;
+CREATE CONSTRAINT TRIGGER node_pairs_one_peer AFTER INSERT OR UPDATE ON ctrlz.node_pairs
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ctrlz.node_pairs_one_peer();
+
+-- 1c. Upstream loops ----------------------------------------------------------------------------
+
+-- The IP of a udp upstream's address, which is an IP and a port as netip.AddrPort prints them, or NULL for
+-- any other text. The cast is guarded, so a malformed text answers NULL where a cast would raise.
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.upstream_udp_ip(p_address text) RETURNS inet
+LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_m text[];
+  v_ip inet;
+BEGIN
+  IF p_address IS NULL THEN
+    RETURN NULL;
+  END IF;
+  -- The two forms netip.ParseAddrPort accepts and no others: a dotted quad with no leading zero in an octet
+  -- (Go refuses 192.0.2.01, and a PostgreSQL reading of it could be another number) and brackets around an
+  -- IPv6 address only (Go refuses [192.0.2.1]:53).
+  v_m := pg_catalog.regexp_match(p_address,
+    '^((?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}):([1-9][0-9]{0,4})$');
+  IF v_m IS NULL THEN
+    v_m := pg_catalog.regexp_match(p_address, '^\[([0-9A-Fa-f]*:[0-9A-Fa-f:.]*)\]:([1-9][0-9]{0,4})$');
+  END IF;
+  IF v_m IS NULL OR v_m[2]::integer > 65535 THEN
+    RETURN NULL;
+  END IF;
+  BEGIN
+    v_ip := v_m[1]::inet;
+  EXCEPTION WHEN invalid_text_representation THEN
+    RETURN NULL;
+  END;
+  -- A host with a prefix length is not an address.
+  IF pg_catalog.masklen(v_ip) <> (CASE pg_catalog.family(v_ip) WHEN 4 THEN 32 ELSE 128 END) THEN
+    RETURN NULL;
+  END IF;
+  RETURN v_ip;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.upstream_udp_ip(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz.upstream_udp_ip(text) TO ctrlz_admin;
+
+-- For kind udp the address is that IP and port, and neither it nor a bootstrap address is a form that
+-- embeds IPv4; a bootstrap address is a host (no prefix length shorter than the address), as the two node
+-- addresses above are.
+ALTER TABLE ctrlz.node_upstreams ADD CONSTRAINT node_upstreams_udp_address
+  CHECK (kind <> 'udp' OR ctrlz.upstream_udp_ip(address) IS NOT NULL);
+ALTER TABLE ctrlz.node_upstreams ADD CONSTRAINT node_upstreams_embedded_ip CHECK (
+  (bootstrap_ip IS NULL OR (
+     pg_catalog.masklen(bootstrap_ip) = (CASE pg_catalog.family(bootstrap_ip) WHEN 4 THEN 32 ELSE 128 END)
+     AND NOT (
+       bootstrap_ip <<= '::ffff:0:0/96'::pg_catalog.inet OR bootstrap_ip <<= '64:ff9b::/96'::pg_catalog.inet
+       OR bootstrap_ip <<= '::/96'::pg_catalog.inet OR bootstrap_ip <<= '2002::/16'::pg_catalog.inet
+       OR bootstrap_ip <<= '2001::/32'::pg_catalog.inet)))
+  AND (kind <> 'udp' OR NOT (
+     ctrlz.upstream_udp_ip(address) <<= '::ffff:0:0/96'::pg_catalog.inet OR ctrlz.upstream_udp_ip(address) <<= '64:ff9b::/96'::pg_catalog.inet
+     OR ctrlz.upstream_udp_ip(address) <<= '::/96'::pg_catalog.inet OR ctrlz.upstream_udp_ip(address) <<= '2002::/16'::pg_catalog.inet
+     OR ctrlz.upstream_udp_ip(address) <<= '2001::/32'::pg_catalog.inet)));
+
+-- An upstream whose bootstrap address, or whose udp IP on any port, is the advertised or bind address of
+-- any node would send a node's own queries back to a node: refused from either side, deferred so that an
+-- address can move from an upstream to a node in one transaction. Both triggers share the function.
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.node_upstreams_no_loop() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_loop boolean;
+BEGIN
+  PERFORM ctrlz_fn.node_upstreams_lock();
+  IF TG_TABLE_NAME = 'node_upstreams' THEN
+    SELECT EXISTS (
+      SELECT 1 FROM ctrlz.nodes n
+      WHERE n.dns_advertised_ip IN (NEW.bootstrap_ip, CASE WHEN NEW.kind = 'udp' THEN ctrlz.upstream_udp_ip(NEW.address) END)
+         OR n.dns_bind_ip IN (NEW.bootstrap_ip, CASE WHEN NEW.kind = 'udp' THEN ctrlz.upstream_udp_ip(NEW.address) END)
+    ) INTO v_loop;
+  ELSE
+    SELECT EXISTS (
+      SELECT 1 FROM ctrlz.node_upstreams u
+      WHERE u.bootstrap_ip IN (NEW.dns_advertised_ip, NEW.dns_bind_ip)
+         OR (u.kind = 'udp' AND ctrlz.upstream_udp_ip(u.address) IN (NEW.dns_advertised_ip, NEW.dns_bind_ip))
+    ) INTO v_loop;
+  END IF;
+  IF v_loop THEN
+    RAISE EXCEPTION 'an upstream of a node may not be the address of a node'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'node_upstreams_no_loop';
+  END IF;
+  RETURN NULL;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.node_upstreams_no_loop() FROM PUBLIC;
+CREATE CONSTRAINT TRIGGER node_upstreams_no_loop AFTER INSERT OR UPDATE OF kind, address, bootstrap_ip ON ctrlz.node_upstreams
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ctrlz.node_upstreams_no_loop();
+CREATE CONSTRAINT TRIGGER node_upstreams_no_loop AFTER INSERT OR UPDATE OF dns_advertised_ip, dns_bind_ip ON ctrlz.nodes
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ctrlz.node_upstreams_no_loop();
+
+-- 1d. Free DNS (SC 5.2a) ------------------------------------------------------------------------
+
+CREATE TABLE ctrlz.free_dns_settings (
+  singleton  boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  enabled    boolean NOT NULL DEFAULT true,
+  -- 50000 is wire.MaxFreeQPS; the admin route refuses more than the ceiling of T-374 (2000 until measured).
+  qps        integer NOT NULL DEFAULT 1000 CONSTRAINT free_dns_settings_qps_range CHECK (qps BETWEEN 1 AND 50000),
+  version    bigint NOT NULL DEFAULT 1,
+  updated_at timestamptz NOT NULL DEFAULT pg_catalog.now()
+);
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON ctrlz.free_dns_settings
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.touch_updated_at();
+
+-- The version is the greater of the old one plus one and the clock in milliseconds, on every insert and
+-- update, a revert included: the compiler and the off floor of SC 5.2a see each change, and after a restore
+-- from a backup it is above every version issued before (unless the panel clock went backwards).
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.free_dns_settings_version() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_old   bigint := 0;
+  v_clock bigint := pg_catalog.floor(pg_catalog.date_part('epoch', pg_catalog.clock_timestamp()) * 1000)::bigint;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    v_old := OLD.version;
+  END IF;
+  NEW.version := GREATEST(v_old + 1, v_clock);
+  RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.free_dns_settings_version() FROM PUBLIC;
+CREATE TRIGGER free_dns_settings_version BEFORE INSERT OR UPDATE ON ctrlz.free_dns_settings
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.free_dns_settings_version();
+INSERT INTO ctrlz.free_dns_settings DEFAULT VALUES;
+
+-- From CountersBatch.free: no name and no address. The hub adds each item into the row of the hour that
+-- holds the batch's bucket_start.
+CREATE TABLE ctrlz.free_dns_counters (
+  node_id      uuid NOT NULL REFERENCES ctrlz.nodes (id) ON DELETE CASCADE,
+  bucket_start timestamptz NOT NULL,
+  protocol     text NOT NULL CHECK (protocol IN ('udp', 'tcp')),
+  outcome      text NOT NULL CHECK (outcome ~ '^[a-z0-9_]{1,32}$'),
+  rcode        smallint NOT NULL CHECK (rcode BETWEEN 0 AND 23),
+  count        bigint NOT NULL DEFAULT 0 CHECK (count >= 0),
+  PRIMARY KEY (node_id, bucket_start, protocol, outcome, rcode)
+);
+
+-- The dedupe of UploadCounters. batch_id is the node's random 64-bit number kept as the bigint with the same
+-- bits. The second UNIQUE makes a node add at most one batch for each 5-minute bucket, whatever ids it draws.
+CREATE TABLE ctrlz.free_dns_counter_batches (
+  node_id      uuid NOT NULL REFERENCES ctrlz.nodes (id) ON DELETE CASCADE,
+  batch_id     bigint NOT NULL,
+  bucket_start timestamptz NOT NULL,
+  received_at  timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  PRIMARY KEY (node_id, batch_id),
+  UNIQUE (node_id, bucket_start)
+);
+
+-- What the tenant dashboards and the page without a login read (T-556, T-557): whether free DNS is on and the
+-- advertised addresses of the global pair, each NULL when there is no global pair or that node is not active.
+-- It takes no key and returns one row of install values, with no tenant data.
+SET ROLE ctrlz_auth;
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.free_dns_public()
+RETURNS TABLE (enabled boolean, primary_dns_ip inet, fallback_dns_ip inet)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT f.enabled,
+         (SELECT pn.dns_advertised_ip FROM ctrlz.nodes pn WHERE pn.id = gp.primary_node_id AND pn.status = 'active'),
+         (SELECT fn.dns_advertised_ip FROM ctrlz.nodes fn WHERE fn.id = gp.fallback_node_id AND fn.status = 'active')
+  FROM ctrlz.free_dns_settings f
+  CROSS JOIN ctrlz.public_settings ps
+  LEFT JOIN ctrlz.node_pairs gp ON gp.id = ps.global_pair_id
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.free_dns_public() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.free_dns_public() TO ctrlz_tenant;
+RESET ROLE;
+
+-- 3. node_enrollments ---------------------------------------------------------------------------
+
+-- The record SC 8a.11 L2 freezes: the CSR, the key it carries, the four addresses and what the host says
+-- about itself, written once by Enroll. The admin compares it with the host's console (4.2 step 4).
+ALTER TABLE ctrlz.node_enrollments
+  ADD COLUMN csr_der             bytea CONSTRAINT node_enrollments_csr_size CHECK (pg_catalog.octet_length(csr_der) BETWEEN 1 AND 4096),
+  ADD COLUMN spki_sha256         bytea CONSTRAINT node_enrollments_spki_size CHECK (pg_catalog.octet_length(spki_sha256) = 32),
+  ADD COLUMN dns_bind_ip         inet,
+  ADD COLUMN dns_advertised_ip   inet,
+  ADD COLUMN proxy_bind_ip       inet,
+  ADD COLUMN proxy_advertised_ip inet,
+  ADD COLUMN hostname            text CONSTRAINT node_enrollments_hostname_form CHECK (
+    pg_catalog.octet_length(hostname) <= 253
+    AND hostname ~ '^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$'),
+  ADD COLUMN os_release          text CONSTRAINT node_enrollments_os_release_form CHECK (os_release ~ '^[ -~]+$' AND pg_catalog.octet_length(os_release) <= 256),
+  ADD COLUMN node_version        text CONSTRAINT node_enrollments_node_version_form CHECK (node_version ~ '^[ -~]+$' AND pg_catalog.octet_length(node_version) <= 256),
+  ADD COLUMN enrolled_at         timestamptz,
+  ADD COLUMN enrolled_from       inet,
+  ADD COLUMN rejected_at         timestamptz,
+  ADD COLUMN cert_der            bytea;
+-- The fingerprint the admin reads is the hex SHA-256 of the SPKI, which is spki_sha256.
+ALTER TABLE ctrlz.node_enrollments ADD CONSTRAINT node_enrollments_fingerprint_matches CHECK (
+  key_fingerprint IS NULL OR (spki_sha256 IS NOT NULL AND key_fingerprint = pg_catalog.encode(spki_sha256, 'hex')));
+
+-- Frozen for every role. The moves of state are issued to pending_approval (Enroll, with the whole record
+-- in the same statement), pending_approval to approved or rejected (the admin), issued or pending_approval to
+-- expired (the worker), and issued to rejected (the admin withdraws a token). A record column that is set
+-- never changes, cert_der too; a record column is set only by the move to pending_approval, together with the
+-- rest of the record. An approved row names its node.
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.node_enrollments_frozen() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  IF NEW.state IS DISTINCT FROM OLD.state AND NOT (
+       (OLD.state = 'issued' AND NEW.state IN ('pending_approval', 'rejected', 'expired'))
+    OR (OLD.state = 'pending_approval' AND NEW.state IN ('approved', 'rejected', 'expired'))) THEN
+    RAISE EXCEPTION 'an enrolment does not move from % to %', OLD.state, NEW.state
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'node_enrollments_frozen';
+  END IF;
+  IF NEW.state = 'approved' AND NEW.node_id IS NULL THEN
+    RAISE EXCEPTION 'an approved enrolment names its node'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'node_enrollments_frozen';
+  END IF;
+  IF OLD.state = 'issued' AND NEW.state = 'pending_approval' THEN
+    IF OLD.csr_der IS NOT NULL OR OLD.spki_sha256 IS NOT NULL OR OLD.dns_bind_ip IS NOT NULL OR OLD.dns_advertised_ip IS NOT NULL
+       OR OLD.proxy_bind_ip IS NOT NULL OR OLD.proxy_advertised_ip IS NOT NULL OR OLD.hostname IS NOT NULL
+       OR OLD.os_release IS NOT NULL OR OLD.node_version IS NOT NULL OR OLD.enrolled_at IS NOT NULL
+       OR OLD.enrolled_from IS NOT NULL OR OLD.key_fingerprint IS NOT NULL OR OLD.cert_der IS NOT NULL THEN
+      RAISE EXCEPTION 'the record of an enrolment is written once'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'node_enrollments_frozen';
+    END IF;
+    IF NEW.csr_der IS NULL OR NEW.spki_sha256 IS NULL OR NEW.key_fingerprint IS NULL OR NEW.dns_bind_ip IS NULL
+       OR NEW.dns_advertised_ip IS NULL OR NEW.hostname IS NULL OR NEW.os_release IS NULL OR NEW.node_version IS NULL
+       OR NEW.enrolled_at IS NULL OR NEW.enrolled_from IS NULL OR NEW.cert_der IS NOT NULL THEN
+      RAISE EXCEPTION 'the first Enroll writes the whole record, and no certificate'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'node_enrollments_frozen';
+    END IF;
+  ELSIF NEW.csr_der IS DISTINCT FROM OLD.csr_der OR NEW.spki_sha256 IS DISTINCT FROM OLD.spki_sha256
+     OR NEW.dns_bind_ip IS DISTINCT FROM OLD.dns_bind_ip OR NEW.dns_advertised_ip IS DISTINCT FROM OLD.dns_advertised_ip
+     OR NEW.proxy_bind_ip IS DISTINCT FROM OLD.proxy_bind_ip OR NEW.proxy_advertised_ip IS DISTINCT FROM OLD.proxy_advertised_ip
+     OR NEW.hostname IS DISTINCT FROM OLD.hostname OR NEW.os_release IS DISTINCT FROM OLD.os_release
+     OR NEW.node_version IS DISTINCT FROM OLD.node_version OR NEW.enrolled_at IS DISTINCT FROM OLD.enrolled_at
+     OR NEW.enrolled_from IS DISTINCT FROM OLD.enrolled_from OR NEW.key_fingerprint IS DISTINCT FROM OLD.key_fingerprint THEN
+    RAISE EXCEPTION 'the record of an enrolment never changes'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'node_enrollments_frozen';
+  ELSIF OLD.cert_der IS NOT NULL AND NEW.cert_der IS DISTINCT FROM OLD.cert_der THEN
+    RAISE EXCEPTION 'the certificate of an enrolment never changes'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'node_enrollments_frozen';
+  ELSIF OLD.cert_der IS NULL AND NEW.cert_der IS NOT NULL AND NEW.state <> 'approved' THEN
+    RAISE EXCEPTION 'only an approved enrolment holds a certificate'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'node_enrollments_frozen';
+  END IF;
+  RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.node_enrollments_frozen() FROM PUBLIC;
+CREATE TRIGGER node_enrollments_frozen BEFORE UPDATE ON ctrlz.node_enrollments
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.node_enrollments_frozen();
+
+-- The same failure from two nodes is one alert and one node's report acts locally (5.3): a report is stored
+-- once for (node, seq, item, reason).
+CREATE UNIQUE INDEX node_quarantine_dedupe_uq ON ctrlz.node_quarantine (node_id, seq, item, reason);
+
+-- 4. admin_jobs ---------------------------------------------------------------------------------
+
+ALTER TABLE ctrlz.admin_jobs DROP CONSTRAINT admin_jobs_kind_check;
+ALTER TABLE ctrlz.admin_jobs ADD CONSTRAINT admin_jobs_kind_check
+  CHECK (kind IN ('registration_transition', 'webauthn_rp_change', 'pair_change', 'domain_change', 'node_revoked'));
+
+-- The hub inserts one kind, a zone CA reissue's domain_change, with ON CONFLICT DO NOTHING: a job in flight
+-- picks up the new state (8). A column grant cannot say which values a column takes, so a trigger does.
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.admin_jobs_hub_kind() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  IF current_user = 'ctrlz_hub' AND NEW.kind <> 'domain_change' THEN
+    RAISE EXCEPTION 'the hub queues the job kind domain_change only'
+      USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'admin_jobs_hub_kind';
+  END IF;
+  RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.admin_jobs_hub_kind() FROM PUBLIC;
+CREATE TRIGGER admin_jobs_hub_kind BEFORE INSERT ON ctrlz.admin_jobs
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.admin_jobs_hub_kind();
+
+-- 5. certificates -------------------------------------------------------------------------------
+
+ALTER TABLE ctrlz.certificates DROP CONSTRAINT certificates_kind_check;
+ALTER TABLE ctrlz.certificates ADD CONSTRAINT certificates_kind_check
+  CHECK (kind IN ('wildcard', 'panel', 'admin', 'node_ca', 'zone_ca', 'block_root', 'block_intermediate'));
+-- names are the SANs of the leaf, lower case. The key of the private CAs is never a row (3.3).
+ALTER TABLE ctrlz.certificates
+  ADD COLUMN names  text[] NOT NULL DEFAULT '{}'
+    CONSTRAINT certificates_names_lower CHECK (pg_catalog.array_to_string(names, ',') = pg_catalog.lower(pg_catalog.array_to_string(names, ','))),
+  ADD COLUMN source text NOT NULL DEFAULT 'issued' CONSTRAINT certificates_source_check CHECK (source IN ('issued', 'uploaded'));
+
+-- The new columns come with their readers. admin and worker hold column grants since 0055 (the sealed key is
+-- the one they may not read), so a new column needs its own.
+GRANT SELECT (names, source) ON ctrlz.certificates TO ctrlz_admin, ctrlz_worker;
+GRANT SELECT (not_before, names, source) ON ctrlz.certificates TO ctrlz_hub;
+GRANT SELECT (kind, state, not_before) ON ctrlz.certificates TO ctrlz_tenant;
+GRANT SELECT (id, kind, chain_pem, wrapped_key_ct, not_before, not_after, state, names, source) ON ctrlz.certificates TO ctrlz_domain_apply;
+-- The hub issues and retires the rows of the private CAs and nothing else; a policy says which.
+GRANT INSERT (kind, chain_pem, not_before, not_after, state, names, source) ON ctrlz.certificates TO ctrlz_hub;
+GRANT UPDATE (state) ON ctrlz.certificates TO ctrlz_hub;
+-- The admin uploads (the key sealed to an intake key, written and never read back) and retires.
+REVOKE INSERT, UPDATE ON ctrlz.certificates FROM ctrlz_admin;
+GRANT INSERT (kind, chain_pem, wrapped_key_ct, not_before, not_after, state, names, source) ON ctrlz.certificates TO ctrlz_admin;
+GRANT UPDATE (state) ON ctrlz.certificates TO ctrlz_admin;
+
+-- Row-level security: global table, so only the roles with a grant meet it (the owner is not forced).
+ALTER TABLE ctrlz.certificates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY hub_read ON ctrlz.certificates AS PERMISSIVE FOR SELECT TO ctrlz_hub
+  USING (kind IN ('wildcard', 'node_ca', 'zone_ca'));
+CREATE POLICY hub_issue ON ctrlz.certificates AS PERMISSIVE FOR INSERT TO ctrlz_hub
+  WITH CHECK (kind IN ('node_ca', 'zone_ca') AND source = 'issued');
+CREATE POLICY hub_retire ON ctrlz.certificates AS PERMISSIVE FOR UPDATE TO ctrlz_hub
+  USING (kind IN ('node_ca', 'zone_ca') AND source = 'issued')
+  WITH CHECK (kind IN ('node_ca', 'zone_ca') AND source = 'issued');
+CREATE POLICY worker_all ON ctrlz.certificates AS PERMISSIVE FOR ALL TO ctrlz_worker
+  USING (true) WITH CHECK (true);
+CREATE POLICY admin_read ON ctrlz.certificates AS PERMISSIVE FOR SELECT TO ctrlz_admin
+  USING (true);
+CREATE POLICY admin_upload ON ctrlz.certificates AS PERMISSIVE FOR INSERT TO ctrlz_admin
+  WITH CHECK (kind IN ('wildcard', 'panel', 'admin') AND source = 'uploaded' AND state = 'active');
+CREATE POLICY admin_retire ON ctrlz.certificates AS PERMISSIVE FOR UPDATE TO ctrlz_admin
+  USING (source = 'uploaded') WITH CHECK (source = 'uploaded');
+CREATE POLICY tenant_zone_ca ON ctrlz.certificates AS PERMISSIVE FOR SELECT TO ctrlz_tenant
+  USING (kind = 'zone_ca');
+CREATE POLICY domain_apply_read ON ctrlz.certificates AS PERMISSIVE FOR SELECT TO ctrlz_domain_apply
+  USING (kind IN ('panel', 'admin'));
+
+-- 6. domain_settings ----------------------------------------------------------------------------
+
+-- panel_host and admin_host are the requested hosts, applied_* the served ones, written only by
+-- `ctrlz domain-apply` (10.4). The hostnames reach .env, so the database holds them to the grammar too.
+ALTER TABLE ctrlz.domain_settings
+  ADD COLUMN changed_at            timestamptz,
+  ADD COLUMN applied_panel_host    text,
+  ADD COLUMN applied_admin_host    text,
+  ADD COLUMN applied_panel_cert_id uuid REFERENCES ctrlz.certificates (id) ON DELETE SET NULL,
+  ADD COLUMN applied_admin_cert_id uuid REFERENCES ctrlz.certificates (id) ON DELETE SET NULL,
+  ADD COLUMN applied_at            timestamptz;
+ALTER TABLE ctrlz.domain_settings
+  ADD CONSTRAINT domain_settings_dns_zone_form CHECK (dns_zone IS NULL OR (
+    pg_catalog.octet_length(dns_zone) <= 253 AND dns_zone LIKE 'dns.%'
+    AND dns_zone ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$')),
+  ADD CONSTRAINT domain_settings_prev_dns_zone_form CHECK (prev_dns_zone IS NULL OR (
+    pg_catalog.octet_length(prev_dns_zone) <= 253 AND prev_dns_zone LIKE 'dns.%'
+    AND prev_dns_zone ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$')),
+  ADD CONSTRAINT domain_settings_panel_host_form CHECK (panel_host IS NULL OR (
+    pg_catalog.octet_length(panel_host) <= 253
+    AND panel_host ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$')),
+  ADD CONSTRAINT domain_settings_admin_host_form CHECK (admin_host IS NULL OR (
+    pg_catalog.octet_length(admin_host) <= 253
+    AND admin_host ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$')),
+  ADD CONSTRAINT domain_settings_applied_panel_host_form CHECK (applied_panel_host IS NULL OR (
+    pg_catalog.octet_length(applied_panel_host) <= 253
+    AND applied_panel_host ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$')),
+  ADD CONSTRAINT domain_settings_applied_admin_host_form CHECK (applied_admin_host IS NULL OR (
+    pg_catalog.octet_length(applied_admin_host) <= 253
+    AND applied_admin_host ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$'));
+
+-- The admin writes the requested values and the stamp of the change; only the apply step writes the applied
+-- ones, as the login role of its one-shot container.
+REVOKE UPDATE ON ctrlz.domain_settings FROM ctrlz_admin;
+GRANT UPDATE (dns_zone, panel_host, admin_host, prev_dns_zone, transition_until, changed_at) ON ctrlz.domain_settings TO ctrlz_admin;
+GRANT USAGE ON SCHEMA ctrlz TO ctrlz_domain_apply;
+GRANT SELECT ON ctrlz.domain_settings TO ctrlz_domain_apply;
+GRANT UPDATE (applied_panel_host, applied_admin_host, applied_panel_cert_id, applied_admin_cert_id, applied_at)
+  ON ctrlz.domain_settings TO ctrlz_domain_apply;
+
+-- The Host gate and every effective panel host of AUTH 7.2 read the host that is served, so auth's read moves
+-- to that column. The function keeps its signature: panel_host is still the host the login page is served on.
+REVOKE SELECT (panel_host) ON ctrlz.domain_settings FROM ctrlz_auth;
+GRANT SELECT (applied_panel_host) ON ctrlz.domain_settings TO ctrlz_auth;
+
+SET ROLE ctrlz_auth;
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.auth_public_config()
+RETURNS TABLE (registration_mode text, panel_host text, rp_id text, allowed_origins text[],
+               passkey_enabled boolean, sms_available boolean, otp_cooldown_s integer)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT s.registration_mode, d.applied_panel_host, w.rp_id, w.allowed_origins,
+         w.enabled AND w.rp_id IS NOT NULL,
+         EXISTS (SELECT 1 FROM ctrlz.sms_gateways g
+                 WHERE g.role IN ('primary', 'fallback')
+                   AND NOT g.unusable_now),
+         s.otp_cooldown_s
+  FROM ctrlz.system_settings s, ctrlz.domain_settings d, ctrlz.webauthn_config w
+$$;
+-- +goose StatementEnd
+RESET ROLE;
+
+-- 1e/3. Grants of the node tables ----------------------------------------------------------------
+
+-- nodes. The hub writes the heartbeat fields, the certificate serials and the failover state, and never slot
+-- or spki_sha256. The admin writes the node form, the two advertised addresses and the status (one way, by
+-- nodes_revoked_terminal); its insert has no status and no failover column, so a new row always starts
+-- pending; it removes a node (the node_pairs foreign keys refuse a paired one). ctrlz_auth reads status for
+-- free_dns_public(). The compiler reads and writes nothing of the failover state.
+GRANT UPDATE (prev_cert_serial, dns_withdrawn, dns_hold, dns_last_failback_at, dns_flap_until) ON ctrlz.nodes TO ctrlz_hub;
+REVOKE INSERT, UPDATE ON ctrlz.nodes FROM ctrlz_admin;
+GRANT INSERT (id, slot, name, dns_bind_ip, dns_advertised_ip, proxy_bind_ip, proxy_advertised_ip, cert_serial, spki_sha256,
+              resolve_mode, last_heartbeat_at, version_info, applied_seq, proxy_blocked, prev_cert_serial, created_at, updated_at)
+  ON ctrlz.nodes TO ctrlz_admin;
+GRANT UPDATE (name, resolve_mode, proxy_blocked, dns_advertised_ip, proxy_advertised_ip, status) ON ctrlz.nodes TO ctrlz_admin;
+GRANT DELETE ON ctrlz.nodes TO ctrlz_admin;
+GRANT SELECT (status) ON ctrlz.nodes TO ctrlz_auth;
+
+GRANT SELECT, INSERT ON ctrlz.node_spki_retired TO ctrlz_admin;
+
+-- node_pairs: the replacement order dissolves a pair no Endpoint uses (the global pair's foreign key refuses it).
+GRANT DELETE ON ctrlz.node_pairs TO ctrlz_admin;
+
+-- node_enrollments. The admin makes the row (a token, its expiry, an address to bind it to) and decides; the
+-- hub writes the record, the state and the certificate Poll issued; the worker expires and sweeps.
+REVOKE INSERT, UPDATE ON ctrlz.node_enrollments FROM ctrlz_hub, ctrlz_admin;
+GRANT UPDATE (csr_der, spki_sha256, dns_bind_ip, dns_advertised_ip, proxy_bind_ip, proxy_advertised_ip, hostname, os_release,
+              node_version, key_fingerprint, state, enrolled_at, enrolled_from, cert_der)
+  ON ctrlz.node_enrollments TO ctrlz_hub;
+GRANT INSERT (token_hash, expires_at, bound_ip) ON ctrlz.node_enrollments TO ctrlz_admin;
+GRANT UPDATE (state, node_id, approved_by, approved_at, rejected_at) ON ctrlz.node_enrollments TO ctrlz_admin;
+GRANT SELECT (id, state, expires_at, enrolled_at, node_id, cert_der) ON ctrlz.node_enrollments TO ctrlz_worker;
+GRANT UPDATE (state) ON ctrlz.node_enrollments TO ctrlz_worker;
+
+-- admin_jobs: the hub queues domain_change (admin_jobs_hub_kind says which kinds).
+GRANT INSERT (kind, params) ON ctrlz.admin_jobs TO ctrlz_hub;
+
+-- The hub's decision state and free DNS.
+GRANT SELECT, UPDATE (version, last_table) ON ctrlz.pair_event_state TO ctrlz_hub;
+GRANT SELECT ON ctrlz.pair_event_state TO ctrlz_admin;
+GRANT SELECT ON ctrlz.node_dns_requests TO ctrlz_admin, ctrlz_hub;
+GRANT INSERT (node_id, kind, requested_by) ON ctrlz.node_dns_requests TO ctrlz_admin;
+GRANT UPDATE (state, reason, decided_at) ON ctrlz.node_dns_requests TO ctrlz_hub;
+
+GRANT SELECT (enabled) ON ctrlz.free_dns_settings TO ctrlz_auth;
+GRANT SELECT (enabled, version) ON ctrlz.free_dns_settings TO ctrlz_hub;
+GRANT SELECT (enabled, qps, version) ON ctrlz.free_dns_settings TO ctrlz_compiler;
+GRANT SELECT ON ctrlz.free_dns_settings TO ctrlz_admin;
+GRANT UPDATE (enabled, qps) ON ctrlz.free_dns_settings TO ctrlz_admin;
+GRANT SELECT, INSERT, UPDATE ON ctrlz.free_dns_counters TO ctrlz_hub;
+GRANT SELECT ON ctrlz.free_dns_counters TO ctrlz_admin;
+GRANT SELECT (bucket_start), DELETE ON ctrlz.free_dns_counters TO ctrlz_worker;
+GRANT SELECT, INSERT ON ctrlz.free_dns_counter_batches TO ctrlz_hub;
+GRANT SELECT (received_at), DELETE ON ctrlz.free_dns_counter_batches TO ctrlz_worker;
+
+-- 1f. The worker's reads and the compiler's write ------------------------------------------------
+
+-- PostgreSQL needs SELECT on every column an UPDATE reads in SET or WHERE, so the pair_version bump
+-- (SET pair_version = pair_version + 1) needs it (SC 8a.4 Admin).
+GRANT SELECT (pair_version) ON ctrlz.endpoints TO ctrlz_worker;
+-- A DELETE ... WHERE needs SELECT on the column it filters (log pruning, 8).
+GRANT SELECT (seq) ON ctrlz.config_log TO ctrlz_worker;
+GRANT SELECT (seq) ON ctrlz.config_snapshot TO ctrlz_worker;
+GRANT SELECT (hash, store_ref, gc_after_seq) ON ctrlz.policy_artifacts TO ctrlz_worker;
+-- A catalog entry that two nodes quarantine marks its version failed (6.4).
+GRANT UPDATE (state) ON ctrlz.catalog_versions TO ctrlz_compiler;
+
+-- 9. The P3 hand-over -----------------------------------------------------------------------------
+
+-- Which node an address, a client row or a proof observation came from, kept after the node row is gone
+-- (no foreign key) so a revoked node's reports can be undone (4.5).
+ALTER TABLE ctrlz.authorized_ips ADD COLUMN learned_by_node_id uuid;
+ALTER TABLE ctrlz.clients ADD COLUMN created_by_node_id uuid;
+ALTER TABLE ctrlz.ip_proof_challenges ADD COLUMN observed_by_node_id uuid;
+
+-- The hub learns secure_dns rows itself (5.4). The restrictive policy is the named policy whose WITH CHECK
+-- admits that source only: a permissive one would be ORed with tenant_isolation and admit every source.
+GRANT SELECT (source) ON ctrlz.authorized_ips TO ctrlz_hub;
+GRANT INSERT (tenant_id, endpoint_id, cidr, source, last_seen_at, learned_by_node_id) ON ctrlz.authorized_ips TO ctrlz_hub;
+CREATE POLICY hub_secure_dns_only ON ctrlz.authorized_ips AS RESTRICTIVE FOR INSERT TO ctrlz_hub
+  WITH CHECK (source = 'secure_dns');
+GRANT SELECT (authorize_secure_dns) ON ctrlz.endpoints TO ctrlz_hub;
+-- The endpoint_set mark of a learned row (P3 3.2), and nothing else the hub could mark.
+GRANT INSERT (tenant_id, aggregate_type, aggregate_id, batch_id) ON ctrlz.policy_outbox TO ctrlz_hub;
+CREATE POLICY hub_endpoint_set_only ON ctrlz.policy_outbox AS RESTRICTIVE FOR INSERT TO ctrlz_hub
+  WITH CHECK (aggregate_type = 'endpoint_set' AND aggregate_id = tenant_id);
+-- The pair rule of 5.4 reads the claim of a challenge; the client cap counts the rows by source.
+GRANT SELECT (claim_id) ON ctrlz.ip_proof_challenges TO ctrlz_hub;
+GRANT UPDATE (observed_by_node_id) ON ctrlz.ip_proof_challenges TO ctrlz_hub;
+GRANT SELECT (source) ON ctrlz.clients TO ctrlz_hub;
+GRANT INSERT (created_by_node_id) ON ctrlz.clients TO ctrlz_hub;
+
+-- ctrlz_auth reads the challenges a node observed, across tenants, for node_taken_claims (and nothing else
+-- of the table beyond what it had).
+CREATE POLICY auth_node_reports ON ctrlz.ip_proof_challenges AS PERMISSIVE FOR SELECT TO ctrlz_auth
+  USING (observed_by_node_id IS NOT NULL);
+
+-- The claims taken on the observations of one node since a time (4.5): the evidence the admin reviews after
+-- a compromise. A challenge a take consumed has the same transaction time as the claim it proved. The
+-- window starts at Unix seconds because catalog check 24 refuses a definer function that takes a timestamp.
+SET ROLE ctrlz_auth;
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.node_taken_claims(p_node_id uuid, p_since_unix bigint)
+RETURNS TABLE (tenant_id uuid, endpoint_id uuid, claim_id uuid, cidr cidr, consumed_at timestamptz)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT ch.tenant_id, c.endpoint_id, ch.claim_id, c.cidr, ch.consumed_at
+  FROM ctrlz.ip_proof_challenges ch
+  JOIN ctrlz.ip_claims c ON c.tenant_id = ch.tenant_id AND c.id = ch.claim_id
+  WHERE ch.observed_by_node_id = p_node_id
+    AND ch.consumed_at IS NOT NULL
+    AND c.proven_at = ch.consumed_at
+    AND ch.consumed_at >= pg_catalog.to_timestamp(p_since_unix)
+  ORDER BY ch.consumed_at, ch.id
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.node_taken_claims(uuid, bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.node_taken_claims(uuid, bigint) TO ctrlz_admin;
+RESET ROLE;
+
+-- The trace columns are the hub's and the worker's (3.2 item 9), not the tenant's: ctrlz_tenant holds
+-- table-level SELECT and INSERT on both tables, which would cover the two new columns, so a tenant could read
+-- which node reported a row or forge the evidence that node_revoked acts on. A column grant is not removed
+-- by a column REVOKE while the table-level one stands, so the table-level grants go and the same columns
+-- minus the new one come back. ip_proof_challenges.observed_by_node_id needs nothing: the tenant's SELECT on
+-- that table has been a column list since 0009.
+REVOKE SELECT, INSERT ON ctrlz.authorized_ips FROM ctrlz_tenant;
+GRANT SELECT (tenant_id, id, endpoint_id, cidr, source, ddns_host_id, cleanup_opt_in, city, isp, last_seen_at, created_at, updated_at)
+  ON ctrlz.authorized_ips TO ctrlz_tenant;
+GRANT INSERT (tenant_id, id, endpoint_id, cidr, source, ddns_host_id, cleanup_opt_in, city, isp, last_seen_at, created_at, updated_at)
+  ON ctrlz.authorized_ips TO ctrlz_tenant;
+REVOKE SELECT, INSERT ON ctrlz.clients FROM ctrlz_tenant;
+GRANT SELECT (tenant_id, id, endpoint_id, label, alias, profile_id, profile2_id, analytics_level, group_name, hostname, mac, ip,
+  source, is_custom, first_seen_at, last_seen_at, created_at, updated_at) ON ctrlz.clients TO ctrlz_tenant;
+GRANT INSERT (tenant_id, id, endpoint_id, label, alias, profile_id, profile2_id, analytics_level, group_name, hostname, mac, ip,
+  source, is_custom, first_seen_at, last_seen_at, created_at, updated_at) ON ctrlz.clients TO ctrlz_tenant;
+
+-- 10. The lock of the single writer of config_log.seq ------------------------------------------------
+
+-- P4 6.1 makes the compiler the one writer of seq under an advisory lock, and 8 (log pruning) runs the
+-- worker's blob GC under the same lock so that a re-bind never interleaves with a delete. pg_advisory_xact_lock
+-- is ctrlz_auth's alone (catalog_reach.yaml), so both take it through this definer function, the way the
+-- audit chain and the two node triggers do. The key is the table's, as audit_lock's is.
+SET ROLE ctrlz_auth;
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz_fn.config_log_lock() RETURNS void
+LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$ SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('ctrlz.config_log', 0)) $$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz_fn.config_log_lock() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ctrlz_fn.config_log_lock() TO ctrlz_compiler, ctrlz_worker;
+-- The compiler had no use for ctrlz_fn until now; the worker has the schema already.
+GRANT USAGE ON SCHEMA ctrlz_fn TO ctrlz_compiler;
+RESET ROLE;

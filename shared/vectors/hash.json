@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "group": "hash",
+  "cases": [
+    {"id": "hash-sip-00", "why": "SipHash-2-4 published vector, key 00..0f, empty input", "op": "siphash", "args": ["000102030405060708090a0b0c0d0e0f", ""], "expect": "726fdb47dd0e0e31"},
+    {"id": "hash-sip-01", "why": "published vector, 1 byte", "op": "siphash", "args": ["000102030405060708090a0b0c0d0e0f", "00"], "expect": "74f839c593dc67fd"},
+    {"id": "hash-sip-02", "why": "published vector, 2 bytes", "op": "siphash", "args": ["000102030405060708090a0b0c0d0e0f", "0001"], "expect": "0d6c8009d9a94f5a"},
+    {"id": "hash-sip-03", "why": "published vector, 3 bytes", "op": "siphash", "args": ["000102030405060708090a0b0c0d0e0f", "000102"], "expect": "85676696d7fb7e2d"},
+    {"id": "hash-sip-04", "why": "published vector, 4 bytes", "op": "siphash", "args": ["000102030405060708090a0b0c0d0e0f", "00010203"], "expect": "cf2794e0277187b7"},
+    {"id": "hash-sip-05", "why": "published vector, 5 bytes", "op": "siphash", "args": ["000102030405060708090a0b0c0d0e0f", "0001020304"], "expect": "18765564cd99a68d"},
+    {"id": "hash-sip-06", "why": "published vector, 6 bytes", "op": "siphash", "args": ["000102030405060708090a0b0c0d0e0f", "000102030405"], "expect": "cbc9466e58fee3ce"},
+    {"id": "hash-sip-07", "why": "published vector, 7 bytes", "op": "siphash", "args": ["000102030405060708090a0b0c0d0e0f", "00010203040506"], "expect": "ab0200f58b01d137"},
+    {"id": "hash-sip-15", "why": "SipHash paper appendix A: 15-byte input", "op": "siphash", "args": ["000102030405060708090a0b0c0d0e0f", "000102030405060708090a0b0c0d0e"], "expect": "a129ca6149be45e5"},
+    {"id": "hash-rid", "why": "RIDHash is the first 16 bytes of SHA-256(\"ctrlz-rid-v1\\0\" + id); value computed with sha256sum", "op": "rid_hash", "input": "abcdefghijklmnopqrstuvwxy2", "expect": "1fc34cea154fc20bf0b017157050c894"},
+    {"id": "hash-token", "why": "TokenHash is the full SHA-256 of \"ctrlz-doh-v1\\0\" + token", "op": "token_hash", "input": "abcdefghijklmnopqrstuvwxyz234567", "expect": "6bf28d79c3592be131e9a3863111b1cd14dbc2d7da255cf885d4651dc5a56b62"},
+    {"id": "hash-client", "why": "ClientHash is the first 16 bytes of SHA-256(\"ctrlz-client-v1\\0\" + label)", "op": "client_hash", "input": "kid", "expect": "c48e92aba78780baa75568e462733dd0"},
+    {"id": "hash-content", "why": "Content hash is plain SHA-256 (FIPS 180-4 'abc')", "op": "sha256", "input": "616263", "expect": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"},
+    {"id": "hash-entry", "why": "Entry hash is SHA-256(prev_hash + stored bytes); the first entry uses 32 zero bytes", "op": "entry_hash", "args": ["0000000000000000000000000000000000000000000000000000000000000000", "010203"], "expect": "4400c1b8638ac2dce3ce0e10b8a891175926ca29a7246e96ef41aa81f11201cc"},
+    {"id": "hash-proof", "why": "Proof code is the first 10 base32 characters of HMAC-SHA256(key, \"ctrlz-proof-v1\\0\" label \"\\0\" ip); value computed with openssl", "op": "proof_code", "input": "lbl", "args": ["key", "192.0.2.1"], "expect": "sjgr3tvr53"},
+    {"id": "hash-proof-mapped", "why": "An IPv4-mapped source is the same source as its IPv4 form: the text is Unmap().String(), so the node and the hub cannot compute two codes (review C9)", "op": "proof_code", "input": "lbl", "args": ["key", "::ffff:192.0.2.1"], "expect": "sjgr3tvr53"},
+    {"id": "hash-proof-v6", "why": "An IPv6 source is its compressed lower-case text (RFC 5952), whatever the spelling", "op": "proof_code", "input": "lbl", "args": ["key", "2001:DB8:0:0:0:0:0:1"], "expect": "xovxhl5foh"}
+  ]
+}

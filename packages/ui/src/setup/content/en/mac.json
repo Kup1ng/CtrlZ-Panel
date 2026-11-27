@@ -1,0 +1,68 @@
+{
+  "versions": [
+    {
+      "id": "13",
+      "name": "macOS 13+",
+      "steps": [
+        {
+          "title": "Allow this network",
+          "text": "Plain DNS only works for a network whose address you have claimed. Turn Plain DNS on for the Endpoint, then claim and prove this network's address on the Addresses page.",
+          "link": "ips"
+        },
+        {
+          "title": "Open the network settings",
+          "text": "Open System Settings, Network, your active connection and then Details."
+        },
+        {
+          "title": "Add the addresses",
+          "text": "In DNS use the + button to add both addresses. The first one must be on top.",
+          "show": [
+            "dns1",
+            "dns2"
+          ]
+        },
+        {
+          "title": "For encryption",
+          "text": "Plain DNS is not encrypted. For encrypted DNS use Automatic Setup to build and install the Apple profile."
+        },
+        {
+          "title": "Check the setup",
+          "text": "A few seconds after saving, run this check to see that the device uses this Endpoint.",
+          "verify": true
+        }
+      ]
+    },
+    {
+      "id": "12",
+      "name": "macOS 12 or older",
+      "steps": [
+        {
+          "title": "Allow this network",
+          "text": "Plain DNS only works for a network whose address you have claimed. Turn Plain DNS on for the Endpoint, then claim and prove this network's address on the Addresses page.",
+          "link": "ips"
+        },
+        {
+          "title": "Open the network preferences",
+          "text": "Open System Preferences, Network, your active connection and then Advanced."
+        },
+        {
+          "title": "Add the addresses",
+          "text": "On the DNS tab use the + button to add both addresses. The first one must be on top.",
+          "show": [
+            "dns1",
+            "dns2"
+          ]
+        },
+        {
+          "title": "For encryption",
+          "text": "Plain DNS is not encrypted. For encrypted DNS use Automatic Setup to build the Apple profile."
+        },
+        {
+          "title": "Check the setup",
+          "text": "A few seconds after saving, run this check to see that the device uses this Endpoint.",
+          "verify": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+-- P4, package J1 (docs/specs/p4-nodes.md 8): the dedupe key of the notices the worker's P4 jobs write.
+--
+-- pair_change, domain_change and node_revoked are each a function of state: a superseded job, a job the
+-- worker ran again after a crash and the job that replaces it all walk the same tenants, and none of them
+-- may notify a tenant twice for one state. The notice therefore carries a key in its params (a hash of the
+-- state it announces), and a tenant holds at most one notice of a kind per key.
+--
+-- A unique index and not a read before the write: ctrlz_worker holds INSERT on notifications and nothing
+-- else (0017), so it cannot look for an earlier notice, and two workers at once would both find none. The
+-- writer says ON CONFLICT DO NOTHING, which needs INSERT only (the same way alerts_open_key_uq serves
+-- AlertOnce). Only a notice that has a key is in the index: every earlier kind is written with no key, so
+-- the index is empty today and the owner's own notices can never collide.
+--
+-- A new file and not an edit of 0100, which another package owns and which has not been published.
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+CREATE UNIQUE INDEX notifications_kind_key_uq ON ctrlz.notifications (tenant_id, kind, (params ->> 'key'))
+  WHERE (params ->> 'key') IS NOT NULL;

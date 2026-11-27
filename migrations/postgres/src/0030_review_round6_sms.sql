@@ -1,0 +1,20 @@
+-- P1 auth review round 6, area SMS layer and worker loops (finding sms-r6-2).
+--
+-- Round 5 made the refund of an unsent code the global key alone, so the worker stopped using
+-- the address a code was requested from and the known-device flag (`otp_challenges.ip` and
+-- `trusted`): they only fed the per-phone and per-network keys it no longer gives back. The
+-- grant stayed, and with it a live read path, for the worker's role, to a record of which
+-- address asked for a code for which phone, decoys included. Nothing reads the columns now
+-- (auth_otp_issue only writes them), so the worker loses SELECT on both.
+--
+-- The columns stay and the issue function keeps writing them: dropping them means replacing
+-- auth_otp_issue and every test fixture that names them, which is a follow-up with its own
+-- review (Plan.md), and the 24 hour sweep already deletes the rows.
+--
+-- A new file and not an edit of an applied one (README, Rules).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+REVOKE SELECT (ip, trusted) ON ctrlz.otp_challenges FROM ctrlz_worker;
