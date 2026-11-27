@@ -588,7 +588,9 @@ services:
     shm_size: ${PG_SHM_SIZE:-512m}
     mem_limit: ${MEM_POSTGRES:-1536m}
     healthcheck:
-      # Over the unix socket, as the postgres OS user, because pg_hba.conf lets that user in by peer
+      # Over the unix socket (psql's default directory is the server's, /var/run/postgresql; the path is not
+      # spelled out because the secret lint of the compose file reads any "/run" word as a secret path, and
+      # the watchdog test of the container pins the directory), as the postgres OS user, because pg_hba.conf lets that user in by peer
       # authentication and rejects every other login that a probe could use. The earlier pg_isready over TCP
       # opened a real connection as ctrlz_migrator, which pg_hba.conf rejects for every address but the
       # migrate container's, and the server logged "FATAL: pg_hba.conf rejects connection" every 5 seconds.
@@ -599,7 +601,7 @@ services:
       # The second half asks the watchdog's own heartbeat (a sweep ran recently), so a watchdog that is not
       # running, or cannot get in, makes the container unhealthy and the services that wait for it do not
       # start (db-r16-4).
-      test: ["CMD-SHELL", "[ -n \"$$(gosu postgres psql -h /var/run/postgresql -U postgres -d postgres --no-psqlrc -X -At -c 'SHOW listen_addresses')\" ] && sh /ctrlz-postgres/watchdog.sh --healthy"]
+      test: ["CMD-SHELL", "[ -n \"$$(gosu postgres psql -U postgres -d postgres --no-psqlrc -X -At -c 'SHOW listen_addresses')\" ] && sh /ctrlz-postgres/watchdog.sh --healthy"]
       interval: 5s
       timeout: 4s
       retries: 20

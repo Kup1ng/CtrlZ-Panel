@@ -338,7 +338,7 @@ func riverConfig(cfg Config, workers *river.Workers) *river.Config {
 		Logger:               cfg.Log,
 		// River's reindexer is off: it runs REINDEX CONCURRENTLY, which the worker's role timeouts and the watchdog
 		// (P1 db-r15-7) cut short, and a cut build leaves an invalid index behind. The tables are small and the
-		// migrator, who owns them, can reindex in a maintenance window (docs of the install). The schedule never fires, and
+		// migrator, who owns them, can reindex in a quiet hour (docs/runbooks/river-indexes.md, which also drops the leftovers of an earlier build). The schedule never fires, and
 		// the empty index list (non-nil: nil means River's default list) leaves it nothing to do should it ever run.
 		ReindexerSchedule:   neverSchedule{},
 		ReindexerIndexNames: []string{},

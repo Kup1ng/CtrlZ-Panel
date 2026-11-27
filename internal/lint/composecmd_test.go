@@ -54,7 +54,7 @@ var composeCommandTable = map[string]composeCommandRow{
 	"migrate.command":          {"7ebb53c1c877f87b553b96d49dea280b69b49701ae464a9da2eff7cfd6bb61cc", `the role name "migrate"`},
 	"postgres.command":         {"85e717f81ef8288d0e3eaf5b0a5887d2cff9d42cb74e3a1583f85be186fe31d2", "the server's configuration flags (no password among them)"},
 	"postgres.entrypoint":      {"b9d1f0f67732c7d25fd937d7038e7df2e9db915f7e0f79024ba46518b3363915", "the start script of the image"},
-	"postgres.healthcheck":     {"113eec7cf47480d6e6b04d236b2cce5c2bc0cf09227a5c26cd4789038692f918", "psql over the socket as the postgres OS user (peer): SHOW listen_addresses, and the watchdog heartbeat"},
+	"postgres.healthcheck":     {"a8efcf83db8e1e3bf9e7a8a393950f18b5f37a39c0f538104bce4746545a2c83", "psql over the socket as the postgres OS user (peer): SHOW listen_addresses, and the watchdog heartbeat"},
 	"rekey.command":            {"ccef35961dcf19749c4afccf30237393bb3b2431888f7e925e0e6fbf171ea288", `the role name "rekey"`},
 	"valkey-admin.command":     {"21b2014a19450f5fbc6970895206dde5e461d138f2f72c35f55d8fb21e6dd236", "the start file, which reads the password from the secret"},
 	"valkey-admin.healthcheck": {"a47cebf6fb862cf2deb16b5e330156f59019a952f17f9eba14faceb129d052bf", "the heartbeat file of the maintenance loop"},
