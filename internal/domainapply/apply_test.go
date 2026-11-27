@@ -130,6 +130,15 @@ func (w *world) cert(names []string, life time.Duration, keyFrom *ecdsa.PrivateK
 	return store.DomainApplyCert{ID: uuid.Must(uuid.NewV7()), ChainPEM: chain, SealedKey: sealed}, key
 }
 
+// wildcard is an uploaded wildcard row for a zone, as DomainApplyLoad returns it: no sealed key.
+func (w *world) wildcard(zone string) store.DomainApplyCert {
+	w.t.Helper()
+	c, _ := w.cert(certcheck.ZoneNames(zone), 60*24*time.Hour, nil)
+	c.Kind = "wildcard"
+	c.SealedKey = nil
+	return c
+}
+
 func (w *world) apply(src *fakeSource) (env, log string, err error) {
 	var out, lg bytes.Buffer
 	err = Apply(context.Background(), Inputs{Source: src, EnvFile: w.envf, TLSDir: w.dir, WebKey: w.webPEM, Now: now, Roots: w.pool, Out: &out, Log: &lg})
@@ -174,7 +183,8 @@ func TestApplyInstallsThePairAndTheEnv(t *testing.T) {
 	pc.Kind = "panel"
 	ac, _ := w.cert([]string{"admin.example.ir"}, 60*24*time.Hour, nil)
 	ac.Kind = "admin"
-	src := &fakeSource{settings: settings(), certs: []store.DomainApplyCert{pc, ac}}
+	// An uploaded wildcard for each live zone, so both verify origins are listed (T-237).
+	src := &fakeSource{settings: settings(), certs: []store.DomainApplyCert{pc, ac, w.wildcard("dns.example.ir"), w.wildcard("dns.old.ir")}}
 
 	env, log, err := w.apply(src)
 	if err != nil {
@@ -240,6 +250,47 @@ func TestApplyInstallsThePairAndTheEnv(t *testing.T) {
 	if strings.Contains(env+log, "PRIVATE") {
 		t.Errorf("a key reached the output or the log")
 	}
+}
+
+// T-237: a zone that no uploaded wildcard covers is in private-CA mode, and its verify origin is not written, so the panel shows the
+// manual check. One zone covered and one not gives one origin; none covered gives an empty value; a wildcard that does not cover the
+// zone (another zone, an ended chain, a chain no public root signed) changes nothing.
+func TestTheVerifyOriginIsWrittenOnlyForACoveredZone(t *testing.T) {
+	w := newWorld(t)
+	other := certcheck.ZoneNames("dns.elsewhere.ir")
+	otherCert, _ := w.cert(other, 60*24*time.Hour, nil)
+	otherCert.Kind = "wildcard"
+	ended, _ := w.cert(certcheck.ZoneNames("dns.example.ir"), -time.Minute, nil)
+	ended.Kind = "wildcard"
+	for name, tc := range map[string]struct {
+		certs []store.DomainApplyCert
+		want  string
+	}{
+		"no wildcard":                     {nil, "CTRLZ_VERIFY_ORIGIN=\n"},
+		"only the current zone":           {[]store.DomainApplyCert{w.wildcard("dns.example.ir")}, "CTRLZ_VERIFY_ORIGIN=https://*.verify.dns.example.ir\n"},
+		"only the previous zone":          {[]store.DomainApplyCert{w.wildcard("dns.old.ir")}, "CTRLZ_VERIFY_ORIGIN=https://*.verify.dns.old.ir\n"},
+		"a wildcard of another zone":      {[]store.DomainApplyCert{otherCert}, "CTRLZ_VERIFY_ORIGIN=\n"},
+		"a wildcard whose chain ended":    {[]store.DomainApplyCert{ended}, "CTRLZ_VERIFY_ORIGIN=\n"},
+		"a panel certificate is no cover": {[]store.DomainApplyCert{panelCertFor(w, "dns.example.ir")}, "CTRLZ_VERIFY_ORIGIN=\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w.writeEnv("# kept\nCTRLZ_ENV_FORMAT_2=1\n")
+			env, _, err := w.apply(&fakeSource{settings: settings(), certs: tc.certs})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(env, tc.want) || strings.Count(env, "CTRLZ_VERIFY_ORIGIN") != 1 {
+				t.Errorf("the .env should hold %q once:\n%s", tc.want, env)
+			}
+		})
+	}
+}
+
+// panelCertFor is a panel-kind row whose names are those of a zone: only the kind wildcard covers a zone.
+func panelCertFor(w *world, zone string) store.DomainApplyCert {
+	c, _ := w.cert(certcheck.ZoneNames(zone), 60*24*time.Hour, nil)
+	c.Kind = "panel"
+	return c
 }
 
 func TestApplyWithNoCertificateUsesThePrivateCA(t *testing.T) {
@@ -641,10 +692,11 @@ func TestHostGrammar(t *testing.T) {
 		t.Error("validZone is wrong")
 	}
 	until := now.Add(-time.Hour)
-	if got := verifyOrigins("dns.a.ir", "dns.b.ir", &until, now); got != "https://*.verify.dns.a.ir" {
+	all := func(string) bool { return true }
+	if got := verifyOrigins("dns.a.ir", "dns.b.ir", &until, now, all); got != "https://*.verify.dns.a.ir" {
 		t.Errorf("an ended transition still lists the old zone: %q", got)
 	}
-	if got := verifyOrigins("", "", nil, now); got != "" {
+	if got := verifyOrigins("", "", nil, now, all); got != "" {
 		t.Errorf("no zone gives %q", got)
 	}
 }

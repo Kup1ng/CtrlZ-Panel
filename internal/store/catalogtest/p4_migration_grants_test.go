@@ -207,7 +207,7 @@ func TestP4CertificatePolicies(t *testing.T) {
 		return strings.Join(got, ",")
 	}
 	for role, w := range map[string]string{
-		"hub": "node_ca,wildcard,zone_ca", "tenant": "zone_ca", "domain_apply": "admin,panel",
+		"hub": "node_ca,wildcard,zone_ca", "tenant": "zone_ca", "domain_apply": "admin,panel,wildcard",
 		"admin": "admin,block_root,node_ca,panel,wildcard,zone_ca", "worker": "admin,block_root,node_ca,panel,wildcard,zone_ca",
 		"compiler": "42501", "auth": "42501",
 	} {
@@ -215,8 +215,8 @@ func TestP4CertificatePolicies(t *testing.T) {
 			t.Errorf("%s sees %q, want %q", role, got, w)
 		}
 	}
-	// The sealed key: the hub reads it for the rows it serves, the apply step for the two web certificates, nobody else.
-	for role, w := range map[string]int{"hub": 3, "domain_apply": 2} {
+	// The sealed key: the hub reads it for the rows it serves, the apply step for the two web certificates and the wildcard (0104: it reads the rows for their names, and holds no key that opens a wildcard seal), nobody else.
+	for role, w := range map[string]int{"hub": 3, "domain_apply": 3} {
 		got, code := h.texts(role, nil, `SELECT count(wrapped_key_ct)::text FROM ctrlz.certificates`)
 		if code != "" || got[0] != fmt.Sprint(w) {
 			t.Errorf("%s reads %v (%q) sealed keys, want %d", role, got, code, w)

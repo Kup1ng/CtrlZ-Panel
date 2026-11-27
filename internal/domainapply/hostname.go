@@ -36,12 +36,17 @@ func validZone(z string) bool {
 // verifyOrigins is the value of CTRLZ_VERIFY_ORIGIN (10.3): the origin the panel's pages may open a connection to for the
 // verify probe of each live zone, comma separated. The previous zone is listed only while its transition lasts, so a
 // zone that is no longer in use leaves the Content-Security-Policy with the next recreate of web-panel.
-func verifyOrigins(zone, prev string, transitionUntil *time.Time, now time.Time) string {
+//
+// A zone is listed only when covered says an active uploaded wildcard covers it (T-237). Without one the nodes serve that zone
+// on the zone CA, which no browser trusts, so every probe would fail and run out its two minutes while each lookup still
+// reached a node. The origin is then absent, and the page shows the manual check instead (private-CA mode, T-089). With no
+// zone covered the value is empty, which the panel reads as "no probe" (FE 15.3).
+func verifyOrigins(zone, prev string, transitionUntil *time.Time, now time.Time, covered func(zone string) bool) string {
 	var out []string
-	if zone != "" {
+	if zone != "" && covered(zone) {
 		out = append(out, "https://*.verify."+zone)
 	}
-	if prev != "" && transitionUntil != nil && now.Before(*transitionUntil) {
+	if prev != "" && transitionUntil != nil && now.Before(*transitionUntil) && covered(prev) {
 		out = append(out, "https://*.verify."+prev)
 	}
 	return strings.Join(out, ",")

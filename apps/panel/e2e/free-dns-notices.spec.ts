@@ -55,6 +55,8 @@ for (const {lang, dir} of LANGS) {
       await expect(remind(page)).toBeVisible();
       await expect(remind(page)).toContainText(text("freeDns.remind.title"));
       await expect(remind(page).locator("bdi")).toHaveText("203.0.113.200");
+      // V1-r1-2: the address is the one of the session's sign-in, which nothing refreshes, so the text says so and does not claim to see the browser now.
+      await expect(remind(page)).toContainText(lang === "en" ? "last signed in" : "آخرین بار");
       await remind(page).getByRole("button", {name: text("freeDns.remind.add")}).click();
       await expect(page).toHaveURL(/\/ips\?ipDialog=claim$/);
       await expect(page.getByRole("dialog", {name: text("ips.claim.title")})).toBeVisible();
@@ -147,6 +149,33 @@ for (const {lang, dir} of LANGS) {
           await expect(page.getByRole("dialog")).toContainText(text("dialogs.delete.text", {name: "Home router"}));
           await expect(page.getByTestId("delete-free-dns")).toHaveCount(0);
         }
+      });
+
+      // V1-r1-4: the page-level counterpart of the unit test of readFreeDns. The route answers once, then fails at the next poll (the page re-reads every
+      // minute), and the notices of the Endpoint page keep what the good answer said.
+      test("T-557: with a good answer from before, a 503 at the next poll keeps the reminder and the IPv6 warning", async ({page, context, baseURL}) => {
+        let asked = 0;
+        let down = false;
+        const v6 = {primary_dns_ip: "2001:db8::53", fallback_dns_ip: "2001:db8::54"};
+        await page.clock.install();
+        await openProfiles(context, baseURL, {
+          handlers: {
+            ...around("203.0.113.200"),
+            "GET /public/free-dns": () => {
+              asked++;
+              return down ? {status: 503, body: {code: "service_unavailable"}} : {body: {enabled: true, ...v6}};
+            },
+          },
+        });
+        await page.goto(home);
+        await expect(remind(page)).toBeVisible();
+        await expect(page.getByTestId("free-dns-ipv6")).toContainText(text("freeDns.ipv6.on"));
+        down = true;
+        const before = asked;
+        await page.clock.fastForward(70_000);
+        await expect.poll(() => asked).toBeGreaterThan(before);
+        await expect(remind(page)).toBeVisible();
+        await expect(page.getByTestId("free-dns-ipv6")).toContainText(text("freeDns.ipv6.on"));
       });
 
       test("T-557: with a good answer from before, a 429 keeps the text of that answer", async ({page, context, baseURL}) => {

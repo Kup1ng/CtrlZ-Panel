@@ -42,15 +42,20 @@ const SCHEME = "https"; // the probe origin is built from the validated verify o
 
 type Shown = {state: VerifyState; protocol?: VerifyProtocol; clientMatched?: boolean};
 
-/** `endpointId` is the owner's: the page then knows which networks the Endpoint holds, for the manual check. A share page has none. */
-export function SetupVerify({view, endpointId}: {view: ResolverView; endpointId?: string}) {
+/**
+ * `endpointId` is the owner's: the page then knows which networks the Endpoint holds, for the manual check. A share page has none.
+ * `plainDns` is true only for an Endpoint with Plain DNS on, verified from a platform that uses our addresses: the partial text is about
+ * networks and free DNS, which means nothing for a DoH, DoT or DoQ setup, for an Endpoint with the switch off, or for a visitor of a share link.
+ * (`view.protocols` is no help: the server lists all five for every Endpoint.)
+ */
+export function SetupVerify({view, endpointId, plainDns = false}: {view: ResolverView; endpointId?: string; plainDns?: boolean}) {
   const origins = useVerifyOrigins();
   const sample = probeHost("x".repeat(26), view.host);
   if (!sample || !inVerifyOrigin(sample, origins)) return <ManualCheck view={view} endpointId={endpointId} />;
-  return <Probe view={view} endpointId={endpointId} />;
+  return <Probe view={view} endpointId={endpointId} plainDns={plainDns} />;
 }
 
-function Probe({view, endpointId}: {view: ResolverView; endpointId?: string}) {
+function Probe({view, endpointId, plainDns}: {view: ResolverView; endpointId?: string; plainDns: boolean}) {
   const t = useTranslations("setup");
   const [shown, setShown] = useState<Shown>({state: "idle"});
   const run = useRef<AbortController | null>(null);
@@ -156,7 +161,7 @@ function Probe({view, endpointId}: {view: ResolverView; endpointId?: string}) {
             : null}
         </span>
       </div>
-      {shown.state === "partial" && view.protocols.includes("plain") ? <PartialPlainDns endpointId={endpointId} /> : null}
+      {shown.state === "partial" && plainDns && endpointId ? <PartialPlainDns endpointId={endpointId} /> : null}
       {shown.state === "success" && shown.clientMatched === false && view.client ? (
         <p className="text-muted text-xs">{t("verify.otherClient")}</p>
       ) : null}

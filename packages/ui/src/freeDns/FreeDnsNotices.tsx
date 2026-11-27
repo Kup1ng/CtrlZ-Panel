@@ -19,8 +19,10 @@ import {pairIsIpv6, readClosed, shouldRemind, subscribeClosed, writeClosed} from
 // minutes and then gives `null`).
 //
 //   - the pair is IPv6: claims are IPv4 only, so Plain DNS over it is never matched to this Endpoint;
-//   - the add-address reminder: the panel sees this browser at an IPv4 address that no claim of the Endpoint holds. It can be closed, and it
-//     stays closed until that address changes.
+//   - the add-address reminder: the address of the current session (the one the sign-in was made from) is an IPv4 address that no claim of the
+//     Endpoint holds. It can be closed, and it stays closed until that address changes. The session row keeps the address of the sign-in and
+//     nothing refreshes it, so after a move to another network the reminder is about the old one; the text says "last sign-in" and not "now"
+//     (V1-r1-2). Judging the address of the browser as it is needs a field of the API that returns the caller's address (docs/wireframes/p4-comparison.md).
 
 export function FreeDnsNotices({endpoint}: {endpoint: Endpoint}) {
   const free = useFreeDns({enabled: endpoint.legacy_dns});

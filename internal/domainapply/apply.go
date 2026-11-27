@@ -196,7 +196,7 @@ func makePlan(ctx context.Context, in Inputs) (*plan, error) {
 	p.pairs = []envPair{
 		{envPanelHost, panelHost},
 		{envAdminHost, adminHost},
-		{envVerifyOrigin, verifyOrigins(settings.DNSZone, settings.PrevDNSZone, settings.TransitionUntil, in.Now)},
+		{envVerifyOrigin, verifyOrigins(settings.DNSZone, settings.PrevDNSZone, settings.TransitionUntil, in.Now, func(zone string) bool { return zoneCovered(certs, zone, in.Now, roots) })},
 	}
 	if p.envOut, err = setEnv(envText, p.pairs); err != nil {
 		p.wipe()
@@ -345,6 +345,20 @@ func choose(certs []store.DomainApplyCert, t *target, in Inputs, roots *x509.Cer
 		return nil, fmt.Errorf("the key of certificate %s does not belong to it: %w", row.ID, err)
 	}
 	return &install{id: row.ID, chain: []byte(res.ChainPEM), key: pkcs8}, nil
+}
+
+// zoneCovered says whether an active uploaded wildcard covers a zone, by the rule the hub serves nodes with (4.3: certcheck.Choose over
+// the same rows, so a chain that ended or does not verify to a public root is not a cover). It judges the leaf only; whether the
+// key still opens is the hub's alert, because this process holds no key that opens a wildcard's seal.
+func zoneCovered(certs []store.DomainApplyCert, zone string, now time.Time, roots *x509.CertPool) bool {
+	var rows []certcheck.Row
+	for _, c := range certs {
+		if c.Kind == string(certcheck.Wildcard) {
+			rows = append(rows, certcheck.Row{ID: c.ID, State: "active", ChainPEM: c.ChainPEM})
+		}
+	}
+	_, _, ok := certcheck.Choose(rows, certcheck.Wildcard, certcheck.Scope{Zones: []string{zone}}, now, certcheck.Options{Roots: roots})
+	return ok
 }
 
 // snippetName is the file Caddy imports for a host. The Caddyfile imports it by a glob with one `?`, so a missing file is

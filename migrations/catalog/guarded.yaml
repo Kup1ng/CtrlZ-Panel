@@ -930,7 +930,7 @@ row_bound:
   # the key back (db-r18-11).
   certificates:
     hub: "kind = ANY (ARRAY['wildcard'::text, 'node_ca'::text, 'zone_ca'::text])"
-    domain_apply: "kind = ANY (ARRAY['panel'::text, 'admin'::text])"
+    domain_apply: "kind = ANY (ARRAY['panel'::text, 'admin'::text, 'wildcard'::text])"
   sms_counters:
     worker: "scope = 'global'"
   # The sender's statements touch only the rows that carry a sealed code (claim, clear, expiry,

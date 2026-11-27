@@ -9,14 +9,16 @@ import (
 
 // The apply step's half of domain_settings and certificates (p4-nodes 3.2 item 6, 10.4). It runs as ctrlz_domain_apply,
 // the login of the one-shot `ctrlz domain-apply`: SELECT on domain_settings, SELECT on the active rows of kind panel and
-// admin (the sealed key included, which nobody else reads back), and UPDATE of the five applied_* columns. Nothing here is
+// admin (the sealed key included, which nobody else reads back) and the uploaded wildcards (0104; chain and names only), and UPDATE of the five applied_* columns. Nothing here is
 // tenant data and every method is one transaction of that role; the grants are the boundary, not these statements.
 
 // ErrDomainChanged is DomainApplyCommit's answer when the requested values moved between the read the plan was made from
 // and the write: the files of the plan are in place, the columns are not, and a new run decides again.
 var ErrDomainChanged = errors.New("store: the domain settings changed during the apply")
 
-// DomainApplyCert is an active panel or admin certificate row as the apply step reads it.
+// DomainApplyCert is an active panel, admin or uploaded wildcard certificate row as the apply step reads it. The wildcards are
+// read to learn which zones run on a public certificate (the verify origin, p4-nodes 10.3), so their SealedKey is always nil:
+// the query returns NULL in its place, whatever the row holds.
 type DomainApplyCert struct {
 	ID        uuid.UUID
 	Kind      string
@@ -27,8 +29,10 @@ type DomainApplyCert struct {
 // domainApplyCertsLimit is a ceiling and not a page: a row ends or is retired by hand, so a few rows are active at once.
 const domainApplyCertsLimit = 400
 
-const qDomainApplyCerts = `SELECT id, kind, chain_pem, wrapped_key_ct FROM ctrlz.certificates
-WHERE kind IN ('panel', 'admin') AND state = 'active' ORDER BY id DESC LIMIT 400`
+// The wildcard filter is the hub's (HubWildcardRows): an active uploaded row with a sealed key, which is what a node is served.
+const qDomainApplyCerts = `SELECT id, kind, chain_pem, CASE WHEN kind = 'wildcard' THEN NULL ELSE wrapped_key_ct END FROM ctrlz.certificates
+WHERE state = 'active' AND (kind IN ('panel', 'admin') OR (kind = 'wildcard' AND source = 'uploaded' AND wrapped_key_ct IS NOT NULL))
+ORDER BY id DESC LIMIT 400`
 
 // DomainApplyLoad reads the settings and the active web certificates in one transaction, so the plan is made from one
 // snapshot of both.

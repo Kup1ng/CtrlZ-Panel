@@ -22,7 +22,9 @@ import {setupText} from "./setup-support.ts";
 const LAST_STEP = {windows: 6} as const;
 const s = (lang: "fa" | "en", path: string, values?: Record<string, string | number>) => setupText(lang, path, values);
 const status = (page: Page) => page.getByTestId("verify-status");
-const lastStep = (lang: "fa" | "en") => configurePath(lang, ENDPOINT.home, "windows", LAST_STEP.windows);
+const lastStep = (lang: "fa" | "en", os = "windows") => configurePath(lang, ENDPOINT.home, os, LAST_STEP.windows);
+// Windows 11 is set up with DoH and Windows 10 with the addresses (Plain DNS): only the second is a setup the claims of networks are about (T-557).
+const PLAIN_OS = "windows-10";
 
 for (const {lang} of LANGS) {
   test.describe(`${lang}: no verify origin`, () => {
@@ -117,10 +119,17 @@ test.describe("with a verify origin", () => {
   });
 
   for (const {lang} of LANGS) {
-    const run = async (page: Page, context: Parameters<typeof openProfiles>[0], script: VerifyScenario[], handlers?: Handlers) => {
-      await openProfiles(context, base, handlers ? {handlers} : {});
+    const run = async (
+      page: Page,
+      context: Parameters<typeof openProfiles>[0],
+      script: VerifyScenario[],
+      handlers?: Handlers,
+      target: {os?: string; plainDnsOff?: boolean} = {},
+    ) => {
+      const mock = await openProfiles(context, base, handlers ? {handlers} : {});
+      if (target.plainDnsOff) mock.screens.endpoints = mock.screens.endpoints.map((e) => (e.id === ENDPOINT.home ? {...e, legacy_dns: false} : e));
       const labels = await stubVerify(page, script);
-      await page.goto(lastStep(lang));
+      await page.goto(lastStep(lang, target.os));
       await page.getByTestId("verify").getByRole("button", {name: s(lang, "verify.start")}).click();
       return labels;
     };
@@ -162,7 +171,7 @@ test.describe("with a verify origin", () => {
 
     // T-557 (D55): the incomplete state for an Endpoint with Plain DNS says what an unidentified device gets, by the switch of free DNS, and gives the way out.
     test(`${lang}: T-557: partial says that a device on an unclaimed network gets free DNS, and offers to prove the claim that waits`, async ({page, context, guard}) => {
-      const labels = await run(page, context, ["other"]);
+      const labels = await run(page, context, ["other"], undefined, {os: PLAIN_OS});
       await expect(status(page)).toHaveAttribute("data-state", "partial");
       const note = page.getByTestId("verify-partial-plain");
       await expect(note).toContainText(s(lang, "verify.freeDns.on"));
@@ -176,7 +185,7 @@ test.describe("with a verify origin", () => {
       const labels = await run(page, context, ["other"], {
         "GET /endpoints/{id}/ip-claims": {body: {claims: []}},
         "GET /public/free-dns": {body: {enabled: false}},
-      });
+      }, {os: PLAIN_OS});
       await expect(status(page)).toHaveAttribute("data-state", "partial");
       const note = page.getByTestId("verify-partial-plain");
       await expect(note).toContainText(s(lang, "verify.freeDns.off"));
@@ -186,10 +195,26 @@ test.describe("with a verify origin", () => {
       outside(guard, labels);
     });
 
+    // V1-r1-1: the text is about the claims of networks, so it is shown only for an Endpoint with Plain DNS on and a setup that uses the addresses.
+    test(`${lang}: T-557: a DoH setup (Windows 11) in the partial state says nothing about networks or free DNS`, async ({page, context, guard}) => {
+      const labels = await run(page, context, ["other"]);
+      await expect(status(page)).toHaveAttribute("data-state", "partial");
+      await expect(status(page)).toContainText(s(lang, "verify.states.partial"));
+      await expect(page.getByTestId("verify-partial-plain")).toHaveCount(0);
+      outside(guard, labels);
+    });
+
+    test(`${lang}: T-557: with Plain DNS off for the Endpoint, the partial state of the addresses setup offers no claim`, async ({page, context, guard}) => {
+      const labels = await run(page, context, ["other"], undefined, {os: PLAIN_OS, plainDnsOff: true});
+      await expect(status(page)).toHaveAttribute("data-state", "partial");
+      await expect(page.getByTestId("verify-partial-plain")).toHaveCount(0);
+      outside(guard, labels);
+    });
+
     test.describe(`${lang}: switch unknown`, () => {
       test.use({allowConsole: [/status of 5\d\d/]});
       test("T-557: when the route cannot be read, partial says nothing about free DNS or refusal and keeps the button", async ({page, context, guard}) => {
-        const labels = await run(page, context, ["other"], {"GET /public/free-dns": {status: 503, body: {code: "service_unavailable"}}});
+        const labels = await run(page, context, ["other"], {"GET /public/free-dns": {status: 503, body: {code: "service_unavailable"}}}, {os: PLAIN_OS});
         await expect(status(page)).toHaveAttribute("data-state", "partial");
         const note = page.getByTestId("verify-partial-plain");
         await expect(note.getByRole("button")).toBeVisible();

@@ -553,8 +553,8 @@
   },
   "freeDns": {
     "remind": {
-      "title": "This network is not added yet",
-      "text": "The panel sees you at <tech>{ip}</tech>, and this Endpoint holds no address that covers it. A device on this network that types our Plain DNS addresses gets free DNS without your filters. Add the address to filter it.",
+      "title": "The network of your last sign-in is not added",
+      "text": "You last signed in to the panel from <tech>{ip}</tech>, and this Endpoint holds no address that covers it. A device on that network that types our Plain DNS addresses gets free DNS without your filters. Add the address to filter it.",
       "add": "Add this address"
     },
     "ipv6": {

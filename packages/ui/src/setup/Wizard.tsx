@@ -25,6 +25,7 @@ export function Wizard({
   onStep,
   view,
   endpointId,
+  plainDns = false,
   onDone,
 }: {
   version: GuideVersion;
@@ -34,6 +35,8 @@ export function Wizard({
   view: ResolverView;
   /** Present for the owner: steps that send to the Addresses page get their button. The share page has no such page. */
   endpointId?: string;
+  /** The Endpoint's Plain DNS switch (`legacy_dns`); false for the share page. Only with it on, and on a platform that uses the addresses, does the partial verify state talk of networks. */
+  plainDns?: boolean;
   onDone: () => void;
 }) {
   const t = useTranslations("setup");
@@ -120,7 +123,7 @@ export function Wizard({
           </Link>
         ) : null}
 
-        {current.verify ? <SetupVerify view={view} endpointId={endpointId} /> : null}
+        {current.verify ? <SetupVerify view={view} endpointId={endpointId} plainDns={plainDns && version.steps.some((s) => s.link === "ips")} /> : null}
       </section>
 
       <div className="flex items-center justify-between gap-2">

@@ -318,6 +318,7 @@ function PlatformView({
           onStep={(n) => onNavigate({os: platform.id, step: n, version: current.id})}
           view={source.view}
           endpointId={source.kind === "endpoint" ? source.endpoint.id : undefined}
+          plainDns={source.kind === "endpoint" && source.endpoint.legacy_dns}
           onDone={onDone}
         />
       ) : (

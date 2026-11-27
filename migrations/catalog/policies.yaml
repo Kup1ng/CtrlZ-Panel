@@ -53,7 +53,7 @@ named:
   # every role that holds a grant on it has a policy, and a role sees and writes the rows of its own kinds.
   # The hub issues and retires the rows of the private CAs only; the admin uploads an active wildcard, panel
   # or admin certificate and retires an uploaded one; the tenant reads the zone CA (the Apple profile's root
-  # time); ctrlz_domain_apply reads the two web certificates it installs.
+  # time); ctrlz_domain_apply reads the two web certificates it installs and the uploaded wildcards (chain and names, to know which zones run on a public certificate; 0104).
   - {table: certificates, name: hub_read, cmd: SELECT, role: ctrlz_hub, qual: "(kind = ANY (ARRAY['wildcard'::text, 'node_ca'::text, 'zone_ca'::text]))", with_check: null}
   - {table: certificates, name: hub_issue, cmd: INSERT, role: ctrlz_hub, qual: null, with_check: "((kind = ANY (ARRAY['node_ca'::text, 'zone_ca'::text])) AND (source = 'issued'::text))"}
   - {table: certificates, name: hub_retire, cmd: UPDATE, role: ctrlz_hub, qual: "((kind = ANY (ARRAY['node_ca'::text, 'zone_ca'::text])) AND (source = 'issued'::text))", with_check: "((kind = ANY (ARRAY['node_ca'::text, 'zone_ca'::text])) AND (source = 'issued'::text))"}
@@ -62,7 +62,7 @@ named:
   - {table: certificates, name: admin_upload, cmd: INSERT, role: ctrlz_admin, qual: null, with_check: "((kind = ANY (ARRAY['wildcard'::text, 'panel'::text, 'admin'::text])) AND (source = 'uploaded'::text) AND (state = 'active'::text))"}
   - {table: certificates, name: admin_retire, cmd: UPDATE, role: ctrlz_admin, qual: "(source = 'uploaded'::text)", with_check: "(source = 'uploaded'::text)"}
   - {table: certificates, name: tenant_zone_ca, cmd: SELECT, role: ctrlz_tenant, qual: "(kind = 'zone_ca'::text)", with_check: null}
-  - {table: certificates, name: domain_apply_read, cmd: SELECT, role: ctrlz_domain_apply, qual: "(kind = ANY (ARRAY['panel'::text, 'admin'::text]))", with_check: null}
+  - {table: certificates, name: domain_apply_read, cmd: SELECT, role: ctrlz_domain_apply, qual: "(kind = ANY (ARRAY['panel'::text, 'admin'::text, 'wildcard'::text]))", with_check: null}
   # The hub learns secure_dns rows and marks the endpoint_set of its tenant, and nothing else. RESTRICTIVE, so
   # the check is ANDed with tenant_isolation instead of ORed (a permissive one would admit every source).
   - {table: authorized_ips, name: hub_secure_dns_only, cmd: INSERT, role: ctrlz_hub, restrictive: true, qual: null, with_check: "(source = 'secure_dns'::text)"}

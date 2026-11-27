@@ -1,3 +1,5 @@
+import {onSessionEnd} from "@ctrlz/api-client/sessionEnd.ts";
+
 // The rules behind the free DNS texts of Plan T-557, without React so a plain test holds them.
 
 const V4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
@@ -43,7 +45,8 @@ export function shouldRemind(input: {
   return !claims.some((claim) => identifies(claim) && claimHolds(claim.cidr, ip));
 }
 
-const CLOSED_KEY = (endpointId: string) => `ctrlz.freeDnsRemind.${endpointId}`;
+const CLOSED_PREFIX = "ctrlz.freeDnsRemind.";
+const CLOSED_KEY = (endpointId: string) => `${CLOSED_PREFIX}${endpointId}`;
 
 // A close made while storage is refused still holds for the rest of the visit, from memory; the listeners are the components that show the reminder.
 const memory = new Map<string, string>();
@@ -69,6 +72,27 @@ export function writeClosed(endpointId: string, ip: string): void {
   }
   for (const listener of listeners) listener();
 }
+
+/**
+ * Forgets every close, in memory and in storage. The value is the public IPv4 address of a sign-in, which belongs to the person who was signed in: it
+ * must not stay on a shared computer after logout or the idle cover (V1-r1-6). Every end of a session reaches it through the registry below.
+ */
+export function clearClosed(): void {
+  memory.clear();
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key?.startsWith(CLOSED_PREFIX)) keys.push(key);
+    }
+    for (const key of keys) window.localStorage.removeItem(key);
+  } catch {
+    // Storage is refused or absent: there is nothing of ours in it to remove.
+  }
+  for (const listener of listeners) listener();
+}
+
+onSessionEnd(clearClosed);
 
 export function subscribeClosed(listener: () => void): () => void {
   listeners.add(listener);

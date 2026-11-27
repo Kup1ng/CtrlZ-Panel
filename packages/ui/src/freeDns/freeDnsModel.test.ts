@@ -1,6 +1,7 @@
-import {describe, expect, it} from "vitest";
+import {runSessionEnd} from "@ctrlz/api-client/sessionEnd.ts";
+import {afterEach, describe, expect, it, vi} from "vitest";
 
-import {claimHolds, identifies, isIpv4, pairIsIpv6, shouldRemind} from "./freeDnsModel.ts";
+import {claimHolds, identifies, isIpv4, pairIsIpv6, readClosed, shouldRemind, writeClosed} from "./freeDnsModel.ts";
 
 // T-557: the rules of the reminder and of the IPv6 pair warning.
 
@@ -66,5 +67,34 @@ describe("pairIsIpv6, identifies, isIpv4", () => {
     expect(isIpv4("203.0.113.7")).toBe(true);
     expect(isIpv4("203.0.113.256")).toBe(false);
     expect(isIpv4("2001:db8::1")).toBe(false);
+  });
+});
+
+// V1-r1-6: the closed address is a person's public IPv4 address; it does not outlive the session on a shared computer.
+describe("the closed reminders at the end of a session", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const storage = () => {
+    const items = new Map<string, string>([["ctrlz.theme", "dark"]]);
+    return {
+      items,
+      getItem: (k: string) => items.get(k) ?? null,
+      setItem: (k: string, v: string) => void items.set(k, v),
+      removeItem: (k: string) => void items.delete(k),
+      key: (i: number) => [...items.keys()][i] ?? null,
+      get length() {
+        return items.size;
+      },
+    };
+  };
+  it("removes every ctrlz.freeDnsRemind key and the memory of a close, and leaves other keys alone", () => {
+    const local = storage();
+    vi.stubGlobal("window", {localStorage: local, addEventListener: () => undefined, removeEventListener: () => undefined});
+    writeClosed("ep-1", "203.0.113.200");
+    writeClosed("ep-2", "203.0.113.201");
+    expect([...local.items.keys()].filter((k) => k.startsWith("ctrlz.freeDnsRemind."))).toHaveLength(2);
+    runSessionEnd();
+    expect([...local.items.keys()]).toEqual(["ctrlz.theme"]);
+    expect(readClosed("ep-1")).toBeNull();
+    expect(readClosed("ep-2")).toBeNull();
   });
 });
