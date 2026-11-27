@@ -1,0 +1,27 @@
+{
+  "name": "ctrlz-web",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=26.13.1 <27"
+  },
+  "scripts": {
+    "build": "pnpm --filter \"./apps/*\" build",
+    "dev:panel": "pnpm --filter @ctrlz/panel dev",
+    "dev:admin": "pnpm --filter @ctrlz/admin dev",
+    "typecheck": "pnpm -r exec tsc --noEmit",
+    "lint": "eslint . && pnpm --filter @ctrlz/web-lint check",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.10",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "9.39.5",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.74.0"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "virtual": {
+    "title": "فهرست‌های بلند",
+    "subtitle": "اثبات رندر مجازی با ۵٬۰۰۰ ردیف",
+    "listTitle": "فهرست",
+    "gridTitle": "جدول",
+    "count": "{count, plural, one {# ردیف} other {# ردیف}}",
+    "listLabel": "فهرست مجازی درخواست‌ها",
+    "gridLabel": "جدول مجازی درخواست‌ها",
+    "gridWarning": "جدول مجازی با ۵٬۰۰۰ ردیف اگر همراه صفحهٔ سروری ساخته شود تقریبا یک دقیقه طول می‌کشد. اینجا فقط در مرورگر و با این دکمه ساخته می‌شود.",
+    "gridShow": "ساخت جدول"
+  },
+  "activity": {
+    "time": "زمان",
+    "domain": "دامنه",
+    "action": "تصمیم",
+    "client": "کلاینت",
+    "blocked": "مسدود",
+    "allowed": "مجاز",
+    "redirected": "ریدایرکت"
+  },
+  "tokens": {
+    "title": "توکن‌ها",
+    "kpi": "درخواست‌های امروز",
+    "switchLabel": "کلید {size}، {state}",
+    "sizes": {
+      "sm": "کوچک",
+      "md": "متوسط",
+      "lg": "بزرگ"
+    },
+    "states": {
+      "off": "خاموش",
+      "on": "روشن",
+      "offDisabled": "خاموش، غیرفعال",
+      "onDisabled": "روشن، غیرفعال"
+    },
+    "cellSwitchLabel": "کلید سلولی",
+    "avatar": "آواتار، {size}",
+    "avatarInitial": "ک",
+    "checkbox": "چک‌باکس، {state}",
+    "checkboxStates": {
+      "off": "علامت‌نخورده",
+      "on": "علامت‌خورده"
+    }
+  },
+  "tokenLab": {
+    "title": "جدول گردی",
+    "subtitle": "یک نمونه از هر ردیف جدول گردی، که آزمون گردی آن را اندازه می‌گیرد",
+    "intro": "کنترل‌ها از ۰٫۴ برابر ارتفاع پیروی می‌کنند و سقفشان ۳۰ پیکسل است. جعبه‌ها در هر ارتفاعی ۲۰ پیکسل‌اند. کلید قرص است.",
+    "controls": "کنترل‌ها",
+    "boxes": "جعبه‌ها و بخش‌ها",
+    "sample": "نمونه",
+    "option": "گزینه",
+    "optionOther": "گزینهٔ دیگر",
+    "search": "جست‌وجو",
+    "number": "عدد",
+    "code": "کد",
+    "tab": "زبانه",
+    "page": "۱",
+    "stepperMinus": "کم کردن",
+    "stepperPlus": "زیاد کردن",
+    "cellLabel": "سلول",
+    "prefix": "+۹۸",
+    "chipLabel": "برچسب",
+    "badgeLabel": "۵",
+    "kbdKey": "ک",
+    "avatarInitial": "ک",
+    "itemTitle": "عنوان",
+    "itemText": "توضیح",
+    "kpiTitle": "عنوان",
+    "kpiValue": "۱۲۸"
+  }
+}

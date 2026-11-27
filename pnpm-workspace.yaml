@@ -1,0 +1,27 @@
+packages:
+  - apps/*
+  - packages/*
+  - tools/web-lint
+strictDepBuilds: true
+# A build script runs only when it is listed here with a reason.
+allowBuilds:
+  # Downloads the licensed package from HeroUI's CDN, using HEROUI_AUTH_TOKEN
+  # from the environment (docs/specs/p1-frontend.md, section 3).
+  "@heroui-pro/react": true
+  sharp: false
+  # next-intl's message extraction and its file watcher. We do not use
+  # extraction, and both ship prebuilt binaries as optional packages.
+  "@parcel/watcher": false
+  "@swc/core": false
+  # The heroui-pro CLI's OS keyring, used only by the interactive login.
+  # Installs authenticate with the CI token instead.
+  "@zowe/secrets-for-zowe-sdk": false
+overrides:
+  heroui-pro: 1.0.0-beta.14
+# openapi-typescript 7.13.0 declares typescript ^5. Held at TypeScript 6.0.3
+# by the spec (section 2.1). It only generates types at build time.
+peerDependencyRules:
+  allowedVersions:
+    openapi-typescript>typescript: "6"
+minimumReleaseAgeExclude:
+  - "@types/node@26.6.10"

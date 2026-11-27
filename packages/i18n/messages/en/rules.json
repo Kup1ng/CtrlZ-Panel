@@ -1,0 +1,497 @@
+{
+  "action": {
+    "block": "Block",
+    "bypass": "Bypass",
+    "redirect": "Redirect",
+    "inherit": "Inherit"
+  },
+  "actionText": {
+    "block": "These requests get no answer.",
+    "bypass": "Answered by plain DNS with no filter.",
+    "redirect": "Goes out through the location you pick.",
+    "inherit": "Follows the folder's rule."
+  },
+  "three": {
+    "group": "Action for {subject}",
+    "set": "{action} for {subject}",
+    "openDestination": "Redirect destination of {subject}",
+    "destinationNow": "Destination: {where}",
+    "neverProxied": "{subject} is never sent through a proxy, so it has no Redirect.",
+    "noShared": "There is no shared location to redirect to.",
+    "iranianBypass": "Set to Redirect but acts as Bypass.",
+    "unavailable": "The destination is not available now and acts as Bypass.",
+    "actsAs": "In effect: {action}"
+  },
+  "expiry": {
+    "none": "No expiry",
+    "in1h": "1 hour",
+    "in1d": "1 day",
+    "in1w": "1 week",
+    "in1m": "1 month",
+    "pick": "Pick a date",
+    "summary": "Until {when}",
+    "past": "That time has passed.",
+    "tooFar": "An expiry cannot be more than a year ahead.",
+    "shortcutsLabel": "Expiry shortcuts",
+    "label": "Expiry",
+    "open": "Expiry of {subject}",
+    "clear": "Remove the expiry of {subject}"
+  },
+  "list": {
+    "empty": "You have no rules yet.",
+    "title": "Rules",
+    "summary": "{count, plural, one {# rule} other {# rules}}",
+    "summaryLoaded": "{count} rules loaded",
+    "toolbar": "Find and filter rules",
+    "searchLabel": "Search rules",
+    "search": "Search a domain",
+    "add": "Add rule",
+    "addAria": "Add a rule to {name}",
+    "addFolder": "Add folder",
+    "addFolderAria": "Add a folder to {name}",
+    "loading": "Loading rules",
+    "loadingMore": "Loading more rules",
+    "loadMoreFailed": "More rules could not be loaded.",
+    "refreshFailed": "The list could not be updated. What you see may be out of date.",
+    "searchingAll": "Searching the rules of every folder.",
+    "listLabel": "Rules of {name}",
+    "emptyTitle": "No rules yet",
+    "emptyText": "Add a domain to block it, let it through, or redirect it.",
+    "emptyFolderText": "This folder has no rules. Add one, or upload a file of rules.",
+    "noMatch": "No rule matches this search."
+  },
+  "folder": {
+    "title": "Folder",
+    "listLabel": "Folders",
+    "edit": "Edit folder {name}",
+    "rules": "{count, plural, one {# rule} other {# rules}}",
+    "action": "Folder Rule: {action}",
+    "noAction": "No Folder Rule",
+    "magicTag": "Magic: Do Not Log"
+  },
+  "options": {
+    "title": "Profile options",
+    "loading": "Loading the options",
+    "learnMore": "Learn more",
+    "learnMoreAria": "Learn more about {name}",
+    "on": "On",
+    "off": "Off",
+    "saved": "Saved",
+    "editAria": "Edit {name}",
+    "failed": "Could not save {name}.",
+    "ttl": {
+      "seconds": "{count, plural, one {# second} other {# seconds}}",
+      "notSet": "Not set",
+      "defaultIs": "Default: {value}",
+      "keeps": "Default: the TTL of each answer",
+      "edit": "Edit",
+      "field": "{name}, in seconds",
+      "hint": "From {min, number} to {max, number} seconds.",
+      "useDefault": "Use the default",
+      "useDefaultAria": "Use the default of {name}",
+      "required": "Write a number of seconds.",
+      "out_of_range": "It must be from {min, number} to {max, number} seconds."
+    },
+    "blockResponse": {
+      "group": "Answer for a blocked name",
+      "mode": {
+        "zero": "0.0.0.0 and ::",
+        "nxdomain": "NXDOMAIN",
+        "refused": "REFUSED",
+        "custom": "Custom",
+        "branded": "Branded (coming later)"
+      },
+      "modeText": {
+        "zero": "A gets 0.0.0.0 and AAAA gets ::.",
+        "nxdomain": "The answer says the name does not exist.",
+        "refused": "The query is refused.",
+        "custom": "A and AAAA get the addresses you give.",
+        "branded": "A block page with your own logo and message comes later."
+      },
+      "v4": "IPv4 address",
+      "v6": "IPv6 address",
+      "v4Example": "203.0.113.7",
+      "invalidV4": "The IPv4 address is not valid.",
+      "invalidV6": "The IPv6 address is not valid.",
+      "needOne": "Write at least one of the two addresses."
+    },
+    "ecs": {
+      "group": "ECS mode",
+      "mode": {
+        "none": "No ECS",
+        "auto": "Auto",
+        "custom": "Custom"
+      },
+      "modeText": {
+        "none": "Nothing about your network is sent.",
+        "auto": "The first part of your own address is sent.",
+        "custom": "The subnets you write are sent."
+      },
+      "v4": "IPv4 subnet",
+      "v6": "IPv6 subnet",
+      "v4Example": "203.0.113.0/24",
+      "invalid": "Write the subnet as address/prefix.",
+      "host_bits": "The address has bits after the prefix. Write the network itself, for example 203.0.113.0/24.",
+      "needOne": "Write at least one of the two subnets."
+    },
+    "defaultRule": {
+      "flag": "Redirects to {where}",
+      "d42Title": "Names of Iranian sites keep their state",
+      "d42Text": "A proxy is never used for Iranian names. When a service or rule does not decide such a name, it is let through, whatever you choose here.",
+      "changeTitle": "This changes where every undecided name goes",
+      "changeText": "From {from} to {to}. It applies at once to every name that no filter, service or rule decides."
+    },
+    "disable": {
+      "group": "Disable for",
+      "choice": {
+        "5m": "5 minutes",
+        "1h": "1 hour",
+        "1d": "1 day",
+        "custom": "Custom"
+      },
+      "until": "Disabled until {when}",
+      "pickFirst": "Pick a date and time first.",
+      "picked": "Until {when}",
+      "pick": "Pick the date and time",
+      "pickLabel": "{name}, end of the pause",
+      "on": "Disabled",
+      "idle": "Active"
+    },
+    "lock": {
+      "locked": "Locked",
+      "unlocked": "Not locked",
+      "message": "Message: {message}",
+      "noMessage": "No message."
+    },
+    "help": {
+      "default_rule": {
+        "title": "Default Rule",
+        "body": "The Default Rule is the last step. A name reaches it only when no custom rule, Geo Rule, service or filter has matched. Bypass lets it through, Block refuses it, and Redirect sends it to a location or an address you choose. Names that are never proxied keep their state, so they are let through even if you choose Redirect."
+      },
+      "block_exfiltration": {
+        "title": "Block DNS exfiltration",
+        "body": "Malware can hide stolen data in very long or unusual DNS names. With this on, such queries are blocked before they leave. Normal browsing is not affected."
+      },
+      "rebind_protection": {
+        "title": "DNS rebind protection",
+        "body": "In a rebind attack a public site is made to resolve to an address inside your home or office network, so a web page can reach your router or devices. With this on, such answers are dropped."
+      },
+      "disable_dnssec": {
+        "title": "Disable DNSSEC",
+        "body": "DNSSEC checks that an answer was not changed on the way. A site with broken signatures cannot be opened while the check is on. Turn this on only to reach such a site, and turn it off again afterwards."
+      },
+      "block_ttl": {
+        "title": "Block TTL",
+        "body": "TTL is the time, in seconds, a device may remember an answer. A short Block TTL makes a device ask again soon, so a name you unblock opens sooner. Without a value it is 60 seconds."
+      },
+      "redirect_ttl": {
+        "title": "Redirect TTL",
+        "body": "TTL is the time, in seconds, a device may remember an answer. A short Redirect TTL makes a device pick up a changed location sooner. Without a value it is 60 seconds."
+      },
+      "bypass_ttl": {
+        "title": "Bypass TTL",
+        "body": "With a value, every answer that passes through is given this TTL, in seconds. Without one, each answer keeps the TTL its own server gave."
+      },
+      "block_response": {
+        "title": "Block response",
+        "body": "By default a blocked name is answered with 0.0.0.0 for IPv4 and :: for IPv6. NXDOMAIN says the name does not exist, REFUSED refuses the query, and Custom answers with addresses you give. A block page with your own logo and message comes later."
+      },
+      "ecs": {
+        "title": "EDNS client subnet (ECS)",
+        "body": "With No ECS nothing about your network is sent. Auto sends the first part of your own address. Custom sends the subnet you write, which is useful to get answers for another place."
+      },
+      "dns64": {
+        "title": "DNS64",
+        "body": "On a network that has only IPv6, a site that has only IPv4 cannot be reached. DNS64 makes an IPv6 address for it that the network translates. It is never applied to blocked or redirected names."
+      },
+      "cname_flattening": {
+        "title": "CNAME flattening",
+        "body": "Many sites answer with a chain of alias names before the address. With this on, the answer holds only the final address, under the name that was asked. Some devices handle that better."
+      },
+      "safe_search": {
+        "title": "Safe search",
+        "body": "Search engines are told to leave out explicit results for every device on this profile. It works for the engines that support it."
+      },
+      "restricted_youtube": {
+        "title": "Restricted YouTube",
+        "body": "YouTube hides videos that may be unsuitable. It applies to every device that uses this profile and cannot be turned off from the device."
+      },
+      "disable": {
+        "title": "Disable this profile",
+        "body": "Pick for how long, then turn the switch on. The profile switches itself back on when the time ends, or when you turn the switch off."
+      },
+      "lock": {
+        "title": "Lock profile",
+        "body": "Locking asks for a password that belongs to this profile alone, and an optional message that whoever opens the profile will see. While it is locked, every control is off. Reading, exporting and duplicating stay open."
+      }
+    },
+    "rows": {
+      "default_rule": {
+        "name": "Default Rule",
+        "description": "What happens to a name that no filter, service or rule has decided."
+      },
+      "block_exfiltration": {
+        "name": "Block DNS exfiltration",
+        "description": "Blocks queries that look like data smuggled out inside DNS names."
+      },
+      "rebind_protection": {
+        "name": "DNS rebind protection",
+        "description": "Drops answers that point a public name at an address inside your own network."
+      },
+      "disable_dnssec": {
+        "name": "Disable DNSSEC",
+        "description": "Skips the signature check, for the rare site whose signatures are broken."
+      },
+      "block_ttl": {
+        "name": "Block TTL",
+        "description": "How long a device keeps the answer for a blocked name."
+      },
+      "redirect_ttl": {
+        "name": "Redirect TTL",
+        "description": "How long a device keeps the answer for a redirected name."
+      },
+      "bypass_ttl": {
+        "name": "Bypass TTL",
+        "description": "Replaces the TTL of every answer that is let through."
+      },
+      "block_response": {
+        "name": "Block response",
+        "description": "What a blocked name gets back."
+      },
+      "ecs": {
+        "name": "EDNS client subnet (ECS)",
+        "description": "Tells the upstream roughly where you are, so it can pick a near server."
+      },
+      "dns64": {
+        "name": "DNS64",
+        "description": "Gives networks with only IPv6 an address for sites that only have IPv4."
+      },
+      "cname_flattening": {
+        "name": "CNAME flattening",
+        "description": "Answers with the final address and drops the chain of alias names."
+      },
+      "safe_search": {
+        "name": "Safe search",
+        "description": "Removes inappropriate results from the search engines it supports."
+      },
+      "restricted_youtube": {
+        "name": "Restricted YouTube",
+        "description": "Turns on YouTube's restricted mode for every device on this profile."
+      },
+      "disable": {
+        "name": "Disable this profile",
+        "description": "Stops filtering for a while. Every name is answered as if the profile had no rules."
+      },
+      "lock": {
+        "name": "Lock profile",
+        "description": "Nothing in the profile can change without the lock password."
+      }
+    }
+  },
+  "dialog": {
+    "title": "Rule",
+    "add": "Add rule",
+    "edit": "Edit rule",
+    "finding": "Looking for the rule",
+    "notFound": "This rule is not in the profile any more.",
+    "lookupFailed": "Could not look for the rule. Try again.",
+    "profile": "Profile: {name}",
+    "domains": "Domains",
+    "domainHelp": "Type a domain and press Enter. A space or a comma starts the next one, and a pasted list is split. *.example.com covers the subdomains.",
+    "domainHelpOne": "The name of this rule. Type another to replace it.",
+    "addTag": "Add domain",
+    "tagsLabel": "Domains of the new rules",
+    "removeTag": "Remove {pattern}",
+    "tagCount": "{count} of {max}",
+    "tagsOver": "{count} did not fit under the limit of {max}.",
+    "tagsDuplicate": "{count, plural, one {# name was already there.} other {# names were already there.}}",
+    "asnNote": "This rule is about a network number.",
+    "action": "Action",
+    "needDestination": "Choose where Redirect sends it.",
+    "expiry": "Expiry",
+    "folder": "Folder",
+    "folderLabel": "Folder of {name}",
+    "noFolder": "No folder",
+    "comment": "Comment",
+    "commentPlaceholder": "A note for yourself",
+    "commentCount": "{count} of {max}",
+    "newRule": "the new rules",
+    "saved": "The rule was saved.",
+    "added": "{count, plural, one {# rule was added.} other {# rules were added.}}",
+    "submitAdd": "{count, plural, =0 {Add} one {Add # rule} other {Add # rules}}",
+    "destinationTitle": "Destination of the Redirect",
+    "destinationDone": "Use this destination",
+    "fixTags": "Fix the marked names and try again."
+  },
+  "filters": {
+    "statusLabel": "Filter rules by status",
+    "allStatuses": "Any status",
+    "enabled": "On",
+    "disabled": "Off",
+    "expired": "Expired",
+    "actionLabel": "Filter rules by action",
+    "allActions": "Any action",
+    "sortLabel": "Sort rules",
+    "sort": {
+      "created": "Newest first",
+      "updated": "Recently changed",
+      "pattern": "By name"
+    }
+  },
+  "view": {
+    "label": "List size",
+    "large": "Large",
+    "small": "Small"
+  },
+  "row": {
+    "switch": "Rule {pattern} on or off",
+    "copy": "Copy {pattern}",
+    "move": "Move {pattern}",
+    "edit": "Edit {pattern}",
+    "delete": "Delete {pattern}",
+    "deleted": "{pattern} was deleted.",
+    "confirmGroup": "Confirm deleting {pattern}",
+    "confirmDelete": "Delete?",
+    "confirmYes": "Delete",
+    "confirmYesAria": "Yes, delete {pattern}",
+    "confirmNo": "Keep",
+    "confirmNoAria": "Keep {pattern}",
+    "select": "Select {pattern}",
+    "actsAsBypass": "Acts as Bypass",
+    "unavailable": "Destination unavailable",
+    "expired": "Expired",
+    "expires": "Until {when}",
+    "inFolder": "In {folder}",
+    "follows": "Folder: {action}",
+    "off": "Off",
+    "geo": {
+      "dest": "Answer is in {country}",
+      "destNot": "Answer is not in {country}",
+      "src": "Asked from {country}",
+      "srcNot": "Not asked from {country}",
+      "asn": "Answer from network {number}",
+      "asnNot": "Answer not from network {number}",
+      "removed": "The rule"
+    }
+  },
+  "folderPage": {
+    "back": "Back to rules",
+    "export": "Export Rules",
+    "exportAria": "Export the rules of {name}",
+    "upload": "Upload Folder",
+    "uploadAria": "Upload rules into {name}",
+    "deleteAria": "Delete folder {name}",
+    "deleteTitle": "Delete the folder {name}?",
+    "deleteText": "The folder and its {count, plural, one {# rule} other {# rules}} are deleted from {profile}. This cannot be undone.",
+    "deleteConfirm": "Delete folder",
+    "deleted": "The folder {name} was deleted."
+  },
+  "batch": {
+    "rules": "{count, plural, one {# rule} other {# rules}}",
+    "everyMatching": "every matching rule",
+    "copy": "Copy",
+    "move": "Move",
+    "edit": "Edit",
+    "enable": "Enable",
+    "disable": "Disable",
+    "delete": "Delete",
+    "copyTitle": "Copy rules",
+    "moveTitle": "Move rules",
+    "editTitle": "Edit rules",
+    "enableTitle": "Enable rules",
+    "disableTitle": "Disable rules",
+    "deleteTitle": "Delete {subject}?",
+    "deleteText": "The rules are deleted from this profile. This cannot be undone.",
+    "deleteJob": "Delete rules",
+    "deleteConfirm": "Delete"
+  },
+  "geo": {
+    "add": "Geo Rule",
+    "rowsLabel": "Geo Rules",
+    "formLabel": "Kind of Geo Rule {number}",
+    "countryLabel": "Country of Geo Rule {number}",
+    "countryPlaceholder": "Search a country",
+    "remove": "Remove Geo Rule {number}",
+    "form": {
+      "dest": "Destination is",
+      "destNot": "Destination is not",
+      "src": "Source is",
+      "srcNot": "Source is not"
+    }
+  },
+  "redirectWarn": {
+    "title": "Before the first Redirect",
+    "heading": "Redirect sends these names through a proxy",
+    "text": "The names reach their site from the place you pick, not from your own address. The connection can be slower, and a site may treat you as a visitor from there. Iranian sites are never redirected.",
+    "once": "You see this once.",
+    "continue": "I understand"
+  },
+  "folderDialog": {
+    "add": "Add folder",
+    "edit": "Edit folder",
+    "finding": "Looking for the folder",
+    "notFound": "This folder is not in the profile any more.",
+    "kindLabel": "Kind of folder",
+    "standard": "Standard",
+    "standardText": "Keeps rules together. It can also give them one shared action.",
+    "magic": "Magic",
+    "magicText": "Its rules are not logged and not counted (Do Not Log).",
+    "magicNote": "A Magic folder only turns logging off. Each rule keeps its own action.",
+    "kindFixed": "The kind of a folder is chosen when it is made.",
+    "name": "Folder name",
+    "namePlaceholder": "Kids sites",
+    "nameCount": "{count} of {max}",
+    "ruleSwitch": "Folder Rule",
+    "ruleText": "One action that the rules in this folder can follow.",
+    "newFolder": "the new folder",
+    "saved": "{name} was saved.",
+    "added": "{name} was added."
+  },
+  "transfer": {
+    "copyTitle": "Copy {subject}",
+    "moveTitle": "Move {subject}",
+    "copyDo": "Copy",
+    "moveDo": "Move",
+    "loading": "Loading profiles",
+    "noOther": "Copy goes to another profile, and you have only this one.",
+    "profile": "Profile",
+    "profileLabel": "Profile that receives {subject}",
+    "thisProfile": "{name} (this profile)",
+    "locked": "{name} is locked, so nothing can be added to it now.",
+    "placeLabel": "Where {subject} goes",
+    "root": "Top level, outside any folder",
+    "folder": "A folder",
+    "createFolder": "Create Folder and Add Rules",
+    "folderLabel": "Folder that receives {subject}",
+    "newName": "Name of the new folder"
+  },
+  "batchEdit": {
+    "title": "Edit {subject}",
+    "apply": "Apply",
+    "hint": "Only what you change is applied.",
+    "nothing": "Choose what to change.",
+    "modeLabel": "What to do with {field}",
+    "keep": "Keep",
+    "set": "Change",
+    "clear": "Clear"
+  },
+  "upload": {
+    "title": "Upload into {name}",
+    "do": "Upload",
+    "done": "The file was merged.",
+    "help": "A file of rules, as Export Rules writes it. It never deletes a rule.",
+    "pick": "Choose a file",
+    "change": "Choose another file",
+    "choose": "Choose the file to upload into {name}",
+    "none": "No file chosen",
+    "size": "{size} KB",
+    "tooBig": "The file is larger than {max} MB.",
+    "empty": "The file is empty.",
+    "modeLabel": "How the file is merged",
+    "newOnly": "Add what is new",
+    "newOnlyText": "Rules that are already there stay as they are.",
+    "upsert": "Add and update",
+    "upsertText": "Rules that are already there take the file's values.",
+    "problems": "Places in the file that were refused"
+  }
+}

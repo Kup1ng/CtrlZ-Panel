@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "group": "traffic-cat",
+  "fixture": "base",
+  "cases": [
+    {"id": "cat-001", "why": "A filter-listed name takes the lowest native category in its mask (bit 0 is category 1)", "endpoint": "e-catprof", "client": "",
+     "req": {"qname": "tracker.example", "qtype": "A", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
+     "upstream": {},
+     "expect": {"action": "block", "stage": "filter", "traffic_cat": 1}},
+    {"id": "cat-002", "why": "A service category wins over the filter mask and is recorded even when the service is Bypass", "endpoint": "e-catprof", "client": "",
+     "req": {"qname": "video.example", "qtype": "A", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
+     "upstream": {"video.example/A": {"answer": ["video.example. 60 IN A 93.184.216.34"]}},
+     "expect": {"action": "bypass", "stage": "service", "traffic_cat": 105}},
+    {"id": "cat-003", "why": "Bit 13 is category 14", "endpoint": "e-catprof", "client": "",
+     "req": {"qname": "www.malware.example", "qtype": "A", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
+     "upstream": {},
+     "expect": {"action": "block", "stage": "filter", "traffic_cat": 14}},
+    {"id": "cat-004", "why": "An unclassified name is category 0 (Uncategorized)", "endpoint": "e-catprof", "client": "",
+     "req": {"qname": "nothing.example", "qtype": "A", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
+     "upstream": {"nothing.example/A": {"answer": ["nothing.example. 60 IN A 93.184.216.34"]}},
+     "expect": {"action": "bypass", "traffic_cat": 0}},
+    {"id": "cat-005", "why": "The lookup runs whatever decided: a custom rule on a classified name still records the category", "endpoint": "e-prec", "client": "",
+     "req": {"qname": "cdn.video.example", "qtype": "A", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
+     "upstream": {"cdn.video.example/A": {"answer": ["cdn.video.example. 60 IN A 93.184.216.34"]}},
+     "expect": {"action": "bypass", "stage": "rule", "traffic_cat": 105}}
+  ]
+}
