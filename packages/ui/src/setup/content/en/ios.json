@@ -1,0 +1,31 @@
+{
+  "versions": [
+    {
+      "id": "14",
+      "name": "iOS and iPadOS 14 and later",
+      "steps": [
+        {
+          "title": "Build the profile",
+          "text": "Use Automatic Setup to build the Apple profile. Scan the QR with the camera or open the link in Safari."
+        },
+        {
+          "title": "Download the profile",
+          "text": "When Safari asks, tap Allow. The profile downloads into Settings."
+        },
+        {
+          "title": "Install the profile",
+          "text": "Open Settings, General, VPN & Device Management. Pick the profile, install it and enter the device passcode."
+        },
+        {
+          "title": "Select it for DNS",
+          "text": "Open Settings, General, VPN & Device Management, DNS and select this profile."
+        },
+        {
+          "title": "Check the setup",
+          "text": "A few seconds after saving, run this check to see that the device uses this Endpoint.",
+          "verify": true
+        }
+      ]
+    }
+  ]
+}
