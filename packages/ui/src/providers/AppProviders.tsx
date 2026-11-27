@@ -10,6 +10,9 @@ import {makeQueryClient} from "@ctrlz/api-client/queryDefaults.ts";
 import {Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode} from "react";
 import {I18nProvider, RouterProvider} from "react-aria-components";
 
+// Loaded here for what it registers: the forget-at-session-end of the reminder closes (V1-r2-2). A page that never loads the Endpoint
+// chunk can still end a session, so the registration cannot live in a module only that chunk imports.
+import "../freeDns/freeDnsModel.ts";
 import {VerifyOriginProvider} from "../setup/VerifyConfig.tsx";
 import {EnsureTheme} from "../theme/EnsureTheme.tsx";
 import {AppContextProvider} from "./appContext.tsx";

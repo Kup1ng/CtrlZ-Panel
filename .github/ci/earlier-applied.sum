@@ -11,7 +11,7 @@
 # bodies of auth_otp_issue in 0010, 0011 and 0023 were reworded in round 6 (commit ff1dc2c) before
 # anything was released. Behaviour did not change, and the manifest pins them as they are.
 
-# newest: 0103_p4_node_dns_state.sql
+# newest: 0104_p4_domain_apply_wildcard.sql
 
 c86f452cc6bc16552ca1fdc2a3c9fc3dde9d8caa1618e11142adc6a712568e92  0001_schemas.sql
 f0ec3cb2a983c096d185560abc6560872206e81db5573c86a852bd9c468d1b6a  0002_global_tables.sql
@@ -90,3 +90,4 @@ c50b8ccf997e3544ef3b48425ee0379ab0d622167b9b38e96ba5da26a7631c2f  0074_p3_plans.
 2926b2ed463ddac9d54724292b066ff4302b8fdc0927e89709a440576b01fa29  0101_p4_job_notice_key.sql
 860c2f4a5c7cd58366a2cfdf0a62ae2194b863366e8c647271593ad34fd7bc5d  0102_p4_admin_impact.sql
 94cc0357c8cdb454c769503d4bb5433a5fbc9f5c019902f2146a873deb667a71  0103_p4_node_dns_state.sql
+c63717079199f3263d2134266a32658fbb1b2b42cbec279fc87f656f134dc789  0104_p4_domain_apply_wildcard.sql

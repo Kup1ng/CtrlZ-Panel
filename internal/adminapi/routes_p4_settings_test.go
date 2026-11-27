@@ -675,3 +675,51 @@ func TestPasskeyInProductionNeedsAnAppliedPublicPanelCert(t *testing.T) {
 	enable().want(422, "cert_not_public")
 	b.callOn(prod, adminHost, "PUT", "/settings/webauthn", map[string]any{"rp_id": "example.ir", "enabled": false}).want(200, "")
 }
+
+// TestApplyPendingFollowsTheWildcardRows (V1 r2-1, r2-3): CTRLZ_VERIFY_ORIGIN lists a zone only while an active uploaded wildcard
+// covers it, so an upload or a retirement after an apply leaves the origin stale until the next run. The page must say so. The
+// run is simulated by what the apply step ends with, applied_at = now().
+func TestApplyPendingFollowsTheWildcardRows(t *testing.T) {
+	r := newIntakeRig(t)
+	b, _ := r.admin(t)
+	b.put("/settings/domain", map[string]any{"dns_zone": "dns.example.ir", "panel_host": "panel.example.ir", "admin_host": "admin.example.ir"}).want(200, "")
+	applied := func() {
+		r.env.Exec(t, `UPDATE ctrlz.domain_settings SET applied_panel_host = panel_host, applied_admin_host = admin_host, applied_at = now()`)
+	}
+	pending := func() bool {
+		var v struct {
+			ApplyPending bool `json:"apply_pending"`
+		}
+		b.get("/settings/domain").want(200, "").json(&v)
+		return v.ApplyPending
+	}
+	applied()
+	if pending() {
+		t.Fatal("nothing is pending after an apply with no wildcard")
+	}
+	// The usual first-install order: the apply ran, then the public wildcard is uploaded.
+	chain, key := r.ca.leaf(t, 60*24*time.Hour, "dns.example.ir", "*.dns.example.ir", "*.verify.dns.example.ir")
+	var c certCreated
+	b.post("/certificates", certBody("wildcard", chain, key)).want(201, "").json(&c)
+	if !pending() {
+		t.Fatal("a wildcard uploaded after the apply changes the origin, so an apply is pending")
+	}
+	applied()
+	if pending() {
+		t.Fatal("the apply has seen the wildcard, so nothing is pending")
+	}
+	b.post("/certificates/"+c.ID+":retire", nil).want(204, "")
+	if !pending() {
+		t.Fatal("a retired wildcard takes the zone back to the private CA, so an apply is pending")
+	}
+	applied()
+	if pending() {
+		t.Fatal("the apply has seen the retirement, so nothing is pending")
+	}
+	// No live zone, no origin: a wildcard row changes nothing.
+	r.env.Exec(t, `UPDATE ctrlz.domain_settings SET dns_zone = NULL, changed_at = NULL`)
+	r.env.Exec(t, `UPDATE ctrlz.certificates SET updated_at = now() WHERE kind = 'wildcard'`)
+	if pending() {
+		t.Fatal("with no zone the origin is empty whatever the wildcard rows do")
+	}
+}

@@ -1,3 +1,5 @@
+import {readFileSync} from "node:fs";
+
 import {runSessionEnd} from "@ctrlz/api-client/sessionEnd.ts";
 import {afterEach, describe, expect, it, vi} from "vitest";
 
@@ -96,5 +98,15 @@ describe("the closed reminders at the end of a session", () => {
     expect([...local.items.keys()]).toEqual(["ctrlz.theme"]);
     expect(readClosed("ep-1")).toBeNull();
     expect(readClosed("ep-2")).toBeNull();
+  });
+});
+
+// V1-r2-2: the clear is registered when freeDnsModel loads, so it must load in every page, not only where the Endpoint chunk does. The
+// shell's provider is on every page of the panel and the admin; a person who closes a reminder, reloads on the dashboard and logs out
+// there would otherwise leave the sign-in address in localStorage.
+describe("the session-end clear is loaded by the shell", () => {
+  it("is imported for its effect by AppProviders", () => {
+    const text = readFileSync(new URL("../providers/AppProviders.tsx", import.meta.url), "utf8");
+    expect(text).toMatch(/^import "\.\.\/freeDns\/freeDnsModel\.ts";$/m);
   });
 });

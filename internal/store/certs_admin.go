@@ -89,3 +89,19 @@ func (g GlobalTx) CertRetire(id uuid.UUID) (bool, error) {
 	}
 	return tag.RowsAffected() == 1, nil
 }
+
+// An uploaded wildcard decides which zones run on a public certificate, and so whether CTRLZ_VERIFY_ORIGIN lists them
+// (p4-nodes 10.3). The apply step does not record the origin it wrote, so the page learns that the origin may be stale from
+// what happened to those rows since the last apply: a row that was uploaded or retired (updated_at moves on both, by the
+// touch trigger), or one whose chain began or ended in the window. A change that leaves the covered state alone still counts;
+// the run it asks for is cheap and ends the flag.
+const qWildcardEventSince = `SELECT EXISTS (SELECT 1 FROM ctrlz.certificates
+WHERE kind = 'wildcard' AND source = 'uploaded' AND (updated_at > $1
+  OR (state = 'active' AND ((not_before > $1 AND not_before <= $2) OR (not_after > $1 AND not_after <= $2)))))`
+
+// WildcardEventSince says whether an uploaded wildcard row changed or began or ended in (since, now].
+func (g GlobalTx) WildcardEventSince(since, now time.Time) (bool, error) {
+	var yes bool
+	err := g.tx.QueryRow(g.ctx, qWildcardEventSince, since, now).Scan(&yes)
+	return yes, sanitize(err)
+}
