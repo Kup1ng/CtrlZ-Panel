@@ -1,0 +1,1 @@
+# Files exempt from ctrlz/no-raw-text, one path per line then " # reason".

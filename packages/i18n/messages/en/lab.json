@@ -1,0 +1,73 @@
+{
+  "virtual": {
+    "title": "Long lists",
+    "subtitle": "Proof of virtual rendering with 5,000 rows",
+    "listTitle": "List",
+    "gridTitle": "Grid",
+    "count": "{count, plural, one {# row} other {# rows}}",
+    "listLabel": "Virtualized list of requests",
+    "gridLabel": "Virtualized grid of requests",
+    "gridWarning": "A virtualized grid of 5,000 rows takes close to a minute when it is part of the server-rendered page. Here it is built in the browser only, with this button.",
+    "gridShow": "Build the grid"
+  },
+  "activity": {
+    "time": "Time",
+    "domain": "Domain",
+    "action": "Decision",
+    "client": "Client",
+    "blocked": "Blocked",
+    "allowed": "Allowed",
+    "redirected": "Redirected"
+  },
+  "tokens": {
+    "title": "Tokens",
+    "kpi": "Queries today",
+    "switchLabel": "{size} switch, {state}",
+    "sizes": {
+      "sm": "Small",
+      "md": "Medium",
+      "lg": "Large"
+    },
+    "states": {
+      "off": "off",
+      "on": "on",
+      "offDisabled": "off, disabled",
+      "onDisabled": "on, disabled"
+    },
+    "cellSwitchLabel": "Cell switch",
+    "avatar": "Avatar, {size}",
+    "avatarInitial": "C",
+    "checkbox": "Checkbox, {state}",
+    "checkboxStates": {
+      "off": "unchecked",
+      "on": "checked"
+    }
+  },
+  "tokenLab": {
+    "title": "Radius table",
+    "subtitle": "One sample of every row of the radius table, measured by the radius test",
+    "intro": "Controls follow 0.4 x height, capped at 30px. Boxes are 20px at any height. The switch is a pill.",
+    "controls": "Controls",
+    "boxes": "Boxes and sections",
+    "sample": "Sample",
+    "option": "Option",
+    "optionOther": "Another option",
+    "search": "Search",
+    "number": "Number",
+    "code": "Code",
+    "tab": "Tab",
+    "page": "1",
+    "stepperMinus": "Decrease",
+    "stepperPlus": "Increase",
+    "cellLabel": "Cell",
+    "prefix": "+98",
+    "chipLabel": "Label",
+    "badgeLabel": "5",
+    "kbdKey": "K",
+    "avatarInitial": "C",
+    "itemTitle": "Title",
+    "itemText": "Description",
+    "kpiTitle": "Title",
+    "kpiValue": "128"
+  }
+}

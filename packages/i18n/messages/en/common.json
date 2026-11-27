@@ -1,0 +1,72 @@
+{
+  "appName": "Ctrl Z",
+  "close": "Close",
+  "cancel": "Cancel",
+  "save": "Save",
+  "saving": "Saving",
+  "delete": "Delete",
+  "remove": "Remove",
+  "edit": "Edit",
+  "add": "Add",
+  "create": "Create",
+  "confirm": "Confirm",
+  "apply": "Apply",
+  "reset": "Reset",
+  "clear": "Clear",
+  "back": "Back",
+  "next": "Continue",
+  "done": "Done",
+  "retry": "Try again",
+  "copy": "Copy",
+  "copied": "Copied",
+  "search": "Search",
+  "more": "More",
+  "yes": "Yes",
+  "no": "No",
+  "optional": "Optional",
+  "required": "Required",
+  "loading": "Loading",
+  "noResults": "No results found",
+  "skipToContent": "Skip to page content",
+  "status": {
+    "on": "On",
+    "off": "Off",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "language": {
+    "label": "Language",
+    "fa": "فارسی",
+    "en": "English"
+  },
+  "theme": {
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "Match system"
+  },
+  "count": {
+    "items": "{count, plural, one {# item} other {# items}}",
+    "selected": "{count, plural, one {# item selected} other {# items selected}}"
+  },
+  "copyNamed": "Copy {name}",
+  "selection": {
+    "barLabel": "Actions on the selected items",
+    "selectAll": "Select all",
+    "selectAllAria": "Select all {count, plural, one {# item} other {# items}}",
+    "clear": "Clear selection",
+    "allMatching": "Every item of this list is selected",
+    "everyMatching": "Every matching item"
+  },
+  "calendar": {
+    "date": "Date",
+    "time": "Time",
+    "apply": "Apply",
+    "clear": "Clear",
+    "today": "Today",
+    "previous": "Previous month",
+    "next": "Next month",
+    "dateTime": "Date and time"
+  },
+  "copyFailed": "Could not copy. Try again or select the value by hand."
+}

@@ -1,0 +1,24 @@
+{
+  "comment": "Share links that must convert and pass the allow-list. Addresses are documentation ranges (RFC 5737, RFC 3849) and example names; keys and passwords are made up. CI runs each through the pinned xray binary with -test (p4b-proxy 15.5).",
+  "items": [
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?encryption=none\u0026flow=xtls-rprx-vision\u0026security=reality\u0026sni=www.example.com\u0026fp=chrome\u0026pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\u0026sid=ab12\u0026spx=%2F\u0026type=tcp#reality-vision",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?encryption=none\u0026security=tls\u0026sni=a.example\u0026alpn=h2%2Chttp%2F1.1\u0026fp=chrome\u0026type=ws\u0026path=%2Fws\u0026host=a.example#ws-tls",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@[2001:db8::1]:8443?encryption=none\u0026security=tls\u0026sni=a.example\u0026type=grpc\u0026serviceName=svc\u0026authority=a.example#grpc-v6",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?encryption=none\u0026security=tls\u0026sni=a.example\u0026type=xhttp\u0026path=%2Fx\u0026mode=auto#xhttp",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?encryption=none\u0026security=tls\u0026sni=a.example\u0026pcs=abababababababababababababababababababababababababababababababab~cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\u0026type=ws\u0026path=%2Fws\u0026host=a.example#ws-two-pins",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:80?encryption=none\u0026security=none\u0026type=tcp\u0026headerType=http\u0026host=a.example\u0026path=%2F#http-header",
+    "vmess://eyJ2IjoiMiIsInBzIjoidm1lc3Mgd3MiLCJhZGQiOiIyMDMuMC4xMTMuNyIsInBvcnQiOiI0NDMiLCJpZCI6IjU3ODNhM2U3LWUzNzMtNTFjZC04NjQyLWM4Mzc4MmI4MDdjNSIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0Ijoid3MiLCJ0eXBlIjoibm9uZSIsImhvc3QiOiJhLmV4YW1wbGUiLCJwYXRoIjoiL3YiLCJ0bHMiOiJ0bHMiLCJzbmkiOiJhLmV4YW1wbGUifQ==",
+    "vmess://eyJ2IjoiMiIsInBzIjoidm1lc3MgdGNwIiwiYWRkIjoiYS5leGFtcGxlIiwicG9ydCI6ODA4MCwiaWQiOiI1NzgzYTNlNy1lMzczLTUxY2QtODY0Mi1jODM3ODJiODA3YzUiLCJhaWQiOjAsIm5ldCI6InRjcCIsInR5cGUiOiJub25lIiwiaG9zdCI6IiIsInBhdGgiOiIiLCJ0bHMiOiIifQ==",
+    "vmess://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?encryption=auto\u0026security=tls\u0026sni=a.example\u0026type=ws\u0026path=%2Fv#vmess-uri",
+    "trojan://made-up-password@203.0.113.7:443?sni=a.example\u0026alpn=h2#trojan",
+    "trojan://made-up-password@203.0.113.7:443?security=tls\u0026sni=a.example\u0026type=ws\u0026path=%2Ft\u0026host=a.example#trojan-ws",
+    "ss://YWVzLTI1Ni1nY206bWFkZS11cC1wYXNzd29yZA@203.0.113.7:8388#ss-sip002",
+    "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTptYWRlLXVwLXBhc3N3b3JkQGEuZXhhbXBsZTo4Mzg4#ss-legacy",
+    "ss://2022-blake3-aes-128-gcm:AAAAAAAAAAAAAAAAAAAAAA%3D%3D@203.0.113.7:8388#ss-2022",
+    "hysteria2://made-up-auth@203.0.113.7:443?sni=a.example\u0026insecure=0#hy2",
+    "hy2://made-up-auth@203.0.113.7:443?sni=a.example\u0026obfs=salamander\u0026obfs-password=made-up#hy2-obfs",
+    "hysteria2://made-up-auth@203.0.113.7/?sni=a.example\u0026insecure=0#hy2-no-port",
+    "hysteria2://made-up-auth@203.0.113.7:443?sni=a.example\u0026mport=20000-30000\u0026obfs=salamander\u0026obfs-password=made-up#hy2-hop",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?encryption=none\u0026security=tls\u0026sni=a.example\u0026type=xhttp\u0026path=%2Fx\u0026extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%2C%22xmux%22%3A%7B%7D%7D#xhttp-extra"
+  ]
+}

@@ -1,0 +1,271 @@
+# CI of the Panel on GitHub Actions. The heavy, parallel part of scripts/ci.sh runs here;
+# what needs the owner's machine stays there (see .github/ci/README.md in this repository
+# and ci/github/README.md in the workspace).
+#
+# Rules this file keeps:
+#   - no pull_request or pull_request_target trigger: the repository is public and a fork
+#     must never get to run these jobs;
+#   - read-only token and no repository credential of any kind (the HeroUI token does not
+#     exist here, so the web stack is not built here); check-tree.mjs refuses the word that
+#     names them, comments included, so it is not written in this file;
+#   - actions are pinned to a full commit SHA, the version in the comment, and only
+#     actions/checkout and actions/setup-go are used. A release is pinned only when it is at
+#     least 14 days old (setup-go v7.1.0 was two days old and is not used yet);
+#   - at most 18 jobs at once: four fixed jobs besides the shards (static, tests (lab), compose
+#     smoke, scan), 8 test shards and 6 mutant shards (a lane branch has none, plan.sh). The Node run adds 5, which is 23 against the
+#     20 of the free account, so the last jobs queue (a queued job waits, it does not fail).
+name: ci
+
+on:
+  push:
+    branches: [main, "ci/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # A go.mod ahead of the installed Go must fail, not download a toolchain (go-pin-check.sh).
+  GOTOOLCHAIN: local
+
+jobs:
+  # The matrices are computed from this checkout, and proven, before any shard starts.
+  plan:
+    name: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      test_matrix: ${{ steps.plan.outputs.test_matrix }}
+      mutant_matrix: ${{ steps.plan.outputs.mutant_matrix }}
+      test_shards: ${{ steps.plan.outputs.test_shards }}
+      mutant_shards: ${{ steps.plan.outputs.mutant_shards }}
+      local_mutants: ${{ steps.plan.outputs.local_mutants }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            shared/go.sum
+      - name: Compute and prove the partition
+        id: plan
+        run: sh .github/ci/plan.sh
+
+  # Everything of ci.sh before the image build.
+  static:
+    name: static
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            shared/go.sum
+      - name: Install the pinned proto tools
+        run: sh .github/ci/install-tools.sh buf proto
+      - name: Static checks
+        run: sh .github/ci/static.sh
+
+  # The lab build (tag ctrlz_lab) of shared/ and the files of the root module that only it builds. No
+  # release job builds shared/netclass/lab_test.go or the lab cases of the golden vectors, so this job
+  # is what runs them; the cases that only a release build runs skip here, by design (shardrun,
+  # gofiles.sh). It does not run the container tests of the root module again: lab.sh says which
+  # packages it runs, and a tree with no lab file in the root module runs none.
+  tests-lab:
+    name: tests (lab)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            shared/go.sum
+      - name: Note the images of the runner
+        run: sh .github/ci/images.sh before
+      - name: go test with the lab tag
+        run: sh .github/ci/lab.sh
+      - name: Judge the images the lab tests ran against
+        run: sh .github/ci/images.sh after
+
+  tests:
+    name: test ${{ matrix.id }}
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.plan.outputs.test_matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            shared/go.sum
+      - name: Check the compiler
+        run: sh scripts/go-pin-check.sh
+      # The images the runner has before the job starts a container, so that images.sh can tell the ones the job added.
+      - name: Note the images of the runner
+        run: sh .github/ci/images.sh before
+      # TestImageSmoke inspects ctrlz/panel:dev, so the image is built from this tree before
+      # the tests, as scripts/ci.sh does, in the shard that holds the package.
+      - name: Build the image
+        if: matrix.shard.needs_image
+        run: |
+          docker build -q -f deploy/docker/Dockerfile -t ctrlz/panel:dev . >/dev/null
+          echo "CTRLZ_IMAGE=ctrlz/panel:dev" >> "$GITHUB_ENV"
+      - name: Run the shard
+        env:
+          SHARD_JSON: ${{ toJSON(matrix.shard) }}
+          # A test that needs something of the host (a second address) fails instead of skipping.
+          CTRLZ_CI: "1"
+          # The snapshot has no git history, so the migration-manifest guard of internal/migrategen (db-r16-28)
+          # is given the earlier copy of applied.sum as a file: the publisher writes it into .github/ci
+          # from the snapshot GitHub held on the branch, or from the local history (scripts/publish.mjs).
+          CTRLZ_EARLIER_MANIFEST: ${{ github.workspace }}/.github/ci/earlier-applied.sum
+          # The runner is thrown away with the job, so the reaper container of testcontainers (a floating tag, started
+          # beside every container test with the Docker socket) is not run: see images.sh, which proves nothing else
+          # took its place.
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: go run ./.github/ci/shardrun tests
+      - name: Judge the images the tests ran against
+        run: sh .github/ci/images.sh after
+
+  mutants:
+    name: mutants ${{ matrix.id }}
+    needs: plan
+    # A tree with no mutant for GitHub to run (all are workspace ones) has one placeholder in
+    # the matrix, because an empty matrix is an error; the job is skipped by the count. A lane
+    # branch (ci/<label>) has the real matrix and a count of 0 (plan.sh): main and ci/full-* run it.
+    if: ${{ needs.plan.outputs.mutant_shards != '0' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix: ${{ fromJSON(needs.plan.outputs.mutant_matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            shared/go.sum
+      - name: Check the compiler
+        run: sh scripts/go-pin-check.sh
+      - name: Note the images of the runner
+        run: sh .github/ci/images.sh before
+      - name: Run the shard
+        env:
+          SHARD_JSON: ${{ toJSON(matrix.shard) }}
+          CTRLZ_CI: "1"
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: go run ./.github/ci/shardrun mutants
+      - name: Judge the images the mutants ran against
+        run: sh .github/ci/images.sh after
+
+  # The image build and the Compose smoke, as the end of ci.sh runs them.
+  compose:
+    name: compose smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Note the images of the runner
+        run: sh .github/ci/images.sh before
+      - name: Build the image
+        run: docker build -q -f deploy/docker/Dockerfile -t ctrlz/panel:dev . >/dev/null
+      # compose.sh gives the runner an IPv6 client address of its own and fails when the
+      # smoke skips its IPv6 check; see the header of that script.
+      - name: Compose smoke
+        env:
+          CTRLZ_IMAGE: ctrlz/panel:dev
+        run: sh .github/ci/compose.sh
+      - name: Judge the images the stack ran
+        run: sh .github/ci/images.sh after
+
+  # The published history is only snapshots, so gitleaks reads the files of the checkout
+  # with the repository's own .gitleaks.toml (publish.mjs only pushes a tree whose file is a reviewed
+  # one) and with gitleaks:allow comments ignored. The history is scanned by the local run.
+  scan:
+    name: gitleaks and govulncheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No build or module cache here: the cache that setup-go restores is saved by whichever job
+      # finishes first, which can be one that has just run the tree's tests and so its dependencies,
+      # and the scanners must not be compiled from anything such a job could have written (CI review
+      # round 7, ci-r7-8). They are built from the module proxy with the checksum database instead.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install the scanners
+        run: sh .github/ci/install-tools.sh gitleaks govulncheck
+      - name: gitleaks
+        run: gitleaks dir --no-banner --redact --log-level=warn --ignore-gitleaks-allow .
+      - name: govulncheck
+        run: |
+          govulncheck -C . ./...
+          govulncheck -C shared ./...
+
+  # One place to read the run: every job's duration, and a failure if any job failed. Not
+  # run when the run was cancelled: a newer push cancels an older run through the concurrency
+  # group, and a red summary for a run that was only superseded would be noise.
+  summary:
+    name: summary
+    if: ${{ !cancelled() }}
+    needs: [plan, static, tests, tests-lab, mutants, compose, scan]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Durations and result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # One variable per job and only its result. The whole needs object carries both matrices
+          # (about 40 KB now) and one environment string may not pass 128 KiB, so the verdict job
+          # would fail to start on a green run once the matrices grew.
+          PLAN_RESULT: ${{ needs.plan.result }}
+          STATIC_RESULT: ${{ needs.static.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+          TESTS_LAB_RESULT: ${{ needs.tests-lab.result }}
+          MUTANTS_RESULT: ${{ needs.mutants.result }}
+          COMPOSE_RESULT: ${{ needs.compose.result }}
+          SCAN_RESULT: ${{ needs.scan.result }}
+          MUTANT_SHARDS: ${{ needs.plan.outputs.mutant_shards }}
+        run: sh .github/ci/summary.sh

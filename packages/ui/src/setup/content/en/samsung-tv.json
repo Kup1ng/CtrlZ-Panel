@@ -1,0 +1,31 @@
+{
+  "versions": [
+    {
+      "id": "tv",
+      "name": "Samsung TV",
+      "steps": [
+        {
+          "title": "Allow this network",
+          "text": "Plain DNS only works for a network whose address you have claimed. Turn Plain DNS on for the Endpoint, then claim and prove this network's address on the Addresses page.",
+          "link": "ips"
+        },
+        {
+          "title": "Open the network settings",
+          "text": "Open Settings, General, Network, Network Status and then IP Settings."
+        },
+        {
+          "title": "Enter the addresses",
+          "text": "Set DNS Setting to Enter manually and enter the first one. If it takes only one, the first is enough.",
+          "show": [
+            "dns1",
+            "dns2"
+          ]
+        },
+        {
+          "title": "Try it on the TV",
+          "text": "The check on this page tests the device you are reading it on, not the TV, so it is not offered here. Open an app on the TV to see that it connects."
+        }
+      ]
+    }
+  ]
+}
