@@ -723,3 +723,64 @@ func TestApplyPendingFollowsTheWildcardRows(t *testing.T) {
 		t.Fatal("with no zone the origin is empty whatever the wildcard rows do")
 	}
 }
+
+// TestApplyPendingFollowsTheOtherTriggers (VL-r1-1, VL-r1-3): the branches of the rule that the upload and the retirement of a
+// wildcard do not reach. Each case moves exactly one clock past the last apply while every other clock stays before it, so a
+// condition that is dropped, or turned into a constant, fails one of them. The touch trigger would move updated_at on every
+// UPDATE below and hide the window branches, so the certificate triggers are off while the clocks are set by hand.
+func TestApplyPendingFollowsTheOtherTriggers(t *testing.T) {
+	r := newIntakeRig(t)
+	b, _ := r.admin(t)
+	b.put("/settings/domain", map[string]any{"dns_zone": "dns.example.ir", "panel_host": "panel.example.ir", "admin_host": "admin.example.ir"}).want(200, "")
+	chain, key := r.ca.leaf(t, 60*24*time.Hour, "dns.example.ir", "*.dns.example.ir", "*.verify.dns.example.ir")
+	b.post("/certificates", certBody("wildcard", chain, key)).want(201, "")
+	r.env.Exec(t, `ALTER TABLE ctrlz.certificates DISABLE TRIGGER USER`)
+	t.Cleanup(func() { r.env.Exec(t, `ALTER TABLE ctrlz.certificates ENABLE TRIGGER USER`) })
+	pending := func() bool {
+		var v struct {
+			ApplyPending bool `json:"apply_pending"`
+		}
+		b.get("/settings/domain").want(200, "").json(&v)
+		return v.ApplyPending
+	}
+	// quiet is the state right after an apply: it ran 30 minutes ago, and everything it could have seen is older.
+	quiet := func() {
+		r.env.Exec(t, `UPDATE ctrlz.domain_settings SET applied_panel_host = panel_host, applied_admin_host = admin_host,
+			applied_at = now() - interval '30 minutes', changed_at = now() - interval '1 hour', prev_dns_zone = NULL, transition_until = NULL`)
+		r.env.Exec(t, `UPDATE ctrlz.certificates SET state = 'active', updated_at = now() - interval '1 hour',
+			not_before = now() - interval '2 days', not_after = now() + interval '60 days' WHERE kind = 'wildcard'`)
+	}
+	check := func(name, change string, want bool) {
+		t.Helper()
+		quiet()
+		if pending() {
+			t.Fatalf("%s: the quiet state is already pending, so the case proves nothing", name)
+		}
+		r.env.Exec(t, change)
+		if got := pending(); got != want {
+			t.Errorf("%s: apply_pending is %v, want %v", name, got, want)
+		}
+	}
+	// changed_at: a zone change made after the apply, and one the apply has seen.
+	check("a zone change after the apply", `UPDATE ctrlz.domain_settings SET changed_at = applied_at + interval '1 second'`, true)
+	check("a zone change before the apply", `UPDATE ctrlz.domain_settings SET changed_at = applied_at - interval '1 second'`, false)
+	// A wildcard whose chain ended after the apply: the origin dropped the zone when it did, and no row was written.
+	check("a wildcard that ended after the apply", `UPDATE ctrlz.certificates SET not_after = now() - interval '10 minutes' WHERE kind = 'wildcard'`, true)
+	check("a wildcard that ended before the apply", `UPDATE ctrlz.certificates SET not_after = now() - interval '1 hour' WHERE kind = 'wildcard'`, false)
+	check("a wildcard that began after the apply", `UPDATE ctrlz.certificates SET not_before = now() - interval '10 minutes' WHERE kind = 'wildcard'`, true)
+	check("a wildcard that has not begun yet", `UPDATE ctrlz.certificates SET not_before = now() + interval '1 hour' WHERE kind = 'wildcard'`, false)
+	// The previous zone leaves the origin when its transition ends, whatever the rows did (VL-r1-3).
+	moved := `UPDATE ctrlz.domain_settings SET dns_zone = 'dns.new.ir', prev_dns_zone = 'dns.example.ir', transition_until = `
+	check("a transition that ended after the apply", moved+`now() - interval '10 minutes'`, true)
+	check("a transition that ended before the apply", moved+`now() - interval '1 hour'`, false)
+	check("a transition that still runs", moved+`now() + interval '1 hour'`, false)
+	// Never applied: every wildcard row counts, and with none there is nothing to say.
+	never := `UPDATE ctrlz.domain_settings SET applied_at = NULL, changed_at = NULL`
+	check("never applied, with a wildcard row", never, true)
+	quiet()
+	r.env.Exec(t, never)
+	r.env.Exec(t, `DELETE FROM ctrlz.certificates WHERE kind = 'wildcard'`)
+	if pending() {
+		t.Error("never applied, with no wildcard row: nothing changes the origin, so nothing is pending")
+	}
+}

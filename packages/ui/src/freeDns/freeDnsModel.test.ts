@@ -105,8 +105,21 @@ describe("the closed reminders at the end of a session", () => {
 // shell's provider is on every page of the panel and the admin; a person who closes a reminder, reloads on the dashboard and logs out
 // there would otherwise leave the sign-in address in localStorage.
 describe("the session-end clear is loaded by the shell", () => {
-  it("is imported for its effect by AppProviders", () => {
+  // Reading the source is as far as a plain test goes: AppProviders pulls in HeroUI, next-intl and the router, and a test that
+  // imported it to watch the registration would cost more than the rule it guards. So the text is judged as a program would read it:
+  // comments are removed, and the import must stand in the import block at the top, before any declaration, where it always runs.
+  it("is imported for its effect by AppProviders, at the top level", () => {
     const text = readFileSync(new URL("../providers/AppProviders.tsx", import.meta.url), "utf8");
-    expect(text).toMatch(/^import "\.\.\/freeDns\/freeDnsModel\.ts";$/m);
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const head = code.slice(0, code.search(/^export /m));
+    expect(head).toMatch(/^import "\.\.\/freeDns\/freeDnsModel\.ts";$/m);
+  });
+  it("registers the clear when the module loads, and no package marks its modules free of side effects", () => {
+    const model = readFileSync(new URL("./freeDnsModel.ts", import.meta.url), "utf8");
+    expect(model).toMatch(/^onSessionEnd\(clearClosed\);$/m);
+    for (const dir of ["../../", "../../../../"]) {
+      const pkg = JSON.parse(readFileSync(new URL(dir + "package.json", import.meta.url), "utf8")) as {sideEffects?: unknown};
+      expect(pkg.sideEffects).toBeUndefined();
+    }
   });
 });

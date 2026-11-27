@@ -254,7 +254,8 @@ func TestApplyInstallsThePairAndTheEnv(t *testing.T) {
 
 // T-237: a zone that no uploaded wildcard covers is in private-CA mode, and its verify origin is not written, so the panel shows the
 // manual check. One zone covered and one not gives one origin; none covered gives an empty value; a wildcard that does not cover the
-// zone (another zone, an ended chain, a chain no public root signed) changes nothing.
+// zone (another zone, an ended chain, a panel certificate) changes nothing. Which rows reach the apply step at all (a retired, issued or
+// key-less wildcard does not) is the SQL filter of qDomainApplyCerts, which the fake source bypasses: store.TestDomainApplyLoadReadsOnlyTheActiveUploadedWildcardsAndNeverTheirKey runs it.
 func TestTheVerifyOriginIsWrittenOnlyForACoveredZone(t *testing.T) {
 	w := newWorld(t)
 	other := certcheck.ZoneNames("dns.elsewhere.ir")

@@ -334,16 +334,20 @@ func (s *Server) domainView(g store.GlobalTx, d store.DomainSettings, now time.T
 // verifyOriginMayBeStale is the part of apply_pending that CTRLZ_VERIFY_ORIGIN adds: the origin lists a zone only while an
 // active uploaded wildcard covers it (10.3), so it follows the zone and the wildcard rows, none of which touch the requested
 // hosts or the chosen panel and admin certificates. The apply step does not store the origin it wrote, so this asks what
-// happened since applied_at: a change of zone, or an uploaded wildcard that was added, retired, or began or ended. Without a
-// live zone the origin is empty whatever the rows say, so nothing is pending.
+// happened since applied_at: a change of zone, the end of the previous zone's transition (the origin drops it then and no row
+// changes, VL-r1-3), or an uploaded wildcard that was added, retired, or began or ended. Without a live zone the origin is
+// empty whatever the wildcard rows say, so they count for nothing then.
 func (s *Server) verifyOriginMayBeStale(g store.GlobalTx, d store.DomainSettings, now time.Time) (bool, error) {
-	live := nodeadmin.DomainState{DNSZone: d.DNSZone, PrevDNSZone: d.PrevDNSZone, TransitionUntil: d.TransitionUntil}.LiveZones(now)
-	if len(live) == 0 {
-		return false, nil
-	}
 	since := time.Unix(0, 0) // never applied: every row and every change counts
 	if d.AppliedAt != nil {
 		since = *d.AppliedAt
+	}
+	if d.PrevDNSZone != "" && d.TransitionUntil != nil && d.TransitionUntil.After(since) && !now.Before(*d.TransitionUntil) {
+		return true, nil
+	}
+	live := nodeadmin.DomainState{DNSZone: d.DNSZone, PrevDNSZone: d.PrevDNSZone, TransitionUntil: d.TransitionUntil}.LiveZones(now)
+	if len(live) == 0 {
+		return false, nil
 	}
 	if d.ChangedAt != nil && d.ChangedAt.After(since) {
 		return true, nil
