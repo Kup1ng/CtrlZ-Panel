@@ -2,11 +2,13 @@ package vectors
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/netip"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,7 +30,20 @@ type EvalCase struct {
 	Client   string                 `json:"client"`
 	Req      ReqJSON                `json:"req"`
 	Upstream map[string]UpstreamRec `json:"upstream"`
-	Expect   ExpectJSON             `json:"expect"`
+	// Self and Latency change the fixture's node state for this case alone.
+	Self    *SelfOverride     `json:"self"`
+	Latency map[string]uint32 `json:"latency"`
+	Expect  ExpectJSON        `json:"expect"`
+}
+
+// SelfOverride changes parts of the node's own address state for one case: a nil
+// field keeps the fixture's value.
+type SelfOverride struct {
+	ProxyBlocked *bool `json:"proxy_blocked"`
+	ProxyDown    *bool `json:"proxy_down"`
+	PeerUsable   *bool `json:"peer_usable"`
+	NoProxyIP    bool  `json:"no_proxy_ip"` // the node has no PROXY_IP at all
+	NoPeerIP     bool  `json:"no_peer_ip"`
 }
 
 type ReqJSON struct {
@@ -74,6 +89,7 @@ type ExpectJSON struct {
 	Flags        *[]string `json:"flags"`
 	WantGrant    *bool     `json:"want_grant"`
 	GrantKind    *uint8    `json:"grant_kind"`
+	PageHash     *string   `json:"page_hash"` // hex of Final.PageHash: the page of a kind 2 Grant
 	Widenable    *bool     `json:"widenable"`
 	Target       *string   `json:"target"`
 	Location     *uint16   `json:"location"`
@@ -223,13 +239,23 @@ func buildRequest(c *EvalCase) (*Request, *upstreamResolver, error) {
 	in.CD, in.DO, in.AD = c.Req.CD, c.Req.DO, c.Req.AD
 	in.Trace = true
 	in.EndpointID = EndpointID(c.Endpoint)
-	r := &Request{Input: in, Endpoint: c.Endpoint, Isolated: c.Req.Isolated}
+	r := &Request{Input: in, Endpoint: c.Endpoint, Isolated: c.Req.Isolated, Self: c.Self}
 	switch c.Path {
 	case "":
 	case "default":
 		r.NoPolicy = true
 	default:
 		return nil, nil, fmt.Errorf("path %q", c.Path)
+	}
+	if len(c.Latency) != 0 {
+		r.Latency = map[uint16]uint32{}
+		for k, v := range c.Latency {
+			n, err := strconv.ParseUint(k, 10, 16)
+			if err != nil {
+				return nil, nil, fmt.Errorf("latency key %q", k)
+			}
+			r.Latency[uint16(n)] = v
+		}
 	}
 	if c.Client != "" {
 		r.ClientHash = identity.ClientHash(c.Client)
@@ -329,6 +355,9 @@ func check(t *testing.T, fx *Fixture, c *EvalCase, out *Outcome, up *upstreamRes
 	}
 	if e.GrantKind != nil {
 		cmp("grant_kind", f.GrantKind, *e.GrantKind)
+	}
+	if e.PageHash != nil {
+		cmp("page_hash", hex.EncodeToString(f.PageHash[:]), *e.PageHash)
 	}
 	if e.Widenable != nil {
 		cmp("widenable", f.Widenable, *e.Widenable)

@@ -184,7 +184,8 @@ func (e *refEval) Evaluate(ctx context.Context, r *Request) (*Outcome, error) {
 		return e.systemOutcome(ctx, &in, ent, r), nil
 	}
 	st, _ := policy.SelectStack(ep, r.ClientHash, in.Now)
-	f, pre := policy.DecideWithPre(ctx, &in, st, &e.env, r.Resolver)
+	env := r.Apply(e.env)
+	f, pre := policy.DecideWithPre(ctx, &in, st, &env, r.Resolver)
 	return &Outcome{PreDone: pre.Done, Deferred: pre.Deferred, Walk: pre.Walk, Final: f}, nil
 }
 
@@ -241,4 +242,40 @@ func (e *refEval) defaultOutcome(ctx context.Context, in *policy.Input, r *Reque
 		}
 	}
 	return &Outcome{Final: policy.PostDefault(in, ans)}
+}
+
+// Apply returns env with the request's overrides applied: the node's own address state
+// (Self) and the published latency of its locations (Latency). Every harness calls it,
+// the reference one and the node's glue, so a case that changes the state of the node
+// changes it the same way everywhere. A request with no override gives env unchanged.
+func (r *Request) Apply(env policy.Env) policy.Env {
+	if o := r.Self; o != nil {
+		if o.ProxyBlocked != nil {
+			env.Self.ProxyBlocked = *o.ProxyBlocked
+		}
+		if o.ProxyDown != nil {
+			env.Self.ProxyDown = *o.ProxyDown
+		}
+		if o.PeerUsable != nil {
+			env.Self.PeerProxyUsable = *o.PeerUsable
+		}
+		if o.NoProxyIP {
+			env.Self.ProxyIP = netip.Addr{}
+		}
+		if o.NoPeerIP {
+			env.Self.PeerProxyIP = netip.Addr{}
+		}
+	}
+	if len(r.Latency) != 0 {
+		l := env.Locs.(fixtureLocs)
+		lat := map[uint16]uint32{}
+		for k, v := range l.latency {
+			lat[k] = v
+		}
+		for k, v := range r.Latency {
+			lat[k] = v
+		}
+		env.Locs = fixtureLocs{healthy: l.healthy, latency: lat}
+	}
+	return env
 }

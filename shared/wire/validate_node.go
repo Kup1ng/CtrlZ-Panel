@@ -76,6 +76,13 @@ func ValidateBlockPage(b *policyv1.BlockPage) error {
 			return err
 		}
 	}
+	if err := validateBlockLogo(b.Logo, b.LogoHash); err != nil {
+		return err
+	}
+	// The node has no profile id of its own and an unblock request names one (3.4).
+	if err := lenIs(w, "profile_id", b.ProfileId, 16); err != nil {
+		return err
+	}
 	switch b.UnblockMode {
 	case policyv1.UnblockMode_UNBLOCK_MODE_NONE, policyv1.UnblockMode_UNBLOCK_MODE_REQUEST:
 		if b.UnblockUrl != "" {
@@ -217,6 +224,11 @@ func ValidateBlockUnblockRequest(r *hubv1.BlockUnblockRequest, now int64) error 
 	if err := lenIs(w, "endpoint_id", r.EndpointId, 16); err != nil {
 		return err
 	}
+	// unblock_requests.profile_id is NOT NULL, and the node knows it only from the
+	// block page blob (3.4).
+	if err := lenIs(w, "profile_id", r.ProfileId, 16); err != nil {
+		return err
+	}
 	n, err := names.FromCanonicalWire(r.QnameWire)
 	if err != nil {
 		return bad(reason.BadName, w, "qname_wire: %v", err)
@@ -283,7 +295,7 @@ func ValidateHeartbeat(h *hubv1.Heartbeat) error {
 	if _, err := ValidatePeerView(h.PeerView); err != nil {
 		return err
 	}
-	return nil
+	return validateHeartbeatP4b(h)
 }
 
 // ValidateApplyResult checks a node's answer about one applied entry.
@@ -337,6 +349,8 @@ func ValidateNodeMessage(m *hubv1.NodeMessage, now int64) error {
 		return ValidateProofObservation(b.ProofObservation, now)
 	case *hubv1.NodeMessage_BlockUnblockRequest:
 		return ValidateBlockUnblockRequest(b.BlockUnblockRequest, now)
+	case *hubv1.NodeMessage_BlockKeyRequest:
+		return ValidateBlockKeyRequest(b.BlockKeyRequest)
 	case nil:
 		return bad(reason.BadSection, "node_message", "empty body")
 	}

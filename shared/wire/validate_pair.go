@@ -172,6 +172,9 @@ func ValidatePeerView(b []byte) (*hubv1.PeerView, error) {
 		if p.Down && !p.Known {
 			return nil, bad(reason.BadSection, w, "down is set while known is false")
 		}
+		if p.ProxyDown && !p.ProxyKnown {
+			return nil, bad(reason.BadSection, w, "proxy_down is set while proxy_known is false")
+		}
 	}
 	if _, ok := hubv1.PushRefusal_name[int32(v.LastRefusal)]; !ok {
 		return nil, bad(reason.BadEnum, w, "last_refusal %d", v.LastRefusal)

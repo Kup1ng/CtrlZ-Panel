@@ -150,6 +150,13 @@ func ValidateEndpoint(e *policyv1.EndpointRecord) error {
 	if err := ValidateSchedule(e.Schedule); err != nil {
 		return err
 	}
+	// account_hash is empty from a compiler that predates P4b and 16 bytes after it
+	// (P4b 3.4); a node reads an empty one as the Endpoint's own id.
+	if len(e.AccountHash) != 0 {
+		if err := lenIs(w, "account_hash", e.AccountHash, 16); err != nil {
+			return err
+		}
+	}
 	if len(e.Clients) > MaxClientsPerEP || len(e.Authorized) > MaxAuthorizedIPs {
 		return bad(reason.SizeCap, w, "too many clients or authorized prefixes")
 	}
@@ -377,6 +384,9 @@ func ValidateNodeConfig(c *hubv1.NodeConfig) error {
 	if c.Mode < commonv1.ResolveMode_RESOLVE_MODE_RECURSIVE || c.Mode > commonv1.ResolveMode_RESOLVE_MODE_HYBRID {
 		return bad(reason.BadEnum, w, "mode %d", c.Mode)
 	}
+	if err := validateNodeConfigP4b(c); err != nil {
+		return err
+	}
 	if len(c.ProofKey) < 16 {
 		return bad(reason.BadSection, w, "proof_key shorter than 16 bytes")
 	}
@@ -425,15 +435,15 @@ func ValidateNodeConfig(c *hubv1.NodeConfig) error {
 	return nil
 }
 
-// Narrowest source prefix a peer may forward, by address family. Section 10.4
-// allows /32, /24 and carrier widths, "chosen after field measurement"; these
-// floors are the widest the contract can mean by carrier, so a peer that is
-// stolen or buggy cannot forward a /0 that lets every source use the proxy for
-// a name. A node with a measured policy passes its own floors to
-// ValidateGrantForwardWidth.
+// Narrowest source prefix a peer may forward, by address family. Since P4b a
+// forwarded source_prefix is always the full address, /32 or /128: the width of a
+// lookup is a rule of the receiver's table and never of the stored key (p4b-proxy
+// 4.1), so a peer that is stolen or buggy cannot forward a wider prefix that lets
+// other sources use the proxy for a name. A caller with another policy passes its
+// own floors to ValidateGrantForwardWidth.
 const (
-	MinGrantBits4 = 16
-	MinGrantBits6 = 32
+	MinGrantBits4 = 32
+	MinGrantBits6 = 128
 )
 
 // ValidateGrantForward checks a peer GrantForward before it is considered,
@@ -516,6 +526,11 @@ func ValidateGrantForwardWidth(g *peerv1.GrantForward, now int64, min4, min6 int
 		}
 		if !bytes.Equal(dial.Wire(), g.DialHostWire) {
 			return bad(reason.BadName, w, "dial_host_wire is not in folded form")
+		}
+	}
+	if len(g.ClientHash) != 0 {
+		if err := lenIs(w, "client_hash", g.ClientHash, 16); err != nil {
+			return err
 		}
 	}
 	if g.Location > 0xFFFF {

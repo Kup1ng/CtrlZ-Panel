@@ -336,6 +336,16 @@ func Apply(st *State, stored []byte, fetch Fetcher) (rep Report) {
 	for k := range newPages {
 		pages[k] = true
 	}
+	// A page is not bound by an Endpoint but by the profile blobs that name it, and the
+	// panel puts its hash in del_blobs only when no bound profile blob names it any
+	// more (p4b-proxy 6.2). The node drops it at once, and its file by the deferred
+	// delete; a profile that still waits for its replacement shows the default page.
+	// Without this a page that nothing names would stay in the set for ever.
+	for _, h := range entry.DelBlobs {
+		var k [32]byte
+		copy(k[:], h)
+		delete(pages, k)
+	}
 	bad := make(map[[32]byte]reason.Code, len(st.Quarantined)+len(newBad))
 	for k, v := range st.Quarantined {
 		bad[k] = v

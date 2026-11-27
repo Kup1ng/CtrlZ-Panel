@@ -116,6 +116,8 @@ type BlockRespJSON struct {
 	Mode string `json:"mode"` // zero, nxdomain, refused, custom, branded
 	V4   string `json:"v4"`
 	V6   string `json:"v6"`
+	// PageHash is the SHA-256 of the block page of a branded response, 64 hex digits.
+	PageHash string `json:"page_hash"`
 }
 
 type ECSJSON struct {
@@ -340,6 +342,13 @@ func (oj *OptionsJSON) build() (blob.Options, error) {
 				return o, err
 			}
 			o.BlockV6 = a.As16()
+		}
+		if b.PageHash != "" {
+			h, err := hex.DecodeString(b.PageHash)
+			if err != nil || len(h) != len(o.BlockPageHash) {
+				return o, fmt.Errorf("block_response page_hash is not 64 hex digits")
+			}
+			copy(o.BlockPageHash[:], h)
 		}
 	}
 	if e := oj.ECS; e != nil {

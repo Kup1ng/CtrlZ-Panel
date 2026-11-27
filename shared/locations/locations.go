@@ -249,3 +249,28 @@ func floorDiv(a, b int64) int64 {
 	}
 	return q
 }
+
+// Hysteresis of the published latency (p4b-proxy 6.4). The agent smooths the time
+// from CONNECT to the first response byte of each location and publishes the
+// smoothed value only when it differs from the last published one by more than
+// PublishPermille of that value and by more than PublishMinMs, so two locations that
+// are a few milliseconds apart do not trade places on every probe. Auto then picks the
+// lowest published value, which is what policy.LocationView.Auto is given.
+const (
+	PublishPermille = 200
+	PublishMinMs    = 10
+)
+
+// ShouldPublish reports whether a new smoothed latency replaces the last published
+// one. last is 0 when nothing was published yet, and then the first value is
+// published at once. Both are milliseconds.
+func ShouldPublish(last, now uint32) bool {
+	if last == 0 {
+		return true
+	}
+	d := now - last
+	if now < last {
+		d = last - now
+	}
+	return d > PublishMinMs && uint64(d)*1000 > uint64(last)*PublishPermille
+}

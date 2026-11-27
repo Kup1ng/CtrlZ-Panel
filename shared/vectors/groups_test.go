@@ -11,29 +11,31 @@ import (
 // count when the group was last reviewed, so removing a case shows up here and
 // in the diff of this file, not only in a rehashed CHECKSUMS.
 //
-// Absent on purpose: grants (the Grant table lives in the node, P4b) and xray and
-// sharelink (the packages are P4b). When one of them is written its group is
+// Every group of section 15 is written (the pair-table-apply group with the P4 gate,
+// T-541; xray, sharelink and grants with P4b B1). When one is added its group is
 // added to this list in the same change; until then a file of that name is an
 // unlisted file and fails TestGroupFilesAreTheListedOnes.
 var requiredGroups = map[string]int{
-	"hash": 17, "names": 57, "identity": 68, "tokens": 54, "precedence": 18, "specificity": 19, "merge": 13,
+	"hash": 17, "names": 57, "identity": 69, "tokens": 54, "precedence": 18, "specificity": 19, "merge": 13,
 	"schedule": 15, "client-order": 4, "expiry": 7, "geo-order": 10, "dest-geo": 17, "cname": 13,
-	"qtype-matrix": 68, "options": 40, "safe-search": 9, "dnssec": 32, "sysnames": 35, "locations": 9,
-	"auto-random": 9, "route": 18, "upload": 8, "blob": 37, "gtable": 23, "quarantine": 13, "no-redirect": 36,
+	"qtype-matrix": 76, "options": 43, "safe-search": 15, "dnssec": 32, "sysnames": 35, "locations": 9,
+	"auto-random": 13, "route": 18, "upload": 8, "blob": 37, "gtable": 23, "quarantine": 14, "no-redirect": 36,
 	// P4 W1 (SC 8a.10): the zone package. zone-failover is written by
 	// sharedtool failover-vectors and nobody edits it.
-	"zone-answer": 65, "zone-failover": 119, "pair-table-validate": 67,
+	"zone-answer": 65, "zone-failover": 124, "pair-table-validate": 67,
 	// P4 gate (T-541, T-545): the node's apply rules, run by a reference model here and
 	// by the node's table writer there.
 	"pair-table-apply": 30,
+	// P4b B1 (SC 14, p4b-proxy 7.2, 7.3): the Xray allow-list and the share link converter.
+	"xray": 145, "sharelink": 46, "grants": 39,
 }
 
 // extraGroups are groups the module has that section 15 does not list by name:
 // they pin parts of sections 5, 9, 10, 13 and 11 that need their own files.
 var extraGroups = map[string]int{
-	"locations-sets": 16, "schedule-zones": 6, "traffic-cat": 5, "manifest": 26,
+	"locations-sets": 26, "schedule-zones": 6, "traffic-cat": 5, "manifest": 26,
 	// P3 (SC 14 and 15): the Apple DNS profile request, its stored form and its identity.
-	"appleprofile": 23,
+	"appleprofile": 31,
 	// P4 W1b: the activity entry of three forms and the free part of a counters batch.
 	"telemetry-validate": 35,
 	// P4 W1b (D42, T-524): a Redirect for an Iranian name is a Bypass at every stage.
@@ -88,8 +90,8 @@ func TestGroupFilesAreTheListedOnes(t *testing.T) {
 	if len(unlisted) > 0 {
 		t.Errorf("vector groups not in requiredGroups or extraGroups: %s", strings.Join(unlisted, ", "))
 	}
-	if len(requiredGroups) != 30 {
-		t.Errorf("the written groups are 30 (section 15, the no-redirect group of P2 and pair-table-apply); grants, xray and sharelink are not yet written; the list has %d", len(requiredGroups))
+	if len(requiredGroups) != 33 {
+		t.Errorf("the written groups are 33 (section 15, the no-redirect group of P2, pair-table-apply, xray, sharelink and grants of P4b); the list has %d", len(requiredGroups))
 	}
 	for n := range requiredGroups {
 		if _, dup := extraGroups[n]; dup {
@@ -108,7 +110,7 @@ func TestNegativeTextVectorsNameTheirCause(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if g.Fixture != "" || name == "blob" || name == "gtable" || name == "quarantine" || name == "zone-answer" || name == "zone-failover" || name == "pair-table-validate" || name == "pair-table-apply" || name == "telemetry-validate" {
+		if g.Fixture != "" || name == "blob" || name == "gtable" || name == "quarantine" || name == "grants" || name == "zone-answer" || name == "zone-failover" || name == "pair-table-validate" || name == "pair-table-apply" || name == "telemetry-validate" {
 			continue
 		}
 		var cases []TextCase

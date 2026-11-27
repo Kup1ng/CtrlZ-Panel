@@ -88,6 +88,7 @@ message NodeMessage {
     LearnedIP learned_ip = 6;
     ProofObservation proof_observation = 7;
     BlockUnblockRequest block_unblock_request = 8;
+    BlockKeyRequest block_key_request = 9;
   }
 }
 
@@ -109,6 +110,65 @@ message Heartbeat {
   uint64 node_config_version = 13; // the highest NodeConfig.version the node applied
   uint32 qps = 14;                 // queries a second, node-wide, over the last 60 s
   uint32 cache_hit_permille = 15;  // cache hits per 1000 queries over the same 60 s, 0 to 1000
+  // P4b additions (p4b-proxy 3.4). A node of an earlier build sends none of them.
+  repeated XrayConfigState xray_configs = 16; // at most 64
+  ProxyState proxy = 17;                      // from the proxy_state message; not listening when 30 s old
+  repeated NodeFault faults = 18;             // no value twice; a value stays while its condition holds
+  XrayUpgradeState xray_upgrade = 19;
+  BindError bind_error = 20;
+}
+
+enum XrayConfigStateKind {
+  XRAY_CONFIG_STATE_KIND_UNSPECIFIED = 0;
+  XRAY_CONFIG_STATE_KIND_PENDING = 1;
+  XRAY_CONFIG_STATE_KIND_APPLIED = 2;
+  XRAY_CONFIG_STATE_KIND_REFUSED = 3;
+  XRAY_CONFIG_STATE_KIND_LAST_GOOD = 4;
+}
+
+// What the node did with one stored config. error holds no value of the fragment
+// (p4b-proxy 7.5 step 1) and is at most 500 characters.
+message XrayConfigState {
+  bytes id = 1;
+  bytes fragment_sha256 = 2;
+  XrayConfigStateKind state = 3;
+  string error = 4;
+  bool healthy = 5;
+  uint32 latency_ms = 6;
+}
+
+message ProxyState {
+  bool listening = 1;
+  uint32 open_connections = 2;
+}
+
+enum NodeFault {
+  NODE_FAULT_UNSPECIFIED = 0;
+  NODE_FAULT_NFT_FAILED = 1;
+  NODE_FAULT_XRAY_DOWN = 2;
+  NODE_FAULT_BLOCK_KEY_MISSING = 3;
+  NODE_FAULT_GRANTS_FULL = 4;
+  // Set while any remote is under the backoff of p4b-proxy 5.5. It takes 5, the next free
+  // number, so the numbers 1 to 4 that nodes already send stay; p6-ops 7.4 starts at 6.
+  NODE_FAULT_XRAY_STUCK = 5;
+}
+
+// fetched is the newest verified Xray bundle on the node, version the last upgrade
+// tried, ok its result and failed_ids the configs the new release refused (at most 64).
+message XrayUpgradeState {
+  string fetched = 1;
+  string version = 2;
+  bool ok = 3;
+  repeated bytes failed_ids = 4;
+}
+
+// BIND_ERROR_UNSPECIFIED is "none": the bind addresses are in use as configured.
+enum BindError {
+  BIND_ERROR_UNSPECIFIED = 0;
+  BIND_ERROR_DNS_NOT_LOCAL = 1;
+  BIND_ERROR_DNS_FAILED = 2;
+  BIND_ERROR_PROXY_NOT_LOCAL = 3;
+  BIND_ERROR_PROXY_FAILED = 4;
 }
 
 // Heartbeat.peer_view holds a serialized PeerView (contract 8a.7). The field stays
@@ -124,6 +184,9 @@ message PeerProbe {
   bytes node_id = 1;
   bool known = 2; // false while this node's probe state of node_id is unknown
   bool down = 3;  // probe-down by the 3-round rule; false when known is false
+  // P4b: the same two for the peer's PROXY_IP, from the pair probe of p4b-proxy 9.2.
+  bool proxy_known = 4;
+  bool proxy_down = 5; // false when proxy_known is false
 }
 
 enum PushRefusal {
@@ -195,6 +258,14 @@ message BlockUnblockRequest {
   bytes qname_wire = 2;
   string message = 3;
   int64 at = 4;
+  // The profile of the block page that showed the form, from BlockPage.profile_id (16 bytes).
+  bytes profile_id = 5;
+}
+
+// Asks the hub for the short-lived block page intermediate of the Endpoint's account
+// (p4b-proxy 10.3). The account is the Endpoint's: the node never names one.
+message BlockKeyRequest {
+  bytes endpoint_id = 1;
 }
 
 message HubMessage {
@@ -233,6 +304,17 @@ message CertBundle {
   bytes wrapped_key = 2;
   bytes chain_pem = 3;
   int64 not_after = 4;
+  // CERT_USE_UNSPECIFIED is the zone certificate every earlier bundle was.
+  CertUse use = 5;
+  // Set exactly with use block_intermediate: the account's 16-byte hash and the 8-byte
+  // epoch of its root, so a node drops a bundle of an old block_root_key.
+  bytes account_hash = 6;
+  bytes block_root_epoch = 7;
+}
+
+enum CertUse {
+  CERT_USE_UNSPECIFIED = 0; // zone
+  CERT_USE_BLOCK_INTERMEDIATE = 1;
 }
 
 message AcmeChallenge {
@@ -262,6 +344,18 @@ message NodeConfig {
   bytes spool_public_key = 13;
   string xray_schema_version = 14;
   repeated XrayConfig xray_configs = 15;
+  // P4b additions (p4b-proxy 3.4). Unspecified grant_width reads as exact.
+  GrantWidth grant_width = 16;
+  repeated string probe_urls = 17; // 0 to 2
+  string xray_fetch_version = 18;
+  bytes block_root_epoch = 19; // empty or 8 bytes
+}
+
+enum GrantWidth {
+  GRANT_WIDTH_UNSPECIFIED = 0; // exact
+  GRANT_WIDTH_EXACT = 1;
+  GRANT_WIDTH_PREFIX24 = 2;
+  GRANT_WIDTH_CARRIER = 3;
 }
 
 message Upstream {
@@ -296,4 +390,7 @@ message XrayConfig {
   uint32 priority = 4;
   bool enabled = 5;
   bytes fragment_json = 6;
+  // Paths the admin accepted as unknown to the allow-list (p4b-proxy 7.3), each inside
+  // one outbound. enabled is always true on the wire: disabled rows are not sent.
+  repeated string accepted_unknown = 7;
 }

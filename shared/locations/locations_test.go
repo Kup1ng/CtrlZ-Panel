@@ -142,3 +142,27 @@ func TestCityFoldsInIdentityAndInRegions(t *testing.T) {
 		t.Errorf("selection: %v", got)
 	}
 }
+
+func TestShouldPublish(t *testing.T) {
+	for _, c := range []struct {
+		last, now uint32
+		want      bool
+	}{
+		{0, 50, true}, // nothing published yet
+		{100, 100, false},
+		{100, 119, false}, // 19 percent
+		{100, 121, true},  // more than 20 percent and than 10 ms
+		{100, 80, false},  // exactly 20 percent is not more
+		{100, 79, true},
+		{30, 38, false}, // 8 ms is more than 20 percent of 30 but not more than 10 ms
+		{30, 41, true},  // 11 ms and 36 percent
+		{200, 210, false},
+		{200, 241, true},
+		{1000, 1199, false},
+		{1000, 1201, true},
+	} {
+		if got := ShouldPublish(c.last, c.now); got != c.want {
+			t.Errorf("ShouldPublish(%d, %d) = %v, want %v", c.last, c.now, got, c.want)
+		}
+	}
+}

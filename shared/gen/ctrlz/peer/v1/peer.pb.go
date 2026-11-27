@@ -37,8 +37,13 @@ type GrantForward struct {
 	GrantKind       uint32                 `protobuf:"varint,7,opt,name=grant_kind,json=grantKind,proto3" json:"grant_kind,omitempty"`
 	ExpiresAt       int64                  `protobuf:"varint,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	SenderConfigSeq uint64                 `protobuf:"varint,9,opt,name=sender_config_seq,json=senderConfigSeq,proto3" json:"sender_config_seq,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The client of the Endpoint whose query decided the Grant, as its 16-byte
+	// client_hash, or empty when the Endpoint's own profile decided (P4b 3.4). The
+	// receiver needs it to pick the stack AcceptGrant runs with, because a client
+	// can have a profile of its own. source_prefix is always a full-length prefix.
+	ClientHash    []byte `protobuf:"bytes,10,opt,name=client_hash,json=clientHash,proto3" json:"client_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GrantForward) Reset() {
@@ -132,6 +137,13 @@ func (x *GrantForward) GetSenderConfigSeq() uint64 {
 		return x.SenderConfigSeq
 	}
 	return 0
+}
+
+func (x *GrantForward) GetClientHash() []byte {
+	if x != nil {
+		return x.ClientHash
+	}
+	return nil
 }
 
 type GrantAck struct {
@@ -278,7 +290,7 @@ var File_ctrlz_peer_v1_peer_proto protoreflect.FileDescriptor
 
 const file_ctrlz_peer_v1_peer_proto_rawDesc = "" +
 	"\n" +
-	"\x18ctrlz/peer/v1/peer.proto\x12\rctrlz.peer.v1\"\xb8\x02\n" +
+	"\x18ctrlz/peer/v1/peer.proto\x12\rctrlz.peer.v1\"\xd9\x02\n" +
 	"\fGrantForward\x12\x19\n" +
 	"\bgrant_id\x18\x01 \x01(\fR\agrantId\x12\x1f\n" +
 	"\vendpoint_id\x18\x02 \x01(\fR\n" +
@@ -291,7 +303,10 @@ const file_ctrlz_peer_v1_peer_proto_rawDesc = "" +
 	"grant_kind\x18\a \x01(\rR\tgrantKind\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\b \x01(\x03R\texpiresAt\x12*\n" +
-	"\x11sender_config_seq\x18\t \x01(\x04R\x0fsenderConfigSeq\"A\n" +
+	"\x11sender_config_seq\x18\t \x01(\x04R\x0fsenderConfigSeq\x12\x1f\n" +
+	"\vclient_hash\x18\n" +
+	" \x01(\fR\n" +
+	"clientHash\"A\n" +
 	"\bGrantAck\x12\x19\n" +
 	"\bgrant_id\x18\x01 \x01(\fR\agrantId\x12\x1a\n" +
 	"\baccepted\x18\x02 \x01(\bR\baccepted\"G\n" +

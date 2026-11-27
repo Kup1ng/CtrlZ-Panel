@@ -225,7 +225,7 @@ func validGrant(now int64) *peerv1.GrantForward {
 	n := names.MustString("example.com")
 	return &peerv1.GrantForward{
 		GrantId: bytes.Repeat([]byte{1}, 16), EndpointId: bytes.Repeat([]byte{2}, 16),
-		SourcePrefix: []byte{1, 2, 3, 0, 24}, NameWire: n.Wire(), GrantKind: 1, ExpiresAt: now + 3600,
+		SourcePrefix: []byte{1, 2, 3, 4, 32}, NameWire: n.Wire(), GrantKind: 1, ExpiresAt: now + 3600,
 	}
 }
 
@@ -242,7 +242,7 @@ func TestValidateGrantForwardSource(t *testing.T) {
 		f(g)
 		return ValidateGrantForward(g, now)
 	}
-	v6 := append(netip.MustParseAddr("2001:db8::").AsSlice(), 48)
+	v6 := append(netip.MustParseAddr("2001:db8::1").AsSlice(), 128)
 	for name, f := range map[string]func(g *peerv1.GrantForward){
 		"/0 on a real address":   func(g *peerv1.GrantForward) { g.SourcePrefix = []byte{1, 2, 3, 4, 0} },
 		"/8 below the floor":     func(g *peerv1.GrantForward) { g.SourcePrefix = []byte{1, 0, 0, 0, 8} },
@@ -253,6 +253,9 @@ func TestValidateGrantForwardSource(t *testing.T) {
 			g.SourcePrefix = append(netip.MustParseAddr("::ffff:1.2.3.0").AsSlice(), 120)
 		},
 		"IPv6 below the floor":       func(g *peerv1.GrantForward) { g.SourcePrefix = append(netip.MustParseAddr("2000::").AsSlice(), 16) },
+		"a /24 is not a full source": func(g *peerv1.GrantForward) { g.SourcePrefix = []byte{1, 2, 3, 0, 24} },
+		"an IPv6 /64":                func(g *peerv1.GrantForward) { g.SourcePrefix = append(netip.MustParseAddr("2001:db8::").AsSlice(), 64) },
+		"client_hash of 15 bytes":    func(g *peerv1.GrantForward) { g.ClientHash = make([]byte, 15) },
 		"root name":                  func(g *peerv1.GrantForward) { g.NameWire = []byte{0} },
 		"uppercase name":             func(g *peerv1.GrantForward) { g.NameWire = []byte("\x07EXAMPLE\x03com\x00") },
 		"uppercase dial host":        func(g *peerv1.GrantForward) { g.DialHostWire = []byte("\x03WWW\x03com\x00") },
@@ -263,15 +266,21 @@ func TestValidateGrantForwardSource(t *testing.T) {
 		}
 	}
 	if err := mutate(func(g *peerv1.GrantForward) { g.SourcePrefix = v6 }); err != nil {
-		t.Errorf("a /48 IPv6 source: %v", err)
+		t.Errorf("a /128 IPv6 source: %v", err)
 	}
 	if err := mutate(func(g *peerv1.GrantForward) { g.SourcePrefix = []byte{1, 2, 3, 4, 32} }); err != nil {
 		t.Errorf("a /32 source: %v", err)
 	}
+	if err := mutate(func(g *peerv1.GrantForward) { g.ClientHash = bytes.Repeat([]byte{7}, 16) }); err != nil {
+		t.Errorf("a client_hash of 16 bytes: %v", err)
+	}
 	// A node with a measured policy may set its own floor.
 	g := validGrant(now)
-	g.SourcePrefix = []byte{1, 2, 0, 0, 16}
-	if err := ValidateGrantForwardWidth(g, now, 24, 48); err == nil {
-		t.Error("a /16 passed a /24 floor")
+	g.SourcePrefix = []byte{1, 2, 3, 0, 24}
+	if err := ValidateGrantForwardWidth(g, now, 32, 128); err == nil {
+		t.Error("a /24 passed a /32 floor")
+	}
+	if err := ValidateGrantForwardWidth(g, now, 24, 48); err != nil {
+		t.Errorf("a /24 under a /24 floor: %v", err)
 	}
 }

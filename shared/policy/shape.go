@@ -103,6 +103,12 @@ func (ev *eval) shapeBypass(ctx context.Context, f *Final, ans *TrueAnswer, r Re
 		f.Action = ActionBlock
 		f.Flags |= FlagRebindBlocked
 		f.Answer, f.WantGrant, f.GrantKind = so.Answer, so.WantGrant, so.GrantKind
+		// The Branded answer of a Rebind block is a kind 2 Grant like any block: the
+		// page of the tenant must reach the Grant, or the node serves the default page
+		// and the entry fails the join test of 4.2 against an ordinary block holder.
+		if f.WantGrant {
+			f.PageHash = ev.eff.BlockPageHash
+		}
 	}
 	if rebind && out.RCode == RCodeNoError && hasPrivateAddr(out.Answer) {
 		blockRebind()

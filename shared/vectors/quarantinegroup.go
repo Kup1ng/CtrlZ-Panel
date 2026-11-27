@@ -15,6 +15,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Shared/quarantine"
 	"github.com/Kup1ng/CtrlZ-Shared/rules"
 	"github.com/Kup1ng/CtrlZ-Shared/wire"
+	"google.golang.org/protobuf/proto"
 )
 
 // QuarantineCase scripts a node receiving entries (contract 9.7): blobs are
@@ -38,6 +39,9 @@ type QBlob struct {
 	Corrupt string `json:"corrupt"`
 	// Withheld blobs are named by an entry but not available to fetch.
 	Withheld bool `json:"withheld"`
+	// Page, when set, makes the blob a block page record with this title (rules are
+	// ignored). It is the one blob kind that no Endpoint binds.
+	Page string `json:"page"`
 }
 
 type QuarantineStep struct {
@@ -71,6 +75,9 @@ type QuarantineExpect struct {
 	KeptPrevious []string          `json:"kept_previous"` // endpoint ids
 	Degraded     []string          `json:"degraded"`      // endpoint ids
 	Endpoints    map[string]string `json:"endpoints"`     // id -> "blob/admin" or "blob/admin/degraded"
+	// Pages lists the names of the block pages the node holds after the step. A case
+	// that leaves it out does not look.
+	Pages *[]string `json:"pages"`
 }
 
 type qStore map[[32]byte][]byte
@@ -118,6 +125,19 @@ func runQuarantineCase(t *testing.T, c *QuarantineCase) {
 	byHash := map[[32]byte]string{}
 	store := qStore{}
 	for name, qb := range c.Blobs {
+		if qb.Page != "" {
+			d, err := proto.Marshal(&policyv1.BlockPage{ProfileId: bytes.Repeat([]byte{9}, 16), Title: qb.Page, UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE})
+			if err != nil {
+				t.Fatalf("blob %s: %v", name, err)
+			}
+			data[name] = d
+			h := sha256.Sum256(d)
+			hash[name], byHash[h] = h, name
+			if !qb.Withheld {
+				store[h] = d
+			}
+			continue
+		}
 		spec := &blob.Spec{}
 		for i, tok := range qb.Rules {
 			p, err := rules.Parse(tok)
@@ -154,7 +174,11 @@ func runQuarantineCase(t *testing.T, c *QuarantineCase) {
 	}
 	ref := func(name string) *policyv1.BlobRef {
 		h := hash[name]
-		return &policyv1.BlobRef{Hash: h[:], Size: uint64(len(data[name])), Kind: policyv1.BlobKind_BLOB_KIND_PROFILE}
+		kind := policyv1.BlobKind_BLOB_KIND_PROFILE
+		if c.Blobs[name].Page != "" {
+			kind = policyv1.BlobKind_BLOB_KIND_BLOCK_PAGE
+		}
+		return &policyv1.BlobRef{Hash: h[:], Size: uint64(len(data[name])), Kind: kind}
 	}
 	st := quarantine.NewState()
 	for si, step := range c.Steps {
@@ -251,6 +275,13 @@ func runQuarantineCase(t *testing.T, c *QuarantineCase) {
 		same("kept_previous", epName(rep.KeptPrevious), exp.KeptPrevious)
 		same("degraded", epName(rep.Degraded), exp.Degraded)
 		same("promoted", epName(rep.Promoted), exp.Promoted)
+		if exp.Pages != nil {
+			var held []string
+			for h := range st.BlockPages {
+				held = append(held, byHash[h])
+			}
+			same("pages", held, *exp.Pages)
+		}
 		for name, want := range exp.Endpoints {
 			id := EndpointID(name)
 			ep, ok := st.Endpoints[id]

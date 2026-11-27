@@ -141,7 +141,7 @@ func TestSmallConstraints(t *testing.T) {
 	}
 	modes := map[string]policyv1.UnblockMode{"none": policyv1.UnblockMode_UNBLOCK_MODE_NONE, "default": policyv1.UnblockMode_UNBLOCK_MODE_REQUEST, "custom": policyv1.UnblockMode_UNBLOCK_MODE_URL}
 	validates := func(mode, url string) bool {
-		return wire.ValidateBlockPage(&policyv1.BlockPage{Title: "t", Message: "m", UnblockMode: modes[mode], UnblockUrl: url}) == nil
+		return wire.ValidateBlockPage(&policyv1.BlockPage{ProfileId: make([]byte, 16), Title: "t", Message: "m", UnblockMode: modes[mode], UnblockUrl: url}) == nil
 	}
 	longURL := "https://example.com/" + strings.Repeat("a", 2040)
 	for _, c := range []struct {

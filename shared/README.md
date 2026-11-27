@@ -46,6 +46,8 @@ or two paths that differ only by case is an error.
 | `wire` | Protobuf validators (pair table, push, peer view, free counters, activity), `ZoneInput`, entry hash chain, `DecodeEntry` |
 | `quarantine` | The apply transaction: a bad blob is set aside, the stream goes on |
 | `appleprofile` | Apple DNS profile: request validation, the stored params and their canonical JSON, the stable PayloadIdentifier and UUIDs (the builder is the panel's `internal/mobileconfig`) |
+| `xrayschema` | The allow-list of Xray configuration per release (outbounds only): a short closed list of keys with closed kinds, every other key unknown (accept_unknown), strict parse, folded keys, always-rejected keys, normal form, chain checks; `For(tag)`, `Newest()` (P4b 7.2) |
+| `sharelink` | Share links (vless, vmess, trojan, ss, hysteria2) and pasted Xray configurations to candidate fragments (P4b 7.3); the corpus is in `fixtures/sharelink` |
 | `manifest` | Signature check before parsing, bundle path checks |
 | `enrollproof` | The Poll proof of possession: the signed input, its digest and the canonical-DER check the hub runs (node enrolment, p4-nodes 4.2) |
 | `vectors` | Golden vectors, fixtures, the single runner and the reference harness |

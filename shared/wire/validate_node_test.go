@@ -17,16 +17,16 @@ const goodLabel = "abcdefghijklmnopqrstuvwxy2"
 
 func TestValidateBlockPage(t *testing.T) {
 	ok := func() *policyv1.BlockPage {
-		return &policyv1.BlockPage{Title: "Blocked", Message: "Line one\nline two", LogoHash: make([]byte, 32),
+		return &policyv1.BlockPage{ProfileId: make([]byte, 16), Title: "Blocked", Message: "Line one\nline two",
 			UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_URL, UnblockUrl: "https://example.com/unblock?id=1"}
 	}
 	if err := ValidateBlockPage(ok()); err != nil {
 		t.Fatalf("a good page: %v", err)
 	}
-	if err := ValidateBlockPage(&policyv1.BlockPage{UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE}); err != nil {
+	if err := ValidateBlockPage(&policyv1.BlockPage{ProfileId: make([]byte, 16), UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE}); err != nil {
 		t.Errorf("an empty page with mode none: %v", err)
 	}
-	if err := ValidateBlockPage(&policyv1.BlockPage{Title: "سایت مسدود است", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_REQUEST}); err != nil {
+	if err := ValidateBlockPage(&policyv1.BlockPage{ProfileId: make([]byte, 16), Title: "سایت مسدود است", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_REQUEST}); err != nil {
 		t.Errorf("a Persian title: %v", err)
 	}
 	mut := map[string]func(*policyv1.BlockPage){
@@ -72,7 +72,7 @@ func TestValidateBlockPage(t *testing.T) {
 		t.Error("nil accepted")
 	}
 	// Characters, not bytes: 120 Persian letters are 240 bytes and fit.
-	if err := ValidateBlockPage(&policyv1.BlockPage{Title: strings.Repeat("س", 120), UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE}); err != nil {
+	if err := ValidateBlockPage(&policyv1.BlockPage{ProfileId: make([]byte, 16), Title: strings.Repeat("س", 120), UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE}); err != nil {
 		t.Errorf("120 characters: %v", err)
 	}
 }
@@ -185,16 +185,19 @@ func TestValidateNodeReports(t *testing.T) {
 		}
 	}
 
-	if err := ValidateBlockUnblockRequest(&hubv1.BlockUnblockRequest{EndpointId: ep, QnameWire: qn, Message: "please unblock", At: now}, now); err != nil {
+	if err := ValidateBlockUnblockRequest(&hubv1.BlockUnblockRequest{EndpointId: ep, ProfileId: make([]byte, 16), QnameWire: qn, Message: "please unblock", At: now}, now); err != nil {
 		t.Errorf("unblock request: %v", err)
 	}
+	prof := make([]byte, 16)
 	for name, r := range map[string]*hubv1.BlockUnblockRequest{
-		"endpoint of 17 bytes": {EndpointId: make([]byte, 17), QnameWire: qn, At: now},
-		"truncated name":       {EndpointId: ep, QnameWire: qn[:3], At: now},
-		"root name":            {EndpointId: ep, QnameWire: []byte{0}, At: now},
-		"message of 501":       {EndpointId: ep, QnameWire: qn, Message: strings.Repeat("a", 501), At: now},
-		"escape in message":    {EndpointId: ep, QnameWire: qn, Message: "x\x1b[31m", At: now},
-		"time zero":            {EndpointId: ep, QnameWire: qn},
+		"endpoint of 17 bytes": {EndpointId: make([]byte, 17), ProfileId: prof, QnameWire: qn, At: now},
+		"truncated name":       {EndpointId: ep, ProfileId: prof, QnameWire: qn[:3], At: now},
+		"root name":            {EndpointId: ep, ProfileId: prof, QnameWire: []byte{0}, At: now},
+		"message of 501":       {EndpointId: ep, ProfileId: prof, QnameWire: qn, Message: strings.Repeat("a", 501), At: now},
+		"escape in message":    {EndpointId: ep, ProfileId: prof, QnameWire: qn, Message: "x\x1b[31m", At: now},
+		"time zero":            {EndpointId: ep, ProfileId: prof, QnameWire: qn},
+		"no profile id":        {EndpointId: ep, QnameWire: qn, At: now},
+		"profile id of 15":     {EndpointId: ep, ProfileId: make([]byte, 15), QnameWire: qn, At: now},
 	} {
 		if ValidateBlockUnblockRequest(r, now) == nil {
 			t.Errorf("unblock request: %s accepted", name)
@@ -284,7 +287,12 @@ func FuzzValidateNodeMessage(f *testing.F) {
 	for _, m := range []*hubv1.NodeMessage{
 		{Body: &hubv1.NodeMessage_ProofObservation{ProofObservation: &hubv1.ProofObservation{Label: goodLabel, SourceIp: []byte{1, 2, 3, 4}, Protocol: 1, ObservedAt: 100}}},
 		{Body: &hubv1.NodeMessage_Heartbeat{Heartbeat: &hubv1.Heartbeat{NodeTime: 5, NodeVersion: "1", BlobMajorMax: 1}}},
-		{Body: &hubv1.NodeMessage_BlockUnblockRequest{BlockUnblockRequest: &hubv1.BlockUnblockRequest{EndpointId: make([]byte, 16), QnameWire: []byte{1, 'a', 0}, At: 1}}},
+		{Body: &hubv1.NodeMessage_BlockUnblockRequest{BlockUnblockRequest: &hubv1.BlockUnblockRequest{EndpointId: make([]byte, 16), ProfileId: make([]byte, 16), QnameWire: []byte{1, 'a', 0}, At: 1}}},
+		{Body: &hubv1.NodeMessage_BlockKeyRequest{BlockKeyRequest: &hubv1.BlockKeyRequest{EndpointId: make([]byte, 16)}}},
+		{Body: &hubv1.NodeMessage_Heartbeat{Heartbeat: &hubv1.Heartbeat{BlobMajorMax: 1,
+			XrayConfigs: []*hubv1.XrayConfigState{{Id: make([]byte, 16), State: hubv1.XrayConfigStateKind_XRAY_CONFIG_STATE_KIND_APPLIED, Error: "e"}},
+			Proxy:       &hubv1.ProxyState{Listening: true}, Faults: []hubv1.NodeFault{hubv1.NodeFault_NODE_FAULT_XRAY_DOWN},
+			XrayUpgrade: &hubv1.XrayUpgradeState{Version: "v26.11.9", FailedIds: [][]byte{make([]byte, 16)}}, BindError: hubv1.BindError_BIND_ERROR_DNS_FAILED}}},
 	} {
 		b, err := proto.Marshal(m)
 		if err != nil {
@@ -305,7 +313,7 @@ func FuzzValidateBlockPage(f *testing.F) {
 	f.Add("Blocked", "msg", "https://example.com/x", int32(3))
 	f.Add("", "", "javascript:alert(1)", int32(3))
 	f.Fuzz(func(t *testing.T, title, msg, link string, mode int32) {
-		p := &policyv1.BlockPage{Title: title, Message: msg, UnblockUrl: link, UnblockMode: policyv1.UnblockMode(mode)}
+		p := &policyv1.BlockPage{ProfileId: make([]byte, 16), Title: title, Message: msg, UnblockUrl: link, UnblockMode: policyv1.UnblockMode(mode)}
 		if ValidateBlockPage(p) != nil || link == "" {
 			return
 		}

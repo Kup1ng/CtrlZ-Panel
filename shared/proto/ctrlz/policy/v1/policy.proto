@@ -87,6 +87,11 @@ message EndpointRecord {
   repeated ctrlz.common.v1.Prefix authorized = 15;
   uint32 client_cap = 16;
   uint32 grant_cap = 17;
+  // The first 16 bytes of the SHA-256 of "ctrlz-account-v1\x00" and the 16 bytes of
+  // the tenant's id (identity.AccountHash), or empty. The record still holds no
+  // tenant_id (R18); this is a one-way label that tells which Endpoints share an
+  // account. A node takes an empty one as the Endpoint's own id (P4b 3.4).
+  bytes account_hash = 18;
 }
 
 // merged_options is one 96-byte CZPB OPTS record, precomputed by the compiler
@@ -208,6 +213,12 @@ message BlockPage {
   bytes logo_hash = 3;
   UnblockMode unblock_mode = 4;
   string unblock_url = 5;
+  // PNG bytes of the logo, at most 256 KiB; logo_hash is their SHA-256. Both or
+  // neither (P4b 3.4). The node serves the page from this blob alone.
+  bytes logo = 6;
+  // The profile the page belongs to (16 bytes). The node knows no profile id of its
+  // own and an unblock request needs one (P4b 3.4).
+  bytes profile_id = 7;
 }
 
 message Revocation {

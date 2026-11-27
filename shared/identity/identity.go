@@ -127,6 +127,22 @@ func RIDHash(rid string) [16]byte {
 	return out
 }
 
+// AccountHash is the one-way label of a tenant that every EndpointRecord of that
+// tenant carries (EndpointRecord.account_hash, p4b-proxy 3.4): the first 16 bytes of
+// the SHA-256 of "ctrlz-account-v1\x00" and the 16 bytes of the tenant's id. The
+// node learns from it which Endpoints share an account, and never the id itself
+// (R18). It returns nil for an id that is not 16 bytes, so a caller that passes
+// the wrong thing gets a value that fails every later length check instead of a
+// hash of something else. A slice and not an array, so no frame holds the bytes
+// by value.
+func AccountHash(tenantID []byte) []byte {
+	if len(tenantID) != 16 {
+		return nil
+	}
+	h := sha256.Sum256(append([]byte("ctrlz-account-v1\x00"), tenantID...))
+	return append([]byte(nil), h[:16]...)
+}
+
 // TokenHash is what the node compares a DoH path token against.
 func TokenHash(token string) [32]byte {
 	return sha256.Sum256([]byte("ctrlz-doh-v1\x00" + token))

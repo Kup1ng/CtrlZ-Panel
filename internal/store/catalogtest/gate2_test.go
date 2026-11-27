@@ -640,7 +640,7 @@ func TestBlockPageTableAndValidator(t *testing.T) {
 		return h.try("", nil, "UPDATE ctrlz.block_pages SET unblock_mode = 'custom', unblock_url = $1 WHERE tenant_id = $2", url, a.Tenant)
 	}
 	linkInValidator := func(url string) bool {
-		return wire.ValidateBlockPage(&policyv1.BlockPage{Title: "t", Message: "m", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_URL, UnblockUrl: url}) == nil
+		return wire.ValidateBlockPage(&policyv1.BlockPage{ProfileId: make([]byte, 16), Title: "t", Message: "m", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_URL, UnblockUrl: url}) == nil
 	}
 	for _, url := range []string{
 		"https://example.com", "https://example.com/", "https://example.com/unblock?id=1", "https://example.com:8443/x",
@@ -721,10 +721,10 @@ func TestBlockPageTableAndValidator(t *testing.T) {
 	}
 	h.exec("UPDATE ctrlz.block_pages SET unblock_mode = 'none', unblock_url = NULL WHERE tenant_id = $1", a.Tenant)
 	titleOK := func(s string) bool {
-		return wire.ValidateBlockPage(&policyv1.BlockPage{Title: s, Message: "m", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE}) == nil
+		return wire.ValidateBlockPage(&policyv1.BlockPage{ProfileId: make([]byte, 16), Title: s, Message: "m", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE}) == nil
 	}
 	messageOK := func(s string) bool {
-		return wire.ValidateBlockPage(&policyv1.BlockPage{Title: "t", Message: s, UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE}) == nil
+		return wire.ValidateBlockPage(&policyv1.BlockPage{ProfileId: make([]byte, 16), Title: "t", Message: s, UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE}) == nil
 	}
 	for _, s := range []string{"Blocked", "", "سلام", "a b", "é", "\u0085", strings.Repeat("a", 120)} {
 		if !titleOK(s) {

@@ -260,6 +260,9 @@ func textOp(c *TextCase) (string, error) {
 	case "loc_allowed", "loc_service", "loc_selection":
 		return locationSets(c)
 	}
+	if out, ok, err := xrayOps(c); ok {
+		return out, err
+	}
 	if c.Op == "build_transitions" {
 		return zoneTransitions(c)
 	}

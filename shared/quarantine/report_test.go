@@ -28,7 +28,7 @@ func TestEveryFailureApplyEmitsPassesTheHubValidator(t *testing.T) {
 	badMagic[0] = 'X'
 	truncated := mkBlob(t, "y.example.com")
 	truncated = truncated[:len(truncated)-1]
-	evil, err := proto.Marshal(&policyv1.BlockPage{Title: "Blocked", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_URL, UnblockUrl: "javascript:alert(1)"})
+	evil, err := proto.Marshal(&policyv1.BlockPage{ProfileId: bytes.Repeat([]byte{9}, 16), Title: "Blocked", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_URL, UnblockUrl: "javascript:alert(1)"})
 	if err != nil {
 		t.Fatal(err)
 	}

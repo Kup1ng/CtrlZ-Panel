@@ -92,6 +92,14 @@
      "steps": [
        {"put_blobs": ["b"], "put_endpoints": [{"id": "e1", "blob": "b"}], "expect": {"advanced": true, "applied_seq": 1, "failed": ["b:hash_mismatch"], "degraded": ["e1"], "endpoints": {"e1": "b/enabled/degraded"}}},
        {"release": ["b"], "put_blobs": ["b"], "put_endpoints": [{"id": "e1", "blob": "b"}], "expect": {"advanced": true, "applied_seq": 2, "endpoints": {"e1": "b/enabled"}}}
+     ]},
+    {"id": "q-014", "why": "A block page that a del_blobs names is dropped at once, whether or not a profile still waits for its replacement (p4b 6.2): the panel names a page only when no bound profile blob names it",
+     "blobs": {"p1": {"page": "First"}, "p2": {"page": "Second"}, "a": {"rules": ["a.example.com"]}},
+     "steps": [
+       {"put_blobs": ["p1", "p2", "a"], "put_endpoints": [{"id": "e1", "blob": "a"}],
+        "expect": {"advanced": true, "applied_seq": 1, "pages": ["p1", "p2"], "endpoints": {"e1": "a/enabled"}}},
+       {"del_blobs": ["p1"], "expect": {"advanced": true, "applied_seq": 2, "pages": ["p2"], "endpoints": {"e1": "a/enabled"}}},
+       {"del_blobs": ["p2", "p1"], "expect": {"advanced": true, "applied_seq": 3, "pages": [], "endpoints": {"e1": "a/enabled"}}}
      ]}
   ]
 }

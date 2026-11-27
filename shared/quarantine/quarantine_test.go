@@ -218,7 +218,7 @@ func TestReEmittedHashIsFetchedAfterADamagedTransfer(t *testing.T) {
 
 func blockPage(t *testing.T, title string) ([]byte, [32]byte, *policyv1.BlobRef) {
 	t.Helper()
-	d, err := proto.Marshal(&policyv1.BlockPage{Title: title, UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE})
+	d, err := proto.Marshal(&policyv1.BlockPage{ProfileId: bytes.Repeat([]byte{9}, 16), Title: title, UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,9 +454,9 @@ func TestBlockPageIsValidatedBeforeItIsAdmitted(t *testing.T) {
 		h := sha256.Sum256(d)
 		return d, &policyv1.BlobRef{Hash: h[:], Size: uint64(len(d)), Kind: policyv1.BlobKind_BLOB_KIND_BLOCK_PAGE}
 	}
-	good, goodRef := mk(&policyv1.BlockPage{Title: "Blocked", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_URL, UnblockUrl: "https://example.com/unblock"})
-	evil, evilRef := mk(&policyv1.BlockPage{Title: "Blocked", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_URL, UnblockUrl: "javascript:alert(1)"})
-	huge, hugeRef := mk(&policyv1.BlockPage{Title: string(bytes.Repeat([]byte("a"), 5000)), UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE})
+	good, goodRef := mk(&policyv1.BlockPage{ProfileId: bytes.Repeat([]byte{9}, 16), Title: "Blocked", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_URL, UnblockUrl: "https://example.com/unblock"})
+	evil, evilRef := mk(&policyv1.BlockPage{ProfileId: bytes.Repeat([]byte{9}, 16), Title: "Blocked", UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_URL, UnblockUrl: "javascript:alert(1)"})
+	huge, hugeRef := mk(&policyv1.BlockPage{ProfileId: bytes.Repeat([]byte{9}, 16), Title: string(bytes.Repeat([]byte("a"), 5000)), UnblockMode: policyv1.UnblockMode_UNBLOCK_MODE_NONE})
 	st := NewState()
 	fetch := store{sha256.Sum256(good): good, sha256.Sum256(evil): evil, sha256.Sum256(huge): huge}
 	rep := Apply(st, marshal(t, &policyv1.ConfigEntry{Seq: 1, PutBlobs: []*policyv1.BlobRef{goodRef, evilRef, hugeRef}}, st), fetch)

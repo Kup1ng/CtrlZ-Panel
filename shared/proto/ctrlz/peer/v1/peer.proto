@@ -23,6 +23,11 @@ message GrantForward {
   uint32 grant_kind = 7;
   int64 expires_at = 8;
   uint64 sender_config_seq = 9;
+  // The client of the Endpoint whose query decided the Grant, as its 16-byte
+  // client_hash, or empty when the Endpoint's own profile decided (P4b 3.4). The
+  // receiver needs it to pick the stack AcceptGrant runs with, because a client
+  // can have a profile of its own. source_prefix is always a full-length prefix.
+  bytes client_hash = 10;
 }
 
 message GrantAck {

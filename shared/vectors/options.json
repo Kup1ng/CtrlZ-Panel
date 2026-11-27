@@ -177,6 +177,14 @@
     {"id": "opt-058", "why": "Rebind reads the ipv4hint behind a compression pointer in the target: RFC 9460 forbids the form, but a client parser that follows pointers would read the private hint, so the scan skips the two pointer bytes and goes on to the params", "endpoint": "e-opt-rebind", "client": "",
      "req": {"qname": "public.example", "qtype": "HTTPS", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
      "upstream": {"public.example/HTTPS": {"answer": ["public.example. 300 IN HTTPS \\# 12 0001c00c00040004c0a80101"]}},
-     "expect": {"action": "block", "stage": "default", "flags": ["rebind_blocked"]}}
+     "expect": {"action": "block", "stage": "default", "flags": ["rebind_blocked"]}},
+    {"id": "opt-059", "why": "Branded Block Response with a page: a rule block asks for a kind 2 Grant that names the page of the profile (B1-r1-2)", "endpoint": "e-opt-rebind-page", "client": "",
+     "req": {"qname": "bl.example", "qtype": "A", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
+     "upstream": {},
+     "expect": {"action": "block", "stage": "rule", "want_grant": true, "grant_kind": 2, "page_hash": "1111111111111111111111111111111111111111111111111111111111111111"}},
+    {"id": "opt-060", "why": "The same page on a Rebind block: it is the same Branded Grant, so it carries the same page hash, or the node serves the default page and the entry fails the join test against a holder of an ordinary block (B1-r1-2)", "endpoint": "e-opt-rebind-page", "client": "",
+     "req": {"qname": "public.example", "qtype": "A", "now": "2026-11-06T10:00:00Z", "src": "5.160.0.1", "protocol": "doh"},
+     "upstream": {"public.example/A": {"answer": ["public.example. 300 IN A 192.168.1.5"]}},
+     "expect": {"action": "block", "stage": "default", "flags": ["rebind_blocked"], "want_grant": true, "grant_kind": 2, "page_hash": "1111111111111111111111111111111111111111111111111111111111111111"}}
   ]
 }

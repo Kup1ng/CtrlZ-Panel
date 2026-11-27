@@ -81,6 +81,177 @@ func (Scope) EnumDescriptor() ([]byte, []int) {
 	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{0}
 }
 
+type XrayConfigStateKind int32
+
+const (
+	XrayConfigStateKind_XRAY_CONFIG_STATE_KIND_UNSPECIFIED XrayConfigStateKind = 0
+	XrayConfigStateKind_XRAY_CONFIG_STATE_KIND_PENDING     XrayConfigStateKind = 1
+	XrayConfigStateKind_XRAY_CONFIG_STATE_KIND_APPLIED     XrayConfigStateKind = 2
+	XrayConfigStateKind_XRAY_CONFIG_STATE_KIND_REFUSED     XrayConfigStateKind = 3
+	XrayConfigStateKind_XRAY_CONFIG_STATE_KIND_LAST_GOOD   XrayConfigStateKind = 4
+)
+
+// Enum value maps for XrayConfigStateKind.
+var (
+	XrayConfigStateKind_name = map[int32]string{
+		0: "XRAY_CONFIG_STATE_KIND_UNSPECIFIED",
+		1: "XRAY_CONFIG_STATE_KIND_PENDING",
+		2: "XRAY_CONFIG_STATE_KIND_APPLIED",
+		3: "XRAY_CONFIG_STATE_KIND_REFUSED",
+		4: "XRAY_CONFIG_STATE_KIND_LAST_GOOD",
+	}
+	XrayConfigStateKind_value = map[string]int32{
+		"XRAY_CONFIG_STATE_KIND_UNSPECIFIED": 0,
+		"XRAY_CONFIG_STATE_KIND_PENDING":     1,
+		"XRAY_CONFIG_STATE_KIND_APPLIED":     2,
+		"XRAY_CONFIG_STATE_KIND_REFUSED":     3,
+		"XRAY_CONFIG_STATE_KIND_LAST_GOOD":   4,
+	}
+)
+
+func (x XrayConfigStateKind) Enum() *XrayConfigStateKind {
+	p := new(XrayConfigStateKind)
+	*p = x
+	return p
+}
+
+func (x XrayConfigStateKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (XrayConfigStateKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_ctrlz_hub_v1_hub_proto_enumTypes[1].Descriptor()
+}
+
+func (XrayConfigStateKind) Type() protoreflect.EnumType {
+	return &file_ctrlz_hub_v1_hub_proto_enumTypes[1]
+}
+
+func (x XrayConfigStateKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use XrayConfigStateKind.Descriptor instead.
+func (XrayConfigStateKind) EnumDescriptor() ([]byte, []int) {
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{1}
+}
+
+type NodeFault int32
+
+const (
+	NodeFault_NODE_FAULT_UNSPECIFIED       NodeFault = 0
+	NodeFault_NODE_FAULT_NFT_FAILED        NodeFault = 1
+	NodeFault_NODE_FAULT_XRAY_DOWN         NodeFault = 2
+	NodeFault_NODE_FAULT_BLOCK_KEY_MISSING NodeFault = 3
+	NodeFault_NODE_FAULT_GRANTS_FULL       NodeFault = 4
+	// Set while any remote is under the backoff of p4b-proxy 5.5. It takes 5, the next free
+	// number, so the numbers 1 to 4 that nodes already send stay; p6-ops 7.4 starts at 6.
+	NodeFault_NODE_FAULT_XRAY_STUCK NodeFault = 5
+)
+
+// Enum value maps for NodeFault.
+var (
+	NodeFault_name = map[int32]string{
+		0: "NODE_FAULT_UNSPECIFIED",
+		1: "NODE_FAULT_NFT_FAILED",
+		2: "NODE_FAULT_XRAY_DOWN",
+		3: "NODE_FAULT_BLOCK_KEY_MISSING",
+		4: "NODE_FAULT_GRANTS_FULL",
+		5: "NODE_FAULT_XRAY_STUCK",
+	}
+	NodeFault_value = map[string]int32{
+		"NODE_FAULT_UNSPECIFIED":       0,
+		"NODE_FAULT_NFT_FAILED":        1,
+		"NODE_FAULT_XRAY_DOWN":         2,
+		"NODE_FAULT_BLOCK_KEY_MISSING": 3,
+		"NODE_FAULT_GRANTS_FULL":       4,
+		"NODE_FAULT_XRAY_STUCK":        5,
+	}
+)
+
+func (x NodeFault) Enum() *NodeFault {
+	p := new(NodeFault)
+	*p = x
+	return p
+}
+
+func (x NodeFault) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NodeFault) Descriptor() protoreflect.EnumDescriptor {
+	return file_ctrlz_hub_v1_hub_proto_enumTypes[2].Descriptor()
+}
+
+func (NodeFault) Type() protoreflect.EnumType {
+	return &file_ctrlz_hub_v1_hub_proto_enumTypes[2]
+}
+
+func (x NodeFault) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NodeFault.Descriptor instead.
+func (NodeFault) EnumDescriptor() ([]byte, []int) {
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{2}
+}
+
+// BIND_ERROR_UNSPECIFIED is "none": the bind addresses are in use as configured.
+type BindError int32
+
+const (
+	BindError_BIND_ERROR_UNSPECIFIED     BindError = 0
+	BindError_BIND_ERROR_DNS_NOT_LOCAL   BindError = 1
+	BindError_BIND_ERROR_DNS_FAILED      BindError = 2
+	BindError_BIND_ERROR_PROXY_NOT_LOCAL BindError = 3
+	BindError_BIND_ERROR_PROXY_FAILED    BindError = 4
+)
+
+// Enum value maps for BindError.
+var (
+	BindError_name = map[int32]string{
+		0: "BIND_ERROR_UNSPECIFIED",
+		1: "BIND_ERROR_DNS_NOT_LOCAL",
+		2: "BIND_ERROR_DNS_FAILED",
+		3: "BIND_ERROR_PROXY_NOT_LOCAL",
+		4: "BIND_ERROR_PROXY_FAILED",
+	}
+	BindError_value = map[string]int32{
+		"BIND_ERROR_UNSPECIFIED":     0,
+		"BIND_ERROR_DNS_NOT_LOCAL":   1,
+		"BIND_ERROR_DNS_FAILED":      2,
+		"BIND_ERROR_PROXY_NOT_LOCAL": 3,
+		"BIND_ERROR_PROXY_FAILED":    4,
+	}
+)
+
+func (x BindError) Enum() *BindError {
+	p := new(BindError)
+	*p = x
+	return p
+}
+
+func (x BindError) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BindError) Descriptor() protoreflect.EnumDescriptor {
+	return file_ctrlz_hub_v1_hub_proto_enumTypes[3].Descriptor()
+}
+
+func (BindError) Type() protoreflect.EnumType {
+	return &file_ctrlz_hub_v1_hub_proto_enumTypes[3]
+}
+
+func (x BindError) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BindError.Descriptor instead.
+func (BindError) EnumDescriptor() ([]byte, []int) {
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{3}
+}
+
 type PushRefusal int32
 
 const (
@@ -126,11 +297,11 @@ func (x PushRefusal) String() string {
 }
 
 func (PushRefusal) Descriptor() protoreflect.EnumDescriptor {
-	return file_ctrlz_hub_v1_hub_proto_enumTypes[1].Descriptor()
+	return file_ctrlz_hub_v1_hub_proto_enumTypes[4].Descriptor()
 }
 
 func (PushRefusal) Type() protoreflect.EnumType {
-	return &file_ctrlz_hub_v1_hub_proto_enumTypes[1]
+	return &file_ctrlz_hub_v1_hub_proto_enumTypes[4]
 }
 
 func (x PushRefusal) Number() protoreflect.EnumNumber {
@@ -139,7 +310,105 @@ func (x PushRefusal) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PushRefusal.Descriptor instead.
 func (PushRefusal) EnumDescriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{1}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{4}
+}
+
+type CertUse int32
+
+const (
+	CertUse_CERT_USE_UNSPECIFIED        CertUse = 0 // zone
+	CertUse_CERT_USE_BLOCK_INTERMEDIATE CertUse = 1
+)
+
+// Enum value maps for CertUse.
+var (
+	CertUse_name = map[int32]string{
+		0: "CERT_USE_UNSPECIFIED",
+		1: "CERT_USE_BLOCK_INTERMEDIATE",
+	}
+	CertUse_value = map[string]int32{
+		"CERT_USE_UNSPECIFIED":        0,
+		"CERT_USE_BLOCK_INTERMEDIATE": 1,
+	}
+)
+
+func (x CertUse) Enum() *CertUse {
+	p := new(CertUse)
+	*p = x
+	return p
+}
+
+func (x CertUse) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CertUse) Descriptor() protoreflect.EnumDescriptor {
+	return file_ctrlz_hub_v1_hub_proto_enumTypes[5].Descriptor()
+}
+
+func (CertUse) Type() protoreflect.EnumType {
+	return &file_ctrlz_hub_v1_hub_proto_enumTypes[5]
+}
+
+func (x CertUse) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CertUse.Descriptor instead.
+func (CertUse) EnumDescriptor() ([]byte, []int) {
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{5}
+}
+
+type GrantWidth int32
+
+const (
+	GrantWidth_GRANT_WIDTH_UNSPECIFIED GrantWidth = 0 // exact
+	GrantWidth_GRANT_WIDTH_EXACT       GrantWidth = 1
+	GrantWidth_GRANT_WIDTH_PREFIX24    GrantWidth = 2
+	GrantWidth_GRANT_WIDTH_CARRIER     GrantWidth = 3
+)
+
+// Enum value maps for GrantWidth.
+var (
+	GrantWidth_name = map[int32]string{
+		0: "GRANT_WIDTH_UNSPECIFIED",
+		1: "GRANT_WIDTH_EXACT",
+		2: "GRANT_WIDTH_PREFIX24",
+		3: "GRANT_WIDTH_CARRIER",
+	}
+	GrantWidth_value = map[string]int32{
+		"GRANT_WIDTH_UNSPECIFIED": 0,
+		"GRANT_WIDTH_EXACT":       1,
+		"GRANT_WIDTH_PREFIX24":    2,
+		"GRANT_WIDTH_CARRIER":     3,
+	}
+)
+
+func (x GrantWidth) Enum() *GrantWidth {
+	p := new(GrantWidth)
+	*p = x
+	return p
+}
+
+func (x GrantWidth) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GrantWidth) Descriptor() protoreflect.EnumDescriptor {
+	return file_ctrlz_hub_v1_hub_proto_enumTypes[6].Descriptor()
+}
+
+func (GrantWidth) Type() protoreflect.EnumType {
+	return &file_ctrlz_hub_v1_hub_proto_enumTypes[6]
+}
+
+func (x GrantWidth) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GrantWidth.Descriptor instead.
+func (GrantWidth) EnumDescriptor() ([]byte, []int) {
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{6}
 }
 
 type FetchEntriesRequest struct {
@@ -624,6 +893,7 @@ type NodeMessage struct {
 	//	*NodeMessage_LearnedIp
 	//	*NodeMessage_ProofObservation
 	//	*NodeMessage_BlockUnblockRequest
+	//	*NodeMessage_BlockKeyRequest
 	Body          isNodeMessage_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -738,6 +1008,15 @@ func (x *NodeMessage) GetBlockUnblockRequest() *BlockUnblockRequest {
 	return nil
 }
 
+func (x *NodeMessage) GetBlockKeyRequest() *BlockKeyRequest {
+	if x != nil {
+		if x, ok := x.Body.(*NodeMessage_BlockKeyRequest); ok {
+			return x.BlockKeyRequest
+		}
+	}
+	return nil
+}
+
 type isNodeMessage_Body interface {
 	isNodeMessage_Body()
 }
@@ -774,6 +1053,10 @@ type NodeMessage_BlockUnblockRequest struct {
 	BlockUnblockRequest *BlockUnblockRequest `protobuf:"bytes,8,opt,name=block_unblock_request,json=blockUnblockRequest,proto3,oneof"`
 }
 
+type NodeMessage_BlockKeyRequest struct {
+	BlockKeyRequest *BlockKeyRequest `protobuf:"bytes,9,opt,name=block_key_request,json=blockKeyRequest,proto3,oneof"`
+}
+
 func (*NodeMessage_Heartbeat) isNodeMessage_Body() {}
 
 func (*NodeMessage_ApplyResult) isNodeMessage_Body() {}
@@ -789,6 +1072,8 @@ func (*NodeMessage_LearnedIp) isNodeMessage_Body() {}
 func (*NodeMessage_ProofObservation) isNodeMessage_Body() {}
 
 func (*NodeMessage_BlockUnblockRequest) isNodeMessage_Body() {}
+
+func (*NodeMessage_BlockKeyRequest) isNodeMessage_Body() {}
 
 type Heartbeat struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -809,8 +1094,14 @@ type Heartbeat struct {
 	NodeConfigVersion uint64 `protobuf:"varint,13,opt,name=node_config_version,json=nodeConfigVersion,proto3" json:"node_config_version,omitempty"` // the highest NodeConfig.version the node applied
 	Qps               uint32 `protobuf:"varint,14,opt,name=qps,proto3" json:"qps,omitempty"`                                                        // queries a second, node-wide, over the last 60 s
 	CacheHitPermille  uint32 `protobuf:"varint,15,opt,name=cache_hit_permille,json=cacheHitPermille,proto3" json:"cache_hit_permille,omitempty"`    // cache hits per 1000 queries over the same 60 s, 0 to 1000
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// P4b additions (p4b-proxy 3.4). A node of an earlier build sends none of them.
+	XrayConfigs   []*XrayConfigState `protobuf:"bytes,16,rep,name=xray_configs,json=xrayConfigs,proto3" json:"xray_configs,omitempty"`        // at most 64
+	Proxy         *ProxyState        `protobuf:"bytes,17,opt,name=proxy,proto3" json:"proxy,omitempty"`                                       // from the proxy_state message; not listening when 30 s old
+	Faults        []NodeFault        `protobuf:"varint,18,rep,packed,name=faults,proto3,enum=ctrlz.hub.v1.NodeFault" json:"faults,omitempty"` // no value twice; a value stays while its condition holds
+	XrayUpgrade   *XrayUpgradeState  `protobuf:"bytes,19,opt,name=xray_upgrade,json=xrayUpgrade,proto3" json:"xray_upgrade,omitempty"`
+	BindError     BindError          `protobuf:"varint,20,opt,name=bind_error,json=bindError,proto3,enum=ctrlz.hub.v1.BindError" json:"bind_error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Heartbeat) Reset() {
@@ -948,6 +1239,249 @@ func (x *Heartbeat) GetCacheHitPermille() uint32 {
 	return 0
 }
 
+func (x *Heartbeat) GetXrayConfigs() []*XrayConfigState {
+	if x != nil {
+		return x.XrayConfigs
+	}
+	return nil
+}
+
+func (x *Heartbeat) GetProxy() *ProxyState {
+	if x != nil {
+		return x.Proxy
+	}
+	return nil
+}
+
+func (x *Heartbeat) GetFaults() []NodeFault {
+	if x != nil {
+		return x.Faults
+	}
+	return nil
+}
+
+func (x *Heartbeat) GetXrayUpgrade() *XrayUpgradeState {
+	if x != nil {
+		return x.XrayUpgrade
+	}
+	return nil
+}
+
+func (x *Heartbeat) GetBindError() BindError {
+	if x != nil {
+		return x.BindError
+	}
+	return BindError_BIND_ERROR_UNSPECIFIED
+}
+
+// What the node did with one stored config. error holds no value of the fragment
+// (p4b-proxy 7.5 step 1) and is at most 500 characters.
+type XrayConfigState struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	FragmentSha256 []byte                 `protobuf:"bytes,2,opt,name=fragment_sha256,json=fragmentSha256,proto3" json:"fragment_sha256,omitempty"`
+	State          XrayConfigStateKind    `protobuf:"varint,3,opt,name=state,proto3,enum=ctrlz.hub.v1.XrayConfigStateKind" json:"state,omitempty"`
+	Error          string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	Healthy        bool                   `protobuf:"varint,5,opt,name=healthy,proto3" json:"healthy,omitempty"`
+	LatencyMs      uint32                 `protobuf:"varint,6,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *XrayConfigState) Reset() {
+	*x = XrayConfigState{}
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *XrayConfigState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*XrayConfigState) ProtoMessage() {}
+
+func (x *XrayConfigState) ProtoReflect() protoreflect.Message {
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use XrayConfigState.ProtoReflect.Descriptor instead.
+func (*XrayConfigState) Descriptor() ([]byte, []int) {
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *XrayConfigState) GetId() []byte {
+	if x != nil {
+		return x.Id
+	}
+	return nil
+}
+
+func (x *XrayConfigState) GetFragmentSha256() []byte {
+	if x != nil {
+		return x.FragmentSha256
+	}
+	return nil
+}
+
+func (x *XrayConfigState) GetState() XrayConfigStateKind {
+	if x != nil {
+		return x.State
+	}
+	return XrayConfigStateKind_XRAY_CONFIG_STATE_KIND_UNSPECIFIED
+}
+
+func (x *XrayConfigState) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *XrayConfigState) GetHealthy() bool {
+	if x != nil {
+		return x.Healthy
+	}
+	return false
+}
+
+func (x *XrayConfigState) GetLatencyMs() uint32 {
+	if x != nil {
+		return x.LatencyMs
+	}
+	return 0
+}
+
+type ProxyState struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Listening       bool                   `protobuf:"varint,1,opt,name=listening,proto3" json:"listening,omitempty"`
+	OpenConnections uint32                 `protobuf:"varint,2,opt,name=open_connections,json=openConnections,proto3" json:"open_connections,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ProxyState) Reset() {
+	*x = ProxyState{}
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProxyState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProxyState) ProtoMessage() {}
+
+func (x *ProxyState) ProtoReflect() protoreflect.Message {
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProxyState.ProtoReflect.Descriptor instead.
+func (*ProxyState) Descriptor() ([]byte, []int) {
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ProxyState) GetListening() bool {
+	if x != nil {
+		return x.Listening
+	}
+	return false
+}
+
+func (x *ProxyState) GetOpenConnections() uint32 {
+	if x != nil {
+		return x.OpenConnections
+	}
+	return 0
+}
+
+// fetched is the newest verified Xray bundle on the node, version the last upgrade
+// tried, ok its result and failed_ids the configs the new release refused (at most 64).
+type XrayUpgradeState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Fetched       string                 `protobuf:"bytes,1,opt,name=fetched,proto3" json:"fetched,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Ok            bool                   `protobuf:"varint,3,opt,name=ok,proto3" json:"ok,omitempty"`
+	FailedIds     [][]byte               `protobuf:"bytes,4,rep,name=failed_ids,json=failedIds,proto3" json:"failed_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *XrayUpgradeState) Reset() {
+	*x = XrayUpgradeState{}
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *XrayUpgradeState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*XrayUpgradeState) ProtoMessage() {}
+
+func (x *XrayUpgradeState) ProtoReflect() protoreflect.Message {
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use XrayUpgradeState.ProtoReflect.Descriptor instead.
+func (*XrayUpgradeState) Descriptor() ([]byte, []int) {
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *XrayUpgradeState) GetFetched() string {
+	if x != nil {
+		return x.Fetched
+	}
+	return ""
+}
+
+func (x *XrayUpgradeState) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *XrayUpgradeState) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *XrayUpgradeState) GetFailedIds() [][]byte {
+	if x != nil {
+		return x.FailedIds
+	}
+	return nil
+}
+
 // Heartbeat.peer_view holds a serialized PeerView (contract 8a.7). The field stays
 // bytes: turning it into a message type would break WIRE_JSON.
 type PeerView struct {
@@ -962,7 +1496,7 @@ type PeerView struct {
 
 func (x *PeerView) Reset() {
 	*x = PeerView{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[11]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -974,7 +1508,7 @@ func (x *PeerView) String() string {
 func (*PeerView) ProtoMessage() {}
 
 func (x *PeerView) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[11]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -987,7 +1521,7 @@ func (x *PeerView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerView.ProtoReflect.Descriptor instead.
 func (*PeerView) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{11}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PeerView) GetPairTableVersion() uint64 {
@@ -1019,17 +1553,20 @@ func (x *PeerView) GetRefusals() uint64 {
 }
 
 type PeerProbe struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NodeId        []byte                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	Known         bool                   `protobuf:"varint,2,opt,name=known,proto3" json:"known,omitempty"` // false while this node's probe state of node_id is unknown
-	Down          bool                   `protobuf:"varint,3,opt,name=down,proto3" json:"down,omitempty"`   // probe-down by the 3-round rule; false when known is false
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	NodeId []byte                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Known  bool                   `protobuf:"varint,2,opt,name=known,proto3" json:"known,omitempty"` // false while this node's probe state of node_id is unknown
+	Down   bool                   `protobuf:"varint,3,opt,name=down,proto3" json:"down,omitempty"`   // probe-down by the 3-round rule; false when known is false
+	// P4b: the same two for the peer's PROXY_IP, from the pair probe of p4b-proxy 9.2.
+	ProxyKnown    bool `protobuf:"varint,4,opt,name=proxy_known,json=proxyKnown,proto3" json:"proxy_known,omitempty"`
+	ProxyDown     bool `protobuf:"varint,5,opt,name=proxy_down,json=proxyDown,proto3" json:"proxy_down,omitempty"` // false when proxy_known is false
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PeerProbe) Reset() {
 	*x = PeerProbe{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[12]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1041,7 +1578,7 @@ func (x *PeerProbe) String() string {
 func (*PeerProbe) ProtoMessage() {}
 
 func (x *PeerProbe) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[12]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1054,7 +1591,7 @@ func (x *PeerProbe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerProbe.ProtoReflect.Descriptor instead.
 func (*PeerProbe) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{12}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *PeerProbe) GetNodeId() []byte {
@@ -1078,6 +1615,20 @@ func (x *PeerProbe) GetDown() bool {
 	return false
 }
 
+func (x *PeerProbe) GetProxyKnown() bool {
+	if x != nil {
+		return x.ProxyKnown
+	}
+	return false
+}
+
+func (x *PeerProbe) GetProxyDown() bool {
+	if x != nil {
+		return x.ProxyDown
+	}
+	return false
+}
+
 type UpstreamHealth struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1089,7 +1640,7 @@ type UpstreamHealth struct {
 
 func (x *UpstreamHealth) Reset() {
 	*x = UpstreamHealth{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[13]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1101,7 +1652,7 @@ func (x *UpstreamHealth) String() string {
 func (*UpstreamHealth) ProtoMessage() {}
 
 func (x *UpstreamHealth) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[13]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1114,7 +1665,7 @@ func (x *UpstreamHealth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpstreamHealth.ProtoReflect.Descriptor instead.
 func (*UpstreamHealth) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{13}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *UpstreamHealth) GetId() []byte {
@@ -1149,7 +1700,7 @@ type LocationHealth struct {
 
 func (x *LocationHealth) Reset() {
 	*x = LocationHealth{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[14]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1161,7 +1712,7 @@ func (x *LocationHealth) String() string {
 func (*LocationHealth) ProtoMessage() {}
 
 func (x *LocationHealth) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[14]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1174,7 +1725,7 @@ func (x *LocationHealth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LocationHealth.ProtoReflect.Descriptor instead.
 func (*LocationHealth) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{14}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *LocationHealth) GetLocation() uint32 {
@@ -1210,7 +1761,7 @@ type ApplyResult struct {
 
 func (x *ApplyResult) Reset() {
 	*x = ApplyResult{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[15]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1222,7 +1773,7 @@ func (x *ApplyResult) String() string {
 func (*ApplyResult) ProtoMessage() {}
 
 func (x *ApplyResult) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[15]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1235,7 +1786,7 @@ func (x *ApplyResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyResult.ProtoReflect.Descriptor instead.
 func (*ApplyResult) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{15}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ApplyResult) GetSeq() uint64 {
@@ -1280,7 +1831,7 @@ type QuarantineReport struct {
 
 func (x *QuarantineReport) Reset() {
 	*x = QuarantineReport{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[16]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1292,7 +1843,7 @@ func (x *QuarantineReport) String() string {
 func (*QuarantineReport) ProtoMessage() {}
 
 func (x *QuarantineReport) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[16]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1305,7 +1856,7 @@ func (x *QuarantineReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuarantineReport.ProtoReflect.Descriptor instead.
 func (*QuarantineReport) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{16}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *QuarantineReport) GetSeq() uint64 {
@@ -1359,7 +1910,7 @@ type RevocationAck struct {
 
 func (x *RevocationAck) Reset() {
 	*x = RevocationAck{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[17]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1371,7 +1922,7 @@ func (x *RevocationAck) String() string {
 func (*RevocationAck) ProtoMessage() {}
 
 func (x *RevocationAck) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[17]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1384,7 +1935,7 @@ func (x *RevocationAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevocationAck.ProtoReflect.Descriptor instead.
 func (*RevocationAck) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{17}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RevocationAck) GetRevSeq() uint64 {
@@ -1403,7 +1954,7 @@ type AcmeAck struct {
 
 func (x *AcmeAck) Reset() {
 	*x = AcmeAck{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[18]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1415,7 +1966,7 @@ func (x *AcmeAck) String() string {
 func (*AcmeAck) ProtoMessage() {}
 
 func (x *AcmeAck) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[18]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1428,7 +1979,7 @@ func (x *AcmeAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcmeAck.ProtoReflect.Descriptor instead.
 func (*AcmeAck) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{18}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AcmeAck) GetTokenId() []byte {
@@ -1450,7 +2001,7 @@ type LearnedIP struct {
 
 func (x *LearnedIP) Reset() {
 	*x = LearnedIP{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[19]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1462,7 +2013,7 @@ func (x *LearnedIP) String() string {
 func (*LearnedIP) ProtoMessage() {}
 
 func (x *LearnedIP) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[19]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1475,7 +2026,7 @@ func (x *LearnedIP) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LearnedIP.ProtoReflect.Descriptor instead.
 func (*LearnedIP) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{19}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *LearnedIP) GetEndpointId() []byte {
@@ -1522,7 +2073,7 @@ type ProofObservation struct {
 
 func (x *ProofObservation) Reset() {
 	*x = ProofObservation{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[20]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1534,7 +2085,7 @@ func (x *ProofObservation) String() string {
 func (*ProofObservation) ProtoMessage() {}
 
 func (x *ProofObservation) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[20]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1547,7 +2098,7 @@ func (x *ProofObservation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProofObservation.ProtoReflect.Descriptor instead.
 func (*ProofObservation) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{20}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ProofObservation) GetLabel() string {
@@ -1586,18 +2137,20 @@ func (x *ProofObservation) GetRidHash() []byte {
 }
 
 type BlockUnblockRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EndpointId    []byte                 `protobuf:"bytes,1,opt,name=endpoint_id,json=endpointId,proto3" json:"endpoint_id,omitempty"`
-	QnameWire     []byte                 `protobuf:"bytes,2,opt,name=qname_wire,json=qnameWire,proto3" json:"qname_wire,omitempty"`
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
-	At            int64                  `protobuf:"varint,4,opt,name=at,proto3" json:"at,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	EndpointId []byte                 `protobuf:"bytes,1,opt,name=endpoint_id,json=endpointId,proto3" json:"endpoint_id,omitempty"`
+	QnameWire  []byte                 `protobuf:"bytes,2,opt,name=qname_wire,json=qnameWire,proto3" json:"qname_wire,omitempty"`
+	Message    string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	At         int64                  `protobuf:"varint,4,opt,name=at,proto3" json:"at,omitempty"`
+	// The profile of the block page that showed the form, from BlockPage.profile_id (16 bytes).
+	ProfileId     []byte `protobuf:"bytes,5,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BlockUnblockRequest) Reset() {
 	*x = BlockUnblockRequest{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[21]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1609,7 +2162,7 @@ func (x *BlockUnblockRequest) String() string {
 func (*BlockUnblockRequest) ProtoMessage() {}
 
 func (x *BlockUnblockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[21]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1622,7 +2175,7 @@ func (x *BlockUnblockRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BlockUnblockRequest.ProtoReflect.Descriptor instead.
 func (*BlockUnblockRequest) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{21}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *BlockUnblockRequest) GetEndpointId() []byte {
@@ -1653,6 +2206,59 @@ func (x *BlockUnblockRequest) GetAt() int64 {
 	return 0
 }
 
+func (x *BlockUnblockRequest) GetProfileId() []byte {
+	if x != nil {
+		return x.ProfileId
+	}
+	return nil
+}
+
+// Asks the hub for the short-lived block page intermediate of the Endpoint's account
+// (p4b-proxy 10.3). The account is the Endpoint's: the node never names one.
+type BlockKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EndpointId    []byte                 `protobuf:"bytes,1,opt,name=endpoint_id,json=endpointId,proto3" json:"endpoint_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlockKeyRequest) Reset() {
+	*x = BlockKeyRequest{}
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockKeyRequest) ProtoMessage() {}
+
+func (x *BlockKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockKeyRequest.ProtoReflect.Descriptor instead.
+func (*BlockKeyRequest) Descriptor() ([]byte, []int) {
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *BlockKeyRequest) GetEndpointId() []byte {
+	if x != nil {
+		return x.EndpointId
+	}
+	return nil
+}
+
 type HubMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Body:
@@ -1672,7 +2278,7 @@ type HubMessage struct {
 
 func (x *HubMessage) Reset() {
 	*x = HubMessage{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[22]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1684,7 +2290,7 @@ func (x *HubMessage) String() string {
 func (*HubMessage) ProtoMessage() {}
 
 func (x *HubMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[22]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1697,7 +2303,7 @@ func (x *HubMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HubMessage.ProtoReflect.Descriptor instead.
 func (*HubMessage) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{22}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *HubMessage) GetBody() isHubMessage_Body {
@@ -1848,7 +2454,7 @@ type FreeDnsOff struct {
 
 func (x *FreeDnsOff) Reset() {
 	*x = FreeDnsOff{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[23]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1860,7 +2466,7 @@ func (x *FreeDnsOff) String() string {
 func (*FreeDnsOff) ProtoMessage() {}
 
 func (x *FreeDnsOff) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[23]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1873,7 +2479,7 @@ func (x *FreeDnsOff) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FreeDnsOff.ProtoReflect.Descriptor instead.
 func (*FreeDnsOff) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{23}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *FreeDnsOff) GetVersion() uint64 {
@@ -1894,7 +2500,7 @@ type HeadNotice struct {
 
 func (x *HeadNotice) Reset() {
 	*x = HeadNotice{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[24]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1906,7 +2512,7 @@ func (x *HeadNotice) String() string {
 func (*HeadNotice) ProtoMessage() {}
 
 func (x *HeadNotice) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[24]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1919,7 +2525,7 @@ func (x *HeadNotice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeadNotice.ProtoReflect.Descriptor instead.
 func (*HeadNotice) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{24}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *HeadNotice) GetSeq() uint64 {
@@ -1944,18 +2550,24 @@ func (x *HeadNotice) GetRelease() bool {
 }
 
 type CertBundle struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          v1.Kind                `protobuf:"varint,1,opt,name=kind,proto3,enum=ctrlz.sign.v1.Kind" json:"kind,omitempty"`
-	WrappedKey    []byte                 `protobuf:"bytes,2,opt,name=wrapped_key,json=wrappedKey,proto3" json:"wrapped_key,omitempty"`
-	ChainPem      []byte                 `protobuf:"bytes,3,opt,name=chain_pem,json=chainPem,proto3" json:"chain_pem,omitempty"`
-	NotAfter      int64                  `protobuf:"varint,4,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Kind       v1.Kind                `protobuf:"varint,1,opt,name=kind,proto3,enum=ctrlz.sign.v1.Kind" json:"kind,omitempty"`
+	WrappedKey []byte                 `protobuf:"bytes,2,opt,name=wrapped_key,json=wrappedKey,proto3" json:"wrapped_key,omitempty"`
+	ChainPem   []byte                 `protobuf:"bytes,3,opt,name=chain_pem,json=chainPem,proto3" json:"chain_pem,omitempty"`
+	NotAfter   int64                  `protobuf:"varint,4,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
+	// CERT_USE_UNSPECIFIED is the zone certificate every earlier bundle was.
+	Use CertUse `protobuf:"varint,5,opt,name=use,proto3,enum=ctrlz.hub.v1.CertUse" json:"use,omitempty"`
+	// Set exactly with use block_intermediate: the account's 16-byte hash and the 8-byte
+	// epoch of its root, so a node drops a bundle of an old block_root_key.
+	AccountHash    []byte `protobuf:"bytes,6,opt,name=account_hash,json=accountHash,proto3" json:"account_hash,omitempty"`
+	BlockRootEpoch []byte `protobuf:"bytes,7,opt,name=block_root_epoch,json=blockRootEpoch,proto3" json:"block_root_epoch,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CertBundle) Reset() {
 	*x = CertBundle{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[25]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1967,7 +2579,7 @@ func (x *CertBundle) String() string {
 func (*CertBundle) ProtoMessage() {}
 
 func (x *CertBundle) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[25]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1980,7 +2592,7 @@ func (x *CertBundle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CertBundle.ProtoReflect.Descriptor instead.
 func (*CertBundle) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{25}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *CertBundle) GetKind() v1.Kind {
@@ -2011,6 +2623,27 @@ func (x *CertBundle) GetNotAfter() int64 {
 	return 0
 }
 
+func (x *CertBundle) GetUse() CertUse {
+	if x != nil {
+		return x.Use
+	}
+	return CertUse_CERT_USE_UNSPECIFIED
+}
+
+func (x *CertBundle) GetAccountHash() []byte {
+	if x != nil {
+		return x.AccountHash
+	}
+	return nil
+}
+
+func (x *CertBundle) GetBlockRootEpoch() []byte {
+	if x != nil {
+		return x.BlockRootEpoch
+	}
+	return nil
+}
+
 type AcmeChallenge struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TokenId       []byte                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
@@ -2023,7 +2656,7 @@ type AcmeChallenge struct {
 
 func (x *AcmeChallenge) Reset() {
 	*x = AcmeChallenge{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[26]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2035,7 +2668,7 @@ func (x *AcmeChallenge) String() string {
 func (*AcmeChallenge) ProtoMessage() {}
 
 func (x *AcmeChallenge) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[26]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2048,7 +2681,7 @@ func (x *AcmeChallenge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcmeChallenge.ProtoReflect.Descriptor instead.
 func (*AcmeChallenge) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{26}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *AcmeChallenge) GetTokenId() []byte {
@@ -2088,7 +2721,7 @@ type ServerTime struct {
 
 func (x *ServerTime) Reset() {
 	*x = ServerTime{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[27]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2100,7 +2733,7 @@ func (x *ServerTime) String() string {
 func (*ServerTime) ProtoMessage() {}
 
 func (x *ServerTime) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[27]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2113,7 +2746,7 @@ func (x *ServerTime) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerTime.ProtoReflect.Descriptor instead.
 func (*ServerTime) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{27}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ServerTime) GetNow() int64 {
@@ -2140,13 +2773,18 @@ type NodeConfig struct {
 	SpoolPublicKey    []byte                 `protobuf:"bytes,13,opt,name=spool_public_key,json=spoolPublicKey,proto3" json:"spool_public_key,omitempty"`
 	XraySchemaVersion string                 `protobuf:"bytes,14,opt,name=xray_schema_version,json=xraySchemaVersion,proto3" json:"xray_schema_version,omitempty"`
 	XrayConfigs       []*XrayConfig          `protobuf:"bytes,15,rep,name=xray_configs,json=xrayConfigs,proto3" json:"xray_configs,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// P4b additions (p4b-proxy 3.4). Unspecified grant_width reads as exact.
+	GrantWidth       GrantWidth `protobuf:"varint,16,opt,name=grant_width,json=grantWidth,proto3,enum=ctrlz.hub.v1.GrantWidth" json:"grant_width,omitempty"`
+	ProbeUrls        []string   `protobuf:"bytes,17,rep,name=probe_urls,json=probeUrls,proto3" json:"probe_urls,omitempty"` // 0 to 2
+	XrayFetchVersion string     `protobuf:"bytes,18,opt,name=xray_fetch_version,json=xrayFetchVersion,proto3" json:"xray_fetch_version,omitempty"`
+	BlockRootEpoch   []byte     `protobuf:"bytes,19,opt,name=block_root_epoch,json=blockRootEpoch,proto3" json:"block_root_epoch,omitempty"` // empty or 8 bytes
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *NodeConfig) Reset() {
 	*x = NodeConfig{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[28]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2158,7 +2796,7 @@ func (x *NodeConfig) String() string {
 func (*NodeConfig) ProtoMessage() {}
 
 func (x *NodeConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[28]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2171,7 +2809,7 @@ func (x *NodeConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeConfig.ProtoReflect.Descriptor instead.
 func (*NodeConfig) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{28}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *NodeConfig) GetVersion() uint64 {
@@ -2279,6 +2917,34 @@ func (x *NodeConfig) GetXrayConfigs() []*XrayConfig {
 	return nil
 }
 
+func (x *NodeConfig) GetGrantWidth() GrantWidth {
+	if x != nil {
+		return x.GrantWidth
+	}
+	return GrantWidth_GRANT_WIDTH_UNSPECIFIED
+}
+
+func (x *NodeConfig) GetProbeUrls() []string {
+	if x != nil {
+		return x.ProbeUrls
+	}
+	return nil
+}
+
+func (x *NodeConfig) GetXrayFetchVersion() string {
+	if x != nil {
+		return x.XrayFetchVersion
+	}
+	return ""
+}
+
+func (x *NodeConfig) GetBlockRootEpoch() []byte {
+	if x != nil {
+		return x.BlockRootEpoch
+	}
+	return nil
+}
+
 type Upstream struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Id              []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -2296,7 +2962,7 @@ type Upstream struct {
 
 func (x *Upstream) Reset() {
 	*x = Upstream{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[29]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2308,7 +2974,7 @@ func (x *Upstream) String() string {
 func (*Upstream) ProtoMessage() {}
 
 func (x *Upstream) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[29]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2321,7 +2987,7 @@ func (x *Upstream) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Upstream.ProtoReflect.Descriptor instead.
 func (*Upstream) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{29}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *Upstream) GetId() []byte {
@@ -2397,7 +3063,7 @@ type UpstreamGroup struct {
 
 func (x *UpstreamGroup) Reset() {
 	*x = UpstreamGroup{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[30]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2409,7 +3075,7 @@ func (x *UpstreamGroup) String() string {
 func (*UpstreamGroup) ProtoMessage() {}
 
 func (x *UpstreamGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[30]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2422,7 +3088,7 @@ func (x *UpstreamGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpstreamGroup.ProtoReflect.Descriptor instead.
 func (*UpstreamGroup) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{30}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *UpstreamGroup) GetName() string {
@@ -2452,7 +3118,7 @@ type ResolverRule struct {
 
 func (x *ResolverRule) Reset() {
 	*x = ResolverRule{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[31]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2464,7 +3130,7 @@ func (x *ResolverRule) String() string {
 func (*ResolverRule) ProtoMessage() {}
 
 func (x *ResolverRule) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[31]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2477,7 +3143,7 @@ func (x *ResolverRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolverRule.ProtoReflect.Descriptor instead.
 func (*ResolverRule) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{31}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ResolverRule) GetOrder() uint32 {
@@ -2516,20 +3182,23 @@ func (x *ResolverRule) GetFinalDefault() bool {
 }
 
 type XrayConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Location      uint32                 `protobuf:"varint,2,opt,name=location,proto3" json:"location,omitempty"`
-	Tag           string                 `protobuf:"bytes,3,opt,name=tag,proto3" json:"tag,omitempty"`
-	Priority      uint32                 `protobuf:"varint,4,opt,name=priority,proto3" json:"priority,omitempty"`
-	Enabled       bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	FragmentJson  []byte                 `protobuf:"bytes,6,opt,name=fragment_json,json=fragmentJson,proto3" json:"fragment_json,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Id           []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Location     uint32                 `protobuf:"varint,2,opt,name=location,proto3" json:"location,omitempty"`
+	Tag          string                 `protobuf:"bytes,3,opt,name=tag,proto3" json:"tag,omitempty"`
+	Priority     uint32                 `protobuf:"varint,4,opt,name=priority,proto3" json:"priority,omitempty"`
+	Enabled      bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	FragmentJson []byte                 `protobuf:"bytes,6,opt,name=fragment_json,json=fragmentJson,proto3" json:"fragment_json,omitempty"`
+	// Paths the admin accepted as unknown to the allow-list (p4b-proxy 7.3), each inside
+	// one outbound. enabled is always true on the wire: disabled rows are not sent.
+	AcceptedUnknown []string `protobuf:"bytes,7,rep,name=accepted_unknown,json=acceptedUnknown,proto3" json:"accepted_unknown,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *XrayConfig) Reset() {
 	*x = XrayConfig{}
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[32]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2541,7 +3210,7 @@ func (x *XrayConfig) String() string {
 func (*XrayConfig) ProtoMessage() {}
 
 func (x *XrayConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[32]
+	mi := &file_ctrlz_hub_v1_hub_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2554,7 +3223,7 @@ func (x *XrayConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use XrayConfig.ProtoReflect.Descriptor instead.
 func (*XrayConfig) Descriptor() ([]byte, []int) {
-	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{32}
+	return file_ctrlz_hub_v1_hub_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *XrayConfig) GetId() []byte {
@@ -2599,6 +3268,13 @@ func (x *XrayConfig) GetFragmentJson() []byte {
 	return nil
 }
 
+func (x *XrayConfig) GetAcceptedUnknown() []string {
+	if x != nil {
+		return x.AcceptedUnknown
+	}
+	return nil
+}
+
 var File_ctrlz_hub_v1_hub_proto protoreflect.FileDescriptor
 
 const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
@@ -2634,7 +3310,7 @@ const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
 	"\x11RenewCertResponse\x12\x19\n" +
 	"\bcert_der\x18\x01 \x01(\fR\acertDer\x12 \n" +
 	"\fca_chain_der\x18\x02 \x03(\fR\n" +
-	"caChainDer\"\xb9\x04\n" +
+	"caChainDer\"\x86\x05\n" +
 	"\vNodeMessage\x127\n" +
 	"\theartbeat\x18\x01 \x01(\v2\x17.ctrlz.hub.v1.HeartbeatH\x00R\theartbeat\x12>\n" +
 	"\fapply_result\x18\x02 \x01(\v2\x19.ctrlz.hub.v1.ApplyResultH\x00R\vapplyResult\x12M\n" +
@@ -2644,8 +3320,9 @@ const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
 	"\n" +
 	"learned_ip\x18\x06 \x01(\v2\x17.ctrlz.hub.v1.LearnedIPH\x00R\tlearnedIp\x12M\n" +
 	"\x11proof_observation\x18\a \x01(\v2\x1e.ctrlz.hub.v1.ProofObservationH\x00R\x10proofObservation\x12W\n" +
-	"\x15block_unblock_request\x18\b \x01(\v2!.ctrlz.hub.v1.BlockUnblockRequestH\x00R\x13blockUnblockRequestB\x06\n" +
-	"\x04body\"\xca\x04\n" +
+	"\x15block_unblock_request\x18\b \x01(\v2!.ctrlz.hub.v1.BlockUnblockRequestH\x00R\x13blockUnblockRequest\x12K\n" +
+	"\x11block_key_request\x18\t \x01(\v2\x1d.ctrlz.hub.v1.BlockKeyRequestH\x00R\x0fblockKeyRequestB\x06\n" +
+	"\x04body\"\xe8\x06\n" +
 	"\tHeartbeat\x12\x1b\n" +
 	"\tnode_time\x18\x01 \x01(\x03R\bnodeTime\x12\x1f\n" +
 	"\vapplied_seq\x18\x02 \x01(\x04R\n" +
@@ -2663,16 +3340,44 @@ const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
 	"\tpeer_view\x18\f \x01(\fR\bpeerView\x12.\n" +
 	"\x13node_config_version\x18\r \x01(\x04R\x11nodeConfigVersion\x12\x10\n" +
 	"\x03qps\x18\x0e \x01(\rR\x03qps\x12,\n" +
-	"\x12cache_hit_permille\x18\x0f \x01(\rR\x10cacheHitPermille\"\xc1\x01\n" +
+	"\x12cache_hit_permille\x18\x0f \x01(\rR\x10cacheHitPermille\x12@\n" +
+	"\fxray_configs\x18\x10 \x03(\v2\x1d.ctrlz.hub.v1.XrayConfigStateR\vxrayConfigs\x12.\n" +
+	"\x05proxy\x18\x11 \x01(\v2\x18.ctrlz.hub.v1.ProxyStateR\x05proxy\x12/\n" +
+	"\x06faults\x18\x12 \x03(\x0e2\x17.ctrlz.hub.v1.NodeFaultR\x06faults\x12A\n" +
+	"\fxray_upgrade\x18\x13 \x01(\v2\x1e.ctrlz.hub.v1.XrayUpgradeStateR\vxrayUpgrade\x126\n" +
+	"\n" +
+	"bind_error\x18\x14 \x01(\x0e2\x17.ctrlz.hub.v1.BindErrorR\tbindError\"\xd2\x01\n" +
+	"\x0fXrayConfigState\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\fR\x02id\x12'\n" +
+	"\x0ffragment_sha256\x18\x02 \x01(\fR\x0efragmentSha256\x127\n" +
+	"\x05state\x18\x03 \x01(\x0e2!.ctrlz.hub.v1.XrayConfigStateKindR\x05state\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\x12\x18\n" +
+	"\ahealthy\x18\x05 \x01(\bR\ahealthy\x12\x1d\n" +
+	"\n" +
+	"latency_ms\x18\x06 \x01(\rR\tlatencyMs\"U\n" +
+	"\n" +
+	"ProxyState\x12\x1c\n" +
+	"\tlistening\x18\x01 \x01(\bR\tlistening\x12)\n" +
+	"\x10open_connections\x18\x02 \x01(\rR\x0fopenConnections\"u\n" +
+	"\x10XrayUpgradeState\x12\x18\n" +
+	"\afetched\x18\x01 \x01(\tR\afetched\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x0e\n" +
+	"\x02ok\x18\x03 \x01(\bR\x02ok\x12\x1d\n" +
+	"\n" +
+	"failed_ids\x18\x04 \x03(\fR\tfailedIds\"\xc1\x01\n" +
 	"\bPeerView\x12,\n" +
 	"\x12pair_table_version\x18\x01 \x01(\x04R\x10pairTableVersion\x12-\n" +
 	"\x05peers\x18\x02 \x03(\v2\x17.ctrlz.hub.v1.PeerProbeR\x05peers\x12<\n" +
 	"\flast_refusal\x18\x03 \x01(\x0e2\x19.ctrlz.hub.v1.PushRefusalR\vlastRefusal\x12\x1a\n" +
-	"\brefusals\x18\x04 \x01(\x04R\brefusals\"N\n" +
+	"\brefusals\x18\x04 \x01(\x04R\brefusals\"\x8e\x01\n" +
 	"\tPeerProbe\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\fR\x06nodeId\x12\x14\n" +
 	"\x05known\x18\x02 \x01(\bR\x05known\x12\x12\n" +
-	"\x04down\x18\x03 \x01(\bR\x04down\"Y\n" +
+	"\x04down\x18\x03 \x01(\bR\x04down\x12\x1f\n" +
+	"\vproxy_known\x18\x04 \x01(\bR\n" +
+	"proxyKnown\x12\x1d\n" +
+	"\n" +
+	"proxy_down\x18\x05 \x01(\bR\tproxyDown\"Y\n" +
 	"\x0eUpstreamHealth\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\fR\x02id\x12\x18\n" +
 	"\ahealthy\x18\x02 \x01(\bR\ahealthy\x12\x1d\n" +
@@ -2712,14 +3417,19 @@ const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
 	"\bprotocol\x18\x03 \x01(\x0e2\x19.ctrlz.common.v1.ProtocolR\bprotocol\x12\x1f\n" +
 	"\vobserved_at\x18\x04 \x01(\x03R\n" +
 	"observedAt\x12\x19\n" +
-	"\brid_hash\x18\x05 \x01(\fR\aridHash\"\x7f\n" +
+	"\brid_hash\x18\x05 \x01(\fR\aridHash\"\x9e\x01\n" +
 	"\x13BlockUnblockRequest\x12\x1f\n" +
 	"\vendpoint_id\x18\x01 \x01(\fR\n" +
 	"endpointId\x12\x1d\n" +
 	"\n" +
 	"qname_wire\x18\x02 \x01(\fR\tqnameWire\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x0e\n" +
-	"\x02at\x18\x04 \x01(\x03R\x02at\"\x85\x04\n" +
+	"\x02at\x18\x04 \x01(\x03R\x02at\x12\x1d\n" +
+	"\n" +
+	"profile_id\x18\x05 \x01(\fR\tprofileId\"2\n" +
+	"\x0fBlockKeyRequest\x12\x1f\n" +
+	"\vendpoint_id\x18\x01 \x01(\fR\n" +
+	"endpointId\"\x85\x04\n" +
 	"\n" +
 	"HubMessage\x12;\n" +
 	"\vhead_notice\x18\x01 \x01(\v2\x18.ctrlz.hub.v1.HeadNoticeH\x00R\n" +
@@ -2746,14 +3456,17 @@ const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
 	"HeadNotice\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x121\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1b.ctrlz.common.v1.EntryClassR\x05class\x12\x18\n" +
-	"\arelease\x18\x03 \x01(\bR\arelease\"\x90\x01\n" +
+	"\arelease\x18\x03 \x01(\bR\arelease\"\x86\x02\n" +
 	"\n" +
 	"CertBundle\x12'\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x13.ctrlz.sign.v1.KindR\x04kind\x12\x1f\n" +
 	"\vwrapped_key\x18\x02 \x01(\fR\n" +
 	"wrappedKey\x12\x1b\n" +
 	"\tchain_pem\x18\x03 \x01(\fR\bchainPem\x12\x1b\n" +
-	"\tnot_after\x18\x04 \x01(\x03R\bnotAfter\"s\n" +
+	"\tnot_after\x18\x04 \x01(\x03R\bnotAfter\x12'\n" +
+	"\x03use\x18\x05 \x01(\x0e2\x15.ctrlz.hub.v1.CertUseR\x03use\x12!\n" +
+	"\faccount_hash\x18\x06 \x01(\fR\vaccountHash\x12(\n" +
+	"\x10block_root_epoch\x18\a \x01(\fR\x0eblockRootEpoch\"s\n" +
 	"\rAcmeChallenge\x12\x19\n" +
 	"\btoken_id\x18\x01 \x01(\fR\atokenId\x12\x12\n" +
 	"\x04fqdn\x18\x02 \x01(\tR\x04fqdn\x12\x14\n" +
@@ -2762,7 +3475,7 @@ const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
 	"expires_at\x18\x04 \x01(\x03R\texpiresAt\"\x1e\n" +
 	"\n" +
 	"ServerTime\x12\x10\n" +
-	"\x03now\x18\x01 \x01(\x03R\x03now\"\x88\x05\n" +
+	"\x03now\x18\x01 \x01(\x03R\x03now\"\xba\x06\n" +
 	"\n" +
 	"NodeConfig\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x04R\aversion\x12\x1e\n" +
@@ -2780,7 +3493,13 @@ const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
 	"\tproof_key\x18\f \x01(\fR\bproofKey\x12(\n" +
 	"\x10spool_public_key\x18\r \x01(\fR\x0espoolPublicKey\x12.\n" +
 	"\x13xray_schema_version\x18\x0e \x01(\tR\x11xraySchemaVersion\x12;\n" +
-	"\fxray_configs\x18\x0f \x03(\v2\x18.ctrlz.hub.v1.XrayConfigR\vxrayConfigs\"\xad\x02\n" +
+	"\fxray_configs\x18\x0f \x03(\v2\x18.ctrlz.hub.v1.XrayConfigR\vxrayConfigs\x129\n" +
+	"\vgrant_width\x18\x10 \x01(\x0e2\x18.ctrlz.hub.v1.GrantWidthR\n" +
+	"grantWidth\x12\x1d\n" +
+	"\n" +
+	"probe_urls\x18\x11 \x03(\tR\tprobeUrls\x12,\n" +
+	"\x12xray_fetch_version\x18\x12 \x01(\tR\x10xrayFetchVersion\x12(\n" +
+	"\x10block_root_epoch\x18\x13 \x01(\fR\x0eblockRootEpoch\"\xad\x02\n" +
 	"\bUpstream\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\fR\x02id\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.ctrlz.common.v1.UpstreamKindR\x04kind\x12\x18\n" +
@@ -2802,7 +3521,7 @@ const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
 	"\vmatch_value\x18\x03 \x01(\tR\n" +
 	"matchValue\x12\x14\n" +
 	"\x05group\x18\x04 \x01(\tR\x05group\x12#\n" +
-	"\rfinal_default\x18\x05 \x01(\bR\ffinalDefault\"\xa5\x01\n" +
+	"\rfinal_default\x18\x05 \x01(\bR\ffinalDefault\"\xd0\x01\n" +
 	"\n" +
 	"XrayConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\fR\x02id\x12\x1a\n" +
@@ -2810,13 +3529,33 @@ const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
 	"\x03tag\x18\x03 \x01(\tR\x03tag\x12\x1a\n" +
 	"\bpriority\x18\x04 \x01(\rR\bpriority\x12\x18\n" +
 	"\aenabled\x18\x05 \x01(\bR\aenabled\x12#\n" +
-	"\rfragment_json\x18\x06 \x01(\fR\ffragmentJson*Q\n" +
+	"\rfragment_json\x18\x06 \x01(\fR\ffragmentJson\x12)\n" +
+	"\x10accepted_unknown\x18\a \x03(\tR\x0facceptedUnknown*Q\n" +
 	"\x05Scope\x12\x15\n" +
 	"\x11SCOPE_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vSCOPE_ENTRY\x10\x01\x12\x0e\n" +
 	"\n" +
 	"SCOPE_BLOB\x10\x02\x12\x10\n" +
-	"\fSCOPE_RECORD\x10\x03*\xd3\x01\n" +
+	"\fSCOPE_RECORD\x10\x03*\xcf\x01\n" +
+	"\x13XrayConfigStateKind\x12&\n" +
+	"\"XRAY_CONFIG_STATE_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eXRAY_CONFIG_STATE_KIND_PENDING\x10\x01\x12\"\n" +
+	"\x1eXRAY_CONFIG_STATE_KIND_APPLIED\x10\x02\x12\"\n" +
+	"\x1eXRAY_CONFIG_STATE_KIND_REFUSED\x10\x03\x12$\n" +
+	" XRAY_CONFIG_STATE_KIND_LAST_GOOD\x10\x04*\xb5\x01\n" +
+	"\tNodeFault\x12\x1a\n" +
+	"\x16NODE_FAULT_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15NODE_FAULT_NFT_FAILED\x10\x01\x12\x18\n" +
+	"\x14NODE_FAULT_XRAY_DOWN\x10\x02\x12 \n" +
+	"\x1cNODE_FAULT_BLOCK_KEY_MISSING\x10\x03\x12\x1a\n" +
+	"\x16NODE_FAULT_GRANTS_FULL\x10\x04\x12\x19\n" +
+	"\x15NODE_FAULT_XRAY_STUCK\x10\x05*\x9d\x01\n" +
+	"\tBindError\x12\x1a\n" +
+	"\x16BIND_ERROR_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18BIND_ERROR_DNS_NOT_LOCAL\x10\x01\x12\x19\n" +
+	"\x15BIND_ERROR_DNS_FAILED\x10\x02\x12\x1e\n" +
+	"\x1aBIND_ERROR_PROXY_NOT_LOCAL\x10\x03\x12\x1b\n" +
+	"\x17BIND_ERROR_PROXY_FAILED\x10\x04*\xd3\x01\n" +
 	"\vPushRefusal\x12\x1c\n" +
 	"\x18PUSH_REFUSAL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16PUSH_REFUSAL_SIGNATURE\x10\x01\x12\x18\n" +
@@ -2824,7 +3563,16 @@ const file_ctrlz_hub_v1_hub_proto_rawDesc = "" +
 	"\x14PUSH_REFUSAL_EXPIRED\x10\x03\x12\x1e\n" +
 	"\x1aPUSH_REFUSAL_LOWER_VERSION\x10\x04\x12\x1e\n" +
 	"\x1aPUSH_REFUSAL_FLAG_CONFLICT\x10\x05\x12\x16\n" +
-	"\x12PUSH_REFUSAL_BUILD\x10\x062\xfa\x05\n" +
+	"\x12PUSH_REFUSAL_BUILD\x10\x06*D\n" +
+	"\aCertUse\x12\x18\n" +
+	"\x14CERT_USE_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bCERT_USE_BLOCK_INTERMEDIATE\x10\x01*s\n" +
+	"\n" +
+	"GrantWidth\x12\x1b\n" +
+	"\x17GRANT_WIDTH_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11GRANT_WIDTH_EXACT\x10\x01\x12\x18\n" +
+	"\x14GRANT_WIDTH_PREFIX24\x10\x02\x12\x17\n" +
+	"\x13GRANT_WIDTH_CARRIER\x10\x032\xfa\x05\n" +
 	"\aNodeHub\x12B\n" +
 	"\aControl\x12\x19.ctrlz.hub.v1.NodeMessage\x1a\x18.ctrlz.hub.v1.HubMessage(\x010\x01\x12N\n" +
 	"\fFetchEntries\x12!.ctrlz.hub.v1.FetchEntriesRequest\x1a\x19.ctrlz.hub.v1.StoredEntry0\x01\x12@\n" +
@@ -2850,114 +3598,132 @@ func file_ctrlz_hub_v1_hub_proto_rawDescGZIP() []byte {
 	return file_ctrlz_hub_v1_hub_proto_rawDescData
 }
 
-var file_ctrlz_hub_v1_hub_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_ctrlz_hub_v1_hub_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_ctrlz_hub_v1_hub_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_ctrlz_hub_v1_hub_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_ctrlz_hub_v1_hub_proto_goTypes = []any{
 	(Scope)(0),                  // 0: ctrlz.hub.v1.Scope
-	(PushRefusal)(0),            // 1: ctrlz.hub.v1.PushRefusal
-	(*FetchEntriesRequest)(nil), // 2: ctrlz.hub.v1.FetchEntriesRequest
-	(*StoredEntry)(nil),         // 3: ctrlz.hub.v1.StoredEntry
-	(*GetHeadRequest)(nil),      // 4: ctrlz.hub.v1.GetHeadRequest
-	(*FetchBlobRequest)(nil),    // 5: ctrlz.hub.v1.FetchBlobRequest
-	(*BlobChunk)(nil),           // 6: ctrlz.hub.v1.BlobChunk
-	(*GetSnapshotRequest)(nil),  // 7: ctrlz.hub.v1.GetSnapshotRequest
-	(*FetchBundleRequest)(nil),  // 8: ctrlz.hub.v1.FetchBundleRequest
-	(*RenewCertRequest)(nil),    // 9: ctrlz.hub.v1.RenewCertRequest
-	(*RenewCertResponse)(nil),   // 10: ctrlz.hub.v1.RenewCertResponse
-	(*NodeMessage)(nil),         // 11: ctrlz.hub.v1.NodeMessage
-	(*Heartbeat)(nil),           // 12: ctrlz.hub.v1.Heartbeat
-	(*PeerView)(nil),            // 13: ctrlz.hub.v1.PeerView
-	(*PeerProbe)(nil),           // 14: ctrlz.hub.v1.PeerProbe
-	(*UpstreamHealth)(nil),      // 15: ctrlz.hub.v1.UpstreamHealth
-	(*LocationHealth)(nil),      // 16: ctrlz.hub.v1.LocationHealth
-	(*ApplyResult)(nil),         // 17: ctrlz.hub.v1.ApplyResult
-	(*QuarantineReport)(nil),    // 18: ctrlz.hub.v1.QuarantineReport
-	(*RevocationAck)(nil),       // 19: ctrlz.hub.v1.RevocationAck
-	(*AcmeAck)(nil),             // 20: ctrlz.hub.v1.AcmeAck
-	(*LearnedIP)(nil),           // 21: ctrlz.hub.v1.LearnedIP
-	(*ProofObservation)(nil),    // 22: ctrlz.hub.v1.ProofObservation
-	(*BlockUnblockRequest)(nil), // 23: ctrlz.hub.v1.BlockUnblockRequest
-	(*HubMessage)(nil),          // 24: ctrlz.hub.v1.HubMessage
-	(*FreeDnsOff)(nil),          // 25: ctrlz.hub.v1.FreeDnsOff
-	(*HeadNotice)(nil),          // 26: ctrlz.hub.v1.HeadNotice
-	(*CertBundle)(nil),          // 27: ctrlz.hub.v1.CertBundle
-	(*AcmeChallenge)(nil),       // 28: ctrlz.hub.v1.AcmeChallenge
-	(*ServerTime)(nil),          // 29: ctrlz.hub.v1.ServerTime
-	(*NodeConfig)(nil),          // 30: ctrlz.hub.v1.NodeConfig
-	(*Upstream)(nil),            // 31: ctrlz.hub.v1.Upstream
-	(*UpstreamGroup)(nil),       // 32: ctrlz.hub.v1.UpstreamGroup
-	(*ResolverRule)(nil),        // 33: ctrlz.hub.v1.ResolverRule
-	(*XrayConfig)(nil),          // 34: ctrlz.hub.v1.XrayConfig
-	(v1.Kind)(0),                // 35: ctrlz.sign.v1.Kind
-	(v11.Protocol)(0),           // 36: ctrlz.common.v1.Protocol
-	(*v12.Revocation)(nil),      // 37: ctrlz.policy.v1.Revocation
-	(*v1.Envelope)(nil),         // 38: ctrlz.sign.v1.Envelope
-	(v11.EntryClass)(0),         // 39: ctrlz.common.v1.EntryClass
-	(v11.ResolveMode)(0),        // 40: ctrlz.common.v1.ResolveMode
-	(v11.UpstreamKind)(0),       // 41: ctrlz.common.v1.UpstreamKind
-	(*v13.LogBatch)(nil),        // 42: ctrlz.telemetry.v1.LogBatch
-	(*v13.CountersBatch)(nil),   // 43: ctrlz.telemetry.v1.CountersBatch
-	(*v13.ActivityBatch)(nil),   // 44: ctrlz.telemetry.v1.ActivityBatch
-	(*v13.Ack)(nil),             // 45: ctrlz.telemetry.v1.Ack
+	(XrayConfigStateKind)(0),    // 1: ctrlz.hub.v1.XrayConfigStateKind
+	(NodeFault)(0),              // 2: ctrlz.hub.v1.NodeFault
+	(BindError)(0),              // 3: ctrlz.hub.v1.BindError
+	(PushRefusal)(0),            // 4: ctrlz.hub.v1.PushRefusal
+	(CertUse)(0),                // 5: ctrlz.hub.v1.CertUse
+	(GrantWidth)(0),             // 6: ctrlz.hub.v1.GrantWidth
+	(*FetchEntriesRequest)(nil), // 7: ctrlz.hub.v1.FetchEntriesRequest
+	(*StoredEntry)(nil),         // 8: ctrlz.hub.v1.StoredEntry
+	(*GetHeadRequest)(nil),      // 9: ctrlz.hub.v1.GetHeadRequest
+	(*FetchBlobRequest)(nil),    // 10: ctrlz.hub.v1.FetchBlobRequest
+	(*BlobChunk)(nil),           // 11: ctrlz.hub.v1.BlobChunk
+	(*GetSnapshotRequest)(nil),  // 12: ctrlz.hub.v1.GetSnapshotRequest
+	(*FetchBundleRequest)(nil),  // 13: ctrlz.hub.v1.FetchBundleRequest
+	(*RenewCertRequest)(nil),    // 14: ctrlz.hub.v1.RenewCertRequest
+	(*RenewCertResponse)(nil),   // 15: ctrlz.hub.v1.RenewCertResponse
+	(*NodeMessage)(nil),         // 16: ctrlz.hub.v1.NodeMessage
+	(*Heartbeat)(nil),           // 17: ctrlz.hub.v1.Heartbeat
+	(*XrayConfigState)(nil),     // 18: ctrlz.hub.v1.XrayConfigState
+	(*ProxyState)(nil),          // 19: ctrlz.hub.v1.ProxyState
+	(*XrayUpgradeState)(nil),    // 20: ctrlz.hub.v1.XrayUpgradeState
+	(*PeerView)(nil),            // 21: ctrlz.hub.v1.PeerView
+	(*PeerProbe)(nil),           // 22: ctrlz.hub.v1.PeerProbe
+	(*UpstreamHealth)(nil),      // 23: ctrlz.hub.v1.UpstreamHealth
+	(*LocationHealth)(nil),      // 24: ctrlz.hub.v1.LocationHealth
+	(*ApplyResult)(nil),         // 25: ctrlz.hub.v1.ApplyResult
+	(*QuarantineReport)(nil),    // 26: ctrlz.hub.v1.QuarantineReport
+	(*RevocationAck)(nil),       // 27: ctrlz.hub.v1.RevocationAck
+	(*AcmeAck)(nil),             // 28: ctrlz.hub.v1.AcmeAck
+	(*LearnedIP)(nil),           // 29: ctrlz.hub.v1.LearnedIP
+	(*ProofObservation)(nil),    // 30: ctrlz.hub.v1.ProofObservation
+	(*BlockUnblockRequest)(nil), // 31: ctrlz.hub.v1.BlockUnblockRequest
+	(*BlockKeyRequest)(nil),     // 32: ctrlz.hub.v1.BlockKeyRequest
+	(*HubMessage)(nil),          // 33: ctrlz.hub.v1.HubMessage
+	(*FreeDnsOff)(nil),          // 34: ctrlz.hub.v1.FreeDnsOff
+	(*HeadNotice)(nil),          // 35: ctrlz.hub.v1.HeadNotice
+	(*CertBundle)(nil),          // 36: ctrlz.hub.v1.CertBundle
+	(*AcmeChallenge)(nil),       // 37: ctrlz.hub.v1.AcmeChallenge
+	(*ServerTime)(nil),          // 38: ctrlz.hub.v1.ServerTime
+	(*NodeConfig)(nil),          // 39: ctrlz.hub.v1.NodeConfig
+	(*Upstream)(nil),            // 40: ctrlz.hub.v1.Upstream
+	(*UpstreamGroup)(nil),       // 41: ctrlz.hub.v1.UpstreamGroup
+	(*ResolverRule)(nil),        // 42: ctrlz.hub.v1.ResolverRule
+	(*XrayConfig)(nil),          // 43: ctrlz.hub.v1.XrayConfig
+	(v1.Kind)(0),                // 44: ctrlz.sign.v1.Kind
+	(v11.Protocol)(0),           // 45: ctrlz.common.v1.Protocol
+	(*v12.Revocation)(nil),      // 46: ctrlz.policy.v1.Revocation
+	(*v1.Envelope)(nil),         // 47: ctrlz.sign.v1.Envelope
+	(v11.EntryClass)(0),         // 48: ctrlz.common.v1.EntryClass
+	(v11.ResolveMode)(0),        // 49: ctrlz.common.v1.ResolveMode
+	(v11.UpstreamKind)(0),       // 50: ctrlz.common.v1.UpstreamKind
+	(*v13.LogBatch)(nil),        // 51: ctrlz.telemetry.v1.LogBatch
+	(*v13.CountersBatch)(nil),   // 52: ctrlz.telemetry.v1.CountersBatch
+	(*v13.ActivityBatch)(nil),   // 53: ctrlz.telemetry.v1.ActivityBatch
+	(*v13.Ack)(nil),             // 54: ctrlz.telemetry.v1.Ack
 }
 var file_ctrlz_hub_v1_hub_proto_depIdxs = []int32{
-	35, // 0: ctrlz.hub.v1.FetchBundleRequest.kind:type_name -> ctrlz.sign.v1.Kind
-	12, // 1: ctrlz.hub.v1.NodeMessage.heartbeat:type_name -> ctrlz.hub.v1.Heartbeat
-	17, // 2: ctrlz.hub.v1.NodeMessage.apply_result:type_name -> ctrlz.hub.v1.ApplyResult
-	18, // 3: ctrlz.hub.v1.NodeMessage.quarantine_report:type_name -> ctrlz.hub.v1.QuarantineReport
-	19, // 4: ctrlz.hub.v1.NodeMessage.revocation_ack:type_name -> ctrlz.hub.v1.RevocationAck
-	20, // 5: ctrlz.hub.v1.NodeMessage.acme_ack:type_name -> ctrlz.hub.v1.AcmeAck
-	21, // 6: ctrlz.hub.v1.NodeMessage.learned_ip:type_name -> ctrlz.hub.v1.LearnedIP
-	22, // 7: ctrlz.hub.v1.NodeMessage.proof_observation:type_name -> ctrlz.hub.v1.ProofObservation
-	23, // 8: ctrlz.hub.v1.NodeMessage.block_unblock_request:type_name -> ctrlz.hub.v1.BlockUnblockRequest
-	15, // 9: ctrlz.hub.v1.Heartbeat.upstreams:type_name -> ctrlz.hub.v1.UpstreamHealth
-	16, // 10: ctrlz.hub.v1.Heartbeat.locations:type_name -> ctrlz.hub.v1.LocationHealth
-	14, // 11: ctrlz.hub.v1.PeerView.peers:type_name -> ctrlz.hub.v1.PeerProbe
-	1,  // 12: ctrlz.hub.v1.PeerView.last_refusal:type_name -> ctrlz.hub.v1.PushRefusal
-	0,  // 13: ctrlz.hub.v1.QuarantineReport.scope:type_name -> ctrlz.hub.v1.Scope
-	36, // 14: ctrlz.hub.v1.LearnedIP.protocol:type_name -> ctrlz.common.v1.Protocol
-	36, // 15: ctrlz.hub.v1.ProofObservation.protocol:type_name -> ctrlz.common.v1.Protocol
-	26, // 16: ctrlz.hub.v1.HubMessage.head_notice:type_name -> ctrlz.hub.v1.HeadNotice
-	37, // 17: ctrlz.hub.v1.HubMessage.revocation:type_name -> ctrlz.policy.v1.Revocation
-	30, // 18: ctrlz.hub.v1.HubMessage.node_config:type_name -> ctrlz.hub.v1.NodeConfig
-	27, // 19: ctrlz.hub.v1.HubMessage.cert_bundle:type_name -> ctrlz.hub.v1.CertBundle
-	28, // 20: ctrlz.hub.v1.HubMessage.acme_challenge:type_name -> ctrlz.hub.v1.AcmeChallenge
-	29, // 21: ctrlz.hub.v1.HubMessage.server_time:type_name -> ctrlz.hub.v1.ServerTime
-	38, // 22: ctrlz.hub.v1.HubMessage.pair_table:type_name -> ctrlz.sign.v1.Envelope
-	25, // 23: ctrlz.hub.v1.HubMessage.free_dns_off:type_name -> ctrlz.hub.v1.FreeDnsOff
-	39, // 24: ctrlz.hub.v1.HeadNotice.class:type_name -> ctrlz.common.v1.EntryClass
-	35, // 25: ctrlz.hub.v1.CertBundle.kind:type_name -> ctrlz.sign.v1.Kind
-	40, // 26: ctrlz.hub.v1.NodeConfig.mode:type_name -> ctrlz.common.v1.ResolveMode
-	31, // 27: ctrlz.hub.v1.NodeConfig.upstreams:type_name -> ctrlz.hub.v1.Upstream
-	32, // 28: ctrlz.hub.v1.NodeConfig.groups:type_name -> ctrlz.hub.v1.UpstreamGroup
-	33, // 29: ctrlz.hub.v1.NodeConfig.rules:type_name -> ctrlz.hub.v1.ResolverRule
-	34, // 30: ctrlz.hub.v1.NodeConfig.xray_configs:type_name -> ctrlz.hub.v1.XrayConfig
-	41, // 31: ctrlz.hub.v1.Upstream.kind:type_name -> ctrlz.common.v1.UpstreamKind
-	11, // 32: ctrlz.hub.v1.NodeHub.Control:input_type -> ctrlz.hub.v1.NodeMessage
-	2,  // 33: ctrlz.hub.v1.NodeHub.FetchEntries:input_type -> ctrlz.hub.v1.FetchEntriesRequest
-	4,  // 34: ctrlz.hub.v1.NodeHub.GetHead:input_type -> ctrlz.hub.v1.GetHeadRequest
-	5,  // 35: ctrlz.hub.v1.NodeHub.FetchBlob:input_type -> ctrlz.hub.v1.FetchBlobRequest
-	7,  // 36: ctrlz.hub.v1.NodeHub.GetSnapshot:input_type -> ctrlz.hub.v1.GetSnapshotRequest
-	8,  // 37: ctrlz.hub.v1.NodeHub.FetchBundle:input_type -> ctrlz.hub.v1.FetchBundleRequest
-	9,  // 38: ctrlz.hub.v1.NodeHub.RenewCert:input_type -> ctrlz.hub.v1.RenewCertRequest
-	42, // 39: ctrlz.hub.v1.NodeHub.UploadLogs:input_type -> ctrlz.telemetry.v1.LogBatch
-	43, // 40: ctrlz.hub.v1.NodeHub.UploadCounters:input_type -> ctrlz.telemetry.v1.CountersBatch
-	44, // 41: ctrlz.hub.v1.NodeHub.ReportActivity:input_type -> ctrlz.telemetry.v1.ActivityBatch
-	24, // 42: ctrlz.hub.v1.NodeHub.Control:output_type -> ctrlz.hub.v1.HubMessage
-	3,  // 43: ctrlz.hub.v1.NodeHub.FetchEntries:output_type -> ctrlz.hub.v1.StoredEntry
-	38, // 44: ctrlz.hub.v1.NodeHub.GetHead:output_type -> ctrlz.sign.v1.Envelope
-	6,  // 45: ctrlz.hub.v1.NodeHub.FetchBlob:output_type -> ctrlz.hub.v1.BlobChunk
-	6,  // 46: ctrlz.hub.v1.NodeHub.GetSnapshot:output_type -> ctrlz.hub.v1.BlobChunk
-	6,  // 47: ctrlz.hub.v1.NodeHub.FetchBundle:output_type -> ctrlz.hub.v1.BlobChunk
-	10, // 48: ctrlz.hub.v1.NodeHub.RenewCert:output_type -> ctrlz.hub.v1.RenewCertResponse
-	45, // 49: ctrlz.hub.v1.NodeHub.UploadLogs:output_type -> ctrlz.telemetry.v1.Ack
-	45, // 50: ctrlz.hub.v1.NodeHub.UploadCounters:output_type -> ctrlz.telemetry.v1.Ack
-	45, // 51: ctrlz.hub.v1.NodeHub.ReportActivity:output_type -> ctrlz.telemetry.v1.Ack
-	42, // [42:52] is the sub-list for method output_type
-	32, // [32:42] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	44, // 0: ctrlz.hub.v1.FetchBundleRequest.kind:type_name -> ctrlz.sign.v1.Kind
+	17, // 1: ctrlz.hub.v1.NodeMessage.heartbeat:type_name -> ctrlz.hub.v1.Heartbeat
+	25, // 2: ctrlz.hub.v1.NodeMessage.apply_result:type_name -> ctrlz.hub.v1.ApplyResult
+	26, // 3: ctrlz.hub.v1.NodeMessage.quarantine_report:type_name -> ctrlz.hub.v1.QuarantineReport
+	27, // 4: ctrlz.hub.v1.NodeMessage.revocation_ack:type_name -> ctrlz.hub.v1.RevocationAck
+	28, // 5: ctrlz.hub.v1.NodeMessage.acme_ack:type_name -> ctrlz.hub.v1.AcmeAck
+	29, // 6: ctrlz.hub.v1.NodeMessage.learned_ip:type_name -> ctrlz.hub.v1.LearnedIP
+	30, // 7: ctrlz.hub.v1.NodeMessage.proof_observation:type_name -> ctrlz.hub.v1.ProofObservation
+	31, // 8: ctrlz.hub.v1.NodeMessage.block_unblock_request:type_name -> ctrlz.hub.v1.BlockUnblockRequest
+	32, // 9: ctrlz.hub.v1.NodeMessage.block_key_request:type_name -> ctrlz.hub.v1.BlockKeyRequest
+	23, // 10: ctrlz.hub.v1.Heartbeat.upstreams:type_name -> ctrlz.hub.v1.UpstreamHealth
+	24, // 11: ctrlz.hub.v1.Heartbeat.locations:type_name -> ctrlz.hub.v1.LocationHealth
+	18, // 12: ctrlz.hub.v1.Heartbeat.xray_configs:type_name -> ctrlz.hub.v1.XrayConfigState
+	19, // 13: ctrlz.hub.v1.Heartbeat.proxy:type_name -> ctrlz.hub.v1.ProxyState
+	2,  // 14: ctrlz.hub.v1.Heartbeat.faults:type_name -> ctrlz.hub.v1.NodeFault
+	20, // 15: ctrlz.hub.v1.Heartbeat.xray_upgrade:type_name -> ctrlz.hub.v1.XrayUpgradeState
+	3,  // 16: ctrlz.hub.v1.Heartbeat.bind_error:type_name -> ctrlz.hub.v1.BindError
+	1,  // 17: ctrlz.hub.v1.XrayConfigState.state:type_name -> ctrlz.hub.v1.XrayConfigStateKind
+	22, // 18: ctrlz.hub.v1.PeerView.peers:type_name -> ctrlz.hub.v1.PeerProbe
+	4,  // 19: ctrlz.hub.v1.PeerView.last_refusal:type_name -> ctrlz.hub.v1.PushRefusal
+	0,  // 20: ctrlz.hub.v1.QuarantineReport.scope:type_name -> ctrlz.hub.v1.Scope
+	45, // 21: ctrlz.hub.v1.LearnedIP.protocol:type_name -> ctrlz.common.v1.Protocol
+	45, // 22: ctrlz.hub.v1.ProofObservation.protocol:type_name -> ctrlz.common.v1.Protocol
+	35, // 23: ctrlz.hub.v1.HubMessage.head_notice:type_name -> ctrlz.hub.v1.HeadNotice
+	46, // 24: ctrlz.hub.v1.HubMessage.revocation:type_name -> ctrlz.policy.v1.Revocation
+	39, // 25: ctrlz.hub.v1.HubMessage.node_config:type_name -> ctrlz.hub.v1.NodeConfig
+	36, // 26: ctrlz.hub.v1.HubMessage.cert_bundle:type_name -> ctrlz.hub.v1.CertBundle
+	37, // 27: ctrlz.hub.v1.HubMessage.acme_challenge:type_name -> ctrlz.hub.v1.AcmeChallenge
+	38, // 28: ctrlz.hub.v1.HubMessage.server_time:type_name -> ctrlz.hub.v1.ServerTime
+	47, // 29: ctrlz.hub.v1.HubMessage.pair_table:type_name -> ctrlz.sign.v1.Envelope
+	34, // 30: ctrlz.hub.v1.HubMessage.free_dns_off:type_name -> ctrlz.hub.v1.FreeDnsOff
+	48, // 31: ctrlz.hub.v1.HeadNotice.class:type_name -> ctrlz.common.v1.EntryClass
+	44, // 32: ctrlz.hub.v1.CertBundle.kind:type_name -> ctrlz.sign.v1.Kind
+	5,  // 33: ctrlz.hub.v1.CertBundle.use:type_name -> ctrlz.hub.v1.CertUse
+	49, // 34: ctrlz.hub.v1.NodeConfig.mode:type_name -> ctrlz.common.v1.ResolveMode
+	40, // 35: ctrlz.hub.v1.NodeConfig.upstreams:type_name -> ctrlz.hub.v1.Upstream
+	41, // 36: ctrlz.hub.v1.NodeConfig.groups:type_name -> ctrlz.hub.v1.UpstreamGroup
+	42, // 37: ctrlz.hub.v1.NodeConfig.rules:type_name -> ctrlz.hub.v1.ResolverRule
+	43, // 38: ctrlz.hub.v1.NodeConfig.xray_configs:type_name -> ctrlz.hub.v1.XrayConfig
+	6,  // 39: ctrlz.hub.v1.NodeConfig.grant_width:type_name -> ctrlz.hub.v1.GrantWidth
+	50, // 40: ctrlz.hub.v1.Upstream.kind:type_name -> ctrlz.common.v1.UpstreamKind
+	16, // 41: ctrlz.hub.v1.NodeHub.Control:input_type -> ctrlz.hub.v1.NodeMessage
+	7,  // 42: ctrlz.hub.v1.NodeHub.FetchEntries:input_type -> ctrlz.hub.v1.FetchEntriesRequest
+	9,  // 43: ctrlz.hub.v1.NodeHub.GetHead:input_type -> ctrlz.hub.v1.GetHeadRequest
+	10, // 44: ctrlz.hub.v1.NodeHub.FetchBlob:input_type -> ctrlz.hub.v1.FetchBlobRequest
+	12, // 45: ctrlz.hub.v1.NodeHub.GetSnapshot:input_type -> ctrlz.hub.v1.GetSnapshotRequest
+	13, // 46: ctrlz.hub.v1.NodeHub.FetchBundle:input_type -> ctrlz.hub.v1.FetchBundleRequest
+	14, // 47: ctrlz.hub.v1.NodeHub.RenewCert:input_type -> ctrlz.hub.v1.RenewCertRequest
+	51, // 48: ctrlz.hub.v1.NodeHub.UploadLogs:input_type -> ctrlz.telemetry.v1.LogBatch
+	52, // 49: ctrlz.hub.v1.NodeHub.UploadCounters:input_type -> ctrlz.telemetry.v1.CountersBatch
+	53, // 50: ctrlz.hub.v1.NodeHub.ReportActivity:input_type -> ctrlz.telemetry.v1.ActivityBatch
+	33, // 51: ctrlz.hub.v1.NodeHub.Control:output_type -> ctrlz.hub.v1.HubMessage
+	8,  // 52: ctrlz.hub.v1.NodeHub.FetchEntries:output_type -> ctrlz.hub.v1.StoredEntry
+	47, // 53: ctrlz.hub.v1.NodeHub.GetHead:output_type -> ctrlz.sign.v1.Envelope
+	11, // 54: ctrlz.hub.v1.NodeHub.FetchBlob:output_type -> ctrlz.hub.v1.BlobChunk
+	11, // 55: ctrlz.hub.v1.NodeHub.GetSnapshot:output_type -> ctrlz.hub.v1.BlobChunk
+	11, // 56: ctrlz.hub.v1.NodeHub.FetchBundle:output_type -> ctrlz.hub.v1.BlobChunk
+	15, // 57: ctrlz.hub.v1.NodeHub.RenewCert:output_type -> ctrlz.hub.v1.RenewCertResponse
+	54, // 58: ctrlz.hub.v1.NodeHub.UploadLogs:output_type -> ctrlz.telemetry.v1.Ack
+	54, // 59: ctrlz.hub.v1.NodeHub.UploadCounters:output_type -> ctrlz.telemetry.v1.Ack
+	54, // 60: ctrlz.hub.v1.NodeHub.ReportActivity:output_type -> ctrlz.telemetry.v1.Ack
+	51, // [51:61] is the sub-list for method output_type
+	41, // [41:51] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_ctrlz_hub_v1_hub_proto_init() }
@@ -2974,8 +3740,9 @@ func file_ctrlz_hub_v1_hub_proto_init() {
 		(*NodeMessage_LearnedIp)(nil),
 		(*NodeMessage_ProofObservation)(nil),
 		(*NodeMessage_BlockUnblockRequest)(nil),
+		(*NodeMessage_BlockKeyRequest)(nil),
 	}
-	file_ctrlz_hub_v1_hub_proto_msgTypes[22].OneofWrappers = []any{
+	file_ctrlz_hub_v1_hub_proto_msgTypes[26].OneofWrappers = []any{
 		(*HubMessage_HeadNotice)(nil),
 		(*HubMessage_Revocation)(nil),
 		(*HubMessage_NodeConfig)(nil),
@@ -2990,8 +3757,8 @@ func file_ctrlz_hub_v1_hub_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ctrlz_hub_v1_hub_proto_rawDesc), len(file_ctrlz_hub_v1_hub_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   33,
+			NumEnums:      7,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

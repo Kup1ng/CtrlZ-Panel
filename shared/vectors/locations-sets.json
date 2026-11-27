@@ -42,6 +42,16 @@
     {"id": "locset-020", "why": "The effective selection is the intersection of the sets", "op": "loc_selection", "args": ["DE:Frankfurt,NL:Amsterdam", "NL:Amsterdam,US"],
      "expect": "NL:Amsterdam"},
     {"id": "locset-021", "why": "An empty effective selection disables Redirect with the shared-destination message", "op": "loc_selection", "args": ["DE:Frankfurt", "US"],
-     "expect": ""}
+     "expect": ""},
+    {"id": "locpub-001", "why": "Hysteresis of Auto (p4b 6.4): Nothing is published yet: the first smoothed value is published at once", "op": "loc_publish", "args": ["0", "50"], "expect": "true"},
+    {"id": "locpub-002", "why": "Hysteresis of Auto (p4b 6.4): An equal value is not published", "op": "loc_publish", "args": ["100", "100"], "expect": "false"},
+    {"id": "locpub-003", "why": "Hysteresis of Auto (p4b 6.4): 19 percent is not more than 20 percent", "op": "loc_publish", "args": ["100", "119"], "expect": "false"},
+    {"id": "locpub-004", "why": "Hysteresis of Auto (p4b 6.4): 21 ms and 21 percent: both limits are passed", "op": "loc_publish", "args": ["100", "121"], "expect": "true"},
+    {"id": "locpub-005", "why": "Hysteresis of Auto (p4b 6.4): Exactly 20 percent is not more than 20 percent", "op": "loc_publish", "args": ["100", "80"], "expect": "false"},
+    {"id": "locpub-006", "why": "Hysteresis of Auto (p4b 6.4): A fall of 21 percent and 21 ms is published too", "op": "loc_publish", "args": ["100", "79"], "expect": "true"},
+    {"id": "locpub-007", "why": "Hysteresis of Auto (p4b 6.4): 8 ms is 27 percent of 30 but not more than 10 ms", "op": "loc_publish", "args": ["30", "38"], "expect": "false"},
+    {"id": "locpub-008", "why": "Hysteresis of Auto (p4b 6.4): 11 ms and 36 percent", "op": "loc_publish", "args": ["30", "41"], "expect": "true"},
+    {"id": "locpub-009", "why": "Hysteresis of Auto (p4b 6.4): 199 ms is under 20 percent of 1000", "op": "loc_publish", "args": ["1000", "1199"], "expect": "false"},
+    {"id": "locpub-010", "why": "Hysteresis of Auto (p4b 6.4): 201 ms is over 20 percent of 1000", "op": "loc_publish", "args": ["1000", "1201"], "expect": "true"}
   ]
 }

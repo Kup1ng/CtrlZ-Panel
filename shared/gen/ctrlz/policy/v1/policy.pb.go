@@ -522,8 +522,13 @@ type EndpointRecord struct {
 	Authorized           []*v1.Prefix           `protobuf:"bytes,15,rep,name=authorized,proto3" json:"authorized,omitempty"`
 	ClientCap            uint32                 `protobuf:"varint,16,opt,name=client_cap,json=clientCap,proto3" json:"client_cap,omitempty"`
 	GrantCap             uint32                 `protobuf:"varint,17,opt,name=grant_cap,json=grantCap,proto3" json:"grant_cap,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// The first 16 bytes of the SHA-256 of "ctrlz-account-v1\x00" and the 16 bytes of
+	// the tenant's id (identity.AccountHash), or empty. The record still holds no
+	// tenant_id (R18); this is a one-way label that tells which Endpoints share an
+	// account. A node takes an empty one as the Endpoint's own id (P4b 3.4).
+	AccountHash   []byte `protobuf:"bytes,18,opt,name=account_hash,json=accountHash,proto3" json:"account_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EndpointRecord) Reset() {
@@ -673,6 +678,13 @@ func (x *EndpointRecord) GetGrantCap() uint32 {
 		return x.GrantCap
 	}
 	return 0
+}
+
+func (x *EndpointRecord) GetAccountHash() []byte {
+	if x != nil {
+		return x.AccountHash
+	}
+	return nil
 }
 
 // merged_options is one 96-byte CZPB OPTS record, precomputed by the compiler
@@ -1549,12 +1561,18 @@ func (x *LocationEntry) GetLabel() string {
 }
 
 type BlockPage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	LogoHash      []byte                 `protobuf:"bytes,3,opt,name=logo_hash,json=logoHash,proto3" json:"logo_hash,omitempty"`
-	UnblockMode   UnblockMode            `protobuf:"varint,4,opt,name=unblock_mode,json=unblockMode,proto3,enum=ctrlz.policy.v1.UnblockMode" json:"unblock_mode,omitempty"`
-	UnblockUrl    string                 `protobuf:"bytes,5,opt,name=unblock_url,json=unblockUrl,proto3" json:"unblock_url,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Title       string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	Message     string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	LogoHash    []byte                 `protobuf:"bytes,3,opt,name=logo_hash,json=logoHash,proto3" json:"logo_hash,omitempty"`
+	UnblockMode UnblockMode            `protobuf:"varint,4,opt,name=unblock_mode,json=unblockMode,proto3,enum=ctrlz.policy.v1.UnblockMode" json:"unblock_mode,omitempty"`
+	UnblockUrl  string                 `protobuf:"bytes,5,opt,name=unblock_url,json=unblockUrl,proto3" json:"unblock_url,omitempty"`
+	// PNG bytes of the logo, at most 256 KiB; logo_hash is their SHA-256. Both or
+	// neither (P4b 3.4). The node serves the page from this blob alone.
+	Logo []byte `protobuf:"bytes,6,opt,name=logo,proto3" json:"logo,omitempty"`
+	// The profile the page belongs to (16 bytes). The node knows no profile id of its
+	// own and an unblock request needs one (P4b 3.4).
+	ProfileId     []byte `protobuf:"bytes,7,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1622,6 +1640,20 @@ func (x *BlockPage) GetUnblockUrl() string {
 		return x.UnblockUrl
 	}
 	return ""
+}
+
+func (x *BlockPage) GetLogo() []byte {
+	if x != nil {
+		return x.Logo
+	}
+	return nil
+}
+
+func (x *BlockPage) GetProfileId() []byte {
+	if x != nil {
+		return x.ProfileId
+	}
+	return nil
 }
 
 type Revocation struct {
@@ -1732,7 +1764,7 @@ const file_ctrlz_policy_v1_policy_proto_rawDesc = "" +
 	"\aBlobRef\x12\x12\n" +
 	"\x04hash\x18\x01 \x01(\fR\x04hash\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x04R\x04size\x12-\n" +
-	"\x04kind\x18\x03 \x01(\x0e2\x19.ctrlz.policy.v1.BlobKindR\x04kind\"\xf7\x05\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x19.ctrlz.policy.v1.BlobKindR\x04kind\"\x9a\x06\n" +
 	"\x0eEndpointRecord\x12\x1f\n" +
 	"\vendpoint_id\x18\x01 \x01(\fR\n" +
 	"endpointId\x12\x19\n" +
@@ -1757,7 +1789,8 @@ const file_ctrlz_policy_v1_policy_proto_rawDesc = "" +
 	"authorized\x12\x1d\n" +
 	"\n" +
 	"client_cap\x18\x10 \x01(\rR\tclientCap\x12\x1b\n" +
-	"\tgrant_cap\x18\x11 \x01(\rR\bgrantCap\"\xd9\x01\n" +
+	"\tgrant_cap\x18\x11 \x01(\rR\bgrantCap\x12!\n" +
+	"\faccount_hash\x18\x12 \x01(\fR\vaccountHash\"\xd9\x01\n" +
 	"\vStackRecord\x12#\n" +
 	"\rprofile1_hash\x18\x01 \x01(\fR\fprofile1Hash\x12#\n" +
 	"\rprofile2_hash\x18\x02 \x01(\fR\fprofile2Hash\x12%\n" +
@@ -1828,14 +1861,17 @@ const file_ctrlz_policy_v1_policy_proto_rawDesc = "" +
 	"\awire_id\x18\x01 \x01(\rR\x06wireId\x12\x18\n" +
 	"\acountry\x18\x02 \x01(\tR\acountry\x12\x12\n" +
 	"\x04city\x18\x03 \x01(\tR\x04city\x12\x14\n" +
-	"\x05label\x18\x04 \x01(\tR\x05label\"\xba\x01\n" +
+	"\x05label\x18\x04 \x01(\tR\x05label\"\xed\x01\n" +
 	"\tBlockPage\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1b\n" +
 	"\tlogo_hash\x18\x03 \x01(\fR\blogoHash\x12?\n" +
 	"\funblock_mode\x18\x04 \x01(\x0e2\x1c.ctrlz.policy.v1.UnblockModeR\vunblockMode\x12\x1f\n" +
 	"\vunblock_url\x18\x05 \x01(\tR\n" +
-	"unblockUrl\"\xa8\x01\n" +
+	"unblockUrl\x12\x12\n" +
+	"\x04logo\x18\x06 \x01(\fR\x04logo\x12\x1d\n" +
+	"\n" +
+	"profile_id\x18\a \x01(\fR\tprofileId\"\xa8\x01\n" +
 	"\n" +
 	"Revocation\x12\x17\n" +
 	"\arev_seq\x18\x01 \x01(\x04R\x06revSeq\x123\n" +

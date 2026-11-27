@@ -369,3 +369,39 @@ func TestWorstCaseFitsTheStoredBound(t *testing.T) {
 	}
 	t.Logf("worst case %d of %d bytes", len(b), MaxParamsBytes)
 }
+
+func TestIdentifyBlockRoot(t *testing.T) {
+	h := []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0xff}
+	id, err := IdentifyBlockRoot(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.PayloadIdentifier != "com.ctrlz.block.000102030405060708090a0b0c0d0eff" || id.RootIdentifier != id.PayloadIdentifier+".root" {
+		t.Errorf("identifiers %+v", id)
+	}
+	if id.PayloadUUID != uuidV5(namespace(), id.PayloadIdentifier) || id.RootUUID != uuidV5(namespace(), id.RootIdentifier) || id.PayloadUUID == id.RootUUID {
+		t.Errorf("uuids %+v", id)
+	}
+	again, _ := IdentifyBlockRoot(h)
+	if again != id {
+		t.Error("not stable")
+	}
+	h2 := append([]byte(nil), h...)
+	h2[15] = 0xfe
+	other, _ := IdentifyBlockRoot(h2)
+	if other.PayloadUUID == id.PayloadUUID || other.RootUUID == id.RootUUID {
+		t.Error("two accounts, one identity")
+	}
+	// An Endpoint profile never shares an identifier or a UUID with a block root.
+	ep, _ := Identify("0197a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b", "")
+	for _, x := range []string{ep.PayloadUUID, ep.ContentUUID, ep.RootUUID} {
+		if x == id.PayloadUUID || x == id.RootUUID {
+			t.Error("collision with an Endpoint profile")
+		}
+	}
+	for _, n := range []int{0, 15, 17} {
+		if _, err := IdentifyBlockRoot(make([]byte, n)); err == nil {
+			t.Errorf("a hash of %d bytes accepted", n)
+		}
+	}
+}

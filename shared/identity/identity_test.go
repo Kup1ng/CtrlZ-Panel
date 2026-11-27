@@ -1,6 +1,8 @@
 package identity
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"net/netip"
 	"strings"
 	"testing"
@@ -272,6 +274,39 @@ func TestTokenMatches(t *testing.T) {
 	for _, wrong := range []string{"", "abcdefghijklmnopqrstuvwxyz234568", "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", tok + "a", tok[:31]} {
 		if TokenMatches(wrong, want) {
 			t.Errorf("%q matched", wrong)
+		}
+	}
+}
+
+func TestAccountHash(t *testing.T) {
+	id := []byte("0123456789abcdef")
+	a := AccountHash(id)
+	if len(a) != 16 {
+		t.Fatalf("length %d", len(a))
+	}
+	// Pinned: the node and the panel must agree for ever, and a vector in another
+	// language would be wrong by one byte of the prefix. SHA-256 of
+	// "ctrlz-account-v1\x00" + "0123456789abcdef", first 16 bytes.
+	want := sha256.Sum256([]byte("ctrlz-account-v1\x000123456789abcdef"))
+	if !bytes.Equal(a, want[:16]) {
+		t.Errorf("hash %x want %x", a, want[:16])
+	}
+	if bytes.Equal(a, AccountHash([]byte("0123456789abcdeg"))) {
+		t.Error("two ids, one hash")
+	}
+	// Domain separation: it is not the client hash or the rid hash of the same text.
+	rid := RIDHash(string(id))
+	if bytes.Equal(a, rid[:]) {
+		t.Error("the account hash equals the rid hash")
+	}
+	// The caller's slice is not kept, so a later write to it cannot change the label.
+	a[0] ^= 0xff
+	if bytes.Equal(a, AccountHash(id)) {
+		t.Error("the result aliases a shared buffer")
+	}
+	for _, n := range []int{0, 15, 17, 32} {
+		if AccountHash(make([]byte, n)) != nil {
+			t.Errorf("an id of %d bytes got a hash", n)
 		}
 	}
 }

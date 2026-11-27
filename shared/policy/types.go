@@ -122,9 +122,13 @@ const (
 	FlagRebindBlocked
 	FlagSafeSearch
 	FlagDeferred
+	// FlagGrantRefused is set by the node when the Grant table refused the Grant of an
+	// answer and the answer was redone without the proxy (p4b-proxy 4.2). The
+	// evaluator never sets it: it is the reason P5 shows for a refused Grant.
+	FlagGrantRefused
 )
 
-var flagNames = [...]string{"location_unavailable", "do_not_log", "via_cname", "rebind_blocked", "safe_search", "deferred"}
+var flagNames = [...]string{"location_unavailable", "do_not_log", "via_cname", "rebind_blocked", "safe_search", "deferred", "grant_refused"}
 
 // Names lists the set flags in declaration order.
 func (f Flags) Names() []string {
@@ -260,6 +264,13 @@ type SelfAddrs struct {
 	ProxyIP         netip.Addr
 	PeerProxyIP     netip.Addr // zero when there is no peer
 	PeerProxyUsable bool       // false when the peer is proxy_blocked or down
+	// ProxyBlocked is this node's own proxy_blocked flag of the PairTable: its
+	// PROXY_IP is filtered on the way to some clients, so it goes last in an answer
+	// while the peer is usable (p4b-proxy 4.4).
+	ProxyBlocked bool
+	// ProxyDown is true while the node's own proxy is not listening, as its dns
+	// process knows it. Its PROXY_IP is then left out of every answer.
+	ProxyDown bool
 }
 
 // Rewrite is the versioned exact-name table behind Safe Search and Restricted
@@ -343,17 +354,21 @@ type PreResult struct {
 
 // Final is the outcome.
 type Final struct {
-	Action     Action
-	Stage      Stage
-	Ref        Ref
-	Slot       uint8 // 1 or 2, 0 if none
-	Target     TargetKind
-	Location   uint16   // chosen location wire id
-	Effective  []uint16 // set Auto or Random drew from, for grant acceptance
-	DialHost   names.Name
-	WantGrant  bool  // true only when a proxy A answer was synthesized
-	Widenable  bool  // false for a wildcard rule match (10.4)
-	GrantKind  uint8 // 1 redirect, 2 block page
+	Action    Action
+	Stage     Stage
+	Ref       Ref
+	Slot      uint8 // 1 or 2, 0 if none
+	Target    TargetKind
+	Location  uint16   // chosen location wire id
+	Effective []uint16 // set Auto or Random drew from, for grant acceptance
+	DialHost  names.Name
+	WantGrant bool  // true only when a proxy A answer was synthesized
+	Widenable bool  // false for a wildcard rule match (10.4)
+	GrantKind uint8 // 1 redirect, 2 block page
+	// PageHash is the block page the Branded answer of a kind 2 Grant names, from the
+	// effective options; all zero is the default page. The receiver of a forwarded
+	// Grant stores it with the holder (p4b-proxy 3.4, item 10).
+	PageHash   [32]byte
 	Flags      Flags
 	HopIndex   uint8 // Chain index of the deciding hop
 	TrafficCat uint16
@@ -363,6 +378,11 @@ type Final struct {
 	// not on this node. The node reports it; the lookup counts as no match.
 	TableMissing bool
 }
+
+// MaxProxyTTL caps the TTL of an answer that carries PROXY_IPs, in seconds, so no
+// cached answer outlives its Grant (p4b-proxy 4.4). A Redirect or Block TTL above it
+// is cut to it in that answer only.
+const MaxProxyTTL = 3600
 
 // Grant kinds.
 const (

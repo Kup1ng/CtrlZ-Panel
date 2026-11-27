@@ -17,6 +17,7 @@ var hubOnlySections = map[string]bool{
 	"proof_observation":     true,
 	"quarantine_report":     true,
 	"block_unblock_request": true,
+	"block_key_request":     true,
 }
 
 // Every section name a decoder or validator on the node side can put in a

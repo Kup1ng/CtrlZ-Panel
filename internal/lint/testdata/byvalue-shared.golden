@@ -34,6 +34,7 @@ shared/names/user.go::MustString
 shared/names/user.go::ParseUser
 shared/names/user.go::ParseUserPart
 shared/names/user.go::parseUser
+shared/policy/eval.go::AcceptGrant
 shared/policy/eval.go::Decide
 shared/policy/eval.go::DecideWithPre
 shared/policy/eval.go::Post

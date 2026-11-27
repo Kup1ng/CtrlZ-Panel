@@ -115,3 +115,42 @@ func uuidV5(ns [16]byte, name string) string {
 	}
 	return string(out)
 }
+
+const blockIdentifierPrefix = "com.ctrlz.block."
+
+// BlockRootIdentity is the identity of the Apple profile that installs an account's
+// block page root (p4b-proxy 10.3): one com.apple.security.root payload, removable,
+// named "Ctrl Z Block Page". It derives from the account hash alone, so a new root
+// of the same account (a rotation of block_root_key) replaces the profile on the
+// device instead of adding a second one.
+type BlockRootIdentity struct {
+	// The outer Configuration payload.
+	PayloadIdentifier string
+	PayloadUUID       string
+	// The com.apple.security.root payload inside it.
+	RootIdentifier string
+	RootUUID       string
+}
+
+// IdentifyBlockRoot derives the identity for an account hash of 16 bytes
+// (identity.AccountHash). The identifiers are com.ctrlz.block.<hash in lower-case
+// hex> and the same with ".root"; the UUIDs are their UUIDv5 in the one namespace of
+// this package. The prefix differs from the Endpoint profile's, so the two kinds
+// never collide.
+func IdentifyBlockRoot(accountHash []byte) (BlockRootIdentity, error) {
+	if len(accountHash) != 16 {
+		return BlockRootIdentity{}, errors.New("appleprofile: the account hash is not 16 bytes")
+	}
+	const hexd = "0123456789abcdef"
+	hx := make([]byte, 0, 32)
+	for _, b := range accountHash {
+		hx = append(hx, hexd[b>>4], hexd[b&0xf])
+	}
+	id := blockIdentifierPrefix + string(hx)
+	return BlockRootIdentity{
+		PayloadIdentifier: id,
+		PayloadUUID:       uuidV5(namespace(), id),
+		RootIdentifier:    id + ".root",
+		RootUUID:          uuidV5(namespace(), id+".root"),
+	}, nil
+}

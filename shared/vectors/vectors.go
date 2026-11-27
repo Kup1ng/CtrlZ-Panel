@@ -103,6 +103,11 @@ type Request struct {
 	ClientHash [16]byte
 	Isolated   bool
 	Resolver   policy.Resolver
+	// Self overrides the fixture's address state for this request, and Latency the
+	// published latency of its locations (milliseconds by wire id): the cases that pin
+	// the order of PROXY_IPs and the pick of Auto change them from one case to the next.
+	Self    *SelfOverride
+	Latency map[uint16]uint32
 	// NoPolicy asks for policy.PostDefault: the answer of a path with no profile.
 	NoPolicy bool
 }
@@ -172,6 +177,8 @@ func runGroup(t *testing.T, g *GroupFile, h Harness) {
 		runZoneAnswerGroup(t, g)
 	case g.Group == "quarantine":
 		runQuarantineGroup(t, g)
+	case g.Group == "grants":
+		runGrantsGroup(t, g)
 	default:
 		runTextGroup(t, g)
 	}

@@ -257,30 +257,34 @@ type GrantOffer struct {
 //
 // A receiver behind the sender's config_seq keeps the grant short until it
 // catches up; that stays in the receiver's glue.
-func AcceptGrant(in *Input, st *Stack, env *Env, r Resolver, offer GrantOffer) bool {
+//
+// It returns the receiver's own Final too, accepted or not: the receiver stores the
+// pick mode (Target), the widening (Widenable) and the page hash of its own
+// result with the holder, never the sender's (p4b-proxy 3.4, item 10).
+func AcceptGrant(in *Input, st *Stack, env *Env, r Resolver, offer GrantOffer) (Final, bool) {
 	f := Decide(context.Background(), in, st, env, r)
 	if !f.WantGrant || !bytes.Equal(f.DialHost.Wire(), offer.DialHost.Wire()) {
-		return false
+		return f, false
 	}
 	switch f.Action {
 	case ActionBlock:
-		// A Branded block page: every node serves the same page, so there is no
-		// location to compare.
-		return offer.Kind == GrantBlockPage
+		// A Branded block page: the location is not compared, and the page hash is
+		// the receiver's own (it is in f.PageHash).
+		return f, offer.Kind == GrantBlockPage
 	case ActionRedirect:
 		if offer.Kind != GrantRedirect {
-			return false
+			return f, false
 		}
 		if f.Target == TargetLocation {
-			return f.Location == offer.Location
+			return f, f.Location == offer.Location
 		}
 		for _, l := range f.Effective {
 			if l == offer.Location {
-				return true
+				return f, true
 			}
 		}
 	}
-	return false
+	return f, false
 }
 
 // ---- completion ---------------------------------------------------------------
@@ -326,13 +330,23 @@ func (ev *eval) seal(f Final) Final {
 	return f
 }
 
+// proxyIPs lists the PROXY_IPs of an answer (SC 7, p4b-proxy 4.4). Own comes first,
+// except that it comes last when it is proxy_blocked and the peer is usable, so a
+// client that cannot reach it tries the peer's first. Own is left out while this
+// node's proxy is down: an address that nothing answers on is worse than none.
 func (ev *eval) proxyIPs() []netip.Addr {
+	self := &ev.env.Self
+	own := self.ProxyIP.IsValid() && !self.ProxyDown
+	peer := self.PeerProxyIP.IsValid() && self.PeerProxyUsable
 	var out []netip.Addr
-	if ev.env.Self.ProxyIP.IsValid() {
-		out = append(out, ev.env.Self.ProxyIP)
+	if own && !(self.ProxyBlocked && peer) {
+		out = append(out, self.ProxyIP)
 	}
-	if ev.env.Self.PeerProxyIP.IsValid() && ev.env.Self.PeerProxyUsable {
-		out = append(out, ev.env.Self.PeerProxyIP)
+	if peer {
+		out = append(out, self.PeerProxyIP)
+	}
+	if own && self.ProxyBlocked && peer {
+		out = append(out, self.ProxyIP)
 	}
 	return out
 }
@@ -355,6 +369,9 @@ func (ev *eval) complete(d decision, fetch func() *TrueAnswer) (Final, completio
 	case ActionBlock:
 		out := Synthesize(&SynthIn{Name: ev.in.Name, QType: ev.in.QType, Action: ActionBlock, Eff: ev.eff, Proxy: ev.proxyIPs()})
 		f.Answer, f.WantGrant, f.GrantKind = out.Answer, out.WantGrant, out.GrantKind
+		if f.WantGrant {
+			f.PageHash = ev.eff.BlockPageHash
+		}
 		return f, compDone
 	case ActionRedirect:
 		return ev.completeRedirect(d, f, fetch)
@@ -375,6 +392,17 @@ func (ev *eval) completeRedirect(d decision, f Final, fetch func() *TrueAnswer) 
 	p := ev.st.Slots[d.slot-1]
 	tg := p.Target(d.target)
 	f.Target = tg.Kind
+	// A location, Auto or Random sends the client to a PROXY_IP. With none usable (the
+	// proxy is down and the peer is not usable) the LocationView has no location, so the
+	// whole name is Bypass with FlagLocationUnavailable, for every qtype (p4b-proxy 4.4).
+	// Checked before any pick, so a hysteresis state is never moved for an answer that
+	// cannot be given.
+	switch tg.Kind {
+	case TargetLocation, TargetAuto, TargetRandom:
+		if len(ev.proxyIPs()) == 0 {
+			return ev.unavailable(f)
+		}
+	}
 	in := SynthIn{Name: ev.in.Name, QType: ev.in.QType, Action: ActionRedirect, Eff: ev.eff, TargetKind: tg.Kind}
 
 	switch tg.Kind {
