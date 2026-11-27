@@ -20,7 +20,7 @@ func TestRequestChallengeAndReleaseShareOneHourlyBudget(t *testing.T) {
 	A, B := f.env.A, f.env.B
 	a := f.makeSession(A.Tenant, A.User)
 	a2 := f.makeSession(A.Tenant, A.User)
-	ep := f.newEndpoint(a, "ip-claim budget")
+	ep := f.newEndpoint(a, "ip-claim-budget")
 	base := "/endpoints/" + ep + "/ip-claims"
 	sessions := []*client{a, a2}
 	turn := 0
@@ -51,11 +51,13 @@ func TestRequestChallengeAndReleaseShareOneHourlyBudget(t *testing.T) {
 	claimOf(request(next()))
 	claimOf(request(next()))
 
+	// ip_claim_release sets state = 'released' and never deletes the row (spec P3 11.5), so kept counts the claim only while it
+	// is not released; counting the row alone would read 1 before and after the release and prove nothing.
 	var rows, kept int
 	count := func() {
 		t.Helper()
 		f.env.Scan(t, `SELECT count(*) FROM ctrlz.ip_claims WHERE tenant_id = $1 AND endpoint_id = $2`, []any{A.Tenant, uuid.MustParse(ep)}, &rows)
-		f.env.Scan(t, `SELECT count(*) FROM ctrlz.ip_claims WHERE tenant_id = $1 AND endpoint_id = $2 AND id = $3`, []any{A.Tenant, uuid.MustParse(ep), uuid.MustParse(y)}, &kept)
+		f.env.Scan(t, `SELECT count(*) FROM ctrlz.ip_claims WHERE tenant_id = $1 AND endpoint_id = $2 AND id = $3 AND state <> 'released'`, []any{A.Tenant, uuid.MustParse(ep), uuid.MustParse(y)}, &kept)
 	}
 	count()
 	if rows > 30 || kept != 1 {
@@ -83,6 +85,11 @@ func TestRequestChallengeAndReleaseShareOneHourlyBudget(t *testing.T) {
 	a.post(base+"/"+y+":release", map[string]any{}).want(204, "")
 	count()
 	if kept != 0 {
-		t.Error("the release after the hour left the claim")
+		t.Error("the release after the hour left the claim live")
+	}
+	var state string
+	f.env.Scan(t, `SELECT state FROM ctrlz.ip_claims WHERE tenant_id = $1 AND id = $2`, []any{A.Tenant, uuid.MustParse(y)}, &state)
+	if state != "released" {
+		t.Errorf("the claim after the release is %q, want released", state)
 	}
 }

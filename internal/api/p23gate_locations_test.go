@@ -56,8 +56,9 @@ func newLocRig(f *frig) *locRig {
 	return r
 }
 
-// loc finds the location row of a key, or makes it. The catalog holds one row for a place whatever the case of its city
-// (the shared comparison folds it), so the row is found by the folded city and the first spelling that asked for it stays.
+// loc finds the location row of a key, or makes it. The unique index on (country, city) is case-sensitive, so the catalog can
+// hold Tehran and tehran as two rows; each spelling gets its own row, so the cases locset-007 to 009 reach the route as two
+// rows and only the fold in the library and the route makes them one place.
 func (r *locRig) loc(k shared.Key) uuid.UUID {
 	r.t.Helper()
 	var where string
@@ -68,7 +69,7 @@ func (r *locRig) loc(k shared.Key) uuid.UUID {
 	case k.City == "":
 		where, args = `country_code = $1 AND city IS NULL`, []any{k.Country}
 	default:
-		where, args = `country_code = $1 AND lower(city) = lower($2)`, []any{k.Country, k.City}
+		where, args = `country_code = $1 AND city = $2`, []any{k.Country, k.City}
 	}
 	var found string
 	r.f.env.Scan(r.t, `SELECT coalesce(min(id::text), '') FROM ctrlz.locations WHERE `+where, args, &found)
@@ -128,7 +129,7 @@ func (r *locRig) usePairs(role string, pairs [][2]string) {
 }
 
 // setOf reads the route: the keys of the answer in the notation of the vectors, in lower case and sorted (the one row of a
-// place shows the spelling that first made it, and the spelling of a city is the library's own vector).
+// place shows one of its spellings, and which one is the library's own vector, so the comparison here is folded).
 func setOf(r *resp) []string {
 	r.t.Helper()
 	var set struct {
