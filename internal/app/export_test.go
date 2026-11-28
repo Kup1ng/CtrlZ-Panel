@@ -15,10 +15,3 @@ var CheckWorkerResolversForTest = checkWorkerResolvers
 
 // StartWorkerForTest exposes startWorker, so a test can hold that it makes the resolver check before anything else.
 var StartWorkerForTest = startWorker
-
-// SetResolvConfPathForTest points the worker's start check at a file of the test's choosing and returns the restore function.
-func SetResolvConfPathForTest(path string) (restore func()) {
-	old := resolvConfPath
-	resolvConfPath = path
-	return func() { resolvConfPath = old }
-}

@@ -113,7 +113,7 @@ func Run(ctx context.Context, role Role, opts Options) error {
 		log.Warn("no database configured; running as a stub")
 	}
 	if role == RoleWorker && st != nil {
-		stop, err := startWorker(ctx, cfg, rt, st, compiler, log)
+		stop, err := startWorker(ctx, cfg, resolvConfPath, rt, st, compiler, log)
 		if err != nil {
 			return fmt.Errorf("worker: %w", err)
 		}

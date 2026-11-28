@@ -222,10 +222,10 @@ func TestComposeSecretsAreFiles(t *testing.T) {
 
 func TestComposeContainersAreLimitedAndRotated(t *testing.T) {
 	c := loadCompose(t)
-	// The official Postgres and ClickHouse images start as root to fix
-	// ownership of their data directory and then drop to their own user, so
-	// they cannot run with every capability dropped or a read-only root.
-	needsRoot := map[string]bool{"postgres": true, "clickhouse": true}
+	// The official Postgres and ClickHouse images start as root to fix ownership of their data directory and then drop to their own
+	// user, so their root filesystem cannot be read-only. They do drop every capability and add five back (composekeys holds which
+	// five), so cap_drop ALL is required of every service here and only read_only is exempt for these two.
+	writableRoot := map[string]bool{"postgres": true, "clickhouse": true}
 	for name, s := range c.Services {
 		if s.Logging.Driver != "json-file" || s.Logging.Options["max-size"] == "" || s.Logging.Options["max-file"] == "" {
 			t.Errorf("%s has no log rotation: %+v", name, s.Logging)
@@ -236,13 +236,11 @@ func TestComposeContainersAreLimitedAndRotated(t *testing.T) {
 		if !contains(s.SecurityOpt, "no-new-privileges:true") {
 			t.Errorf("%s may gain privileges", name)
 		}
-		if !needsRoot[name] {
-			if !contains(s.CapDrop, "ALL") {
-				t.Errorf("%s keeps capabilities", name)
-			}
-			if !s.ReadOnly {
-				t.Errorf("%s has a writable root filesystem", name)
-			}
+		if !contains(s.CapDrop, "ALL") {
+			t.Errorf("%s keeps capabilities", name)
+		}
+		if !writableRoot[name] && !s.ReadOnly {
+			t.Errorf("%s has a writable root filesystem", name)
 		}
 	}
 }

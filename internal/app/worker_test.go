@@ -203,8 +203,7 @@ func TestStartWorkerMakesTheResolverCheckFirst(t *testing.T) {
 	if err := os.WriteFile(p, []byte(bad), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	defer app.SetResolvConfPathForTest(p)()
-	_, err := app.StartWorkerForTest(context.Background(), app.Config{Env: app.EnvProduction}, nil, nil, nil, nil)
+	_, err := app.StartWorkerForTest(context.Background(), app.Config{Env: app.EnvProduction}, p, nil, nil, nil, nil)
 	if !errors.Is(err, resolvguard.ErrHostForward) {
 		t.Errorf("err = %v, want resolvguard.ErrHostForward", err)
 	}
