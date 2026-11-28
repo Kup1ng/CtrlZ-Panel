@@ -28,7 +28,23 @@ const (
 	// MaxLogoSide is the largest width or height the header may name. It is read before any pixel is decoded, so a small file
 	// that claims a huge canvas never costs memory.
 	MaxLogoSide = 1024
+	// MaxJPEGScans bounds the scans of a JPEG. Go's decoder has no limit of its own, and for each scan of a progressive
+	// image it walks every block of the component, so a file of 256 KiB holding thousands of near-empty scans costs
+	// seconds of CPU under the size and dimension limits above. A real logo has about ten.
+	MaxJPEGScans = 32
+	// decodeSlots is how many decodes run at once: the work is CPU-bound and one tenant's burst must not take every core
+	// of the API process from the others.
+	decodeSlots = 2
 )
+
+// decodeSem holds one token for each decode in progress.
+var decodeSem = make(chan struct{}, decodeSlots)
+
+// jpegScans counts the start-of-scan markers of a JPEG. 0xFF 0xDA cannot appear in entropy-coded data (a 0xFF there is
+// stuffed as 0xFF 0x00), so the count can only be too high, by a segment that holds the pair, never too low.
+func jpegScans(raw []byte) int {
+	return bytes.Count(raw, []byte{0xff, 0xda})
+}
 
 var (
 	// ErrInvalid is asset_invalid: not an image of a type a logo may be, too large, too wide, or not decodable. The caller
@@ -58,6 +74,11 @@ func Normalize(raw []byte) ([]byte, error) {
 	if cfg.Width < 1 || cfg.Height < 1 || cfg.Width > MaxLogoSide || cfg.Height > MaxLogoSide {
 		return nil, ErrInvalid
 	}
+	if format == "jpeg" && jpegScans(raw) > MaxJPEGScans {
+		return nil, ErrInvalid
+	}
+	decodeSem <- struct{}{}
+	defer func() { <-decodeSem }()
 	img, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
 		return nil, ErrInvalid

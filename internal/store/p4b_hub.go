@@ -194,6 +194,30 @@ func (s *Store) HubBlockRoots(ctx context.Context) (out []BlockRoot, err error) 
 	return out, err
 }
 
+const qHubBlockRootsEmpty = `SELECT tenant_id FROM ctrlz.block_roots WHERE cert_der IS NULL ORDER BY tenant_id`
+
+// HubBlockRootsEmpty lists the accounts whose root has no certificate yet, for the pass of every 5 s (11). It reads through
+// the partial index block_roots_empty_idx, so the cost follows the rows that wait and not every account that has a block
+// page; HubBlockRoots, which compares every digest, is for the pass at start.
+func (s *Store) HubBlockRootsEmpty(ctx context.Context) (out []uuid.UUID, err error) {
+	err = s.WithGlobal(ctx, TxOpts{ReadOnly: true}, func(g GlobalTx) error {
+		rows, err := g.tx.Query(g.ctx, qHubBlockRootsEmpty)
+		if err != nil {
+			return sanitize(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id uuid.UUID
+			if err := rows.Scan(&id); err != nil {
+				return sanitize(err)
+			}
+			out = append(out, id)
+		}
+		return sanitize(rows.Err())
+	})
+	return out, err
+}
+
 const qHubBlockRootSet = `UPDATE ctrlz.block_roots SET cert_der = $2, spki_sha256 = $3, not_before = $4, not_after = $5
 WHERE tenant_id = $1 RETURNING tenant_id`
 

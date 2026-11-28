@@ -172,6 +172,9 @@ func TestHubClosesTheAlertOfOneNodeAndKind(t *testing.T) {
 func TestHubGivesEveryAccountsRootItsCertificate(t *testing.T) {
 	f := newFixture(t)
 	hub := f.db.Store(f.ctx, t, store.RoleHub)
+	if empty, err := hub.HubBlockRootsEmpty(f.ctx); err != nil || len(empty) != 2 {
+		t.Fatalf("the 5 s pass sees %d empty roots (%v), want both tenants'", len(empty), err)
+	}
 	roots, err := hub.HubBlockRoots(f.ctx)
 	if err != nil || len(roots) != 2 {
 		t.Fatalf("the hub sees %d roots (%v), want both tenants'", len(roots), err)
@@ -199,6 +202,9 @@ func TestHubGivesEveryAccountsRootItsCertificate(t *testing.T) {
 	}
 	if got[f.A.Tenant] != 32 || got[f.B.Tenant] != 0 {
 		t.Errorf("digests after the set: %v", got)
+	}
+	if empty, err := hub.HubBlockRootsEmpty(f.ctx); err != nil || len(empty) != 1 || empty[0] != f.B.Tenant {
+		t.Errorf("the 5 s pass after A's certificate: %v (%v), want only B", empty, err)
 	}
 }
 

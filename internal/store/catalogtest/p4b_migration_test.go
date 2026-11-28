@@ -87,6 +87,8 @@ func TestP4bConfigs(t *testing.T) {
 		{"a tag of 33 characters", strings.Replace(cfgInsert(nodeC1, frankfurt, "x", true), "'x'", "'"+strings.Repeat("a", 33)+"'", 1)},
 		{"a schema version that is no tag", strings.Replace(cfgInsert(nodeC1, frankfurt, "x", true), "'"+relTag+"'", "'1'", 1)},
 		{"a schema version with no patch", strings.Replace(cfgInsert(nodeC1, frankfurt, "x", true), "'"+relTag+"'", "'v26.10'", 1)},
+		// xrayschema.ValidReleaseTag holds a tag to 32 bytes, and the node's config is refused above that (B2-r1-4).
+		{"a schema version of 33 bytes", strings.Replace(cfgInsert(nodeC1, frankfurt, "x", true), "'"+relTag+"'", "'v1.2."+strings.Repeat("9", 28)+"'", 1)},
 		{"a fragment over 32 KiB", cfgMany(nodeC1, frankfurt, 1, 32770)},
 		{"a note over 500 characters", `INSERT INTO ctrlz.node_location_configs (node_id, location_id, tag, fragment, schema_version, note)
 			VALUES ('` + nodeC1 + `', '` + frankfurt + `', 'n', '{}', '` + relTag + `', '` + strings.Repeat("n", 501) + `')`},
@@ -97,6 +99,7 @@ func TestP4bConfigs(t *testing.T) {
 	} {
 		want(t, c.what, h.seq("admin", nil, c.sql), "23514")
 	}
+	want(t, "a schema version of 32 bytes", h.seq("admin", nil, strings.Replace(cfgInsert(nodeC1, frankfurt, "v32", true), "'"+relTag+"'", "'v1.2."+strings.Repeat("9", 27)+"'", 1)), "")
 	want(t, "a fragment of exactly 32 KiB", h.seq("admin", nil, cfgMany(nodeC1, frankfurt, 1, 32768)), "")
 	want(t, "a priority of 99", h.seq("admin", nil, `INSERT INTO ctrlz.node_location_configs (node_id, location_id, tag, fragment, schema_version, priority)
 		VALUES ('`+nodeC1+`', '`+frankfurt+`', 'p', '{}', '`+relTag+`', 99)`), "")
@@ -134,6 +137,14 @@ func TestP4bConfigs(t *testing.T) {
 	}
 	want(t, "the admin writes the counter", h.seq("admin", nil, `UPDATE ctrlz.nodes SET xray_rev = 5 WHERE id = '`+n3+`'`), "")
 	want(t, "the hub writes the counter", h.seq("hub", nil, `UPDATE ctrlz.nodes SET xray_rev = 5 WHERE id = '`+n3+`'`), "42501")
+	// The hub reads again only when the counter moved, so a counter put back to the value it cached would hide a change
+	// (B2-r1-8): it moves forward only, in a statement of its own and after a step of the trigger in the same transaction.
+	want(t, "the counter moved back", h.seq("admin", nil, `UPDATE ctrlz.nodes SET xray_rev = 4 WHERE id = '`+n3+`'`), "23514")
+	want(t, "the counter kept", h.seq("admin", nil, `UPDATE ctrlz.nodes SET xray_rev = 5 WHERE id = '`+n3+`'`), "")
+	want(t, "a config deleted and the counter put back", h.seq("admin", nil, cfgInsert(nodeC1, frankfurt, "back", true),
+		`DELETE FROM ctrlz.node_location_configs WHERE node_id = '`+nodeC1+`' AND tag = 'back'`,
+		`UPDATE ctrlz.nodes SET xray_rev = (SELECT xray_rev - 2 FROM ctrlz.nodes WHERE id = '`+nodeC1+`') WHERE id = '`+nodeC1+`'`), "23514")
+	want(t, "the counter moved back by the superuser", h.seq("", nil, `UPDATE ctrlz.nodes SET xray_rev = 4 WHERE id = '`+n3+`'`), "23514")
 	want(t, "a negative counter", h.seq("", nil, `UPDATE ctrlz.nodes SET xray_rev = -1 WHERE id = '`+n3+`'`), "23514")
 
 	// 64 rows a node, 2 MiB of fragments: 64 rows of 32 KiB are exactly 2 MiB, and the 65th row is refused.
@@ -294,6 +305,8 @@ func TestP4bNodeColumns(t *testing.T) {
 	want(t, "the admin sets the release to fetch", h.seq("admin", nil, upd(`xray_fetch_version = 'v26.11.9'`)), "")
 	want(t, "the admin clears it", h.seq("admin", nil, upd(`xray_fetch_version = NULL`)), "")
 	want(t, "a release that is no tag", h.seq("admin", nil, upd(`xray_fetch_version = 'latest'`)), "23514")
+	want(t, "a release of 32 bytes", h.seq("admin", nil, upd(`xray_fetch_version = 'v1.2.`+strings.Repeat("9", 27)+`'`)), "")
+	want(t, "a release of 33 bytes, which ValidReleaseTag refuses", h.seq("admin", nil, upd(`xray_fetch_version = 'v1.2.`+strings.Repeat("9", 28)+`'`)), "23514")
 	want(t, "the admin sets the bind addresses", h.seq("admin", nil, upd(`dns_bind_ip = '192.0.2.70', proxy_bind_ip = '192.0.2.71'`)), "")
 	for _, ip := range []string{"::ffff:192.0.2.1", "64:ff9b::c000:201", "::c000:201", "2002:c000:201::1", "2001::1", "192.0.2.0/24"} {
 		want(t, "the proxy bind address "+ip, h.seq("admin", nil, upd(`proxy_bind_ip = '`+ip+`'`)), "23514")

@@ -87,7 +87,10 @@ ALTER TABLE ctrlz.locations
 
 -- Before item 2, whose trigger writes it.
 ALTER TABLE ctrlz.nodes
-  ADD COLUMN xray_fetch_version text CONSTRAINT nodes_xray_fetch_version_form CHECK (xray_fetch_version ~ '^v[0-9]+\.[0-9]+\.[0-9]+$'),
+  -- At most 32 bytes, as xrayschema.ValidReleaseTag holds it: a longer tag would pass here and then make the node's
+  -- NodeConfig fail wire.ValidateNodeConfig, so that node could be sent no config at all.
+  ADD COLUMN xray_fetch_version text CONSTRAINT nodes_xray_fetch_version_form CHECK (
+    xray_fetch_version ~ '^v[0-9]+\.[0-9]+\.[0-9]+$' AND pg_catalog.char_length(xray_fetch_version) <= 32),
   ADD COLUMN xray_rev bigint NOT NULL DEFAULT 0 CONSTRAINT nodes_xray_rev_not_negative CHECK (xray_rev >= 0);
 
 ALTER TABLE ctrlz.nodes ADD CONSTRAINT nodes_proxy_bind_ip_form CHECK (proxy_bind_ip IS NULL OR (
@@ -98,6 +101,26 @@ ALTER TABLE ctrlz.nodes ADD CONSTRAINT nodes_proxy_bind_ip_form CHECK (proxy_bin
     OR proxy_bind_ip <<= '2001::/32'::pg_catalog.inet)));
 
 GRANT UPDATE (dns_bind_ip, proxy_bind_ip, xray_fetch_version, xray_rev) ON ctrlz.nodes TO ctrlz_admin;
+
+-- The hub reads the fragments again only when xray_rev moved, so a counter put back to the value it cached (the admin
+-- holds UPDATE on the column, because the trigger of item 2 runs as the writer) would hide a removed credential. The
+-- counter therefore never goes down, whoever writes it.
+-- +goose StatementBegin
+CREATE FUNCTION ctrlz.nodes_xray_rev_forward() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  IF NEW.xray_rev < OLD.xray_rev THEN
+    RAISE EXCEPTION 'nodes.xray_rev only moves forward'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'nodes_xray_rev_forward';
+  END IF;
+  RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+REVOKE ALL ON FUNCTION ctrlz.nodes_xray_rev_forward() FROM PUBLIC;
+CREATE TRIGGER nodes_xray_rev_forward BEFORE UPDATE OF xray_rev ON ctrlz.nodes
+  FOR EACH ROW EXECUTE FUNCTION ctrlz.nodes_xray_rev_forward();
 
 -- 2 and 3. node_location_configs ----------------------------------------------------------------
 
@@ -116,18 +139,20 @@ ALTER TABLE ctrlz.node_location_configs ALTER COLUMN schema_version DROP DEFAULT
 ALTER TABLE ctrlz.node_location_configs ALTER COLUMN schema_version TYPE text USING schema_version::pg_catalog.text;
 ALTER TABLE ctrlz.node_location_configs
   ADD COLUMN accepted_unknown text[] NOT NULL DEFAULT '{}',
-  ADD CONSTRAINT node_location_configs_schema_version_form CHECK (schema_version ~ '^v[0-9]+\.[0-9]+\.[0-9]+$'),
+  ADD CONSTRAINT node_location_configs_schema_version_form CHECK (
+    schema_version ~ '^v[0-9]+\.[0-9]+\.[0-9]+$' AND pg_catalog.char_length(schema_version) <= 32),
   ADD CONSTRAINT node_location_configs_fragment_size CHECK (pg_catalog.octet_length(fragment::pg_catalog.text) <= 32768),
   ADD CONSTRAINT node_location_configs_note_len CHECK (pg_catalog.char_length(note) <= 500),
   ADD CONSTRAINT node_location_configs_tag_form CHECK (tag ~ '^[a-z0-9][a-z0-9-]{0,31}$'),
   ADD CONSTRAINT node_location_configs_priority_range CHECK (priority BETWEEN 0 AND 99),
   -- The bounds of wire.ValidateNodeConfig (64 paths of at most 256 bytes), so that one bad write cannot make
   -- the config of a whole node unreadable or unsendable. The elements are joined with a control character that no
-  -- path holds, so one pattern bounds each of them; the form of a path is the route's and the validator's.
+  -- path holds, so one pattern bounds each of them; the form of a path is the route's and the validator's. A run of
+  -- 257 is written as 255 and 2: Postgres refuses a repetition count above 255 (SQLSTATE 2201B).
   ADD CONSTRAINT node_location_configs_accepted_unknown_bounds CHECK (
     pg_catalog.cardinality(accepted_unknown) <= 64
     AND pg_catalog.array_position(accepted_unknown, NULL::pg_catalog.text) IS NULL
-    AND pg_catalog.array_to_string(accepted_unknown, pg_catalog.chr(1)) !~ ('[^' || pg_catalog.chr(1) || ']{257}'));
+    AND pg_catalog.array_to_string(accepted_unknown, pg_catalog.chr(1)) !~ ('[^' || pg_catalog.chr(1) || ']{255}[^' || pg_catalog.chr(1) || ']{2}'));
 
 -- Every write of a config steps the counter of its node: the node row's lock orders the writers of one node, and
 -- the hub reads the fragments again only when the counter moved (11). The limits are D31's: 64 configs and 2 MiB
@@ -263,7 +288,7 @@ CREATE TABLE ctrlz.proxy_settings (
     -- the row is global: one bad value would stop every node's config).
     CONSTRAINT proxy_settings_probe_urls_form CHECK (
       pg_catalog.array_to_string(probe_urls, pg_catalog.chr(1)) ~ ('^https?://[!-~]+(' || pg_catalog.chr(1) || 'https?://[!-~]+)?$')
-      AND pg_catalog.array_to_string(probe_urls, pg_catalog.chr(1)) !~ '[!-~]{257}'),
+      AND pg_catalog.array_to_string(probe_urls, pg_catalog.chr(1)) !~ '[!-~]{255}[!-~]{2}'),  -- 257 in a row; a count above 255 is refused
   updated_at  timestamptz NOT NULL DEFAULT pg_catalog.now()
 );
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON ctrlz.proxy_settings
@@ -292,6 +317,9 @@ CREATE TABLE ctrlz.block_roots (
     AND (not_after IS NULL OR not_after > not_before))
 );
 {{rls "ctrlz.block_roots"}}
+-- The pass of every 5 s looks only for rows with no certificate; the partial index keeps that read to them however
+-- many accounts have a certificate. The pass at start reads every row for the SPKI comparison.
+CREATE INDEX block_roots_empty_idx ON ctrlz.block_roots (tenant_id) WHERE cert_der IS NULL;
 GRANT SELECT, INSERT (tenant_id) ON ctrlz.block_roots TO ctrlz_tenant;
 GRANT SELECT, UPDATE (cert_der, spki_sha256, not_before, not_after) ON ctrlz.block_roots TO ctrlz_hub;
 -- The hub serves every account, so it sees and writes every row, as the compiler's drain does for the outbox.
@@ -324,13 +352,16 @@ GRANT SELECT (created_at) ON ctrlz.unblock_requests TO ctrlz_worker;
 -- (nothing on main wrote one); the check holds for every insert and every update of a row.
 ALTER TABLE ctrlz.tenant_assets ADD CONSTRAINT tenant_assets_png_only CHECK (mime = 'image/png') NOT VALID;
 
--- At most 20 rows a tenant (D31). assets.Store decides it first under the quota lock of the tenant; this counts
--- again so that no other writer can pass it.
+-- At most 20 rows a tenant (D31). assets.Store decides it first under the quota lock of the tenant; this takes the
+-- same lock before it counts, so two writers of one tenant meet here even when one of them skipped QuotaLock (the lock
+-- is re-entrant inside one transaction). In READ COMMITTED the count then runs on a snapshot taken after the wait. A
+-- writer that holds no tenant setting (the seed, a superuser) locks nothing: the function answers false for it.
 -- +goose StatementBegin
 CREATE FUNCTION ctrlz.tenant_assets_limit() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
+  PERFORM ctrlz_fn.profile_tenant_lock();
   IF (SELECT pg_catalog.count(*) FROM ctrlz.tenant_assets WHERE tenant_id = NEW.tenant_id) >= 20 THEN
     RAISE EXCEPTION 'a tenant holds at most 20 assets'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'tenant_assets_limit';

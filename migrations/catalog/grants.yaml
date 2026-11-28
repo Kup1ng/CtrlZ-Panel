@@ -490,7 +490,8 @@ views:
 schemas:
   public:    {owner: pg_database_owner, usage: []}
   ctrlz:     {owner: ctrlz_migrator, usage: [tenant, hub, compiler, worker, admin, auth, backfill, keytool, scoped, domain_apply]}
-  ctrlz_fn:  {owner: ctrlz_auth, usage: [tenant, worker, admin, keytool, compiler]}
+  # hub: EXECUTE on node_alert_close alone (0105); the schema grant is what lets that EXECUTE be reached.
+  ctrlz_fn:  {owner: ctrlz_auth, usage: [tenant, worker, admin, keytool, compiler, hub]}
   ctrlz_ext: {owner: ctrlz_migrator, usage: []}
   river:     {owner: ctrlz_migrator, usage: [worker]}
 

@@ -621,6 +621,7 @@ helpers:
   - {name: node_spki_retire, args: "", returns: trigger, ranks: ["node_spki_retired:ins"]}
   - {name: node_upstreams_no_loop, args: "", returns: trigger, ranks: [node_upstreams]}
   - {name: nodes_revoked_terminal, args: "", returns: trigger, ranks: []}
+  - {name: nodes_xray_rev_forward, args: "", returns: trigger, ranks: []}
   - {name: one_time_expiry, args: "p_one_time boolean, p_expires_at timestamp with time zone", returns: "timestamp with time zone", ranks: [], execute: [admin]}
   - {name: otp_challenges_deliverable, args: "", returns: trigger, ranks: []}
   - {name: plans_one_default, args: "", returns: trigger, ranks: []}
@@ -628,7 +629,7 @@ helpers:
   - {name: revocation_stays, args: "", returns: trigger, ranks: []}
   - {name: sms_counters_guard, args: "", returns: trigger, ranks: []}
   - {name: suspended_claim_stays, args: "", returns: trigger, ranks: []}
-  - {name: tenant_assets_limit, args: "", returns: trigger, ranks: []}
+  - {name: tenant_assets_limit, args: "", returns: trigger, ranks: [idempotency_keys]}
   - {name: touch_updated_at, args: "", returns: trigger, ranks: []}
   - {name: upstream_udp_ip, args: "p_address text", returns: inet, ranks: [], execute: [admin]}
 
@@ -656,4 +657,5 @@ triggers:
   # P4b (migration 0105).
   - "CREATE TRIGGER node_location_configs_limit AFTER INSERT OR DELETE OR UPDATE ON ctrlz.node_location_configs FOR EACH ROW EXECUTE FUNCTION ctrlz.node_location_configs_limit()"
   - "CREATE TRIGGER location_availability_sync AFTER INSERT OR DELETE OR UPDATE OF node_id, location_id, enabled ON ctrlz.node_location_configs FOR EACH ROW EXECUTE FUNCTION ctrlz.location_availability_sync()"
+  - "CREATE TRIGGER nodes_xray_rev_forward BEFORE UPDATE OF xray_rev ON ctrlz.nodes FOR EACH ROW EXECUTE FUNCTION ctrlz.nodes_xray_rev_forward()"
   - "CREATE TRIGGER tenant_assets_limit BEFORE INSERT ON ctrlz.tenant_assets FOR EACH ROW EXECUTE FUNCTION ctrlz.tenant_assets_limit()"

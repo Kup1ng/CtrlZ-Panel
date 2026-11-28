@@ -202,3 +202,27 @@ func TestStoreOrderAndRefusals(t *testing.T) {
 		t.Errorf("a lock that failed: %v, insert %d", err, g.inserted)
 	}
 }
+
+// A JPEG whose scans are counted by their markers: the decoder has no limit of its own, so the count is the only thing
+// between a 256 KiB file of thousands of near-empty progressive scans and seconds of CPU (B2-r1-5). The file below decodes
+// fine without the check, since a comment segment is ignored by the decoder; only the marker count refuses it.
+func TestNormalizeRefusesAJPEGWithManyScans(t *testing.T) {
+	var j bytes.Buffer
+	if err := jpeg.Encode(&j, gradient(40, 40), nil); err != nil {
+		t.Fatal(err)
+	}
+	withComment := func(pairs int) []byte {
+		payload := bytes.Repeat([]byte{0xFF, 0xDA}, pairs)
+		seg := append([]byte{0xFF, 0xFE, byte((len(payload) + 2) >> 8), byte(len(payload) + 2)}, payload...)
+		return append(append(append([]byte{}, j.Bytes()[:2]...), seg...), j.Bytes()[2:]...)
+	}
+	if _, err := Normalize(withComment(MaxJPEGScans - 1)); err != nil {
+		t.Errorf("a file at the limit: %v", err)
+	}
+	if _, err := Normalize(withComment(MaxJPEGScans)); !errors.Is(err, ErrInvalid) {
+		t.Errorf("a file over the limit: err = %v, want ErrInvalid", err)
+	}
+	if got := jpegScans(j.Bytes()); got != 1 {
+		t.Errorf("a baseline JPEG has %d scan markers, want 1", got)
+	}
+}
