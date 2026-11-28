@@ -3,6 +3,7 @@ package catalogtest_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -144,7 +145,14 @@ ORDER BY 1, 2`)
 		sig := fmt.Sprintf("ctrlz_fn.%s(%s)", f.Name, f.Args)
 		add("function "+f.Name+" loses its search_path", "10", "ALTER FUNCTION "+sig+" RESET search_path")
 		add("function "+f.Name+" is executable by PUBLIC", "10", "GRANT EXECUTE ON FUNCTION "+sig+" TO PUBLIC")
-		add("function "+f.Name+" is executable by the hub", "10", "GRANT EXECUTE ON FUNCTION "+sig+" TO ctrlz_hub")
+		// A grant to a role that already holds EXECUTE changes nothing, and a mutation that changes nothing is
+		// "not caught" by every check. node_alert_close (0105) is the one function the hub is meant to run, so for
+		// it the mutation is the opposite one: the hub loses it, and check 10 must see the missing grant.
+		if slices.Contains(f.Execute, "hub") {
+			add("function "+f.Name+" is no longer executable by the hub", "10", "REVOKE EXECUTE ON FUNCTION "+sig+" FROM ctrlz_hub")
+		} else {
+			add("function "+f.Name+" is executable by the hub", "10", "GRANT EXECUTE ON FUNCTION "+sig+" TO ctrlz_hub")
+		}
 		add("function "+f.Name+" loses SECURITY DEFINER", "10", "ALTER FUNCTION "+sig+" SECURITY INVOKER")
 		add("function "+f.Name+" changes owner", "09", "ALTER FUNCTION "+sig+" OWNER TO ctrlz_migrator")
 	}
