@@ -2,6 +2,7 @@ package lint_test
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -46,10 +47,14 @@ import (
 //     someone edits the tables.
 //  5. Every named volume, network, secret and dependency a service uses is declared, and every secret entry of
 //     a service is a plain name (the long form can name a target path or a mode).
-//  6. Every service that has a network of its own names the resolver address of the file (`dns`, TEST-NET-1) or is on the closed list of
+//  6. Every service that has a network of its own names the resolver address of the file (`dns`) or is on the closed list of
 //     services that keep the embedded resolver's way out, each with its reason (p6-ops 9.5): Docker's embedded DNS forwards the names of
 //     a non-internal network from the host's namespace, past every row of the firewall table, unless the container is given a
-//     server to forward to.
+//     server to forward to. The address is judged by where it sits, and not only by its text: a service whose networks are all
+//     internal may use any address (nothing leaves), and a service with a network that has a route out needs an address inside the
+//     subnet of an internal network it joins, outside that network's ip_range and not the fixed address of any service, so the
+//     forward stays on-link on a bridge that has no way out. A renumbered subnet, a network added to a service, or a service on
+//     Compose's implicit `default` network makes the address off-link, and the forward would leave by the default route in plaintext.
 //
 // What it does not judge: the values of logging, image, mem_limit, pids_limit and stop_grace_period (the value
 // gives no reach, or another lint judges it: environment is composeenv_test.go, and command, entrypoint and
@@ -387,6 +392,7 @@ func composeKeyProblemsWith(text string, tb composeTables) []string {
 	}
 	top, named, nets, secs := composeTopLevelProblems(doc)
 	out = append(out, top...)
+	fixed := composeFixedAddrs(services)
 	for name, raw := range services {
 		s := composeMap(raw)
 		for key := range s {
@@ -456,7 +462,7 @@ func composeKeyProblemsWith(text string, tb composeTables) []string {
 			}
 		}
 		if _, hasNet := s["network_mode"]; !hasNet {
-			out = append(out, composeDNSProblems(name, s["dns"], tb)...)
+			out = append(out, composeDNSProblems(name, s, tb, composeMap(doc["networks"]), fixed)...)
 		}
 		if v, ok := s["profiles"]; ok {
 			got, plain := composeStrings(v)
@@ -522,9 +528,11 @@ func composeKeys[V any](m map[string]V) map[string]bool {
 	return out
 }
 
-// composeDNSProblems judges the `dns` key of one service that has a network of its own: exactly the table's resolver, or no key at all and a
-// row of the open table. A service in neither table fails, so a new service has to say which it is.
-func composeDNSProblems(name string, v any, tb composeTables) []string {
+// composeDNSProblems judges the `dns` key of one service that has a network of its own: exactly the table's resolver (and that resolver
+// where it sits, composeDNSPlacementProblems), or no key at all and a row of the open table. A service in neither table fails, so a new
+// service has to say which it is.
+func composeDNSProblems(name string, s map[string]any, tb composeTables, networks map[string]any, fixed map[netip.Addr]string) []string {
+	v := s["dns"]
 	want, closed := tb.DNS[name]
 	reason, open := tb.DNSOpen[name]
 	got, plain := composeStrings(v)
@@ -533,14 +541,89 @@ func composeDNSProblems(name string, v any, tb composeTables) []string {
 		return []string{fmt.Sprintf("%s has no dns key, the table gives it %v: without one Docker's embedded resolver forwards from the host namespace, past the firewall rows", name, want)}
 	case closed && (!plain || !composeSameStrings(got, want)):
 		return []string{fmt.Sprintf("%s has dns %v, the table allows %v", name, v, want)}
+	case closed:
+		return composeDNSPlacementProblems(name, s, got, networks, fixed)
 	case open && reason == "":
 		return []string{name + " is in the open dns table with no reason"}
 	case open && v != nil:
 		return []string{fmt.Sprintf("%s is on the open dns table and has dns %v; leave the key out or move the service to the closed table", name, v)}
 	case !closed && !open:
-		return []string{name + " is in neither dns table: give it dns " + fmt.Sprint(composeNoDNS) + " or list it with the names it resolves"}
+		return []string{name + " is in neither dns table: give it dns " + fmt.Sprint(composeNoDNS) +
+			" when every network it joins is internal, or an unassigned address of the subnet of an internal network it joins (above that network's ip_range) when one has a route out, or list it with the names it resolves"}
 	}
 	return nil
+}
+
+// composeFixedAddrs maps every fixed address a service asks for (ipv4_address, ipv6_address) to the service, so a resolver address cannot be
+// one that a container really holds.
+func composeFixedAddrs(services map[string]any) map[netip.Addr]string {
+	out := map[netip.Addr]string{}
+	for name, raw := range services {
+		for _, n := range composeMap(composeMap(raw)["networks"]) {
+			for _, k := range []string{"ipv4_address", "ipv6_address"} {
+				if str, _ := composeMap(n)[k].(string); str != "" {
+					if a, err := netip.ParseAddr(str); err == nil {
+						out[a] = name
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+// composeDNSPlacementProblems holds the fact the table value rests on. Docker's embedded resolver forwards to the `dns` address from
+// inside the container's namespace; on an internal bridge nothing leaves, but on a bridge with a route out an address that is not on-link
+// goes by the default route, in plaintext. So when every network of the service is internal any address is safe, and otherwise the address
+// has to be on-link in an internal network the service joins: inside its subnet, outside its ip_range (Docker would hand it to a container)
+// and not the fixed address of a service. A service with no `networks` key is on the implicit `default` network, which is not internal.
+func composeDNSPlacementProblems(name string, s map[string]any, addrs []string, networks map[string]any, fixed map[netip.Addr]string) []string {
+	joined := composeNames(s["networks"])
+	if len(joined) == 0 {
+		joined = []string{"default"}
+	}
+	var internal, routed []string
+	for _, n := range joined {
+		if composeMap(networks[n])["internal"] == true {
+			internal = append(internal, n)
+		} else {
+			routed = append(routed, n)
+		}
+	}
+	if len(routed) == 0 {
+		return nil
+	}
+	var out []string
+	for _, a := range addrs {
+		ip, err := netip.ParseAddr(a)
+		if err != nil {
+			out = append(out, fmt.Sprintf("%s has dns %q, which is not an address", name, a))
+			continue
+		}
+		onLink := false
+		for _, n := range internal {
+			cfgs, _ := composeMap(composeMap(networks[n])["ipam"])["config"].([]any)
+			for _, c := range cfgs {
+				subnet, err := netip.ParsePrefix(fmt.Sprint(composeMap(c)["subnet"]))
+				if err != nil || !subnet.Contains(ip) {
+					continue
+				}
+				onLink = true
+				if r, ok := composeMap(c)["ip_range"].(string); ok {
+					if rng, err := netip.ParsePrefix(r); err == nil && rng.Contains(ip) {
+						out = append(out, fmt.Sprintf("%s has dns %s, inside the ip_range of %s: Docker may hand it to a container, which would then answer the lookups", name, a, n))
+					}
+				}
+				if holder, ok := fixed[ip]; ok {
+					out = append(out, fmt.Sprintf("%s has dns %s, the fixed address of %s: that container would answer the lookups", name, a, holder))
+				}
+			}
+		}
+		if !onLink {
+			out = append(out, fmt.Sprintf("%s joins %v, which has a route out, and its dns %s lies in no subnet of an internal network it joins (%v): the forward is off-link, so it would leave by the default route in plaintext", name, routed, a, internal))
+		}
+	}
+	return out
 }
 
 func TestComposeKeysAreAnAllowList(t *testing.T) {
@@ -668,6 +751,11 @@ func TestComposeKeysLintCanFail(t *testing.T) {
 		{"the hub on the shared black-hole address", replace("    dns: [\"10.213.77.253\"]\n", "    dns: *no-external-dns\n"), "has dns"},
 		{"the api with a second resolver", replace("  api:\n    dns: *no-external-dns\n", "  api:\n    dns: [\"192.0.2.53\", \"9.9.9.9\"]\n"), "has dns"},
 		{"the worker given a resolver", plant("worker", "    dns: [\"192.0.2.53\"]\n"), "open dns table"},
+		// Where the resolver sits (CD-r2-1, CD-r2-2): the table value is safe only on-link in an internal network, or when nothing the service joins has a route out.
+		{"app renumbered, caddy's dns left behind", func(s string) string {
+			return replace("10.213.78.0/25", "10.213.80.0/25")(replace("10.213.78.0/24", "10.213.80.0/24")(s))
+		}, "lies in no subnet of an internal network"},
+		{"the api on a network with a route out", replace("    networks: [app, backend, vk_api]\n", "    networks: [app, backend, vk_api, egress]\n"), "lies in no subnet of an internal network"},
 		{"a new service in no table", replace("\n  web-admin:\n", "\n  newsvc:\n    image: busybox\n    networks: [web]\n\n  web-admin:\n"), "in neither dns table"},
 		{"a dependency that is no service", plant("web-panel", "    depends_on: [ghost]\n"), "which is not a service"},
 	} {
@@ -736,6 +824,55 @@ func TestComposeDNSTableClausesFail(t *testing.T) {
 		}, "with no reason"},
 	} {
 		p := composeKeyProblemsWith(good, tc.tables())
+		found := false
+		for _, line := range p {
+			found = found || strings.Contains(line, tc.want)
+		}
+		if !found {
+			t.Errorf("%s: no problem says %q; got %v", tc.name, tc.want, p)
+		}
+	}
+}
+
+// TestComposeDNSPlacementClausesFail plants in the file and in the table together, since the tables pin the address text and the clauses
+// aimed at here judge where the address sits: a new service on the implicit default network with the no-route address, and an address
+// of the right subnet that is in the ip_range or is a container's fixed address.
+func TestComposeDNSPlacementClausesFail(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "deploy", "compose", "docker-compose.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	good := string(b)
+	withDNS := func(service string, addr []string) composeTables {
+		tb := realComposeTables()
+		dns := map[string][]string{}
+		for k, v := range tb.DNS {
+			dns[k] = v
+		}
+		dns[service] = addr
+		tb.DNS = dns
+		return tb
+	}
+	caddyDNS := func(addr string) string {
+		return strings.Replace(good, "    dns: [\"10.213.78.253\"]\n", "    dns: [\""+addr+"\"]\n", 1)
+	}
+	for _, tc := range []struct {
+		name   string
+		file   string
+		tables composeTables
+		want   string
+	}{
+		{"a new service on the default network with the no-route address",
+			strings.Replace(good, "\n  web-admin:\n", "\n  newsvc:\n    image: busybox\n    dns: [\"192.0.2.53\"]\n\n  web-admin:\n", 1),
+			withDNS("newsvc", composeNoDNS), "lies in no subnet of an internal network"},
+		{"caddy's dns inside the ip_range of app", caddyDNS("10.213.78.5"), withDNS("caddy", []string{"10.213.78.5"}), "inside the ip_range"},
+		{"caddy's dns the fixed address of caddy", caddyDNS("10.213.78.200"), withDNS("caddy", []string{"10.213.78.200"}), "the fixed address of caddy"},
+		{"caddy's dns that is no address", caddyDNS("not-an-address"), withDNS("caddy", []string{"not-an-address"}), "which is not an address"},
+	} {
+		if tc.file == good {
+			t.Fatalf("%s: the plant changed nothing", tc.name)
+		}
+		p := composeKeyProblemsWith(tc.file, tc.tables)
 		found := false
 		for _, line := range p {
 			found = found || strings.Contains(line, tc.want)
