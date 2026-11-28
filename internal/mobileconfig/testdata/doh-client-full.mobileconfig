@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>DNSSettings</key>
+			<dict>
+				<key>DNSProtocol</key>
+				<string>HTTPS</string>
+				<key>ServerAddresses</key>
+				<array>
+					<string>203.0.113.10</string>
+					<string>203.0.113.11</string>
+				</array>
+				<key>ServerURL</key>
+				<string>https://abcdefghijklmnopqrstuvwxy2-kid.dns.example.com/abcdefghijklmnopqrstuvwxyz234567</string>
+			</dict>
+			<key>OnDemandRules</key>
+			<array>
+				<dict>
+					<key>Action</key>
+					<string>Disconnect</string>
+					<key>SSIDMatch</key>
+					<array>
+						<string>Home Wi-Fi</string>
+						<string>خانه</string>
+					</array>
+				</dict>
+				<dict>
+					<key>Action</key>
+					<string>EvaluateConnection</string>
+					<key>ActionParameters</key>
+					<array>
+						<dict>
+							<key>DomainAction</key>
+							<string>NeverConnect</string>
+							<key>Domains</key>
+							<array>
+								<string>captive.apple.com</string>
+								<string>example.com</string>
+								<string>local</string>
+							</array>
+						</dict>
+					</array>
+				</dict>
+				<dict>
+					<key>Action</key>
+					<string>Connect</string>
+				</dict>
+			</array>
+			<key>PayloadDisplayName</key>
+			<string>Ctrl Z DNS over HTTPS</string>
+			<key>PayloadIdentifier</key>
+			<string>com.ctrlz.dns.0197a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b.c.kid.dns</string>
+			<key>PayloadType</key>
+			<string>com.apple.dnsSettings.managed</string>
+			<key>PayloadUUID</key>
+			<string>EC2F1A42-29C5-590F-A3A6-82245CCF34EA</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>ProhibitDisablement</key>
+			<true/>
+		</dict>
+	</array>
+	<key>PayloadDescription</key>
+	<string>Encrypted DNS settings from Ctrl Z.</string>
+	<key>PayloadDisplayName</key>
+	<string>Ctrl Z - Home phone</string>
+	<key>PayloadIdentifier</key>
+	<string>com.ctrlz.dns.0197a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b.c.kid</string>
+	<key>PayloadOrganization</key>
+	<string>Ctrl Z</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>193E1251-A2C9-5D0B-A54D-2AA858B5A65F</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>

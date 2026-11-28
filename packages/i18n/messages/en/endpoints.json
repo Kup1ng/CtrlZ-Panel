@@ -1,0 +1,570 @@
+{
+  "frame": {
+    "tabsLabel": "Sections of Endpoint {name}",
+    "tabs": {
+      "clients": "Clients",
+      "ips": "Addresses",
+      "schedule": "Schedule"
+    },
+    "resolvers": "Resolvers",
+    "resolversAria": "Resolvers of Endpoint {name}",
+    "edit": "Edit",
+    "editAria": "Edit Endpoint {name}",
+    "subtitle": "{type}",
+    "profile": "Profile: {name}",
+    "profileTwo": "Profile 2: {name}",
+    "loading": "Loading the Endpoint",
+    "back": "Back to Endpoints",
+    "held": "An administrator is holding this Endpoint. It cannot be deleted.",
+    "notConfigured": "Not Configured",
+    "configure": "Configure",
+    "configureAria": "Configure Endpoint {name}"
+  },
+  "status": {
+    "pending": "Not Configured",
+    "active": "Active"
+  },
+  "state": {
+    "enabled": "On",
+    "soft_disabled": "Soft disabled",
+    "hard_disabled": "Hard disabled"
+  },
+  "lastQuery": "Last query {when}",
+  "noQuery": "No query yet",
+  "list": {
+    "empty": "You have no Endpoints yet.",
+    "emptyText": "An Endpoint is a device or a network that gets its DNS from Ctrl Z. Start with one.",
+    "emptyAction": "Add Endpoint",
+    "emptyFiltered": "No Endpoint matches this filter.",
+    "loading": "Loading Endpoints",
+    "listLabel": "Endpoints",
+    "chipsLabel": "Filter Endpoints by type",
+    "chipAll": "All",
+    "chipNotConfigured": "Not Configured",
+    "chipAria": "{name}: {count, number}",
+    "menu": {
+      "export": "Export CSV",
+      "select": "Select several",
+      "sortName": "Sort by name",
+      "sortDate": "Sort by newest",
+      "sortCurrent": "{label} (current)",
+      "newGroup": "New group"
+    },
+    "exportFailed": "The export could not be made. Try again.",
+    "groups": {
+      "ungrouped": "No group",
+      "count": "{count, plural, one {# Endpoint} other {# Endpoints}}",
+      "toggleAria": "Open or close group {name}",
+      "actionsAria": "Actions of group {name}",
+      "rename": "Rename",
+      "delete": "Delete group",
+      "empty": "This group has no Endpoints."
+    },
+    "row": {
+      "editAria": "Edit Endpoint {name}",
+      "clients": "Clients",
+      "ips": "IPs",
+      "countAria": "{count, number} {label}: Endpoint {name}",
+      "statistics": "Statistics of Endpoint {name}",
+      "typeAria": "Type: {type}",
+      "schedule": "Has a schedule",
+      "heldChip": "Held",
+      "profile": "Profile: {name}",
+      "profileTwo": "Profile 2: {name}",
+      "selectAria": "Select Endpoint {name}"
+    },
+    "partial": {
+      "title": "Not every Endpoint was loaded",
+      "text": "The list may be missing Endpoints, so selecting all is off until it loads.",
+      "retryAria": "Try again: load the rest of the Endpoints"
+    },
+    "selection": {
+      "move": "Move",
+      "edit": "Edit",
+      "delete": "Delete",
+      "overflow": "Only the first {max} Endpoints go into this action."
+    }
+  },
+  "dialogs": {
+    "add": {
+      "title": "Add Endpoint",
+      "submit": "Create",
+      "profileFor": "Profile: {name}",
+      "created": "Endpoint created.",
+      "createdMany": "{count} Endpoints created."
+    },
+    "edit": {
+      "title": "Edit {name}",
+      "submit": "Save",
+      "saved": "Saved.",
+      "scheduleAria": "Schedule of Endpoint {name}",
+      "schedule": "Schedule",
+      "deleteAria": "Delete Endpoint {name}",
+      "held": "An administrator is holding this Endpoint. It does not answer and cannot be deleted until it is released.",
+      "rotate": {
+        "title": "New resolver ID",
+        "text": "The Resolver ID and the DoH token change. You have to set the devices up again, and the share and download links of this Endpoint stop working.",
+        "button": "Get a new ID",
+        "buttonAria": "Get a new Resolver ID for {name}",
+        "confirmTitle": "New ID for {name}?",
+        "confirmText": "The current ID stops working, and devices set up with it get no DNS until you set them up again. The share and download links of this Endpoint end too.",
+        "confirm": "Change the ID",
+        "done": "New ID created. Set the devices up again."
+      }
+    },
+    "fields": {
+      "type": "Type",
+      "typePlaceholder": "Search for a type",
+      "typeEmpty": "No type found",
+      "names": "Names",
+      "namesHint": "One name per line, or separated by commas. Up to 50 names, 64 characters each.",
+      "namesCount": "{count, number} names",
+      "namesTooMany": "At most 50 names",
+      "name": "Name",
+      "profile": "Profile",
+      "profilePlaceholder": "Choose a profile",
+      "profileLocked": "{name} (locked)",
+      "addProfileTwo": "Add a second profile",
+      "profileTwo": "Profile 2",
+      "profileTwoHint": "Profile 2 applies after the first one.",
+      "removeProfileTwo": "Remove Profile 2",
+      "noProfiles": "Create a profile first.",
+      "analytics": "Analytics",
+      "analyticsNone": "None",
+      "analyticsSome": "Some",
+      "analyticsFull": "Full",
+      "analyticsHint": {
+        "none": "No query is logged.",
+        "some": "Only counts and the overall result are kept, with no domains.",
+        "full": "The domain and the result of every query are kept."
+      },
+      "comment": "Comment",
+      "commentCount": "{count, number} of {max, number}",
+      "group": "Group",
+      "noGroup": "No group",
+      "newGroup": "New group",
+      "newGroupName": "Name of the new group",
+      "newGroupCreate": "Create group",
+      "newGroupCancel": "Leave it without a group",
+      "status": "Status",
+      "statusHint": {
+        "pending": "It turns active with the first DNS query.",
+        "active": "The filter applies.",
+        "soft_disabled": "The filter does not apply, and DNS answers like an ordinary resolver.",
+        "hard_disabled": "Nothing is answered, and devices have no DNS."
+      },
+      "advanced": "Advanced settings",
+      "legacy": "Plain DNS",
+      "legacyHint": "Devices with no encrypted DNS reach DNS from your IP address. Off until you turn it on.",
+      "secureDns": "Authorize by Secure DNS",
+      "secureDnsHint": "The address of anyone who queries over DoH correctly joins the authorized IPs.",
+      "ddns": "Authorize by Dynamic DNS",
+      "ddnsHint": "The addresses of the hosts you register join the authorized IPs.",
+      "exposeIp": "Expose IP via DNS",
+      "exposeIpHint": "The outside IP of a device can be seen with a DNS query.",
+      "requireIps": "Require Authorized IPs",
+      "requireIpsHint": "Only addresses in the Authorized IPs list get answers. The list needs at least one address.",
+      "requireIpsWarning": "Once this is on, devices on an address that is not in the list get no answer."
+    },
+    "delete": {
+      "title": "Delete {name}",
+      "batchTitle": "Delete {count, number} Endpoints",
+      "text": "Devices set up with \"{name}\" get no DNS after it is deleted, and their internet may stop working. This cannot be undone.",
+      "batchText": "Devices set up with these Endpoints get no DNS after they are deleted, and their internet may stop working. This cannot be undone.",
+      "confirm": "I know the devices lose DNS",
+      "submit": "Delete",
+      "heldTitle": "Held",
+      "heldText": "An administrator holds these Endpoints, so they cannot be deleted: {names}. Take them out of the selection.",
+      "heldRefused": "These Endpoints cannot be deleted now, because they are held or an address is suspended: {names}.",
+      "done": "Deleted.",
+      "doneMany": "{count} Endpoints deleted.",
+      "separator": ", ",
+      "freeDnsOn": "Devices that use our Plain DNS addresses from a network of this Endpoint are no longer identified. They keep getting free DNS, without any filter.",
+      "freeDnsOff": "Devices that use our Plain DNS addresses from a network of this Endpoint are no longer identified, and their queries are refused."
+    },
+    "group": {
+      "createTitle": "New group",
+      "renameTitle": "Rename group",
+      "deleteTitle": "Delete group {name}",
+      "name": "Group name",
+      "search": "Search Endpoints",
+      "pick": "Endpoints in the group",
+      "pickHint": "Optional. The Endpoints you tick move into this group.",
+      "selected": "{count, plural, one {# Endpoint selected} other {# Endpoints selected}}",
+      "noEndpoints": "There are no Endpoints.",
+      "noMatch": "No Endpoint found.",
+      "limit": "A group takes at most {max, number} Endpoints at a time. Move the rest into it later.",
+      "create": "Create group",
+      "rename": "Save",
+      "deleteText": "The group goes and its Endpoints stay, with no group.",
+      "deleteConfirm": "Delete group",
+      "gone": "This group is gone.",
+      "inGroup": "In group {group}"
+    },
+    "move": {
+      "title": "Move {count, plural, one {# Endpoint} other {# Endpoints}}",
+      "group": "Destination group",
+      "choose": "Choose a group",
+      "submit": "Move",
+      "done": "{count, plural, one {# Endpoint moved.} other {# Endpoints moved.}}"
+    },
+    "batch": {
+      "title": "Edit {count, plural, one {# Endpoint} other {# Endpoints}}",
+      "text": "Only what you choose changes.",
+      "keep": "Keep as it is",
+      "profileTwoNone": "No Profile 2",
+      "submit": "Apply",
+      "done": "{count, plural, one {# Endpoint edited.} other {# Endpoints edited.}}",
+      "nothing": "Nothing to change is chosen."
+    },
+    "locks": {
+      "tooMany": "This change needs the lock passwords of more than 8 profiles. Change fewer Endpoints at a time."
+    },
+    "destinations": {
+      "title": "Destinations are lost",
+      "text": "With this change some destinations of the profile are not available on these Endpoints, and they act like \"Bypass\". Continue?",
+      "continue": "Continue"
+    },
+    "missing": {
+      "title": "Endpoint not found",
+      "text": "This Endpoint does not exist or is gone."
+    }
+  },
+  "schedule": {
+    "title": "Schedule",
+    "loading": "Loading the schedule",
+    "gridLabel": "Weekly schedule of Endpoint {name}",
+    "hint": "Drag with a mouse. On touch, tap the start time and then the end time. With a keyboard, use the arrow keys and Enter. Select a window to edit it.",
+    "days": {
+      "long": {
+        "0": "Sunday",
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday"
+      },
+      "short": {
+        "0": "Sun",
+        "1": "Mon",
+        "2": "Tue",
+        "3": "Wed",
+        "4": "Thu",
+        "5": "Fri",
+        "6": "Sat"
+      }
+    },
+    "pairName": "{first} + {second}",
+    "cellWindow": "{day} {time}: {name}",
+    "cellEmpty": "{day} {time}: no window",
+    "cellSelected": "selected",
+    "cellStart": "start of a window",
+    "announceStart": "Start set on {day} at {time}. Choose the end time and press Enter.",
+    "announceCancelled": "Start removed.",
+    "blocked": "This window overlaps another one.",
+    "tooMany": "At most {max, number} windows are allowed.",
+    "tz": {
+      "label": "Time zone",
+      "placeholder": "Search for a zone",
+      "empty": "No zone found"
+    },
+    "copy": {
+      "button": "Copy day",
+      "title": "Copy day",
+      "from": "From day",
+      "to": "To days",
+      "all": "All other days",
+      "apply": "Apply",
+      "done": "Day copied. Not saved yet.",
+      "note": "The windows of the chosen days are replaced by those of the source day. Nothing changes until you save."
+    },
+    "clear": "Clear all",
+    "clearAria": "Clear all windows",
+    "save": "Save schedule",
+    "discard": "Discard changes",
+    "saved": "Schedule saved.",
+    "unsaved": "Not saved: {count, plural, one {# window} other {# windows}}",
+    "count": "{count, plural, one {# window} other {# windows}}",
+    "none": "No windows. The Endpoint always uses its own profile.",
+    "window": {
+      "title": "Window",
+      "startGroup": "Start",
+      "endGroup": "End",
+      "startDay": "Start day",
+      "startTime": "Start time",
+      "endDay": "End day",
+      "endTime": "End time",
+      "noSecond": "No second profile",
+      "delete": "Delete window",
+      "deleteAria": "Delete this window",
+      "endBeforeStart": "The end has to be after the start.",
+      "overlap": "This window overlaps another one."
+    }
+  },
+  "clients": {
+    "title": "Clients",
+    "loading": "Loading clients",
+    "listLabel": "Clients of the Endpoint",
+    "searchLabel": "Search clients",
+    "search": "Search clients",
+    "count": "{count, plural, one {# client} other {# clients}}",
+    "add": "Custom client",
+    "ungrouped": "No group",
+    "groupCount": "{count, plural, one {# client} other {# clients}}",
+    "groupCountSoFar": "{count, plural, one {# client so far} other {# clients so far}}",
+    "empty": "No clients yet.",
+    "emptyText": "Clients appear on their own with the first request of each device. You can also make one by hand.",
+    "emptyFiltered": "No client matches this search.",
+    "menu": {
+      "label": "Client actions",
+      "select": "Select several",
+      "inactive": "Delete inactive clients",
+      "all": "Delete all clients"
+    },
+    "selection": {
+      "delete": "Delete",
+      "loaded": "Only the clients loaded so far can be selected. To remove all of them use Delete all clients."
+    },
+    "row": {
+      "nothingKnown": "Nothing is known about this device yet",
+      "default": "Default",
+      "custom": "Custom",
+      "profile": "Profile: {name}",
+      "profiles": "Profile: {first} + {second}",
+      "analytics": "Analytics: {level}",
+      "lastSeen": "Last request {when}",
+      "selectAria": "Select client {name}",
+      "editAria": "Edit client {name}",
+      "deleteAria": "Delete client {name}"
+    },
+    "dialog": {
+      "createTitle": "Custom client",
+      "editTitle": "Edit {name}",
+      "label": "Label",
+      "labelHint": "Lowercase letters, digits and hyphens. Left empty, it is made from the name.",
+      "labelVisible": "The label crosses the network unencrypted when a device connects (DoT, DoQ), and so does one made from the name. Do not put a person’s name in either.",
+      "alias": "Name",
+      "group": "Group",
+      "sameAsEndpoint": "Same as the Endpoint",
+      "create": "Create",
+      "save": "Save",
+      "created": "Client created.",
+      "saved": "Saved."
+    },
+    "delete": {
+      "titleIds": "Delete {count, plural, one {# client} other {# clients}}",
+      "titleInactive": "Delete inactive clients",
+      "titleAll": "Delete all clients",
+      "textIds": "{count, plural, one {# client} other {# clients}} will be deleted.",
+      "textInactive": "{count, plural, one {# client has} other {# clients have}} sent no request for over {days, plural, one {# day} other {# days}} and will be deleted.",
+      "textAll": "All {count, plural, one {# client} other {# clients}} of this Endpoint will be deleted.",
+      "counting": "Counting…",
+      "note": "A client that sends a request again is seen again, but its own name and profile do not come back.",
+      "days": "Days",
+      "daysHint": "A number from {min} to {max}",
+      "daysInvalid": "Enter a number from {min} to {max}.",
+      "confirm": "I know this cannot be undone.",
+      "submit": "Delete",
+      "progress": "{count, plural, one {# client} other {# clients}} deleted…",
+      "done": "{count, plural, one {# client} other {# clients}} deleted."
+    }
+  },
+  "ips": {
+    "title": "Addresses",
+    "intro": "These are the addresses that get DNS from this Endpoint: Plain DNS addresses and Authorized IPs.",
+    "claims": {
+      "title": "Plain DNS addresses",
+      "text": "Devices with no encrypted DNS are recognised by these addresses.",
+      "add": "Add an address",
+      "loading": "Loading addresses",
+      "empty": "No addresses yet.",
+      "emptyText": "Add an address or a subnet so its Plain DNS requests reach this Endpoint.",
+      "listLabel": "Plain DNS addresses",
+      "source": {
+        "manual": "Added by hand",
+        "browser": "From the browser",
+        "secure_dns": "From Secure DNS",
+        "ddns": "From Dynamic DNS"
+      },
+      "lastSeen": "last request {when}",
+      "state": {
+        "active": "Active",
+        "pending_proof": "Waiting for proof",
+        "grace": "Grace period",
+        "suspended": "Suspended"
+      },
+      "proven": "Proven",
+      "unproven": "Not proven",
+      "graceUntil": "Grace until {date}",
+      "needsAdmin": "Needs an administrator's approval",
+      "prove": "Prove",
+      "proveAria": "Prove address {cidr}",
+      "releaseAria": "Release address {cidr}",
+      "releaseTitle": "Release {cidr}?",
+      "releaseText": "The address is taken off the Endpoint, and the devices behind it are no longer filtered.",
+      "releaseSubmit": "Release",
+      "released": "Address released.",
+      "legacyOffTitle": "Plain DNS is off",
+      "legacyOff": "Requests from these addresses do not reach the Endpoint until Plain DNS is on.",
+      "legacyOffLink": "Edit Endpoint",
+      "graceNote": "Addresses that are not proven have a grace period. Prove them before it ends or they are suspended."
+    },
+    "claim": {
+      "title": "Add a Plain DNS address",
+      "intro": "Enter the address or subnet your devices reach DNS from.",
+      "field": "IP address or subnet",
+      "fieldHint": "Like 203.0.113.7 or 198.51.100.0/24",
+      "useMine": "Use this browser's address",
+      "useMineNote": "The address the panel sees for this browser can differ from the one a device's DNS comes from (a carrier network, IPv6).",
+      "submit": "Add",
+      "needsAdmin": "This address needs an administrator's approval.",
+      "done": "Address added."
+    },
+    "proof": {
+      "title": "Prove {cidr}",
+      "titleNone": "Prove an address",
+      "readFailed": "The addresses could not be read. Close this window and open it again.",
+      "gone": "This address is no longer there.",
+      "provenTitle": "{cidr} is proven",
+      "provenText": "This address is now proven.",
+      "suspended": "This address is suspended and cannot be proven. Contact support.",
+      "needsAdmin": "Proof alone does not finish this address: it waits for an administrator.",
+      "intro": "For {cidr} you have to show that a DNS request comes from this network.",
+      "noZone": "The service domain is not set yet, so proof is not possible.",
+      "noPair": "This Endpoint has no DNS addresses yet.",
+      "start": "Start proof",
+      "again": "New code",
+      "expired": "The earlier code has ended.",
+      "wait": "Try again in {seconds} seconds.",
+      "waiting": "From the network {cidr}, do one of the three ways. It is checked every 3 seconds.",
+      "nameLabel": "Name to query",
+      "serverLabel": "DNS server",
+      "tcp": {
+        "title": "TCP",
+        "text": "Send a TXT query over TCP. There is nothing to type.",
+        "dig": "dig command over TCP",
+        "nslookup": "nslookup command"
+      },
+      "udp": {
+        "title": "UDP",
+        "text": "Send the query over UDP and type the TXT answer here.",
+        "dig": "dig command over UDP",
+        "seen": "A UDP query was seen. Type the code from the TXT answer.",
+        "code": "Code from the TXT answer",
+        "check": "Check code"
+      },
+      "secure": {
+        "title": "Secure DNS",
+        "text": "On a device that uses this Endpoint's encrypted DNS, press the button so the browser asks for the name.",
+        "button": "Ask with the browser",
+        "again": "Ask again",
+        "off": "Not available on this installation."
+      },
+      "observed": "A {protocol} query was seen.",
+      "notYet": "No query seen yet.",
+      "expires": "{seconds, plural, one {# second} other {# seconds}} until the code ends",
+      "protocols": {
+        "udp": "UDP",
+        "tcp": "TCP",
+        "dot": "DoT",
+        "doh": "DoH",
+        "doh3": "DoH3",
+        "doq": "DoQ"
+      },
+      "noProofTitle": "Not proven",
+      "noProofCodeText": "The code is not right, or the query reached us from another address. Check the code and try again. If the query came from another address, get a new code.",
+      "noProofText": "The query reached us from another address, usually the provider's resolver or another path. This code can no longer prove the address: get a new one and run the query again from the device whose address you claimed.",
+      "newChallenge": "Get a new code",
+      "unavailable": "This address is shared with other networks, so it cannot be proven for you. Use encrypted DNS (DoH or DoT) instead: it needs no address.",
+      "done": "Address proven."
+    },
+    "authorized": {
+      "title": "Authorized IPs",
+      "text": "These addresses always get answers.",
+      "requireOn": "Require Authorized IPs is on: only these addresses get answers, and the last one cannot be deleted.",
+      "add": "Add IP",
+      "menu": "Authorized IP actions",
+      "select": "Select several",
+      "searchLabel": "Search Authorized IPs",
+      "search": "Search addresses",
+      "loading": "Loading Authorized IPs",
+      "empty": "No Authorized IPs yet.",
+      "emptyText": "Add an address or subnet that must always get answers.",
+      "emptyFiltered": "No address matches this search.",
+      "listLabel": "Authorized IPs",
+      "currentChip": "Your address",
+      "lastChip": "Last address",
+      "currentWhy": "This is your current address and cannot be deleted.",
+      "lastWhy": "While Require Authorized IPs is on, the last address cannot be deleted.",
+      "source": {
+        "manual": "Added by hand",
+        "secure_dns": "Secure DNS",
+        "ddns": "Dynamic DNS"
+      },
+      "lastSeen": "last seen {when}",
+      "added": "added {when}",
+      "cleanup": "Auto-remove",
+      "cleanupAria": "Auto-remove {cidr} when unused",
+      "cleanupFailed": "The change was not saved.",
+      "copyAria": "Copy {cidr}",
+      "copied": "Copied.",
+      "copyFailed": "Could not copy.",
+      "deleteAria": "Delete {cidr}",
+      "selectAria": "Select {cidr}",
+      "deleteSelected": "Delete"
+    },
+    "add": {
+      "title": "Add an Authorized IP",
+      "field": "IP address or subnet",
+      "hint": "One address to a line, or separated by commas. Up to {max, number}. Widest allowed: /16 for IPv4, /32 for IPv6.",
+      "outOfRange": "Too wide: at most /16 for IPv4 and /32 for IPv6.",
+      "tooMany": "At most {max, number} addresses.",
+      "badEntry": "Entry {n, number} is not valid: {text}",
+      "refused": "Entry {n, number} ({text}): {reason}",
+      "submit": "Add",
+      "done": "{count, plural, one {# address} other {# addresses}} added."
+    },
+    "delete": {
+      "title": "Delete {count, plural, one {# address} other {# addresses}}",
+      "text": "These addresses will stop getting answers.",
+      "more": "and {count} more",
+      "submit": "Delete",
+      "done": "Deleted."
+    },
+    "ddns": {
+      "title": "Dynamic DNS hosts",
+      "text": "The address these names point to becomes an Authorized IP on its own. It never counts as proof of a Plain DNS address.",
+      "field": "Host name",
+      "add": "Add host",
+      "added": "Host added.",
+      "empty": "No hosts yet.",
+      "listLabel": "Dynamic DNS hosts",
+      "noAddress": "No address found yet",
+      "resolved": "last checked {when}",
+      "neverResolved": "not checked yet",
+      "failing": "Check failing",
+      "deleteAria": "Delete host {name}",
+      "deleteTitle": "Delete {name}?",
+      "deleteText": "The addresses that came from this host are removed from the Authorized IPs too.",
+      "deleteSubmit": "Delete",
+      "deleted": "Host deleted."
+    }
+  },
+  "freeDns": {
+    "remind": {
+      "title": "The network of your last sign-in is not added",
+      "text": "You last signed in to the panel from <tech>{ip}</tech>, and this Endpoint holds no address that covers it. A device on that network that types our Plain DNS addresses gets free DNS without your filters. Add the address to filter it.",
+      "add": "Add this address"
+    },
+    "ipv6": {
+      "title": "The service addresses are IPv6",
+      "on": "Plain DNS cannot be matched to an Endpoint over IPv6, because only IPv4 networks can be added. A device that types these addresses gets free DNS without your filters. Use DoH, DoT or DoQ to be filtered.",
+      "off": "Plain DNS cannot be matched to an Endpoint over IPv6, because only IPv4 networks can be added. A device that types these addresses is refused. Use DoH, DoT or DoQ."
+    },
+    "legacyOff": {
+      "on": "With Plain DNS off, devices that reach DNS from these addresses are no longer identified. If they still use our addresses, they get free DNS without your filters.",
+      "off": "With Plain DNS off, devices that reach DNS from these addresses are no longer identified, and a query from them is refused."
+    }
+  }
+}

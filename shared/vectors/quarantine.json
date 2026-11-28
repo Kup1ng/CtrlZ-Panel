@@ -1,0 +1,105 @@
+{
+  "format": 1,
+  "group": "quarantine",
+  "cases": [
+    {"id": "q-001", "why": "One bad blob in an entry: the stream is not stopped, applied_seq advances, other records apply, the endpoint with no previous binding is served degraded",
+     "blobs": {"good": {"rules": ["ads.example.com"]}, "bad": {"rules": ["x.example.com"], "corrupt": "bad_magic"}},
+     "steps": [
+       {"put_blobs": ["good", "bad"], "put_endpoints": [{"id": "e1", "blob": "good"}, {"id": "e2", "blob": "bad"}],
+        "expect": {"advanced": true, "applied_seq": 1, "quarantined": ["bad:bad_magic"], "degraded": ["e2"],
+                   "endpoints": {"e1": "good/enabled", "e2": "bad/enabled/degraded"}}}
+     ]},
+    {"id": "q-002", "why": "An endpoint whose new blob is quarantined keeps its previous binding, but a hard_disable in the same record still applies",
+     "blobs": {"good": {"rules": ["ads.example.com"]}, "bad": {"rules": ["x.example.com"], "corrupt": "truncated"}},
+     "steps": [
+       {"put_blobs": ["good"], "put_endpoints": [{"id": "e1", "blob": "good"}],
+        "expect": {"advanced": true, "applied_seq": 1, "endpoints": {"e1": "good/enabled"}}},
+       {"put_blobs": ["bad"], "put_endpoints": [{"id": "e1", "blob": "bad", "admin": "hard_disabled"}],
+        "expect": {"advanced": true, "applied_seq": 2, "quarantined": ["bad:length_mismatch"], "kept_previous": ["e1"],
+                   "endpoints": {"e1": "good/hard_disabled"}}}
+     ]},
+    {"id": "q-003", "why": "A corrupt PLIX hash is a bad blob like any other",
+     "blobs": {"bad": {"rules": ["x.example.com"], "corrupt": "plix_hash"}},
+     "steps": [
+       {"put_blobs": ["bad"], "expect": {"advanced": true, "applied_seq": 1, "quarantined": ["bad:hash_mismatch"]}}
+     ]},
+    {"id": "q-004", "why": "A blob that is missing is not quarantined: the endpoint keeps its binding and the blob can arrive later",
+     "blobs": {"a": {"rules": ["a.example.com"]}, "b": {"rules": ["b.example.com"], "withheld": true}},
+     "steps": [
+       {"put_blobs": ["a"], "put_endpoints": [{"id": "e1", "blob": "a"}], "expect": {"advanced": true, "applied_seq": 1, "endpoints": {"e1": "a/enabled"}}},
+       {"put_blobs": ["b"], "put_endpoints": [{"id": "e1", "blob": "b"}],
+        "expect": {"advanced": true, "applied_seq": 2, "missing": ["b"], "kept_previous": ["e1"], "endpoints": {"e1": "a/enabled"}}}
+     ]},
+    {"id": "q-005", "why": "A garbage entry does not advance the node",
+     "blobs": {"a": {"rules": ["a.example.com"]}},
+     "steps": [
+       {"put_blobs": ["a"], "expect": {"advanced": true, "applied_seq": 1}},
+       {"raw": "garbage bytes", "expect": {"advanced": false, "applied_seq": 1, "entry_failure": "bad_section"}}
+     ]},
+    {"id": "q-006", "why": "A sequence gap does not advance the node (it refetches from the hub)",
+     "blobs": {"a": {"rules": ["a.example.com"]}},
+     "steps": [
+       {"put_blobs": ["a"], "expect": {"advanced": true, "applied_seq": 1}},
+       {"seq": 5, "put_blobs": ["a"], "expect": {"advanced": false, "applied_seq": 1, "entry_failure": "index_range"}}
+     ]},
+    {"id": "q-007", "why": "A deleted blob stays while an endpoint still binds to it",
+     "blobs": {"a": {"rules": ["a.example.com"]}},
+     "steps": [
+       {"put_blobs": ["a"], "put_endpoints": [{"id": "e1", "blob": "a"}], "expect": {"advanced": true, "applied_seq": 1, "endpoints": {"e1": "a/enabled"}}},
+       {"del_blobs": ["a"], "expect": {"advanced": true, "applied_seq": 2, "endpoints": {"e1": "a/enabled"}}}
+     ]},
+    {"id": "q-008", "why": "Deleting an endpoint removes its binding and its degraded mark",
+     "blobs": {"bad": {"rules": ["x.example.com"], "corrupt": "bad_magic"}},
+     "steps": [
+       {"put_blobs": ["bad"], "put_endpoints": [{"id": "e2", "blob": "bad"}], "expect": {"advanced": true, "applied_seq": 1, "quarantined": ["bad:bad_magic"], "degraded": ["e2"]}},
+       {"del_endpoints": ["e2"], "expect": {"advanced": true, "applied_seq": 2}}
+     ]},
+    {"id": "q-009", "why": "A blob missing when its Endpoint is put is not forgotten: when it arrives, a later entry that does not mention it switches the Endpoint without a new put (review F05/F12)",
+     "blobs": {"a": {"rules": ["a.example.com"]}, "b": {"rules": ["b.example.com"], "withheld": true}, "c": {"rules": ["c.example.com"]}},
+     "steps": [
+       {"put_blobs": ["a"], "put_endpoints": [{"id": "e1", "blob": "a"}], "expect": {"advanced": true, "applied_seq": 1, "endpoints": {"e1": "a/enabled"}}},
+       {"put_blobs": ["b"], "put_endpoints": [{"id": "e1", "blob": "b"}],
+        "expect": {"advanced": true, "applied_seq": 2, "missing": ["b"], "kept_previous": ["e1"], "endpoints": {"e1": "a/enabled"}}},
+       {"put_blobs": ["c"], "expect": {"advanced": true, "applied_seq": 3, "missing": ["b"], "endpoints": {"e1": "a/enabled"}}},
+       {"release": ["b"], "put_blobs": ["c"], "expect": {"advanced": true, "applied_seq": 4, "promoted": ["e1"], "endpoints": {"e1": "b/enabled"}}}
+     ]},
+    {"id": "q-010", "why": "A first-time Endpoint whose blob was missing leaves degraded mode when the blob arrives and the node retries, with no entry and no applied_seq move",
+     "blobs": {"b": {"rules": ["b.example.com"], "withheld": true}},
+     "steps": [
+       {"put_blobs": ["b"], "put_endpoints": [{"id": "e1", "blob": "b"}], "expect": {"advanced": true, "applied_seq": 1, "missing": ["b"], "degraded": ["e1"], "endpoints": {"e1": "b/enabled/degraded"}}},
+       {"retry": true, "expect": {"advanced": false, "applied_seq": 1, "missing": ["b"], "endpoints": {"e1": "b/enabled/degraded"}}},
+       {"release": ["b"], "retry": true, "expect": {"advanced": false, "applied_seq": 1, "promoted": ["e1"], "endpoints": {"e1": "b/enabled"}}}
+     ]},
+    {"id": "q-011", "why": "A newer put for the Endpoint ends the wait: a late blob does not override it",
+     "blobs": {"a": {"rules": ["a.example.com"]}, "b": {"rules": ["b.example.com"], "withheld": true}},
+     "steps": [
+       {"put_blobs": ["a"], "put_endpoints": [{"id": "e1", "blob": "a"}], "expect": {"advanced": true, "applied_seq": 1}},
+       {"put_blobs": ["b"], "put_endpoints": [{"id": "e1", "blob": "b"}], "expect": {"advanced": true, "applied_seq": 2, "missing": ["b"], "kept_previous": ["e1"]}},
+       {"put_endpoints": [{"id": "e1", "blob": "a", "admin": "soft_disabled"}], "expect": {"advanced": true, "applied_seq": 3, "missing": ["b"], "endpoints": {"e1": "a/soft_disabled"}}},
+       {"release": ["b"], "retry": true, "expect": {"advanced": false, "applied_seq": 3, "endpoints": {"e1": "a/soft_disabled"}}}
+     ]},
+    {"id": "q-012", "why": "A transfer that delivers the wrong bytes is not a verdict on the hash: it is reported, the hash is not quarantined, the Endpoint stays pending and the next retry fetches it again",
+     "blobs": {"a": {"rules": ["a.example.com"]}, "b": {"rules": ["b.example.com"], "corrupt": "flip_transfer"}},
+     "steps": [
+       {"put_blobs": ["a"], "put_endpoints": [{"id": "e1", "blob": "a"}], "expect": {"advanced": true, "applied_seq": 1, "endpoints": {"e1": "a/enabled"}}},
+       {"put_blobs": ["b"], "put_endpoints": [{"id": "e1", "blob": "b"}],
+        "expect": {"advanced": true, "applied_seq": 2, "failed": ["b:hash_mismatch"], "kept_previous": ["e1"], "endpoints": {"e1": "a/enabled"}}},
+       {"retry": true, "expect": {"advanced": false, "applied_seq": 2, "failed": ["b:hash_mismatch"], "endpoints": {"e1": "a/enabled"}}},
+       {"release": ["b"], "retry": true, "expect": {"advanced": false, "applied_seq": 2, "promoted": ["e1"], "endpoints": {"e1": "b/enabled"}}}
+     ]},
+    {"id": "q-013", "why": "The panel re-emitting the same hash after a damaged transfer is fetched again and binds, because the hash was never quarantined",
+     "blobs": {"b": {"rules": ["b.example.com"], "corrupt": "flip_transfer"}},
+     "steps": [
+       {"put_blobs": ["b"], "put_endpoints": [{"id": "e1", "blob": "b"}], "expect": {"advanced": true, "applied_seq": 1, "failed": ["b:hash_mismatch"], "degraded": ["e1"], "endpoints": {"e1": "b/enabled/degraded"}}},
+       {"release": ["b"], "put_blobs": ["b"], "put_endpoints": [{"id": "e1", "blob": "b"}], "expect": {"advanced": true, "applied_seq": 2, "endpoints": {"e1": "b/enabled"}}}
+     ]},
+    {"id": "q-014", "why": "A block page that a del_blobs names is dropped at once, whether or not a profile still waits for its replacement (p4b 6.2): the panel names a page only when no bound profile blob names it",
+     "blobs": {"p1": {"page": "First"}, "p2": {"page": "Second"}, "a": {"rules": ["a.example.com"]}},
+     "steps": [
+       {"put_blobs": ["p1", "p2", "a"], "put_endpoints": [{"id": "e1", "blob": "a"}],
+        "expect": {"advanced": true, "applied_seq": 1, "pages": ["p1", "p2"], "endpoints": {"e1": "a/enabled"}}},
+       {"del_blobs": ["p1"], "expect": {"advanced": true, "applied_seq": 2, "pages": ["p2"], "endpoints": {"e1": "a/enabled"}}},
+       {"del_blobs": ["p2", "p1"], "expect": {"advanced": true, "applied_seq": 3, "pages": [], "endpoints": {"e1": "a/enabled"}}}
+     ]}
+  ]
+}

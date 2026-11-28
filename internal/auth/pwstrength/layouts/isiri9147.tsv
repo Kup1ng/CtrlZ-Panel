@@ -1,0 +1,78 @@
+# Persian (Standard), ISIRI 9147 (kbdfar.dll)
+#
+# Source: the Windows keyboard layout 00050429 ("Persian (Standard)"), read from the operating system with
+# dump.ps1 (Win32 ToUnicodeEx on the layout, Windows Server 2025 build 26100, 2026-11-09).
+# It is data, not a table typed from memory: every later change of it is a diff a reader can
+# compare with a fresh run of dump.ps1. The generator (gen/main.go) turns it into
+# ../layouts_gen.go, and TestLayoutTablesAreGenerated fails if that file drifts.
+#
+# Columns, tab separated: scan code (hex), then four code point lists ("U+0041+U+0042" is
+# two characters): the key on the US layout (00000409) unshifted and shifted, and the key on
+# this layout unshifted and shifted. An empty cell is a key with no character. The US legend
+# is what a Persian letter is "read as" (4.3): the key it shares with a Latin letter.
+#
+# One cell is the standard's and not the system's (P1 auth review round 9, primitives-r9-1): scan code 2D,
+# Shift+X. ToUnicodeEx on kbdfar.dll (Windows Server 2025 build 26100) reports tah (U+0637) there, which is the
+# unshifted letter again; ISIRI 9147 puts the combining maddah above (U+0653) on that key, and the systems that
+# implement the standard (Linux, macOS, Android) type it, so a shifted walk Shift+Z, Shift+X, Shift+C arrives as
+# U+0643 U+0653 U+0698 and must read as "zxc". A fresh run of dump.ps1 therefore differs from this file in ONE
+# row, this one, and that is expected. The other cells of the shifted bottom row (Z U+0643, C U+0698, V U+0670,
+# B U+200C, N U+0654, M U+0621) agree with the standard, which is why the dump is otherwise trusted; the test
+# TestLayoutDataShowsTheFactsOfSpec43 pins the whole shifted row.
+#
+# Two more cells are the standard's and not the system's (round 10, primitives-r10-8): scan code 29, Shift+`
+# (the division sign U+00F7; the dump reports the unshifted ZWJ there again, the same fault as Shift+X) and
+# scan code 05, Shift+4 (the rial sign U+FDFC; the dump shows its NFKC form, the four letters of "rial", which
+# no key types). Both were read from the published standard (Wikipedia, "Persian keyboard layout") and are
+# pinned by TestLayoutDataShowsTheFactsOfSpec43. The generator enters U+FDFC under its own code point and
+# pwstrength reads a typed character before it applies NFKC, so the rial sign reads as the key "4".
+# A fresh run of dump.ps1 therefore differs from this file in THREE rows (2D, 29, 05), and that is expected.
+29	U+0060	U+007E	U+200D	U+00F7
+02	U+0031	U+0021	U+06F1	U+0021
+03	U+0032	U+0040	U+06F2	U+066C
+04	U+0033	U+0023	U+06F3	U+066B
+05	U+0034	U+0024	U+06F4	U+FDFC
+06	U+0035	U+0025	U+06F5	U+066A
+07	U+0036	U+005E	U+06F6	U+00D7
+08	U+0037	U+0026	U+06F7	U+060C
+09	U+0038	U+002A	U+06F8	U+002A
+0A	U+0039	U+0028	U+06F9	U+0029
+0B	U+0030	U+0029	U+06F0	U+0028
+0C	U+002D	U+005F	U+002D	U+0640
+0D	U+003D	U+002B	U+003D	U+002B
+10	U+0071	U+0051	U+0636	U+0652
+11	U+0077	U+0057	U+0635	U+064C
+12	U+0065	U+0045	U+062B	U+064D
+13	U+0072	U+0052	U+0642	U+064B
+14	U+0074	U+0054	U+0641	U+064F
+15	U+0079	U+0059	U+063A	U+0650
+16	U+0075	U+0055	U+0639	U+064E
+17	U+0069	U+0049	U+0647	U+0651
+18	U+006F	U+004F	U+062E	U+005D
+19	U+0070	U+0050	U+062D	U+005B
+1A	U+005B	U+007B	U+062C	U+007D
+1B	U+005D	U+007D	U+0686	U+007B
+1E	U+0061	U+0041	U+0634	U+0624
+1F	U+0073	U+0053	U+0633	U+0626
+20	U+0064	U+0044	U+06CC	U+064A
+21	U+0066	U+0046	U+0628	U+0625
+22	U+0067	U+0047	U+0644	U+0623
+23	U+0068	U+0048	U+0627	U+0622
+24	U+006A	U+004A	U+062A	U+0629
+25	U+006B	U+004B	U+0646	U+00BB
+26	U+006C	U+004C	U+0645	U+00AB
+27	U+003B	U+003A	U+06A9	U+003A
+28	U+0027	U+0022	U+06AF	U+061B
+2B	U+005C	U+007C	U+005C	U+007C
+2C	U+007A	U+005A	U+0638	U+0643
+2D	U+0078	U+0058	U+0637	U+0653
+2E	U+0063	U+0043	U+0632	U+0698
+2F	U+0076	U+0056	U+0631	U+0670
+30	U+0062	U+0042	U+0630	U+200C
+31	U+006E	U+004E	U+062F	U+0654
+32	U+006D	U+004D	U+067E	U+0621
+33	U+002C	U+003C	U+0648	U+003E
+34	U+002E	U+003E	U+002E	U+003C
+35	U+002F	U+003F	U+002F	U+061F
+56	U+005C	U+007C	U+005C	U+007C
+39	U+0020	U+0020	U+0020	U+200C

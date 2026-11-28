@@ -1,0 +1,32 @@
+-- P1 auth review round 2 (db-r2-1 / db-r2-5): ctrlz_admin keeps UPDATE only
+-- where the admin code writes.
+--
+-- 0012 took users.password_hash away from ctrlz_admin because code running as
+-- ctrlz_admin (an injection in the admin container, or a leaked
+-- pg_admin_password used from inside the backend network) may open WithTenant
+-- on any tenant and would otherwise set a hash it knows. The same reach was
+-- still open through the credential tables: ctrlz_admin held table-level UPDATE
+-- on sessions, refresh_tokens, api_tokens and webauthn_credentials, which is
+-- token_hash, the expiry columns, restricted, reauth_at, public_key and
+-- credential_id. Session and refresh token hashes are plain SHA-256 of the
+-- token, so the attacker computes the hash of a token they choose, writes it
+-- into a victim's row (revoked_at NULL, expiry far ahead, reauth_at now), and
+-- presents the token: a full session with no password and no second factor.
+-- Rewriting webauthn_credentials.public_key does the same through a passkey
+-- login, and api_tokens.token_hash mints a write API token.
+--
+-- The admin code only revokes: sessions.revoked_at and refresh_tokens.revoked_at
+-- (RevokeUserSessions, spec 10.7 step c). It never writes api_tokens (a tenant
+-- revokes its own) or webauthn_credentials (the RP ID job is the worker's). So
+-- it keeps UPDATE (revoked_at) on the first two and nothing on the last two.
+-- Its SELECT column grants are unchanged.
+--
+-- A new file and not an edit of 0011 or 0012 (README, Rules).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+
+-- As the owner. A table-level REVOKE removes the column-level UPDATE grants too.
+REVOKE UPDATE ON ctrlz.sessions, ctrlz.refresh_tokens, ctrlz.api_tokens, ctrlz.webauthn_credentials FROM ctrlz_admin;
+GRANT UPDATE (revoked_at) ON ctrlz.sessions, ctrlz.refresh_tokens TO ctrlz_admin;
