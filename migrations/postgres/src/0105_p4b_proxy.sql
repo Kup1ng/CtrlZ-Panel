@@ -104,14 +104,23 @@ GRANT UPDATE (dns_bind_ip, proxy_bind_ip, xray_fetch_version, xray_rev) ON ctrlz
 
 -- The hub reads the fragments again only when xray_rev moved, so a counter put back to the value it cached (the admin
 -- holds UPDATE on the column, because the trigger of item 2 runs as the writer) would hide a removed credential. The
--- counter therefore never goes down, whoever writes it.
+-- counter therefore never goes down, whoever writes it. Nor does it jump far: a counter set to the top of bigint would
+-- make the step of the limit trigger overflow, so no config of that node could be written again, and nothing that can
+-- write the counter could put it back (B2-r2-3). The trigger of item 2 steps by 1, so a step of a million is far above
+-- any use, and the top of bigint is then out of reach of any number of writes.
 -- +goose StatementBegin
 CREATE FUNCTION ctrlz.nodes_xray_rev_forward() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
+  -- Two statements, not one OR: Postgres does not promise the order of the two sides, and the difference of a negative
+  -- value from a large one would overflow.
   IF NEW.xray_rev < OLD.xray_rev THEN
     RAISE EXCEPTION 'nodes.xray_rev only moves forward'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'nodes_xray_rev_forward';
+  END IF;
+  IF NEW.xray_rev - OLD.xray_rev > 1000000 THEN
+    RAISE EXCEPTION 'nodes.xray_rev moves by at most a million at a time'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'nodes_xray_rev_forward';
   END IF;
   RETURN NEW;
@@ -148,10 +157,13 @@ ALTER TABLE ctrlz.node_location_configs
   -- The bounds of wire.ValidateNodeConfig (64 paths of at most 256 bytes), so that one bad write cannot make
   -- the config of a whole node unreadable or unsendable. The elements are joined with a control character that no
   -- path holds, so one pattern bounds each of them; the form of a path is the route's and the validator's. A run of
-  -- 257 is written as 255 and 2: Postgres refuses a repetition count above 255 (SQLSTATE 2201B).
+  -- 257 is written as 255 and 2: Postgres refuses a repetition count above 255 (SQLSTATE 2201B). The limit is in bytes
+  -- (xrayschema.ValidPath), a regular expression counts characters, and a path is ASCII only, so every element is held to
+  -- the printable ASCII characters: then a character is a byte (B2-r2-1).
   ADD CONSTRAINT node_location_configs_accepted_unknown_bounds CHECK (
     pg_catalog.cardinality(accepted_unknown) <= 64
     AND pg_catalog.array_position(accepted_unknown, NULL::pg_catalog.text) IS NULL
+    AND pg_catalog.array_to_string(accepted_unknown, pg_catalog.chr(1)) !~ ('[^ -~' || pg_catalog.chr(1) || ']')
     AND pg_catalog.array_to_string(accepted_unknown, pg_catalog.chr(1)) !~ ('[^' || pg_catalog.chr(1) || ']{255}[^' || pg_catalog.chr(1) || ']{2}'));
 
 -- Every write of a config steps the counter of its node: the node row's lock orders the writers of one node, and
@@ -348,9 +360,10 @@ GRANT SELECT (created_at) ON ctrlz.unblock_requests TO ctrlz_worker;
 -- 10. tenant_assets -----------------------------------------------------------------------------
 
 -- assets.Store (10.5) decodes a logo and writes it again as PNG, so a row of any other type is not its work.
--- NOT VALID: item 10 says new rows. 0003 allowed JPEG and WebP, and a row of that kind that exists is left as it is
--- (nothing on main wrote one); the check holds for every insert and every update of a row.
-ALTER TABLE ctrlz.tenant_assets ADD CONSTRAINT tenant_assets_png_only CHECK (mime = 'image/png') NOT VALID;
+-- Validated, as the catalog check 28 requires of every constraint. 0003 allowed JPEG and WebP, but nothing on main wrote a
+-- row of this table (assets.Store is its first writer), so the table is empty on any installed database and the scan
+-- finds nothing; a row of another type would stop the migration with a check violation, which is the loud answer.
+ALTER TABLE ctrlz.tenant_assets ADD CONSTRAINT tenant_assets_png_only CHECK (mime = 'image/png');
 
 -- At most 20 rows a tenant (D31). assets.Store decides it first under the quota lock of the tenant; this takes the
 -- same lock before it counts, so two writers of one tenant meet here even when one of them skipped QuotaLock (the lock
@@ -397,7 +410,7 @@ ALTER TABLE ctrlz.policy_artifacts
 -- alerts it has, which sets resolved_at of the open row of one kind and one node, for the kinds of 11 and no other.
 -- The row is named by params.key, the node's id as text (alerts_open_key_uq, 0011). It answers how many rows it
 -- closed, which is one or none. ctrlz_auth owns it because it is not about a tenant and needs UPDATE on alerts.
-GRANT SELECT (kind, params, resolved_at), UPDATE (resolved_at) ON ctrlz.alerts TO ctrlz_auth;
+GRANT SELECT (id, kind, params, resolved_at), UPDATE (resolved_at) ON ctrlz.alerts TO ctrlz_auth;
 
 SET ROLE ctrlz_auth;
 -- +goose StatementBegin
@@ -407,10 +420,15 @@ AS $$
 DECLARE
   v_closed integer;
 BEGIN
+  -- The ordered shape of every multi-row writer (db-r16-19): the open row of a kind and a node is one by
+  -- alerts_open_key_uq, but that index is partial, so the statement names its rows by id, locked in id order.
   UPDATE ctrlz.alerts SET resolved_at = pg_catalog.now()
-  WHERE resolved_at IS NULL AND kind = p_kind AND (params ->> 'key') = p_node::pg_catalog.text
-    AND kind = ANY (ARRAY['nft_failed', 'xray_down', 'block_key_missing', 'grants_full', 'xray_stuck',
-                          'location_down', 'xray_upgrade_blocked', 'proxy_unreachable']::pg_catalog.text[]);
+  WHERE id = ANY (ARRAY(
+    SELECT s.id FROM ctrlz.alerts s
+    WHERE s.resolved_at IS NULL AND s.kind = p_kind AND (s.params ->> 'key') = p_node::pg_catalog.text
+      AND s.kind = ANY (ARRAY['nft_failed', 'xray_down', 'block_key_missing', 'grants_full', 'xray_stuck',
+                              'location_down', 'xray_upgrade_blocked', 'proxy_unreachable']::pg_catalog.text[])
+    ORDER BY s.id FOR NO KEY UPDATE));
   GET DIAGNOSTICS v_closed = ROW_COUNT;
   RETURN v_closed;
 END

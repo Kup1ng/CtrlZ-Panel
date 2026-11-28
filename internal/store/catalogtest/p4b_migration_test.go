@@ -104,16 +104,23 @@ func TestP4bConfigs(t *testing.T) {
 	want(t, "a priority of 99", h.seq("admin", nil, `INSERT INTO ctrlz.node_location_configs (node_id, location_id, tag, fragment, schema_version, priority)
 		VALUES ('`+nodeC1+`', '`+frankfurt+`', 'p', '{}', '`+relTag+`', 99)`), "")
 	want(t, "the dropped last-good column", h.seq("admin", nil, `SELECT last_good_fragment FROM ctrlz.node_location_configs`), "42703")
-	want(t, "accepted_unknown", h.seq("admin", nil, `UPDATE ctrlz.node_location_configs SET accepted_unknown = '{a.b}'`), "")
-	// The bounds of wire.ValidateNodeConfig: 64 paths of at most 256 bytes, none NULL.
+	// The bounds of wire.ValidateNodeConfig: 64 paths of at most 256 bytes, none NULL, all ASCII. Each case writes a row
+	// first and then changes it: seq rolls back, so an UPDATE alone would find no row and prove nothing.
 	setUnknown := func(expr string) string {
-		return "UPDATE ctrlz.node_location_configs SET accepted_unknown = " + expr
+		return h.seq("admin", nil, cfgInsert(nodeC1, frankfurt, "au", true), "UPDATE ctrlz.node_location_configs SET accepted_unknown = "+expr)
 	}
-	want(t, "64 accepted paths", h.seq("admin", nil, setUnknown("(SELECT array_agg('p' || g) FROM generate_series(1, 64) g)")), "")
-	want(t, "65 accepted paths", h.seq("admin", nil, setUnknown("(SELECT array_agg('p' || g) FROM generate_series(1, 65) g)")), "23514")
-	want(t, "an accepted path of 256 bytes", h.seq("admin", nil, setUnknown("ARRAY[repeat('x', 256)]")), "")
-	want(t, "an accepted path of 257 bytes", h.seq("admin", nil, setUnknown("ARRAY['a', repeat('x', 257)]")), "23514")
-	want(t, "an accepted path that is NULL", h.seq("admin", nil, setUnknown("ARRAY['a', NULL]::text[]")), "23514")
+	want(t, "accepted_unknown", setUnknown("'{a.b}'"), "")
+	want(t, "64 accepted paths", setUnknown("(SELECT array_agg('p' || g) FROM generate_series(1, 64) g)"), "")
+	want(t, "65 accepted paths", setUnknown("(SELECT array_agg('p' || g) FROM generate_series(1, 65) g)"), "23514")
+	want(t, "an accepted path of 256 bytes", setUnknown("ARRAY[repeat('x', 256)]"), "")
+	want(t, "an accepted path of 257 bytes", setUnknown("ARRAY['a', repeat('x', 257)]"), "23514")
+	want(t, "an accepted path that is NULL", setUnknown("ARRAY['a', NULL]::text[]"), "23514")
+	// A character is not a byte: 200 two-byte characters are under 256 characters and over 256 bytes, which the wire
+	// validator refuses, so the database holds the paths to ASCII (B2-r2-1).
+	want(t, "an accepted path of 200 two-byte characters", setUnknown("ARRAY[repeat('é', 200)]"), "23514")
+	want(t, "an accepted path with one two-byte character", setUnknown("ARRAY['a.é']"), "23514")
+	want(t, "an accepted path with a control character", setUnknown("ARRAY[E'a\tb']"), "23514")
+	want(t, "an accepted path with a space and a tilde", setUnknown("ARRAY['a b~']"), "")
 
 	// The counter steps on every insert, update and delete, and a statement that moves a config steps both nodes.
 	n3 := h.addNode(3, "pending", "192.0.2.61")
@@ -136,11 +143,19 @@ func TestP4bConfigs(t *testing.T) {
 		t.Errorf("xray_rev after a delete is %d, want %d", got, b3+2)
 	}
 	want(t, "the admin writes the counter", h.seq("admin", nil, `UPDATE ctrlz.nodes SET xray_rev = 5 WHERE id = '`+n3+`'`), "")
+	// seq rolls back, so the value the next cases move from is written for real.
+	h.exec(`UPDATE ctrlz.nodes SET xray_rev = 5 WHERE id = $1`, n3)
 	want(t, "the hub writes the counter", h.seq("hub", nil, `UPDATE ctrlz.nodes SET xray_rev = 5 WHERE id = '`+n3+`'`), "42501")
 	// The hub reads again only when the counter moved, so a counter put back to the value it cached would hide a change
 	// (B2-r1-8): it moves forward only, in a statement of its own and after a step of the trigger in the same transaction.
 	want(t, "the counter moved back", h.seq("admin", nil, `UPDATE ctrlz.nodes SET xray_rev = 4 WHERE id = '`+n3+`'`), "23514")
 	want(t, "the counter kept", h.seq("admin", nil, `UPDATE ctrlz.nodes SET xray_rev = 5 WHERE id = '`+n3+`'`), "")
+	// A counter set to the top of bigint would make the step of the limit trigger overflow for good (B2-r2-3).
+	want(t, "a step of a million", h.seq("admin", nil, `UPDATE ctrlz.nodes SET xray_rev = 1000005 WHERE id = '`+n3+`'`), "")
+	want(t, "a step over a million", h.seq("admin", nil, `UPDATE ctrlz.nodes SET xray_rev = 1000006 WHERE id = '`+n3+`'`), "23514")
+	want(t, "the top of bigint", h.seq("admin", nil, `UPDATE ctrlz.nodes SET xray_rev = 9223372036854775807 WHERE id = '`+n3+`'`), "23514")
+	want(t, "the top of bigint by the superuser", h.seq("", nil, `UPDATE ctrlz.nodes SET xray_rev = 9223372036854775807 WHERE id = '`+n3+`'`), "23514")
+	want(t, "the bottom of bigint", h.seq("", nil, `UPDATE ctrlz.nodes SET xray_rev = -9223372036854775808 WHERE id = '`+n3+`'`), "23514")
 	want(t, "a config deleted and the counter put back", h.seq("admin", nil, cfgInsert(nodeC1, frankfurt, "back", true),
 		`DELETE FROM ctrlz.node_location_configs WHERE node_id = '`+nodeC1+`' AND tag = 'back'`,
 		`UPDATE ctrlz.nodes SET xray_rev = (SELECT xray_rev - 2 FROM ctrlz.nodes WHERE id = '`+nodeC1+`') WHERE id = '`+nodeC1+`'`), "23514")
@@ -366,6 +381,8 @@ func TestP4bBlockRoots(t *testing.T) {
 	want(t, "tenant A deletes its row", h.seq("tenant", &a, `DELETE FROM ctrlz.block_roots`), "42501")
 	want(t, "the hub inserts a row", h.seq("hub", nil, ins(a)), "42501")
 	want(t, "the hub deletes a row", h.seq("hub", nil, `DELETE FROM ctrlz.block_roots`), "42501")
+	// The seq calls above rolled back, so A's row is made again for real: the hub's cases need both tenants' rows.
+	h.exec(ins(a))
 
 	// The hub gives every empty row its certificate.
 	setRoot := func(digestLen int, after string) string {
@@ -385,8 +402,9 @@ func TestP4bBlockRoots(t *testing.T) {
 	want(t, "the hub clears a root", h.seq("hub", nil, `UPDATE ctrlz.block_roots SET cert_der = NULL, spki_sha256 = NULL, not_before = NULL, not_after = NULL`), "")
 	want(t, "the hub writes the stamp", h.seq("hub", nil, `UPDATE ctrlz.block_roots SET created_at = now()`), "42501")
 	want(t, "the hub moves a root to another tenant", h.seq("hub", nil, `UPDATE ctrlz.block_roots SET tenant_id = gen_random_uuid()`), "42501")
-	// The tenant reads the certificate of its own root and no other.
-	if got, code := h.texts("tenant", &a, `SELECT spki_sha256::text FROM ctrlz.block_roots`); code != "" || len(got) != 1 {
+	// The tenant reads the certificate of its own root and no other. affected rolls back, so the root is written for real.
+	h.exec(setRoot(32, "now() + interval '10 years'") + ` WHERE tenant_id = '` + a + `'`)
+	if got, code := h.texts("tenant", &a, `SELECT spki_sha256::text FROM ctrlz.block_roots`); code != "" || len(got) != 1 || got[0] == "NULL" {
 		t.Errorf("tenant A reads its root: %v (%q)", got, code)
 	}
 }

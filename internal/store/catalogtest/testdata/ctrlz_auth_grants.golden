@@ -114,7 +114,7 @@ schema ctrlz_fn USAGE
 table admin_users INSERT (must_change_password, password_expires_at, password_hash, username)
 table admin_users SELECT (id, must_change_password, password_expires_at, totp_enabled_at, totp_last_step, totp_secret_ct)
 table admin_users UPDATE (must_change_password, password_changed_at, password_expires_at, password_hash, totp_enabled_at, totp_last_step, totp_secret_ct)
-table alerts SELECT (kind, params, resolved_at)
+table alerts SELECT (id, kind, params, resolved_at)
 table alerts UPDATE (resolved_at)
 table api_tokens SELECT (allowed_ips, id, kind, revoked_at, tenant_id, token_hash, user_id)
 table audit_log INSERT (action, admin_id, at, entry_hash, ip, params, prev_hash, target)

@@ -2,6 +2,7 @@ package assets
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -65,7 +67,7 @@ func decodeDims(t *testing.T, b []byte) (int, int, string) {
 
 func TestNormalizeWritesAPNGAgain(t *testing.T) {
 	src := encodePNG(t, gradient(64, 32))
-	out, err := Normalize(src)
+	out, err := norm(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +89,7 @@ func TestNormalizeWritesAPNGAgain(t *testing.T) {
 func TestNormalizeDropsMetadataAndTrailingBytes(t *testing.T) {
 	src := withChunk(encodePNG(t, gradient(8, 8)), "tEXt", []byte("Comment\x00where I live"))
 	src = append(src, []byte("TRAILING-SECRET")...)
-	out, err := Normalize(src)
+	out, err := norm(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +108,7 @@ func TestNormalizeJPEGLosesItsExif(t *testing.T) {
 	exif := append([]byte("Exif\x00\x00"), []byte("GPS 35.7N 51.4E")...)
 	seg := append([]byte{0xFF, 0xE1, byte((len(exif) + 2) >> 8), byte(len(exif) + 2)}, exif...)
 	src := append(append(append([]byte{}, j.Bytes()[:2]...), seg...), j.Bytes()[2:]...)
-	out, err := Normalize(src)
+	out, err := norm(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +126,7 @@ func TestNormalizeWebP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := Normalize(src)
+	out, err := norm(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,12 +151,12 @@ func TestNormalizeRefuses(t *testing.T) {
 		"a JPEG header alone": {0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F'},
 	}
 	for name, b := range cases {
-		if _, err := Normalize(b); !errors.Is(err, ErrInvalid) {
+		if _, err := norm(b); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v, want ErrInvalid", name, err)
 		}
 	}
 	// The edge itself is allowed, in height as in width.
-	if _, err := Normalize(encodePNG(t, image.NewNRGBA(image.Rect(0, 0, MaxLogoSide, MaxLogoSide)))); err != nil {
+	if _, err := norm(encodePNG(t, image.NewNRGBA(image.Rect(0, 0, MaxLogoSide, MaxLogoSide)))); err != nil {
 		t.Errorf("1024 by 1024: %v", err)
 	}
 }
@@ -169,7 +171,7 @@ func TestNormalizeReadsTheHeaderFirst(t *testing.T) {
 	src := append([]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}, chunk("IHDR", ihdr)...)
 	src = append(src, chunk("IDAT", []byte{0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01})...)
 	src = append(src, chunk("IEND", nil)...)
-	if _, err := Normalize(src); !errors.Is(err, ErrInvalid) {
+	if _, err := norm(src); !errors.Is(err, ErrInvalid) {
 		t.Errorf("a canvas of 60000 by 60000: %v", err)
 	}
 }
@@ -188,10 +190,15 @@ func (f *fakeWriter) AssetInsert(sha256, png []byte) (uuid.UUID, store.Won, erro
 }
 
 func TestStoreOrderAndRefusals(t *testing.T) {
-	good := encodePNG(t, gradient(8, 8))
+	src := encodePNG(t, gradient(8, 8))
+	good, err := Normalize(context.Background(), src)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f := &fakeWriter{}
-	if _, err := Store(f, []byte("junk")); !errors.Is(err, ErrInvalid) || f.locked != 0 || f.inserted != 0 {
-		t.Errorf("a bad image: %v, lock %d, insert %d: nothing may be taken or written", err, f.locked, f.inserted)
+	// A zero Logo is what a caller gets from a Normalize it did not check: nothing is taken or written for it.
+	if _, err := Store(f, Logo{}); !errors.Is(err, ErrInvalid) || f.locked != 0 || f.inserted != 0 {
+		t.Errorf("no image: %v, lock %d, insert %d: nothing may be taken or written", err, f.locked, f.inserted)
 	}
 	if _, err := Store(f, good); !errors.Is(err, ErrLimit) || f.locked != 1 || f.inserted != 1 {
 		t.Errorf("a tenant at its limit: %v, lock %d, insert %d", err, f.locked, f.inserted)
@@ -216,13 +223,53 @@ func TestNormalizeRefusesAJPEGWithManyScans(t *testing.T) {
 		seg := append([]byte{0xFF, 0xFE, byte((len(payload) + 2) >> 8), byte(len(payload) + 2)}, payload...)
 		return append(append(append([]byte{}, j.Bytes()[:2]...), seg...), j.Bytes()[2:]...)
 	}
-	if _, err := Normalize(withComment(MaxJPEGScans - 1)); err != nil {
+	if _, err := norm(withComment(MaxJPEGScans - 1)); err != nil {
 		t.Errorf("a file at the limit: %v", err)
 	}
-	if _, err := Normalize(withComment(MaxJPEGScans)); !errors.Is(err, ErrInvalid) {
+	if _, err := norm(withComment(MaxJPEGScans)); !errors.Is(err, ErrInvalid) {
 		t.Errorf("a file over the limit: err = %v, want ErrInvalid", err)
 	}
 	if got := jpegScans(j.Bytes()); got != 1 {
 		t.Errorf("a baseline JPEG has %d scan markers, want 1", got)
+	}
+}
+
+// norm is Normalize with a context that never ends, returning the PNG bytes.
+func norm(raw []byte) ([]byte, error) {
+	l, err := Normalize(context.Background(), raw)
+	return l.PNG(), err
+}
+
+// A request whose client has gone leaves the queue for a decode slot, and a context that has ended is not judged as an
+// image (B2-r2-2).
+func TestNormalizeWaitEndsWithTheContext(t *testing.T) {
+	good := encodePNG(t, gradient(8, 8))
+	sem := decodeSem()
+	for i := 0; i < decodeSlots; i++ {
+		sem <- struct{}{}
+	}
+	defer func() {
+		for i := 0; i < decodeSlots; i++ {
+			<-sem
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := Normalize(ctx, good); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("a wait for a slot that never frees: err = %v, want the deadline", err)
+	}
+	done, stop := context.WithCancel(context.Background())
+	stop()
+	if _, err := Normalize(done, good); !errors.Is(err, context.Canceled) {
+		t.Errorf("a context that ended already: err = %v, want Canceled", err)
+	}
+	// A bad image is refused before any slot is asked for, so a full queue does not turn it into a wait.
+	if _, err := Normalize(ctx, []byte("junk")); !errors.Is(err, ErrInvalid) {
+		t.Errorf("a bad image with the slots taken: err = %v, want ErrInvalid", err)
+	}
+	// Store decodes nothing: it finishes with every slot taken.
+	f := &fakeWriter{}
+	if _, err := Store(f, Logo{png: good}); !errors.Is(err, ErrLimit) || f.inserted != 1 {
+		t.Errorf("Store with every slot taken: %v, insert %d", err, f.inserted)
 	}
 }

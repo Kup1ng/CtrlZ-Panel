@@ -33,12 +33,17 @@ func driveAssetCap(t *testing.T, e *raceEnv) {
 	if err := png.Encode(&logo, img); err != nil {
 		t.Fatal(err)
 	}
+	// Normalize runs before the transaction opens, as a route does (B2-r2-2): Store decodes nothing.
+	lg, err := assets.Normalize(e.ctx, logo.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
 	settle := newBarrier(spenders, 400*time.Millisecond)
 	got := wins(t, spenders, func(i int, hold func()) (bool, error) {
 		stored := false
 		err := e.tenant.WithTenant(e.ctx, e.A.Tenant, store.TxOpts{}, func(tx store.Tx) error {
 			hold()
-			_, err := assets.Store(tx, logo.Bytes())
+			_, err := assets.Store(tx, lg)
 			settle()
 			switch {
 			case err == nil:
@@ -63,7 +68,7 @@ func driveAssetCap(t *testing.T, e *raceEnv) {
 		t.Errorf("%d stored rows carry their own digest and size, want 3", n)
 	}
 	if err := e.tenant.WithTenant(e.ctx, e.B.Tenant, store.TxOpts{}, func(tx store.Tx) error {
-		_, err := assets.Store(tx, logo.Bytes())
+		_, err := assets.Store(tx, lg)
 		return err
 	}); err != nil {
 		t.Errorf("tenant B is refused with A full: %v", err)

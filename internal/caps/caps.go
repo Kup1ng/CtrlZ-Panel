@@ -227,6 +227,7 @@ func Bounds() []Bound {
 		{"maxLimit", "page size of a list route; reads only"},
 		{"MaxLogoBytes", "size of one uploaded logo, judged on the bytes in hand by assets.Normalize before anything is stored"},
 		{"MaxLogoSide", "width and height a logo header may name, judged on the bytes in hand by assets.Normalize before a pixel is decoded"},
+		{"MaxJPEGScans", "start-of-scan markers a logo JPEG may hold, counted on the bytes in hand by assets.Normalize before the decode"},
 		{"maxProofMembers", "how many top-level members of one request body the proof reader looks at: in process, one request, nothing shared that racing actors could spend"},
 		{"MaxOTPUnitsFA", "length of one OTP template body in billed units, checked on the value in hand (sms.CheckBodyLength)"},
 		{"MaxOTPUnitsEN", "length of one OTP template body in billed units, checked on the value in hand (sms.CheckBodyLength)"},

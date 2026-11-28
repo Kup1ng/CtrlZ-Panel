@@ -270,7 +270,7 @@ tables:
     compiler: "I"
     worker: "I"
     admin: "S U"
-    auth: "S(kind,params,resolved_at) U(resolved_at)"
+    auth: "S(id,kind,params,resolved_at) U(resolved_at)"
   announcements:
     scoped: "S"
     worker: "S"
