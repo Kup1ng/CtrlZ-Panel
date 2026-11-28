@@ -319,11 +319,12 @@ type InsertKey struct {
 // unique value sorts by that value.
 func InsertOrder() map[string]InsertKey {
 	return map[string]InsertKey{
-		"recovery_codes": {Cols: []string{"code_hash"}, Why: "the unique value the caller chooses; the id is generated and never collides"},
-		"policy_outbox":  {Cols: []string{"tenant_id"}, Why: "one row per tenant of the batch; the dedupe key leads with the tenant and the batch id is the same for the whole statement"},
-		"endpoints":      {Cols: []string{"resolver_id"}, Why: "the globally unique value the caller chooses (a resolver id is drawn at random, and two creators of one tenant are ordered by the quota lock anyway); the id is generated and never collides"},
-		"authorized_ips": {Cols: []string{"cidr"}, Why: "the unique value the caller chooses within an Endpoint (tenant and Endpoint are the same for the whole statement); the id is generated and never collides"},
-		"rules":          {Cols: []string{"rule_key"}, Why: "the unique value the caller chooses within a profile (tenant and profile are the same for the whole statement); the id is generated and never collides"},
+		"recovery_codes":             {Cols: []string{"code_hash"}, Why: "the unique value the caller chooses; the id is generated and never collides"},
+		"policy_outbox":              {Cols: []string{"tenant_id"}, Why: "one row per tenant of the batch; the dedupe key leads with the tenant and the batch id is the same for the whole statement"},
+		"endpoints":                  {Cols: []string{"resolver_id"}, Why: "the globally unique value the caller chooses (a resolver id is drawn at random, and two creators of one tenant are ordered by the quota lock anyway); the id is generated and never collides"},
+		"authorized_ips":             {Cols: []string{"cidr"}, Why: "the unique value the caller chooses within an Endpoint (tenant and Endpoint are the same for the whole statement); the id is generated and never collides"},
+		"rules":                      {Cols: []string{"rule_key"}, Why: "the unique value the caller chooses within a profile (tenant and profile are the same for the whole statement); the id is generated and never collides"},
+		"node_location_config_state": {Cols: []string{"config_id"}, Why: "one row per config the node reports; config_id is the primary key and what a second reporter of the same node collides on"},
 	}
 }
 

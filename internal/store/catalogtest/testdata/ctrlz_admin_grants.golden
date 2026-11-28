@@ -27,6 +27,7 @@ policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.curre
 policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy block_pages tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy block_roots tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy certificates admin_read SELECT PERMISSIVE using=true check=-
 policy certificates admin_retire UPDATE PERMISSIVE using=(source = 'uploaded'::text) check=(source = 'uploaded'::text)
 policy certificates admin_upload INSERT PERMISSIVE using=- check=((kind = ANY (ARRAY['wildcard'::text, 'panel'::text, 'admin'::text])) AND (source = 'uploaded'::text) AND (state = 'active'::text))
@@ -173,6 +174,7 @@ table node_dns_state SELECT
 table node_enrollments INSERT (bound_ip, expires_at, token_hash)
 table node_enrollments SELECT
 table node_enrollments UPDATE (approved_at, approved_by, node_id, rejected_at, state)
+table node_location_config_state SELECT
 table node_location_configs DELETE
 table node_location_configs INSERT
 table node_location_configs SELECT
@@ -196,7 +198,7 @@ table node_upstreams UPDATE
 table nodes DELETE
 table nodes INSERT (applied_seq, cert_serial, created_at, dns_advertised_ip, dns_bind_ip, id, last_heartbeat_at, name, prev_cert_serial, proxy_advertised_ip, proxy_bind_ip, proxy_blocked, resolve_mode, slot, spki_sha256, updated_at, version_info)
 table nodes SELECT
-table nodes UPDATE (dns_advertised_ip, name, proxy_advertised_ip, proxy_blocked, resolve_mode, status)
+table nodes UPDATE (dns_advertised_ip, dns_bind_ip, name, proxy_advertised_ip, proxy_bind_ip, proxy_blocked, resolve_mode, status, xray_fetch_version, xray_rev)
 table notifications INSERT
 table pair_event_state SELECT
 table plans SELECT
@@ -207,6 +209,8 @@ table profile_presets SELECT
 table profile_presets UPDATE
 table profiles SELECT (id, kind, lock_state, locked_at, name, tenant_id)
 table profiles UPDATE (lock_message, lock_password_hash, lock_state, locked_at, locked_by)
+table proxy_settings SELECT
+table proxy_settings UPDATE (grant_width, probe_urls)
 table public_settings SELECT
 table public_settings UPDATE
 table refresh_tokens SELECT (id, revoked_at, tenant_id, user_id)

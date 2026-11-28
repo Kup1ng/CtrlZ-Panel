@@ -199,6 +199,8 @@ func Entries() []Entry {
 		{Name: "max_endpoints", Kind: Cap, Entitlements: []string{"max_endpoints"}, Wins: []string{"Tx.EndpointsInsert"}},
 		{Name: "max_clients_per_endpoint", Kind: Cap, Entitlements: []string{"max_clients_per_endpoint"}, Wins: []string{"Tx.ClientInsert"}},
 		{Name: "endpoint_group.create", Kind: Cap, Consts: []string{"MaxGroupsPerTenant"}, Wins: []string{"Tx.GroupInsert"}},
+		// P4b, the logos of the block pages (docs/specs/p4b-proxy.md 10.5): one statement, under the tenant quota lock.
+		{Name: "tenant_asset.create", Kind: Cap, Consts: []string{"MaxAssetsPerTenant"}, Wins: []string{"Tx.AssetInsert"}},
 		{Name: "endpoint.delete", Kind: Ending, Wins: []string{"Tx.EndpointsDelete"}},
 		// The access list (spec 3.5, 5). max_authorized_ips counts the tenant's manual rows under the quota lock; a DDNS host is
 		// counted under its Endpoint's row; the last row of an Endpoint that requires authorized IPs is one statement that ends
@@ -223,6 +225,9 @@ func Entries() []Entry {
 func Bounds() []Bound {
 	return []Bound{
 		{"maxLimit", "page size of a list route; reads only"},
+		{"MaxLogoBytes", "size of one uploaded logo, judged on the bytes in hand by assets.Normalize before anything is stored"},
+		{"MaxLogoSide", "width and height a logo header may name, judged on the bytes in hand by assets.Normalize before a pixel is decoded"},
+		{"MaxJPEGScans", "start-of-scan markers a logo JPEG may hold, counted on the bytes in hand by assets.Normalize before the decode"},
 		{"maxProofMembers", "how many top-level members of one request body the proof reader looks at: in process, one request, nothing shared that racing actors could spend"},
 		{"MaxOTPUnitsFA", "length of one OTP template body in billed units, checked on the value in hand (sms.CheckBodyLength)"},
 		{"MaxOTPUnitsEN", "length of one OTP template body in billed units, checked on the value in hand (sms.CheckBodyLength)"},

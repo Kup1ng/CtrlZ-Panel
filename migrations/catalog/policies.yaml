@@ -63,6 +63,10 @@ named:
   - {table: certificates, name: admin_retire, cmd: UPDATE, role: ctrlz_admin, qual: "(source = 'uploaded'::text)", with_check: "(source = 'uploaded'::text)"}
   - {table: certificates, name: tenant_zone_ca, cmd: SELECT, role: ctrlz_tenant, qual: "(kind = 'zone_ca'::text)", with_check: null}
   - {table: certificates, name: domain_apply_read, cmd: SELECT, role: ctrlz_domain_apply, qual: "(kind = ANY (ARRAY['panel'::text, 'admin'::text, 'wildcard'::text]))", with_check: null}
+  # P4b (migration 0105). The hub serves every account, so it reads every block_roots row and gives an empty one its
+  # certificate (10.3); the tenant sees and inserts its own row through tenant_isolation.
+  - {table: block_roots, name: hub_read, cmd: SELECT, role: ctrlz_hub, qual: "true", with_check: null}
+  - {table: block_roots, name: hub_issue, cmd: UPDATE, role: ctrlz_hub, qual: "true", with_check: "true"}
   # The hub learns secure_dns rows and marks the endpoint_set of its tenant, and nothing else. RESTRICTIVE, so
   # the check is ANDed with tenant_isolation instead of ORed (a permissive one would admit every source).
   - {table: authorized_ips, name: hub_secure_dns_only, cmd: INSERT, role: ctrlz_hub, restrictive: true, qual: null, with_check: "(source = 'secure_dns'::text)"}

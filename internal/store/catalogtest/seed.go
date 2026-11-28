@@ -106,6 +106,7 @@ INSERT INTO ctrlz.rule_folders (tenant_id, id, profile_id, name) VALUES ('{{.Ten
 INSERT INTO ctrlz.rules (tenant_id, profile_id, folder_id, rule_key, match_kind, action, target_kind, target_ipv4)
   VALUES ('{{.Tenant}}', '{{.Profile}}', '00000000-0000-7000-8000-0000000{{.Index}}0b01', 'example.test', 'domain', 'redirect', 'ip', '203.0.113.7');
 INSERT INTO ctrlz.block_pages (tenant_id, profile_id, logo_asset_id, title) VALUES ('{{.Tenant}}', '{{.Profile}}', '00000000-0000-7000-8000-0000000{{.Index}}0a01', 'Blocked');
+INSERT INTO ctrlz.block_roots (tenant_id) VALUES ('{{.Tenant}}');
 
 INSERT INTO ctrlz.endpoint_groups (tenant_id, id, name) VALUES ('{{.Tenant}}', '00000000-0000-7000-8000-0000000{{.Index}}0c01', 'home');
 INSERT INTO ctrlz.endpoints (tenant_id, id, name, type, group_id, resolver_id, profile_id, profile2_id)

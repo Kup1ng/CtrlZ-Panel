@@ -56,20 +56,20 @@ func newLocRig(f *frig) *locRig {
 	return r
 }
 
-// loc finds the location row of a key, or makes it. The unique index on (country, city) is case-sensitive, so the catalog can
-// hold Tehran and tehran as two rows; each spelling gets its own row, so the cases locset-007 to 009 reach the route as two
-// rows and only the fold in the library and the route makes them one place.
+// loc finds the location row of a key, or makes it. Since migration 0105 the unique indexes fold the city and the label
+// (SC 10.1), so Tehran and tehran cannot be two rows: the second spelling finds the row the first made, and the cases
+// locset-007 to 009 reach the route as one row. The fold of the library is held by its own vectors.
 func (r *locRig) loc(k shared.Key) uuid.UUID {
 	r.t.Helper()
 	var where string
 	var args []any
 	switch {
 	case k.Country == "":
-		where, args = `country_code IS NULL AND label = $1`, []any{k.Label}
+		where, args = `country_code IS NULL AND lower(btrim(label)) = lower(btrim($1))`, []any{k.Label}
 	case k.City == "":
 		where, args = `country_code = $1 AND city IS NULL`, []any{k.Country}
 	default:
-		where, args = `country_code = $1 AND city = $2`, []any{k.Country, k.City}
+		where, args = `country_code = $1 AND lower(btrim(city)) = lower(btrim($2))`, []any{k.Country, k.City}
 	}
 	var found string
 	r.f.env.Scan(r.t, `SELECT coalesce(min(id::text), '') FROM ctrlz.locations WHERE `+where, args, &found)

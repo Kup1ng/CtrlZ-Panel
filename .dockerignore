@@ -1,6 +1,14 @@
 .git
 .claude
-secrets/
+# What a Dockerfile `COPY . .` must never carry into a layer (p6-ops): the secret files (the root directory and any directory of the
+# name below the tree), the signed node bundles, the host's .env and its backups, and the NTS keys of chrony. All of them are
+# gitignored, so no review would ever see one in a layer. deploy/compose/.env.example stays: the Go image embeds the compose file
+# beside it.
+secrets
+**/secrets
+deploy/bundles
+deploy/compose/.env
+deploy/compose/.env.bak*
 deploy/chrony/nts
 **/node_modules
 **/.next

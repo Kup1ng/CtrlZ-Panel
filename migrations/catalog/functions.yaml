@@ -596,6 +596,16 @@ security_definer:
     auth_owner_reason: "lists the claims of every tenant that were taken on the observations of one node, for the admin's review after a compromise (4.5); the policy auth_node_reports shows it only the challenges a node observed"
     execute: [admin]
     ranks: []
+  # P4b (migration 0105).
+  - name: node_alert_close
+    isolation: none
+    isolation_reason: "alerts only: an alert is about a node of the operator and carries no tenant"
+    args: "p_kind text, p_node uuid"
+    returns: "integer"
+    owner: auth
+    auth_owner_reason: "sets resolved_at of the open alert of one kind and one node, for the eight kinds of P4b 11; the hub holds INSERT on alerts only and ctrlz_auth is the owner that holds the one UPDATE (resolved_at)"
+    execute: [hub]
+    ranks: [alerts]
 
 helpers:
   - {name: cap_reached, args: "spent numeric, cap numeric", returns: boolean, ranks: [], execute: [auth, scoped, tenant, worker]}
@@ -604,11 +614,14 @@ helpers:
   - {name: admin_jobs_hub_kind, args: "", returns: trigger, ranks: []}
   - {name: current_tenant_id, args: "", returns: uuid, ranks: []}
   - {name: free_dns_settings_version, args: "", returns: trigger, ranks: []}
+  - {name: location_availability_sync, args: "", returns: trigger, ranks: [nodes, "location_availability:ins"]}
   - {name: node_enrollments_frozen, args: "", returns: trigger, ranks: []}
+  - {name: node_location_configs_limit, args: "", returns: trigger, ranks: [nodes]}
   - {name: node_pairs_one_peer, args: "", returns: trigger, ranks: [node_pairs]}
   - {name: node_spki_retire, args: "", returns: trigger, ranks: ["node_spki_retired:ins"]}
   - {name: node_upstreams_no_loop, args: "", returns: trigger, ranks: [node_upstreams]}
   - {name: nodes_revoked_terminal, args: "", returns: trigger, ranks: []}
+  - {name: nodes_xray_rev_forward, args: "", returns: trigger, ranks: []}
   - {name: one_time_expiry, args: "p_one_time boolean, p_expires_at timestamp with time zone", returns: "timestamp with time zone", ranks: [], execute: [admin]}
   - {name: otp_challenges_deliverable, args: "", returns: trigger, ranks: []}
   - {name: plans_one_default, args: "", returns: trigger, ranks: []}
@@ -616,6 +629,7 @@ helpers:
   - {name: revocation_stays, args: "", returns: trigger, ranks: []}
   - {name: sms_counters_guard, args: "", returns: trigger, ranks: []}
   - {name: suspended_claim_stays, args: "", returns: trigger, ranks: []}
+  - {name: tenant_assets_limit, args: "", returns: trigger, ranks: [idempotency_keys]}
   - {name: touch_updated_at, args: "", returns: trigger, ranks: []}
   - {name: upstream_udp_ip, args: "p_address text", returns: inet, ranks: [], execute: [admin]}
 
@@ -640,3 +654,8 @@ triggers:
   - "CREATE TRIGGER free_dns_settings_version BEFORE INSERT OR UPDATE ON ctrlz.free_dns_settings FOR EACH ROW EXECUTE FUNCTION ctrlz.free_dns_settings_version()"
   - "CREATE TRIGGER node_enrollments_frozen BEFORE UPDATE ON ctrlz.node_enrollments FOR EACH ROW EXECUTE FUNCTION ctrlz.node_enrollments_frozen()"
   - "CREATE TRIGGER admin_jobs_hub_kind BEFORE INSERT ON ctrlz.admin_jobs FOR EACH ROW EXECUTE FUNCTION ctrlz.admin_jobs_hub_kind()"
+  # P4b (migration 0105).
+  - "CREATE TRIGGER node_location_configs_limit AFTER INSERT OR DELETE OR UPDATE ON ctrlz.node_location_configs FOR EACH ROW EXECUTE FUNCTION ctrlz.node_location_configs_limit()"
+  - "CREATE TRIGGER location_availability_sync AFTER INSERT OR DELETE OR UPDATE OF node_id, location_id, enabled ON ctrlz.node_location_configs FOR EACH ROW EXECUTE FUNCTION ctrlz.location_availability_sync()"
+  - "CREATE TRIGGER nodes_xray_rev_forward BEFORE UPDATE OF xray_rev ON ctrlz.nodes FOR EACH ROW EXECUTE FUNCTION ctrlz.nodes_xray_rev_forward()"
+  - "CREATE TRIGGER tenant_assets_limit BEFORE INSERT ON ctrlz.tenant_assets FOR EACH ROW EXECUTE FUNCTION ctrlz.tenant_assets_limit()"

@@ -25,16 +25,15 @@
 #     TestNoPasswordIsAnEnvironmentOfALongRunningProcess refuses ANY other assignment before a
 #     command, `export` or `env` in a file of deploy/ or scripts/, whatever the variable is called, and
 #     lists the lines it allows with the reason (round 16, admin-r16-5).
-#   - Every container has no-new-privileges, a memory limit and rotated logs. All
-#     but postgres and clickhouse also drop every capability and have a read-only
-#     root, and add back only what the file names: caddy NET_BIND_SERVICE (its
-#     binary carries that file capability) and caddy-init CHOWN. The two database
-#     images are the exception on both counts and keep Docker's default capability
-#     set (less what no-new-privileges removes) and a writable root: they start as
-#     root to fix the ownership of their data directory and then drop to their own
-#     user, which needs CHOWN, SETUID and SETGID and a root they can write. The
-#     only other root container is caddy-init, a one-shot that does one chown and
-#     has no network. internal/lint TestComposeContainersAreLimitedAndRotated and
+#   - Every container has no-new-privileges, a memory limit and rotated logs, and drops every capability. Every
+#     container with a network of its own also turns MPTCP off in it (sysctls net.mptcp.enabled 0; a new network
+#     namespace starts with it on, whatever the host says). All but postgres and clickhouse have a read-only root, and
+#     add back only what the file names: caddy NET_BIND_SERVICE (its binary carries that file capability) and caddy-init
+#     CHOWN. The two database images keep a writable root and add back CHOWN, FOWNER, DAC_OVERRIDE, SETUID and SETGID:
+#     they start as root to fix the ownership of their data directory and then drop to their own user (postgres does
+#     it in its own entrypoint, before it starts the watchdog, so no shell of the container stays root), which needs
+#     those five and a root they can write. The only other root container is caddy-init, a one-shot that does one chown
+#     and has no network. internal/lint TestComposeContainersAreLimitedAndRotated and
 #     TestComposeContainersRunAsNonRoot hold this list; a third exception fails them.
 #   - Nothing pulls from the internet at run time. Every image is pinned by tag AND digest
 #     (tag@sha256:<index digest>, the tag kept readable), and this file is the one place that
@@ -73,6 +72,10 @@ x-hardened: &hardened
   cap_drop: ["ALL"]
   read_only: true
   pids_limit: 512
+  # MPTCP off in this container's own network namespace (p6-ops 9.5). net.mptcp.enabled is a setting of each namespace and a
+  # new one starts at 1, so the host's sysctl does not reach a container. Docker applies a net.* sysctl to a container with a
+  # namespace of its own. A service on network_mode none opens no socket and has none (internal/lint composekeys).
+  sysctls: {net.mptcp.enabled: "0"}
 
 x-go-env: &go-env
   CTRLZ_DB_HOST: postgres
@@ -87,8 +90,8 @@ x-go-env: &go-env
   # purpose: the compose lint treats any variable with KEY as a secret file.
   CTRLZ_KEK_DIR: /run/secrets
   # Go 1.24 and later listen with MPTCP by default (GODEBUG multipathtcp=2; Go 1.27's doc/godebug.md: "0" turns MPTCP off for
-  # dialers and listeners both). net.mptcp.enabled is a setting of each network namespace, so the host's sysctl (p6-ops 9.5)
-  # does not reach a container: the process says it itself. Caddy is a Go binary and carries the same value in its own block.
+  # dialers and listeners both). The sysctl of x-hardened turns it off for the namespace; this is the second line, said by the
+  # process itself, which still holds if a runtime ignores the sysctl. Caddy is a Go binary and carries the same value in its own block.
   GODEBUG: multipathtcp=0
 
 # The resolver address of a service that resolves no name outside the stack (p6-ops 9.5). Docker's embedded resolver
@@ -100,7 +103,8 @@ x-go-env: &go-env
 # drop it: 192.0.2.53 is TEST-NET-1, a member of special4. It serves the services whose networks are all internal, which
 # have no route out at all. caddy and hub are on a plain bridge with a way out and take an address of their own (see them): a
 # name Docker does not hold (a service being recreated) is forwarded, and a drop that waits for a table of P6 is no guard.
-# Every service names one of these addresses or, with a reason, none (internal/lint composekeys).
+# Every service names one of these addresses, or the worker the pinned resolvers of the host (see it), and none keeps the embedded
+# resolver's own way out (internal/lint composekeys).
 x-no-external-dns: &no-external-dns ["192.0.2.53"]
 
 x-go-service: &go-service
@@ -320,7 +324,7 @@ services:
       # container limit so the collector works before the cgroup kill, which would also stop the SMS sender and the sweeps
       # of every tenant.
       GOMEMLIMIT: ${GOMEMLIMIT_WORKER:-200MiB}
-      # The resolver of the DDNS job (P4 8): empty is the host's own, or tls://host or https://host/path (a DoT or DoH server).
+      # The resolver of the DDNS job (P4 8): empty is the pinned resolvers of the worker's dns, or tls://host or https://host/path (a DoT or DoH server).
       CTRLZ_DDNS_RESOLVER: ${CTRLZ_DDNS_RESOLVER:-}
     secrets: [pg_worker_password, pg_compiler_password, kek_sms_cred, kek_otp_delivery]
     volumes:
@@ -329,11 +333,18 @@ services:
       <<: *go-health-8080
       test: ["CMD", "/usr/local/bin/ctrlz", "healthcheck", "http://127.0.0.1:8083/healthz"]
     mem_limit: ${MEM_WORKER:-256m}
-    # No `dns:`, on purpose: the worker is the one service that resolves names outside the stack. The DDNS job looks up the host names
-    # tenants enter (the host resolver, or the DoT or DoH server of CTRLZ_DDNS_RESOLVER, which may be a name), and the SMS drivers dial
-    # their gateway by name. The `egress` row of p6-ops 9.5 is the one place that bounds this: UDP and TCP 53 to an address outside
-    # special, plus the pinned resolvers. With a loopback host resolver (D80's ctrld) the embedded resolver forwards from the host namespace, outside the bridge rows, and otherwise
-    # from the container's, where the row sees it; the row already lets the worker send port 53 to any public address, so the first path opens nothing new. internal/lint composekeys lists this exception.
+    # The pinned resolvers of the host (p6-ops 9.5), and no other. The worker is the one service that resolves names outside the
+    # stack: the DDNS job looks up the host names tenants enter, and the SMS drivers dial their gateway by name. With no `dns` key
+    # Docker's embedded resolver forwards from the host namespace to whatever the host resolves with (ctrld on 127.0.0.1 in D80),
+    # outside every row of the firewall table: tenant names would land in the owner's private resolver, and a worker that ran foreign
+    # code could carry the secrets it mounts out in the labels of a name with nothing to count it. With these addresses the forward
+    # starts in the container's namespace and the `egress` row sees it. A host sets them in .env (the installer writes them from
+    # firewall.conf in P6); an address that is a loopback or the host itself defeats this, so it is a resolver the host reaches over
+    # the network. The second and third default to the first, so one is enough. internal/lint composekeys requires this exact form.
+    dns:
+      - "${CTRLZ_WORKER_DNS1:?set CTRLZ_WORKER_DNS1 in .env to the address of a domestic resolver (p6-ops 9.5), not a loopback address}"
+      - "${CTRLZ_WORKER_DNS2:-${CTRLZ_WORKER_DNS1}}"
+      - "${CTRLZ_WORKER_DNS3:-${CTRLZ_WORKER_DNS1}}"
     networks: [backend, egress]
 
   # Node-facing from P4: the node port (9443) carries enrolment (no client certificate), the install files and the
@@ -550,6 +561,14 @@ services:
     restart: unless-stopped
     logging: *logging
     security_opt: ["no-new-privileges:true"]
+    # Not the x-hardened block: the root file system stays writable and the user is the image's own. The entry still starts as root
+    # for one purpose and keeps these five capabilities for it alone: the entrypoint owns the data directory (CHOWN, FOWNER,
+    # DAC_OVERRIDE: the directory belongs to the server user and is mode 0700) and then drops to the server user for the life
+    # of the container (SETUID, SETGID). A server user holds no capability after that, so nothing in the container can open a raw
+    # socket (NET_RAW is in Docker's default set, not here) or spoof an address on its network.
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "SETUID", "SETGID", "FOWNER", "DAC_OVERRIDE"]
+    sysctls: {net.mptcp.enabled: "0"}
     image: postgres:18.7@sha256:e754b839f447639b7004895f4d8a4bfcb4e9dbe3a1bc035f27f646562a16fd61
     # The official entrypoint with the watchdog beside it (postgres/entrypoint.sh): the one party a
     # compromised service role does not control. It ends a role's transaction older than
@@ -654,6 +673,14 @@ services:
     restart: unless-stopped
     logging: *logging
     security_opt: ["no-new-privileges:true"]
+    # Not the x-hardened block: the root file system stays writable and the user is the image's own. The entry still starts as root
+    # for one purpose and keeps these five capabilities for it alone: the entrypoint owns the data directory (CHOWN, FOWNER,
+    # DAC_OVERRIDE: the directory belongs to the server user and is mode 0700) and then drops to the server user for the life
+    # of the container (SETUID, SETGID). A server user holds no capability after that, so nothing in the container can open a raw
+    # socket (NET_RAW is in Docker's default set, not here) or spoof an address on its network.
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "SETUID", "SETGID", "FOWNER", "DAC_OVERRIDE"]
+    sysctls: {net.mptcp.enabled: "0"}
     image: clickhouse/clickhouse-server:26.2@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
     # The official entrypoint would take the password from CLICKHOUSE_PASSWORD,
     # which then stays in the server's environment for its whole life, writes it

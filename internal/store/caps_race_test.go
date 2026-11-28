@@ -298,6 +298,9 @@ func TestCapsRaceHarness(t *testing.T) {
 	for name, d := range p2Drivers() {
 		drivers[name] = d
 	}
+	for name, d := range p4bDrivers() {
+		drivers[name] = d
+	}
 	known := map[string]bool{}
 	for _, e := range caps.Entries() {
 		known[e.Name] = true

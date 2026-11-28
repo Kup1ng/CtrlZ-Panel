@@ -43,6 +43,7 @@ policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.curre
 policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy block_pages tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy block_roots tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy certificates tenant_zone_ca SELECT PERMISSIVE using=(kind = 'zone_ca'::text) check=-
 policy clients tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy endpoint_ddns_hosts tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
@@ -100,6 +101,8 @@ table block_pages DELETE
 table block_pages INSERT
 table block_pages SELECT
 table block_pages UPDATE
+table block_roots INSERT (tenant_id)
+table block_roots SELECT
 table catalog_common_domains SELECT
 table catalog_filter SELECT
 table catalog_filter_mode SELECT

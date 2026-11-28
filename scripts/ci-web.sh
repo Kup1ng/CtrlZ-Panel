@@ -210,7 +210,9 @@ if [ "${CTRLZ_WEB_STACK:-0}" = 1 ]; then
   # 10c. Environment of the e2e project: the profile and the example file, a private secrets
   # directory, and an output directory the worker (uid 65532) can write.
   { grep -hv '^#' deploy/compose/.env.example deploy/compose/profiles/small.env | grep -v '^$' \
-      | grep -v '^CTRLZ_SECRETS_DIR' ; printf 'CTRLZ_SECRETS_DIR=%s\n' "$work/secrets"; } > "$work/env"
+      | grep -v '^CTRLZ_SECRETS_DIR' ; printf 'CTRLZ_SECRETS_DIR=%s\n' "$work/secrets"
+    # The worker's pinned resolver (docker-compose.yml): TEST-NET-1, which answers nothing. This stack resolves no outside name.
+    echo "CTRLZ_WORKER_DNS1=192.0.2.53"; } > "$work/env"
   # The secrets directory is in the env file as a host path; every compose call and the seed take that file.
   scripts/gen-secrets.sh "$work/secrets"
   rm -rf deploy/compose/e2e-out

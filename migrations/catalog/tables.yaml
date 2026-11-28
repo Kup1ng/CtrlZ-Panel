@@ -15,6 +15,7 @@ tenant:
   - authorized_ips
   - batch_jobs
   - block_pages
+  - block_roots
   - clients
   - endpoint_ddns_hosts
   - endpoint_groups
@@ -88,6 +89,7 @@ global:
   - node_dns_requests
   - node_dns_state
   - node_enrollments
+  - node_location_config_state
   - node_location_configs
   - node_pairs
   - node_quarantine
@@ -100,6 +102,7 @@ global:
   - plans
   - policy_artifacts
   - profile_presets
+  - proxy_settings
   - public_settings
   - schema_migrations
   - sms_counters

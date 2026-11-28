@@ -58,6 +58,8 @@ envfile="$work/env"
   echo "CTRLZ_HTTP_PORT=$http_port"
   echo "CTRLZ_HTTPS_PORT=$https_port"
   echo "CTRLZ_SECRETS_DIR=$(host_path "$secrets")"
+  # The worker's pinned resolver (docker-compose.yml): TEST-NET-1, which answers nothing. The smoke resolves no outside name.
+  echo "CTRLZ_WORKER_DNS1=192.0.2.53"
 } > "$envfile"
 
 dc() { docker compose -p "$project" -f deploy/compose/docker-compose.yml -f deploy/compose/ci-placeholder.yml --env-file "$(host_path "$envfile")" "$@"; }

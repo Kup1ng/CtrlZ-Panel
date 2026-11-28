@@ -204,8 +204,8 @@ func TestPersonalDataIsDecidedByTypeAndNotOnlyByName(t *testing.T) {
 			[]string{"GRANT SELECT (hostname, mac) ON ctrlz.clients TO ctrlz_compiler"}},
 		{"the hub reads the claimed prefix", "ctrlz_hub can SELECT ip_claims.cidr",
 			[]string{"GRANT SELECT (cidr) ON ctrlz.ip_claims TO ctrlz_hub"}},
-		{"the hub reads the domains visitors asked to unblock", "ctrlz_hub can SELECT unblock_requests.qname",
-			[]string{"GRANT SELECT (qname) ON ctrlz.unblock_requests TO ctrlz_hub"}},
+		{"the worker reads the domains visitors asked to unblock", "ctrlz_worker can SELECT unblock_requests.qname",
+			[]string{"GRANT SELECT (qname) ON ctrlz.unblock_requests TO ctrlz_worker"}},
 	} {
 		t.Run(m.name, func(t *testing.T) {
 			v := breakIn(t, h, h.fx, m.sql...)

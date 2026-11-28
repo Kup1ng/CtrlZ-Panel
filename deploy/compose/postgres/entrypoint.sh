@@ -20,6 +20,23 @@
 # Compose file asks `watchdog.sh --healthy`, which needs a recent sweep.
 set -eu
 
+# Root for the length of this block, and no longer. The official entrypoint does the same two steps (it creates the data directory,
+# gives it to the server user, and re-runs itself as that user), but it would do them as a child of this shell, which would then
+# stay root, with the capabilities of the container, for as long as the container lives: a shell that parses the watchdog's output,
+# next to the tenants' unencrypted database sessions. So the directories are made ready here, the way docker_create_db_directories
+# of the image does it, and this shell is replaced by itself as the server user. After that no process of the container holds a
+# capability (the image's other steps need none), and the container keeps CHOWN, FOWNER, DAC_OVERRIDE, SETUID and SETGID
+# only for this block (docker-compose.yml). The healthcheck runs as root too, for one command at a time, and uses gosu.
+if [ "$(id -u)" = 0 ]; then
+	: "${PGDATA:?the image sets PGDATA}"
+	mkdir -p "$PGDATA" /var/run/postgresql
+	chmod 00700 "$PGDATA" || :
+	chmod 03775 /var/run/postgresql || :
+	find "$PGDATA" ! -user postgres -exec chown postgres '{}' +
+	find /var/run/postgresql ! -user postgres -exec chown postgres '{}' +
+	exec gosu postgres sh "$0" "$@"
+fi
+
 if ! sh /ctrlz-postgres/watchdog.sh --check; then
 	echo "ctrlz postgres: the watchdog settings are not valid, not starting" >&2
 	exit 1
@@ -31,7 +48,7 @@ pg=$!
 # The loop restarts the watchdog whatever ended it. It is a child of this shell, not of Postgres.
 (
 	while :; do
-		gosu postgres sh /ctrlz-postgres/watchdog.sh || :
+		sh /ctrlz-postgres/watchdog.sh || :
 		echo "ctrlz postgres watchdog: ended, starting it again" >&2
 		sleep 1
 	done

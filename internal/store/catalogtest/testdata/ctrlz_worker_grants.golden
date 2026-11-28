@@ -21,6 +21,7 @@ policy api_tokens tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.curre
 policy authorized_ips tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy batch_jobs tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy block_pages tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
+policy block_roots tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy certificates worker_all ALL PERMISSIVE using=true check=true
 policy clients tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
 policy endpoint_ddns_hosts tenant_isolation ALL PERMISSIVE using=(tenant_id = ctrlz.current_tenant_id()) check=(tenant_id = ctrlz.current_tenant_id())
@@ -76,6 +77,7 @@ table authorized_ips UPDATE (last_seen_at)
 table batch_jobs DELETE
 table batch_jobs SELECT
 table batch_jobs UPDATE
+table block_pages SELECT (logo_asset_id)
 table bundles INSERT
 table bundles SELECT
 table bundles UPDATE
@@ -163,7 +165,7 @@ table locations SELECT
 table node_enrollments DELETE
 table node_enrollments SELECT (cert_der, enrolled_at, expires_at, id, node_id, state)
 table node_enrollments UPDATE (state)
-table node_location_configs SELECT
+table node_location_configs SELECT (enabled, id, location_id, node_id)
 table node_pairs SELECT
 table nodes SELECT
 table notifications INSERT
@@ -224,11 +226,13 @@ table sms_provider_templates SELECT
 table sms_templates SELECT
 table system_settings SELECT
 table tenant_assets DELETE
+table tenant_assets SELECT (created_at, id)
 table tenant_audit_log DELETE
 table tenant_audit_log SELECT (at, id, tenant_id)
 table tenant_entitlements SELECT
 table tenants SELECT (aggregate_retention_months, deleted_at, id, raw_retention_days, status)
 table unblock_requests DELETE
+table unblock_requests SELECT (created_at)
 table update_status INSERT
 table update_status SELECT
 table update_status UPDATE

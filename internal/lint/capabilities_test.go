@@ -152,6 +152,9 @@ var moduleStdSafe = map[string]string{
 	"crypto/x509":     "certificates and pools",
 	"database/sql":    "the type of a NULL column",
 	"embed":           "files compiled in",
+	"image":           "the image interface and the header reader of assets.Store (P4b 10.5)",
+	"image/jpeg":      "the JPEG decoder of assets.Store, which writes the logo again as PNG (P4b 10.5)",
+	"image/png":       "the PNG decoder and encoder of assets.Store (P4b 10.5)",
 	"encoding/base32": "TOTP seeds",
 	"encoding/base64": "text forms",
 	"encoding/binary": "framing",
@@ -414,7 +417,7 @@ var sharedThirdParty = map[string]map[string]string{
 	"golang.org/x/net/publicsuffix":  {"shared/rules": "the public suffix list compiled into the library"},
 	"google.golang.org/protobuf/proto": {
 		"shared/manifest": "the wire form of the signed manifest", "shared/quarantine": "the wire form of a pending policy", "shared/wire": "marshal and unmarshal of the messages",
-		"shared/vectors": "the quarantine vector group marshals a block page to give a blob its bytes; only test files import this package",
+		"shared/vectors": "the quarantine vector group builds the pending-policy messages it feeds a node and marshals a block page to give a blob its bytes (imported by test files only)",
 	},
 	"google.golang.org/protobuf/reflect/protoreflect": generatedWhy("protoc-gen-go output"),
 	"google.golang.org/protobuf/runtime/protoimpl":    generatedWhy("protoc-gen-go output: protoimpl.Pointer is unsafe.Pointer by another name, so it is named only where the generator writes it"),

@@ -195,7 +195,7 @@ func TestP4EnrolmentRecordIsFrozen(t *testing.T) {
 func TestP4CertificatePolicies(t *testing.T) {
 	h := newHarness(t, testpg.Need(t, cluster))
 	for _, r := range [][3]string{{"wildcard", "uploaded", "{dns.example.test,*.dns.example.test}"}, {"node_ca", "issued", "{}"}, {"zone_ca", "issued", "{dns.example.test}"},
-		{"panel", "uploaded", "{panel.example.test}"}, {"admin", "uploaded", "{admin.example.test}"}, {"block_root", "issued", "{}"}} {
+		{"panel", "uploaded", "{panel.example.test}"}, {"admin", "uploaded", "{admin.example.test}"}} {
 		h.exec(`INSERT INTO ctrlz.certificates (kind, chain_pem, wrapped_key_ct, not_before, not_after, state, source, names)
 			VALUES ($1, 'pem', '\x01', now() - interval '1 day', now() + interval '60 days', 'active', $2, $3::text[])`, r[0], r[1], r[2])
 	}
@@ -208,7 +208,7 @@ func TestP4CertificatePolicies(t *testing.T) {
 	}
 	for role, w := range map[string]string{
 		"hub": "node_ca,wildcard,zone_ca", "tenant": "zone_ca", "domain_apply": "admin,panel,wildcard",
-		"admin": "admin,block_root,node_ca,panel,wildcard,zone_ca", "worker": "admin,block_root,node_ca,panel,wildcard,zone_ca",
+		"admin": "admin,node_ca,panel,wildcard,zone_ca", "worker": "admin,node_ca,panel,wildcard,zone_ca",
 		"compiler": "42501", "auth": "42501",
 	} {
 		if got := kinds(role); got != w {

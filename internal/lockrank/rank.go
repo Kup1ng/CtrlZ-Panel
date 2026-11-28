@@ -183,7 +183,7 @@ var rankTable = sync.OnceValue(buildRanks)
 // configBand lists the RankConfig tables.
 func configBand() []string {
 	return []string{
-		"analytics_read_floors", "announcements", "authorized_ips",
+		"analytics_read_floors", "announcements", "authorized_ips", "block_roots",
 		"bundles", "catalog_common_domains", "catalog_filter", "catalog_filter_mode", "catalog_filter_table",
 		"catalog_infra_denylist", "catalog_no_redirect_domain", "catalog_protected_domains", "catalog_rewrites", "catalog_service",
 		"catalog_service_alias", "catalog_service_category", "catalog_service_domain", "catalog_versions",
@@ -191,9 +191,9 @@ func configBand() []string {
 		"endpoint_groups", "endpoint_types", "endpoints", "feedback_items",
 		"filter_preview_jobs", "free_dns_counter_batches", "free_dns_counters", "free_dns_settings", "geoip_versions", "ip_claims", "ip_proof_challenges",
 		"leases", "location_availability", "locations", "node_certs", "node_dns_requests", "node_dns_state", "node_enrollments",
-		"node_location_configs", "node_pairs", "node_quarantine", "node_resolver_rules", "node_spki_retired", "node_upstreams",
+		"node_location_config_state", "node_location_configs", "node_pairs", "node_quarantine", "node_resolver_rules", "node_spki_retired", "node_upstreams",
 		"nodes", "pair_event_state", "plans", "policy_artifacts", "profile_download_tokens",
-		"profile_presets", "public_settings",
+		"profile_presets", "proxy_settings", "public_settings",
 		"schedule_windows", "schema_migrations", "setup_share_tokens",
 		"tenant_assets", "unblock_requests", "update_status",
 	}

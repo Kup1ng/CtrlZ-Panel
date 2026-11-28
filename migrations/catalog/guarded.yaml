@@ -378,12 +378,11 @@ secrets:
   idempotency_keys:
     response: [tenant]
   # A fragment of the proxy configuration of a node location: the outbound it names carries
-  # the credentials of the upstream (P3), so it is decided as a secret before the P3 code exists. The four
-  # roles hold table-level SELECT from P0, declared as held; P3 narrows them to what each needs,
-  # and the entry then fails as stale and shrinks.
+  # the credentials of the exit. Only the admin, which writes it, and the hub, which sends it to the node,
+  # read it; the compiler and the worker keep four columns of the table (P4b 3.2 item 3, migration 0105),
+  # and last-good is on the node, so the column is gone.
   node_location_configs:
-    fragment: [admin, compiler, hub, worker]
-    last_good_fragment: [admin, compiler, hub, worker]
+    fragment: [admin, hub]
 
 # Personal data (P1 auth review round 7, finding db-r7-5): the columns that record a phone
 # number, an address or a user agent, so which person did what from where. They hold no
@@ -459,7 +458,7 @@ personal:
     phone_e164: [worker]
   # The domain a visitor of a tenant asked to have unblocked: behaviour of the tenant's people.
   unblock_requests:
-    qname: [tenant]
+    qname: [hub, tenant]
   tenant_audit_log:
     ip: [tenant]
   users:
@@ -549,6 +548,8 @@ read_open:
     key: "the name of an Endpoint type in the catalog (a closed vocabulary)"
   locations:
     country_code: "an ISO country code of a node location"
+  policy_artifacts:
+    page_hash: "the SHA-256 of the block page a profile blob names; nodes download both blobs, so the digest is public to them and opens nothing"
   rules:
     rule_key: "the normalised match key of a custom rule, the tenant's own domain or address"
   sms_deliveries:
@@ -620,6 +621,10 @@ open:
     why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
     no_personal: "the tenant's own configuration, labels and statuses; no column is a phone, an address, a device or network name or a place, and a label is what the tenant typed for its own object"
     columns: [message, title, unblock_mode, unblock_url]
+  block_roots:
+    why: "a public certificate and the digest of its key, which every node and the tenant may read; the key itself is derived from block_root_key at each use and stored nowhere (P4b 10.3)"
+    no_personal: "the root certificate of an account's block page, which names the account by a digest and holds no person's data"
+    columns: [cert_der, spki_sha256]
   bundles:
     why: "public content and its digest, which nodes and tenants read freely; no credential (db-r6-3)"
     no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
@@ -780,10 +785,14 @@ open:
     why: "the public fingerprint of the node key and the state; the token is token_hash (db-r6-3)"
     no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
     columns: [cert_der, csr_der, key_fingerprint, node_version, os_release, spki_sha256, state]
+  node_location_config_state:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [error, fragment_sha256, state]
   node_location_configs:
     why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
     no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
-    columns: [note, tag]
+    columns: [accepted_unknown, note, schema_version, tag]
   node_quarantine:
     why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
     no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
@@ -799,7 +808,7 @@ open:
   nodes:
     why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
     no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
-    columns: [cert_serial, name, prev_cert_serial, resolve_mode, spki_sha256, status, version_info]
+    columns: [cert_serial, name, prev_cert_serial, resolve_mode, spki_sha256, status, version_info, xray_fetch_version]
   notifications:
     why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
     no_personal: "a closed kind, severity, an in-app link and closed params of a notice the user reads in their own account"
@@ -816,6 +825,10 @@ open:
     why: "public content and its digest, which nodes and tenants read freely; no credential (db-r6-3)"
     no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
     columns: [hash, kind, store_ref]
+  proxy_settings:
+    why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
+    no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
+    columns: [grant_width, probe_urls]
   policy_outbox:
     why: "names, settings, statuses, closed vocabularies and the caller's own data; no credential, seed, token or key (db-r6-3)"
     no_personal: "operator-owned content and state (catalog entries, versions, digests, node, gateway and job settings); no column is about a person"
@@ -962,10 +975,8 @@ all_rows:
     admin: "the admin issues enrollments and lists every one"
     hub: "the hub verifies the token of whichever node enrolls"
   node_location_configs:
-    admin: "declared as held from P0 (the entry of secrets above); P3 narrows it and this entry goes"
-    compiler: "declared as held from P0 (the entry of secrets above); P3 narrows it and this entry goes"
-    hub: "declared as held from P0 (the entry of secrets above); P3 narrows it and this entry goes"
-    worker: "declared as held from P0 (the entry of secrets above); P3 narrows it and this entry goes"
+    admin: "the admin writes and lists every config of every node (fragments included) in the location tabs"
+    hub: "the hub sends each node the fragments of its own enabled configs, read again when nodes.xray_rev moved (P4b 11)"
   sms_gateways:
     admin: "the admin manages every gateway of the operator and tests its credentials"
     worker: "the sender chooses among all gateways by role and breaker, and sends through whichever is up"

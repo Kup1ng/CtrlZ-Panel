@@ -123,6 +123,10 @@ var sweepNotASweep = map[string]string{
 	"qHubFailWrite":                     "the singleton row of pair_event_state (WHERE singleton, its primary key): one row, moved by the compare-and-set on its version that every signing event of the hub commits; nothing drives it by a timer",
 	"qDDNSClaimsRelease":                "releases the DDNS claims of one Endpoint whose address its hosts no longer answer with, picked once by the ordered locking subselect and bounded by what the Endpoint may hold (a claim per address of at most 5 hosts, under max_ip_claims); the DDNS pass of that Endpoint drives it under the Endpoint row, so there is no backlog to batch",
 	"qIdempotencyFinish":                "keyed by its whole primary key (tenant, key): the one row the request inserted, named by the statement's own parameters",
+	"qHubConfigStates":                  "the upsert of what one node reported of its own configs (at most 64 entries of one Heartbeat, joined to the node's configs so another node's id writes nothing), keyed by config_id, the table's primary key; the hub sends it at most every 30 s or on a change",
+	"qHubBlockRootSet":                  "keyed by its whole primary key tenant_id, which this table has in place of id: the one root of the one account the statement names, given its certificate by the hub's pass of every 5 s",
+	"location_availability_sync":        "keeps the one row of (node, location) in step with the enabled configs of that pair, keyed by the whole primary key; the trigger of a write of one config, never a timer",
+	"node_alert_close":                  "closes the one open alert of one kind and one node (alerts_open_key_uq allows no second), for the eight kinds of P4b 11, when the condition is gone; named by its own parameters, not by a timer",
 }
 
 // sweepPrimaryKeys are the primary keys that are not just id. A bounded batch names the

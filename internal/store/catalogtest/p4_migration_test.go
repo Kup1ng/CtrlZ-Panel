@@ -192,7 +192,7 @@ func TestP4NodeStatusMovesOneWay(t *testing.T) {
 		{"the admin writes the SPKI", `UPDATE ctrlz.nodes SET spki_sha256 = decode(repeat('22', 32), 'hex') WHERE id = '` + n3 + `'`, "42501"},
 		{"the admin writes the slot", `UPDATE ctrlz.nodes SET slot = 2 WHERE id = '` + n3 + `'`, "42501"},
 		{"the admin writes the certificate serial", `UPDATE ctrlz.nodes SET cert_serial = 'x' WHERE id = '` + n3 + `'`, "42501"},
-		{"the admin writes the bind address", `UPDATE ctrlz.nodes SET dns_bind_ip = '192.0.2.98' WHERE id = '` + n3 + `'`, "42501"},
+		{"the admin writes the bind address (0105 grants it)", `UPDATE ctrlz.nodes SET dns_bind_ip = '192.0.2.98' WHERE id = '` + n3 + `'`, ""},
 		{"the admin writes a failover column", `UPDATE ctrlz.nodes SET dns_withdrawn = true WHERE id = '` + n3 + `'`, "42501"},
 		{"the admin inserts with a status", `INSERT INTO ctrlz.nodes (slot, name, status) VALUES (3, 'y', 'active')`, "42501"},
 		{"the admin inserts with a failover column", `INSERT INTO ctrlz.nodes (slot, name, dns_hold) VALUES (3, 'y', true)`, "42501"},

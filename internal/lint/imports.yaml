@@ -158,6 +158,8 @@ third_party:
     why: password hashing (4.1)
   - path: golang.org/x/crypto/x509roots/fallback/bundle
     why: the Mozilla root certificates embedded in the binary, the "public certificate" test of an uploaded chain (internal/certcheck, p4-nodes 4.3)
+  - path: golang.org/x/image/webp
+    why: "the WebP decoder of assets.Store (P4b 10.5). A logo of that type is read once, its header first, and written again as PNG, so no WebP and no metadata is stored"
   - path: golang.org/x/net/dns/dnsmessage
     why: the wire message of the DDNS job's DoH lookups (P4 8), the same package the Go resolver is built on
   - path: golang.org/x/net/publicsuffix

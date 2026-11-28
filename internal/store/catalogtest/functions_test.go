@@ -208,8 +208,8 @@ func TestSecurityDefinerFunctions(t *testing.T) {
 	// TestP4NodePairsOnePeer and TestP4UpstreamLoops (EXECUTE for the admin alone, the lock that serialises two commits),
 	// config_log_lock by TestP4ConfigLogLock (the compiler and the worker, the roles refused, the lock that serialises two transactions),
 	// free_dns_public by TestP4FreeDNS (the shape of its row in four states of the global pair, the roles that may not call it),
-	// and node_taken_claims by TestP4NodeTakenClaims and the isolation fixture.
-	for _, name := range []string{"node_pairs_lock", "node_upstreams_lock", "config_log_lock", "free_dns_public", "node_taken_claims"} {
+	// node_taken_claims by TestP4NodeTakenClaims and the isolation fixture, and (P4b, 0105) node_alert_close by TestP4bNodeAlertClose.
+	for _, name := range []string{"node_pairs_lock", "node_upstreams_lock", "config_log_lock", "free_dns_public", "node_taken_claims", "node_alert_close"} {
 		covered[name] = true
 	}
 	// tenant_notice_sms queues the SMS of a security notice (question 19): its two-tenant call is the fixture of

@@ -137,6 +137,7 @@ var composeHostVariables = map[string]string{
 	"CTRLZ_IMAGE": "the name of the Panel image under test", "CTRLZ_WEB_PANEL_IMAGE": "the name of the web-panel image built on this machine", "CTRLZ_WEB_ADMIN_IMAGE": "the name of the web-admin image built on this machine",
 	"CTRLZ_ENV":        "production, or test for the smoke",
 	"CTRLZ_PANEL_HOST": "a host name", "CTRLZ_ADMIN_HOST": "a host name", "CTRLZ_DDNS_RESOLVER": "empty, or a tls:// or https:// URL that the worker parses strictly (port 853 or 443)", "CTRLZ_VERIFY_ORIGIN": "origins https://*.verify.<zone>, written by domain-apply; no credential", "CTRLZ_HUB_HOST": "host names and addresses, the SANs of the hub leaf; no credential", "CTRLZ_HTTP_PORT": "a port", "CTRLZ_HTTPS_PORT": "a port",
+	"CTRLZ_WORKER_DNS1": "the address of a resolver, pinned as the worker's dns (p6-ops 9.5); required, no credential", "CTRLZ_WORKER_DNS2": "an address, defaults to the first", "CTRLZ_WORKER_DNS3": "an address, defaults to the first",
 	"CTRLZ_SECRETS_DIR":           "the directory of the secret files, a path and no content",
 	"CTRLZ_ENV_FORMAT_2":          "the marker of the .env layout",
 	"CTRLZ_API_ARGON2_BUDGET_MIB": "a number", "CTRLZ_API_ARGON2_CONCURRENCY": "a number", "CTRLZ_ADMIN_ARGON2_BUDGET_MIB": "a number",
@@ -433,10 +434,10 @@ func TestComposeRefusesAnEnvFromAnEarlierLayout(t *testing.T) {
 	dir := t.TempDir()
 	without := filepath.Join(dir, "old.env")
 	with := filepath.Join(dir, "new.env")
-	if err := os.WriteFile(without, []byte("CTRLZ_IMAGE=ctrlz/panel:dev\nMEM_VALKEY=256m\n"), 0o600); err != nil {
+	if err := os.WriteFile(without, []byte("CTRLZ_IMAGE=ctrlz/panel:dev\nMEM_VALKEY=256m\nCTRLZ_WORKER_DNS1=192.0.2.53\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(with, []byte(name+"=1\n"), 0o600); err != nil {
+	if err := os.WriteFile(with, []byte(name+"=1\nCTRLZ_WORKER_DNS1=192.0.2.53\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -453,5 +454,16 @@ func TestComposeRefusesAnEnvFromAnEarlierLayout(t *testing.T) {
 	}
 	if out, err := run(with); err != nil {
 		t.Errorf("an .env with the marker was refused:\n%s", out)
+	}
+	// The worker's pinned resolver (p6-ops 9.5) is required, and the other two default to it: the nested default of docker-compose.yml
+	// has to parse in the Compose this runs on, and a host that did not set the first has to be told so by name.
+	noDNS := filepath.Join(dir, "nodns.env")
+	if err := os.WriteFile(noDNS, []byte(name+"=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := run(noDNS); err == nil {
+		t.Errorf("an .env with no CTRLZ_WORKER_DNS1 was accepted: the worker would start with Docker's own resolver again:\n%s", out)
+	} else if !strings.Contains(string(out), "CTRLZ_WORKER_DNS1") {
+		t.Errorf("compose refused the .env without naming CTRLZ_WORKER_DNS1:\n%s", out)
 	}
 }

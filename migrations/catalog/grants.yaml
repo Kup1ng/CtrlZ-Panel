@@ -82,7 +82,7 @@ tables:
   tenant_assets:
     tenant: "S I D"
     compiler: "S"
-    worker: "D"
+    worker: "S(id,created_at) D"
   profiles:
     tenant: "S I U(-id-tenant_id-compiled_hash) D"
     compiler: "S(-lock_password_hash)"
@@ -111,10 +111,14 @@ tables:
   block_pages:
     tenant: "S I U D"
     compiler: "S"
+    worker: "S(logo_asset_id)"
+  block_roots:
+    tenant: "S I(tenant_id)"
+    hub: "S U(cert_der,spki_sha256,not_before,not_after)"
   unblock_requests:
     tenant: "S U(status)"
-    hub: "I"
-    worker: "D"
+    hub: "S(endpoint_id,qname,status,created_at) I"
+    worker: "S(created_at) D"
   filter_preview_jobs:
     tenant: "S I"
     worker: "S U D"
@@ -266,6 +270,7 @@ tables:
     compiler: "I"
     worker: "I"
     admin: "S U"
+    auth: "S(id,kind,params,resolved_at) U(resolved_at)"
   announcements:
     scoped: "S"
     worker: "S"
@@ -275,7 +280,7 @@ tables:
     hub: "S U(last_heartbeat_at,version_info,applied_seq,cert_serial,prev_cert_serial,dns_withdrawn,dns_hold,dns_last_failback_at,dns_flap_until)"
     compiler: "S"
     worker: "S"
-    admin: "S I(-status-dns_withdrawn-dns_hold-dns_last_failback_at-dns_flap_until) U(name,resolve_mode,proxy_blocked,dns_advertised_ip,proxy_advertised_ip,status) D"
+    admin: "S I(-status-dns_withdrawn-dns_hold-dns_last_failback_at-dns_flap_until-xray_fetch_version-xray_rev) U(name,resolve_mode,proxy_blocked,dns_advertised_ip,proxy_advertised_ip,status,dns_bind_ip,proxy_bind_ip,xray_fetch_version,xray_rev) D"
     auth: "S(id,dns_advertised_ip,status)"
   node_enrollments:
     hub: "S U(csr_der,spki_sha256,dns_bind_ip,dns_advertised_ip,proxy_bind_ip,proxy_advertised_ip,hostname,os_release,node_version,key_fingerprint,state,enrolled_at,enrolled_from,cert_der)"
@@ -308,9 +313,15 @@ tables:
     admin: "S I U"
   node_location_configs:
     hub: "S"
-    compiler: "S"
-    worker: "S"
+    compiler: "S(id,node_id,location_id,enabled)"
+    worker: "S(id,node_id,location_id,enabled)"
     admin: "S I U D"
+  node_location_config_state:
+    hub: "S I U"
+    admin: "S"
+  proxy_settings:
+    hub: "S"
+    admin: "S U(grant_width,probe_urls)"
   location_availability:
     tenant: "S"
     hub: "S"
@@ -479,7 +490,8 @@ views:
 schemas:
   public:    {owner: pg_database_owner, usage: []}
   ctrlz:     {owner: ctrlz_migrator, usage: [tenant, hub, compiler, worker, admin, auth, backfill, keytool, scoped, domain_apply]}
-  ctrlz_fn:  {owner: ctrlz_auth, usage: [tenant, worker, admin, keytool, compiler]}
+  # hub: EXECUTE on node_alert_close alone (0105); the schema grant is what lets that EXECUTE be reached.
+  ctrlz_fn:  {owner: ctrlz_auth, usage: [tenant, worker, admin, keytool, compiler, hub]}
   ctrlz_ext: {owner: ctrlz_migrator, usage: []}
   river:     {owner: ctrlz_migrator, usage: [worker]}
 

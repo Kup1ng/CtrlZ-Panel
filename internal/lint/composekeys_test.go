@@ -18,7 +18,7 @@ import (
 //
 // The invariant: nothing a service can be given by the Compose file is outside a list somebody read. The
 // lints of this directory decode the file into a struct of the fields seen so far, and yaml.v3 drops every
-// other key, so `volumes`, `privileged`, `pid`, `devices`, `sysctls`, `userns_mode`, `extra_hosts` and a
+// other key, so `volumes`, `privileged`, `pid`, `devices`, a `sysctls` of any other kind, `userns_mode`, `extra_hosts` and a
 // `cap_add` outside caddy passed unseen: a later edit that bound ../../secrets into the internet-facing api,
 // or mounted the Docker socket, or made valkey privileged, kept every Compose test green. The secrets rule
 // (TestComposeKeyFilesFollowTheDomains, TestComposeSecretsAreFiles) reads the `secrets:` list only, which a
@@ -36,10 +36,11 @@ import (
 //     of subnet and ip_range; a top-level secret holds only `file`, a name under the secrets directory
 //     variable and nothing else.
 //  2. A service holds only the keys of composeServiceKeys. Anything else (privileged, pid, ipc, uts, devices,
-//     sysctls, userns_mode, extra_hosts, cgroup_parent, group_add, include, extends, configs, a key not
+//     userns_mode, extra_hosts, cgroup_parent, group_add, include, extends, configs, a key not
 //     yet invented) fails, whatever its value.
 //  3. The keys that widen what a container may do take their values from closed tables, exactly: security_opt
-//     (one entry), cap_drop (ALL), read_only (true), cap_add, network_mode, user, tmpfs, build, ports, ulimits,
+//     (one entry), cap_drop (ALL, and every service has it), sysctls (net.mptcp.enabled "0", and every service with a network of its
+//     own has it: the container's namespace starts with MPTCP on, p6-ops 9.5), read_only (true), cap_add, network_mode, user, tmpfs, build, ports, ulimits,
 //     shm_size, profiles and volumes (the entries of each service). A service that is not in a table may have
 //     none of that key.
 //  4. Whatever the tables say, no volume source may be the secrets directory (or hold the word), the Docker
@@ -47,10 +48,10 @@ import (
 //     someone edits the tables.
 //  5. Every named volume, network, secret and dependency a service uses is declared, and every secret entry of
 //     a service is a plain name (the long form can name a target path or a mode).
-//  6. Every service that has a network of its own names the resolver address of the file (`dns`) or is on the closed list of
-//     services that keep the embedded resolver's way out, each with its reason (p6-ops 9.5): Docker's embedded DNS forwards the names of
-//     a non-internal network from the host's namespace, past every row of the firewall table, unless the container is given a
-//     server to forward to. The address is judged by where it sits, and not only by its text: a service whose networks are all
+//  6. Every service that has a network of its own names its resolver (`dns`), exactly as its row of the table says (p6-ops 9.5):
+//     Docker's embedded DNS forwards the names of a non-internal network from the host's namespace, past every row of the firewall
+//     table, unless the container is given a server to forward to. The worker, which resolves names outside the stack, names the
+//     pinned resolvers of the host through the variables CTRLZ_WORKER_DNS1 to 3, and no service keeps the embedded resolver's own way out. The address is judged by where it sits, and not only by its text: a service whose networks are all
 //     internal may use any address (nothing leaves), and a service with a network that has a route out needs an address inside the
 //     subnet of an internal network it joins, outside that network's ip_range and not the fixed address of any service, so the
 //     forward stays on-link on a bridge that has no way out. A renumbered subnet, a network added to a service, or a service on
@@ -73,7 +74,8 @@ var composeServiceKeys = map[string]string{
 	"network_mode": "judged by composeTables.NetworkMode", "tmpfs": "judged by composeTables.Tmpfs",
 	"shm_size": "judged by composeTables.ShmSize", "ulimits": "judged by composeTables.Ulimits",
 	"pull_policy": "judged by composeTables.PullPolicy",
-	"dns":         "judged by composeTables.DNS and composeTables.DNSOpen",
+	"dns":         "judged by composeTables.DNS",
+	"sysctls":     "judged exactly",
 }
 
 // composeTables are the closed tables the lint judges against; the real ones are realComposeTables.
@@ -90,7 +92,6 @@ type composeTables struct {
 	Profiles    map[string][]string
 	PullPolicy  map[string]string
 	DNS         map[string][]string
-	DNSOpen     map[string]string
 }
 
 func valkeyZoneVolumes(zone string) []string {
@@ -111,12 +112,25 @@ var (
 	composeNoDNS    = []string{"192.0.2.53"}
 	composeCaddyDNS = []string{"10.213.78.253"} // app, above its ip_range, apart from caddy's 10.213.78.200
 	composeHubDNS   = []string{"10.213.77.253"} // backend, above its ip_range, apart from .200 to .202
+	// The worker resolves names outside the stack, so it names the pinned resolvers of the host, from compose.env (p6-ops 9.5). Its first is
+	// required, the others default to it. The row is the exact text: the file's own interpolation is not evaluated here.
+	composeWorkerDNS = []string{
+		"${CTRLZ_WORKER_DNS1:?set CTRLZ_WORKER_DNS1 in .env to the address of a domestic resolver (p6-ops 9.5), not a loopback address}",
+		"${CTRLZ_WORKER_DNS2:-${CTRLZ_WORKER_DNS1}}",
+		"${CTRLZ_WORKER_DNS3:-${CTRLZ_WORKER_DNS1}}",
+	}
+	// What an entrypoint that owns a directory as root and then drops to its user needs, and nothing else.
+	composeServerDirCaps = []string{"CHOWN", "SETUID", "SETGID", "FOWNER", "DAC_OVERRIDE"}
 )
 
 func realComposeTables() composeTables {
 	return composeTables{
 		// The capability each service adds back after dropping all of them.
-		CapAdd: map[string][]string{"caddy": {"NET_BIND_SERVICE"}, "caddy-init": {"CHOWN"}},
+		// postgres and clickhouse start as root to own their data directory and then drop to the server user (setuid, setgid).
+		CapAdd: map[string][]string{
+			"caddy": {"NET_BIND_SERVICE"}, "caddy-init": {"CHOWN"},
+			"postgres": composeServerDirCaps, "clickhouse": composeServerDirCaps,
+		},
 		// The service that has no network of its own.
 		NetworkMode: map[string]string{"caddy-init": "none"},
 		// Every volume entry of every service, exactly. A bind mount is read-only; a named volume is one of the
@@ -181,10 +195,8 @@ func realComposeTables() composeTables {
 			"caddy": composeCaddyDNS, "api": composeNoDNS, "admin": composeNoDNS, "hub": composeHubDNS, "migrate": composeNoDNS, "rekey": composeNoDNS,
 			"domain-apply": composeNoDNS, "web-panel": composeNoDNS, "web-admin": composeNoDNS, "postgres": composeNoDNS, "clickhouse": composeNoDNS,
 			"valkey-api": composeNoDNS, "valkey-admin": composeNoDNS,
-		},
-		// A service that resolves names outside the stack keeps the embedded resolver's way out, and the row says what it resolves.
-		DNSOpen: map[string]string{
-			"worker": "the DDNS job resolves the host names tenants enter (and the name of a DoT or DoH CTRLZ_DDNS_RESOLVER), and the SMS drivers dial their gateway by name; its egress row of p6-ops 9.5 allows port 53 to any public address",
+			// Not black-holed: it resolves the DDNS host names tenants enter and the SMS gateways, through the pinned resolvers its egress row allows.
+			"worker": composeWorkerDNS,
 		},
 	}
 }
@@ -405,10 +417,17 @@ func composeKeyProblemsWith(text string, tb composeTables) []string {
 				out = append(out, fmt.Sprintf("%s has security_opt %v, the only entry allowed is no-new-privileges:true", name, v))
 			}
 		}
-		if v, ok := s["cap_drop"]; ok {
-			if got, plain := composeStrings(v); !plain || !composeSameStrings(got, []string{"ALL"}) {
-				out = append(out, fmt.Sprintf("%s has cap_drop %v, want [ALL]", name, v))
+		// Every service drops every capability, with no exception (a service that forgot the key kept Docker's default set, NET_RAW included).
+		if got, plain := composeStrings(s["cap_drop"]); !plain || !composeSameStrings(got, []string{"ALL"}) {
+			out = append(out, fmt.Sprintf("%s has cap_drop %v, want [ALL]", name, s["cap_drop"]))
+		}
+		// A service with a namespace of its own turns MPTCP off in it. caddy-init, on network_mode none, opens no socket and has no row for it.
+		if _, hasMode := s["network_mode"]; !hasMode {
+			if !reflect.DeepEqual(s["sysctls"], map[string]any{"net.mptcp.enabled": "0"}) {
+				out = append(out, fmt.Sprintf("%s has sysctls %v, want exactly net.mptcp.enabled: \"0\" (a new namespace starts with MPTCP on)", name, s["sysctls"]))
 			}
+		} else if v, ok := s["sysctls"]; ok {
+			out = append(out, fmt.Sprintf("%s has sysctls %v and a network_mode, which Docker may refuse; it opens no socket, leave them out", name, v))
 		}
 		if v, ok := s["read_only"]; ok && v != true {
 			out = append(out, fmt.Sprintf("%s has read_only %v, want true", name, v))
@@ -503,11 +522,9 @@ func composeKeyProblemsWith(text string, tb composeTables) []string {
 			out = append(out, "the volume table names the service "+name+", which the file does not have")
 		}
 	}
-	for _, names := range []map[string]bool{composeKeys(tb.DNS), composeKeys(tb.DNSOpen)} {
-		for name := range names {
-			if _, ok := services[name]; !ok {
-				out = append(out, "the dns table names the service "+name+", which the file does not have")
-			}
+	for name := range tb.DNS {
+		if _, ok := services[name]; !ok {
+			out = append(out, "the dns table names the service "+name+", which the file does not have")
 		}
 	}
 	for name := range tb.CapAdd {
@@ -519,39 +536,23 @@ func composeKeyProblemsWith(text string, tb composeTables) []string {
 	return out
 }
 
-// composeKeys returns the keys of a table as a set.
-func composeKeys[V any](m map[string]V) map[string]bool {
-	out := map[string]bool{}
-	for k := range m {
-		out[k] = true
-	}
-	return out
-}
-
 // composeDNSProblems judges the `dns` key of one service that has a network of its own: exactly the table's resolver (and that resolver
 // where it sits, composeDNSPlacementProblems), or no key at all and a row of the open table. A service in neither table fails, so a new
 // service has to say which it is.
 func composeDNSProblems(name string, s map[string]any, tb composeTables, networks map[string]any, fixed map[netip.Addr]string) []string {
 	v := s["dns"]
-	want, closed := tb.DNS[name]
-	reason, open := tb.DNSOpen[name]
+	want, listed := tb.DNS[name]
 	got, plain := composeStrings(v)
 	switch {
-	case closed && v == nil:
+	case !listed:
+		return []string{name + " is in no dns table row: give it dns " + fmt.Sprint(composeNoDNS) +
+			" when every network it joins is internal, or an unassigned address of the subnet of an internal network it joins (above that network's ip_range) when one has a route out, or the pinned resolvers of the host when it resolves names outside the stack"}
+	case v == nil:
 		return []string{fmt.Sprintf("%s has no dns key, the table gives it %v: without one Docker's embedded resolver forwards from the host namespace, past the firewall rows", name, want)}
-	case closed && (!plain || !composeSameStrings(got, want)):
+	case !plain || !composeSameStrings(got, want):
 		return []string{fmt.Sprintf("%s has dns %v, the table allows %v", name, v, want)}
-	case closed:
-		return composeDNSPlacementProblems(name, s, got, networks, fixed)
-	case open && reason == "":
-		return []string{name + " is in the open dns table with no reason"}
-	case open && v != nil:
-		return []string{fmt.Sprintf("%s is on the open dns table and has dns %v; leave the key out or move the service to the closed table", name, v)}
-	case !closed && !open:
-		return []string{name + " is in neither dns table: give it dns " + fmt.Sprint(composeNoDNS) +
-			" when every network it joins is internal, or an unassigned address of the subnet of an internal network it joins (above that network's ip_range) when one has a route out, or list it with the names it resolves"}
 	}
-	return nil
+	return composeDNSPlacementProblems(name, s, got, networks, fixed)
 }
 
 // composeFixedAddrs maps every fixed address a service asks for (ipv4_address, ipv6_address) to the service, so a resolver address cannot be
@@ -595,6 +596,11 @@ func composeDNSPlacementProblems(name string, s map[string]any, addrs []string, 
 	}
 	var out []string
 	for _, a := range addrs {
+		// The pinned resolvers of the host (the worker's row): an address of the host's own choosing, which the egress row of the firewall
+		// table names. The forward starts in the container's namespace whatever it is, so there is no placement to judge.
+		if strings.HasPrefix(a, "${CTRLZ_WORKER_DNS") {
+			continue
+		}
 		ip, err := netip.ParseAddr(a)
 		if err != nil {
 			out = append(out, fmt.Sprintf("%s has dns %q, which is not an address", name, a))
@@ -705,7 +711,18 @@ func TestComposeKeysLintCanFail(t *testing.T) {
 		{"ipc host", plant("api", "    ipc: host\n"), "service keys"},
 		{"uts host", plant("api", "    uts: host\n"), "service keys"},
 		{"devices", plant("api", "    devices: [\"/dev/mem\"]\n"), "service keys"},
-		{"sysctls", plant("api", "    sysctls: {net.ipv4.ip_forward: 1}\n"), "service keys"},
+		// sysctls (p6-ops 9.5): the one value, on every service that has a namespace of its own, and none on the service that has none.
+		{"another sysctl on the api", plant("api", "    sysctls: {net.ipv4.ip_forward: 1}\n"), "want exactly net.mptcp.enabled"},
+		{"a second sysctl beside the one", plant("api", "    sysctls: {net.mptcp.enabled: \"0\", net.ipv4.ip_forward: 1}\n"), "want exactly net.mptcp.enabled"},
+		{"MPTCP left on in the api", plant("api", "    sysctls: {net.mptcp.enabled: \"1\"}\n"), "want exactly net.mptcp.enabled"},
+		{"every hardened service without the sysctl", replace("has none (internal/lint composekeys).\n  sysctls: {net.mptcp.enabled: \"0\"}\n", "has none (internal/lint composekeys).\n"), "want exactly net.mptcp.enabled"},
+		{"postgres without the sysctl", replace("\"DAC_OVERRIDE\"]\n    sysctls: {net.mptcp.enabled: \"0\"}\n    image: postgres", "\"DAC_OVERRIDE\"]\n    image: postgres"), "postgres has sysctls"},
+		{"clickhouse without the sysctl", replace("    sysctls: {net.mptcp.enabled: \"0\"}\n    image: clickhouse", "    image: clickhouse"), "clickhouse has sysctls"},
+		{"a sysctl on the service that has no namespace of its own", plant("caddy-init", "    sysctls: {net.mptcp.enabled: \"0\"}\n"), "a network_mode"},
+		// cap_drop: every service has it (postgres and clickhouse had none), and the two that start as root add back five and no more.
+		{"postgres without cap_drop", replace("    cap_drop: [\"ALL\"]\n    cap_add: [\"CHOWN\", \"SETUID\", \"SETGID\", \"FOWNER\", \"DAC_OVERRIDE\"]\n    sysctls: {net.mptcp.enabled: \"0\"}\n    image: postgres", "    cap_add: [\"CHOWN\", \"SETUID\", \"SETGID\", \"FOWNER\", \"DAC_OVERRIDE\"]\n    sysctls: {net.mptcp.enabled: \"0\"}\n    image: postgres"), "postgres has cap_drop"},
+		{"clickhouse without cap_drop", replace("    cap_drop: [\"ALL\"]\n    cap_add: [\"CHOWN\", \"SETUID\", \"SETGID\", \"FOWNER\", \"DAC_OVERRIDE\"]\n    sysctls: {net.mptcp.enabled: \"0\"}\n    image: clickhouse", "    cap_add: [\"CHOWN\", \"SETUID\", \"SETGID\", \"FOWNER\", \"DAC_OVERRIDE\"]\n    sysctls: {net.mptcp.enabled: \"0\"}\n    image: clickhouse"), "clickhouse has cap_drop"},
+		{"NET_RAW added back to postgres", replace("\"DAC_OVERRIDE\"]\n    sysctls: {net.mptcp.enabled: \"0\"}\n    image: postgres", "\"DAC_OVERRIDE\", \"NET_RAW\"]\n    sysctls: {net.mptcp.enabled: \"0\"}\n    image: postgres"), "postgres adds the capabilities"},
 		{"userns_mode", plant("api", "    userns_mode: host\n"), "service keys"},
 		{"extra_hosts", plant("api", "    extra_hosts: [\"x:1.2.3.4\"]\n"), "service keys"},
 		{"cgroup_parent", plant("api", "    cgroup_parent: x\n"), "service keys"},
@@ -750,13 +767,17 @@ func TestComposeKeysLintCanFail(t *testing.T) {
 		{"caddy on the shared black-hole address", replace("    dns: [\"10.213.78.253\"]\n", "    dns: *no-external-dns\n"), "has dns"},
 		{"the hub on the shared black-hole address", replace("    dns: [\"10.213.77.253\"]\n", "    dns: *no-external-dns\n"), "has dns"},
 		{"the api with a second resolver", replace("  api:\n    dns: *no-external-dns\n", "  api:\n    dns: [\"192.0.2.53\", \"9.9.9.9\"]\n"), "has dns"},
-		{"the worker given a resolver", plant("worker", "    dns: [\"192.0.2.53\"]\n"), "open dns table"},
+		// The worker's pinned resolvers (p6-ops 9.5): the exact form, the first required and the others defaulting to it.
+		{"the worker without dns", replace("    dns:\n      - \"${CTRLZ_WORKER_DNS1:?", "    dnz:\n      - \"${CTRLZ_WORKER_DNS1:?"), "worker has no dns key"},
+		{"the worker on the black-hole address", replace("      - \"${CTRLZ_WORKER_DNS2:-${CTRLZ_WORKER_DNS1}}\"\n      - \"${CTRLZ_WORKER_DNS3:-${CTRLZ_WORKER_DNS1}}\"\n", "      - \"192.0.2.53\"\n"), "worker has dns"},
+		{"the worker's first resolver optional", replace("${CTRLZ_WORKER_DNS1:?set", "${CTRLZ_WORKER_DNS1:-set"), "worker has dns"},
+		{"the worker with a resolver of its own choosing", replace("      - \"${CTRLZ_WORKER_DNS3:-${CTRLZ_WORKER_DNS1}}\"\n", "      - \"9.9.9.9\"\n"), "worker has dns"},
 		// Where the resolver sits (CD-r2-1, CD-r2-2): the table value is safe only on-link in an internal network, or when nothing the service joins has a route out.
 		{"app renumbered, caddy's dns left behind", func(s string) string {
 			return replace("10.213.78.0/25", "10.213.80.0/25")(replace("10.213.78.0/24", "10.213.80.0/24")(s))
 		}, "lies in no subnet of an internal network"},
 		{"the api on a network with a route out", replace("    networks: [app, backend, vk_api]\n", "    networks: [app, backend, vk_api, egress]\n"), "lies in no subnet of an internal network"},
-		{"a new service in no table", replace("\n  web-admin:\n", "\n  newsvc:\n    image: busybox\n    networks: [web]\n\n  web-admin:\n"), "in neither dns table"},
+		{"a new service in no table", replace("\n  web-admin:\n", "\n  newsvc:\n    image: busybox\n    networks: [web]\n\n  web-admin:\n"), "in no dns table row"},
 		{"a dependency that is no service", plant("web-panel", "    depends_on: [ghost]\n"), "which is not a service"},
 	} {
 		p := composeKeyProblems(tc.mutate(good))
@@ -780,7 +801,7 @@ func TestComposeKeysLintCanFail(t *testing.T) {
 }
 
 // TestComposeDNSTableClausesFail plants in the tables and not in the file, since the two clauses it aims at judge the tables: a
-// row of the dns table that names a service the file lacks (a rename that left the row behind), and an open row with no reason.
+// row of the dns table that names a service the file lacks (a rename that left the row behind).
 func TestComposeDNSTableClausesFail(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join(repoRoot(t), "deploy", "compose", "docker-compose.yml"))
 	if err != nil {
@@ -792,14 +813,11 @@ func TestComposeDNSTableClausesFail(t *testing.T) {
 	}
 	copyTables := func() composeTables {
 		tb := realComposeTables()
-		dns, open := map[string][]string{}, map[string]string{}
+		dns := map[string][]string{}
 		for k, v := range tb.DNS {
 			dns[k] = v
 		}
-		for k, v := range tb.DNSOpen {
-			open[k] = v
-		}
-		tb.DNS, tb.DNSOpen = dns, open
+		tb.DNS = dns
 		return tb
 	}
 	for _, tc := range []struct {
@@ -812,16 +830,6 @@ func TestComposeDNSTableClausesFail(t *testing.T) {
 			tb.DNS["renamed-away"] = composeNoDNS
 			return tb
 		}, "the dns table names the service renamed-away"},
-		{"an open row for a service the file lacks", func() composeTables {
-			tb := copyTables()
-			tb.DNSOpen["renamed-away"] = "a reason"
-			return tb
-		}, "the dns table names the service renamed-away"},
-		{"an open row with an empty reason", func() composeTables {
-			tb := copyTables()
-			tb.DNSOpen["worker"] = ""
-			return tb
-		}, "with no reason"},
 	} {
 		p := composeKeyProblemsWith(good, tc.tables())
 		found := false
