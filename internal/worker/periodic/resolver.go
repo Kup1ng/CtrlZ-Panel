@@ -16,7 +16,7 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 )
 
-// The resolver of the DDNS job (docs/specs/p4-nodes.md 8): the host's own resolver by default, or the DoT or DoH server that
+// The resolver of the DDNS job (docs/specs/p4-nodes.md 8): the worker's pinned resolvers (CTRLZ_WORKER_DNS1 to 3) by default, or the DoT or DoH server that
 // CTRLZ_DDNS_RESOLVER names. It is one of the few clients of the server binary that dial a host outside the deployment, and
 // the destination list of the egress rules is closed at TCP and UDP 53, TCP 443 and TCP 853 (p6-ops 5). So the target is
 // parsed strictly, here, to exactly the two shapes the list allows, and every dial the client makes is the one function
@@ -53,7 +53,7 @@ const (
 	pathDoH   = "/dns-query"
 )
 
-// parseTarget reads the setting. Empty is not a target (the caller uses the host's resolver). Anything beyond
+// parseTarget reads the setting. Empty is not a target (the caller uses the worker's pinned resolvers (CTRLZ_WORKER_DNS1 to 3)). Anything beyond
 // `tls://host[:853]` and `https://host[:443][/path]` is refused: user info, a query, a fragment, another port and another
 // scheme, so a mistyped or hostile value cannot send the worker's queries somewhere the egress list did not intend.
 func parseTarget(spec string) (target, error) {
@@ -146,7 +146,7 @@ func WithRoots(p *x509.CertPool) Option { return func(o *options) { o.roots = p 
 // withDialAddr is for tests: the connection goes to addr, the name checked is still the target's.
 func withDialAddr(addr string) Option { return func(o *options) { o.dialAddr = addr } }
 
-// NewResolver builds the resolver of a CTRLZ_DDNS_RESOLVER value: the host's resolver for an empty one.
+// NewResolver builds the resolver of a CTRLZ_DDNS_RESOLVER value: the worker's pinned resolvers (CTRLZ_WORKER_DNS1 to 3) for an empty one.
 func NewResolver(spec string, opts ...Option) (Resolver, error) {
 	var o options
 	for _, f := range opts {
@@ -199,7 +199,7 @@ func (d *dialer) dialDoT(ctx context.Context, _, _ string) (net.Conn, error) {
 }
 
 // ---------------------------------------------------------------------------
-// The host's resolver, and DoT through it.
+// The container's default resolver (the worker's pinned resolvers (CTRLZ_WORKER_DNS1 to 3)), and DoT through it.
 
 type netResolver struct{ r *net.Resolver }
 

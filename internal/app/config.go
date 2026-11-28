@@ -112,7 +112,7 @@ type Config struct {
 	// volume under Compose. Worker only; the compiler job needs it and the compiler pool both.
 	ArtifactsDir string
 
-	// DDNSResolver is the DoT or DoH server of the DDNS job (P4 8), a tls:// or https:// URL; empty is the host's own resolver.
+	// DDNSResolver is the DoT or DoH server of the DDNS job (P4 8), a tls:// or https:// URL; empty uses the worker's pinned resolvers (CTRLZ_WORKER_DNS1 to 3).
 	// Worker only. It is parsed strictly where it is used (internal/worker/periodic).
 	DDNSResolver string
 
@@ -199,7 +199,7 @@ type Getenv func(string) string
 //	CTRLZ_DB_PASSWORD_FILE         file holding this role's password
 //	CTRLZ_DB_COMPILER_PASSWORD_FILE  worker only: the compiler role's password
 //	CTRLZ_ARTIFACTS_DIR              worker only: the directory of the artifact store the compiler writes
-//	CTRLZ_DDNS_RESOLVER              worker only: tls://host or https://host/path, the resolver of the DDNS job (default: the host's)
+//	CTRLZ_DDNS_RESOLVER              worker only: tls://host or https://host/path, the resolver of the DDNS job (default: the worker's pinned resolvers (CTRLZ_WORKER_DNS1 to 3))
 //	CTRLZ_PROOF_KEY_FILE           hub only: the proof_key secret
 //	CTRLZ_DB_MAX_CONNS             pool size
 //	CTRLZ_ENV                      production (default), dev or test
