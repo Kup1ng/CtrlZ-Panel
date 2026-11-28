@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Kup1ng/CtrlZ-Panel/internal/app"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/keyring"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/resolvguard"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/secret"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/sms"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/store"
@@ -189,5 +191,21 @@ func TestWorkerResolverCheckRefusesTheHostNamespace(t *testing.T) {
 	}
 	if err := app.CheckWorkerResolversForTest(app.EnvProduction, p); err != nil {
 		t.Errorf("a pinned resolver was refused: %v", err)
+	}
+}
+
+// TestStartWorkerMakesTheResolverCheckFirst: startWorker itself, not only the helper, refuses a host-namespace forward. The
+// runtime, the stores and the log are nil because the check must return before any of them is touched; a later edit that moves
+// the check behind them would panic here instead of passing.
+func TestStartWorkerMakesTheResolverCheckFirst(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "resolv.conf")
+	bad := "nameserver 127.0.0.11\n\n# ExtServers: [host(127.0.0.1)]\n"
+	if err := os.WriteFile(p, []byte(bad), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	defer app.SetResolvConfPathForTest(p)()
+	_, err := app.StartWorkerForTest(context.Background(), app.Config{Env: app.EnvProduction}, nil, nil, nil, nil)
+	if !errors.Is(err, resolvguard.ErrHostForward) {
+		t.Errorf("err = %v, want resolvguard.ErrHostForward", err)
 	}
 }

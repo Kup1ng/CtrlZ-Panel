@@ -273,6 +273,7 @@ var osMembers = map[string][]string{
 	"internal/secret":      {"ReadFile", "PathError"},                        // a secret read from a file, an error type
 	"internal/keyring":     {"ErrNotExist"},                                  // a missing key file is not an error of the ring
 	"internal/sms/smshttp": {"ReadFile"},                                     // the bundle of trusted roots, read from one absolute path (sms-r17-12)
+	"internal/resolvguard": {"ErrNotExist", "ReadFile"},                      // the worker reads the container's own /etc/resolv.conf once at start to refuse a host-namespace DNS forward (p6-ops 9.5); a missing file is not the bypass
 
 	"cmd/ctrlz":                            {"Args", "Exit", "Interrupt", "Stderr"},                                                                                                                                        // the command line, the exit status and the stop signal of the service
 	"internal/app":                         {"DirFS", "Getenv", "Open", "ReadFile", "Stderr", "Stdout"},                                                                                                                    // the roles read their environment and log to stdout; load-fixture reads a lab file and prints its result; the hub reads its key files (CTRLZ_HUB_HOST and the secrets of 3.2) from the paths Compose mounts

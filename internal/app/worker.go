@@ -36,7 +36,8 @@ import (
 // sweep is worse than one that is not running, because Compose would see it as
 // healthy.
 func startWorker(ctx context.Context, cfg Config, rt *Runtime, st, compilerStore *store.Store, log *slog.Logger) (func(wait time.Duration), error) {
-	// First, before a connection or a loop exists: a worker whose names leave through the host namespace must not run at all.
+	// First, before any loop starts (the pools are already open, but nothing uses them yet): a worker whose names leave through the
+	// host namespace must not run at all.
 	if err := checkWorkerResolvers(cfg.Env, resolvConfPath); err != nil {
 		return nil, err
 	}
@@ -152,8 +153,9 @@ func (l workerLoop) Valid() bool {
 	return l == loopSMS || l == loopSweep || l == loopAdminJobs || l == loopBatchJobs || l == loopCompiler || l == loopPeriodic || l == loopStop
 }
 
-// resolvConfPath is the file Docker writes the worker's forwarding targets into (see resolvguard).
-const resolvConfPath = "/etc/resolv.conf"
+// resolvConfPath is the file Docker writes the worker's forwarding targets into (see resolvguard). It is a variable only so a test
+// can point startWorker at a file of its own; nothing else assigns it.
+var resolvConfPath = "/etc/resolv.conf"
 
 // checkWorkerResolvers refuses a production worker whose DNS would be forwarded from the host namespace or to a loopback
 // address: the one path past the firewall table that Compose cannot see (p6-ops 9.5). Dev and test runs keep the machine's own

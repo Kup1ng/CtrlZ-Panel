@@ -88,6 +88,7 @@ internal/publicapi
 internal/ratelimit
 internal/reachcheck
 internal/reqledger
+internal/resolvguard
 internal/riverpoll
 internal/safego
 internal/secret
