@@ -91,12 +91,16 @@ x-go-env: &go-env
   # does not reach a container: the process says it itself. Caddy is a Go binary and carries the same value in its own block.
   GODEBUG: multipathtcp=0
 
-# The one resolver address of a service that resolves no name outside the stack (p6-ops 9.5). Docker's embedded resolver
+# The resolver address of a service that resolves no name outside the stack (p6-ops 9.5). Docker's embedded resolver
 # (127.0.0.11) answers the names of the Compose services itself and sends every other name to the servers the container
-# is given. With none given on a non-internal network, dockerd forwards the query from the host's namespace to the host's own
-# resolver, outside every row of the firewall table, so a container that ran foreign code could carry a secret out in
-# the labels of a name. With this address the forward starts in the container's namespace, where the bridge rows drop it:
-# 192.0.2.53 is TEST-NET-1, a member of special4. Every service names it or, with a reason, does not (internal/lint composekeys).
+# is given. With none given, a host resolver on a loopback address (ctrld on 127.0.0.1 in D80) is reached by dockerd from the
+# host's namespace, outside every row of the firewall table, so a container that ran foreign code could carry a secret out in
+# the labels of a name; any other host resolver (systemd-resolved's upstream list on a stock Ubuntu) is reached from the
+# container's namespace. With this address the forward always starts in the container's namespace, where the bridge rows
+# drop it: 192.0.2.53 is TEST-NET-1, a member of special4. It serves the services whose networks are all internal, which
+# have no route out at all. caddy and hub are on a plain bridge with a way out and take an address of their own (see them): a
+# name Docker does not hold (a service being recreated) is forwarded, and a drop that waits for a table of P6 is no guard.
+# Every service names one of these addresses or, with a reason, none (internal/lint composekeys).
 x-no-external-dns: &no-external-dns ["192.0.2.53"]
 
 x-go-service: &go-service
@@ -173,7 +177,12 @@ services:
     network_mode: none
 
   caddy:
-    dns: *no-external-dns
+    # Not the shared address: caddy is on `ingress`, a bridge with a route out, so a forward to 192.0.2.53 would leave through the
+    # uplink in plaintext (and a forger on the path could answer it) until the P6 table drops it, and Caddy resolves api and web-panel
+    # by name for each new connection. 10.213.78.253 is an unassigned address of `app` above its ip_range and apart from caddy's
+    # own: on-link on an internal bridge, so the forward goes nowhere and nothing answers, whatever the host table holds. If the
+    # subnet of `app` changes, this address moves with it.
+    dns: ["10.213.78.253"]
     <<: *hardened
     image: caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b
     # Not root (review round 1). The image runs as root unless told otherwise, and
@@ -323,8 +332,8 @@ services:
     # No `dns:`, on purpose: the worker is the one service that resolves names outside the stack. The DDNS job looks up the host names
     # tenants enter (the host resolver, or the DoT or DoH server of CTRLZ_DDNS_RESOLVER, which may be a name), and the SMS drivers dial
     # their gateway by name. The `egress` row of p6-ops 9.5 is the one place that bounds this: UDP and TCP 53 to an address outside
-    # special, plus the pinned resolvers. Here the embedded resolver forwards from the host namespace, outside the bridge rows; the row
-    # already lets the worker send port 53 to any public address, so that path opens nothing new. internal/lint composekeys lists this exception.
+    # special, plus the pinned resolvers. With a loopback host resolver (D80's ctrld) the embedded resolver forwards from the host namespace, outside the bridge rows, and otherwise
+    # from the container's, where the row sees it; the row already lets the worker send port 53 to any public address, so the first path opens nothing new. internal/lint composekeys lists this exception.
     networks: [backend, egress]
 
   # Node-facing from P4: the node port (9443) carries enrolment (no client certificate), the install files and the
@@ -332,7 +341,10 @@ services:
   # container and publishes nothing: a published /readyz would hand the internet an unauthenticated call that
   # takes a pooled database connection (admin-r10-4).
   hub:
-    dns: *no-external-dns
+    # As caddy: the hub is on `hub_ingress` (a route out) and dials postgres by name over a connection without TLS, so a forged
+    # answer would hand its password away. 10.213.77.253 is an unassigned address of `backend` above its ip_range, apart from the
+    # fixed .200 to .202; nothing answers it. If the subnet of `backend` changes, this address moves with it.
+    dns: ["10.213.77.253"]
     <<: *go-service
     command: ["hub"]
     environment:
@@ -813,7 +825,7 @@ networks:
     ipam:
       config:
         - subnet: 10.213.78.0/24
-          ip_range: 10.213.78.0/25
+          ip_range: 10.213.78.0/25  # caddy's dns, 10.213.78.253, is unassigned in the upper half: keep it so
   # The worker alone: SMS gateways. Compose cannot name destinations; the
   # drivers dial fixed hosts and a host firewall rule closes the rest (P6).
   egress:
@@ -847,7 +859,7 @@ networks:
     ipam:
       config:
         - subnet: 10.213.77.0/24
-          ip_range: 10.213.77.0/25
+          ip_range: 10.213.77.0/25  # the hub's dns, 10.213.77.253, is unassigned in the upper half: keep it so
 
 volumes:
   pgdata:

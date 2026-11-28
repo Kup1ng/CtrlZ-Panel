@@ -99,8 +99,14 @@ func valkeyZoneVolumes(zone string) []string {
 	}
 }
 
-// composeNoDNS is the value of dns of a service that resolves no outside name (the x-no-external-dns anchor of the file).
-var composeNoDNS = []string{"192.0.2.53"}
+// composeNoDNS is the value of dns of a service that resolves no outside name and has only internal networks (the x-no-external-dns anchor
+// of the file). caddy and hub are on a bridge with a route out, so each has an unassigned address of an internal network it joins instead:
+// the forward then stays on that bridge whatever the host's firewall table holds (p6-ops 9.5).
+var (
+	composeNoDNS    = []string{"192.0.2.53"}
+	composeCaddyDNS = []string{"10.213.78.253"} // app, above its ip_range, apart from caddy's 10.213.78.200
+	composeHubDNS   = []string{"10.213.77.253"} // backend, above its ip_range, apart from .200 to .202
+)
 
 func realComposeTables() composeTables {
 	return composeTables{
@@ -164,9 +170,10 @@ func realComposeTables() composeTables {
 			"web-panel": "never", "web-admin": "never",
 		},
 		// The resolver of every service that resolves no name outside the stack: TEST-NET-1, which the host firewall drops (special4), so
-		// Docker's embedded resolver answers the Compose names and sends nothing out. caddy-init has network_mode none and no resolver at all.
+		// Docker's embedded resolver answers the Compose names and sends nothing out. caddy and hub are the two on a bridge with a route out,
+		// where that drop is only as good as the host table: each has an unassigned address of an internal network it joins. caddy-init has network_mode none and no resolver at all.
 		DNS: map[string][]string{
-			"caddy": composeNoDNS, "api": composeNoDNS, "admin": composeNoDNS, "hub": composeNoDNS, "migrate": composeNoDNS, "rekey": composeNoDNS,
+			"caddy": composeCaddyDNS, "api": composeNoDNS, "admin": composeNoDNS, "hub": composeHubDNS, "migrate": composeNoDNS, "rekey": composeNoDNS,
 			"domain-apply": composeNoDNS, "web-panel": composeNoDNS, "web-admin": composeNoDNS, "postgres": composeNoDNS, "clickhouse": composeNoDNS,
 			"valkey-api": composeNoDNS, "valkey-admin": composeNoDNS,
 		},
@@ -654,8 +661,11 @@ func TestComposeKeysLintCanFail(t *testing.T) {
 		{"an undeclared network", replace("    networks: [web]\n\n  web-admin:", "    networks: [web, nowhere]\n\n  web-admin:"), "joins the network nowhere"},
 		// The resolver (p6-ops 9.5): a service without the key, with another one, the open row given a key, and a service that is in no table.
 		{"the api without dns", replace("  api:\n    dns: *no-external-dns\n", "  api:\n"), "has no dns key"},
-		{"caddy without dns", replace("  caddy:\n    dns: *no-external-dns\n", "  caddy:\n"), "has no dns key"},
-		{"the hub resolving through a public server", replace("  hub:\n    dns: *no-external-dns\n", "  hub:\n    dns: [\"1.1.1.1\"]\n"), "has dns"},
+		{"caddy without dns", replace("    dns: [\"10.213.78.253\"]\n", ""), "has no dns key"},
+		{"the hub resolving through a public server", replace("    dns: [\"10.213.77.253\"]\n", "    dns: [\"1.1.1.1\"]\n"), "has dns"},
+		// caddy and hub on the shared black hole: on a bridge with a route out it would leave in plaintext until the P6 table drops it.
+		{"caddy on the shared black-hole address", replace("    dns: [\"10.213.78.253\"]\n", "    dns: *no-external-dns\n"), "has dns"},
+		{"the hub on the shared black-hole address", replace("    dns: [\"10.213.77.253\"]\n", "    dns: *no-external-dns\n"), "has dns"},
 		{"the api with a second resolver", replace("  api:\n    dns: *no-external-dns\n", "  api:\n    dns: [\"192.0.2.53\", \"9.9.9.9\"]\n"), "has dns"},
 		{"the worker given a resolver", plant("worker", "    dns: [\"192.0.2.53\"]\n"), "open dns table"},
 		{"a new service in no table", replace("\n  web-admin:\n", "\n  newsvc:\n    image: busybox\n    networks: [web]\n\n  web-admin:\n"), "in neither dns table"},
@@ -677,6 +687,61 @@ func TestComposeKeysLintCanFail(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("%s: no problem says %q (a table may have refused it, and not the clause aimed at); got %v", tc.name, tc.want, p)
+		}
+	}
+}
+
+// TestComposeDNSTableClausesFail plants in the tables and not in the file, since the two clauses it aims at judge the tables: a
+// row of the dns table that names a service the file lacks (a rename that left the row behind), and an open row with no reason.
+func TestComposeDNSTableClausesFail(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "deploy", "compose", "docker-compose.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	good := string(b)
+	if p := composeKeyProblems(good); len(p) != 0 {
+		t.Fatalf("the real file is refused: %v", p)
+	}
+	copyTables := func() composeTables {
+		tb := realComposeTables()
+		dns, open := map[string][]string{}, map[string]string{}
+		for k, v := range tb.DNS {
+			dns[k] = v
+		}
+		for k, v := range tb.DNSOpen {
+			open[k] = v
+		}
+		tb.DNS, tb.DNSOpen = dns, open
+		return tb
+	}
+	for _, tc := range []struct {
+		name   string
+		tables func() composeTables
+		want   string
+	}{
+		{"a closed row for a service the file lacks", func() composeTables {
+			tb := copyTables()
+			tb.DNS["renamed-away"] = composeNoDNS
+			return tb
+		}, "the dns table names the service renamed-away"},
+		{"an open row for a service the file lacks", func() composeTables {
+			tb := copyTables()
+			tb.DNSOpen["renamed-away"] = "a reason"
+			return tb
+		}, "the dns table names the service renamed-away"},
+		{"an open row with an empty reason", func() composeTables {
+			tb := copyTables()
+			tb.DNSOpen["worker"] = ""
+			return tb
+		}, "with no reason"},
+	} {
+		p := composeKeyProblemsWith(good, tc.tables())
+		found := false
+		for _, line := range p {
+			found = found || strings.Contains(line, tc.want)
+		}
+		if !found {
+			t.Errorf("%s: no problem says %q; got %v", tc.name, tc.want, p)
 		}
 	}
 }
