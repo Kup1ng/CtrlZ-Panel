@@ -9,3 +9,6 @@ func NewRuntimeForTest(cfg Config, consoleTool bool) (*Runtime, error) {
 
 // PlainHTTPOriginForTest exposes the mapping from the environment to the Origin scheme policy.
 var PlainHTTPOriginForTest = plainHTTPOrigin
+
+// CheckWorkerResolversForTest exposes the start check of the worker's resolvers on a resolv.conf path of the test's choosing.
+var CheckWorkerResolversForTest = checkWorkerResolvers

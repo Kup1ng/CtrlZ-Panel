@@ -340,7 +340,8 @@ services:
     # code could carry the secrets it mounts out in the labels of a name with nothing to count it. With these addresses the forward
     # starts in the container's namespace and the `egress` row sees it. A host sets them in .env (the installer writes them from
     # firewall.conf in P6); an address that is a loopback or the host itself defeats this, so it is a resolver the host reaches over
-    # the network. The second and third default to the first, so one is enough. internal/lint composekeys requires this exact form.
+    # the network, and the worker refuses to start when Docker would forward from the host (internal/resolvguard). The second and third
+    # default to the first, so one is enough. internal/lint composekeys requires this exact form.
     dns:
       - "${CTRLZ_WORKER_DNS1:?set CTRLZ_WORKER_DNS1 in .env to the address of a domestic resolver (p6-ops 9.5), not a loopback address}"
       - "${CTRLZ_WORKER_DNS2:-${CTRLZ_WORKER_DNS1}}"

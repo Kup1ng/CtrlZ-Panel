@@ -168,3 +168,26 @@ func TestWorkerRefusesToStartWithoutItsKeys(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+// TestWorkerResolverCheckRefusesTheHostNamespace: a production worker whose Docker resolv.conf forwards from the host namespace
+// does not start, and a dev run keeps the machine's own resolver (p6-ops 9.5).
+func TestWorkerResolverCheckRefusesTheHostNamespace(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "resolv.conf")
+	bad := "nameserver 127.0.0.11\noptions ndots:0\n\n# ExtServers: [host(127.0.0.1)]\n"
+	if err := os.WriteFile(p, []byte(bad), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.CheckWorkerResolversForTest(app.EnvProduction, p); err == nil {
+		t.Error("a production worker with a host-namespace forward was accepted")
+	}
+	if err := app.CheckWorkerResolversForTest(app.EnvDev, p); err != nil {
+		t.Errorf("a dev run was refused: %v", err)
+	}
+	good := "nameserver 127.0.0.11\n\n# ExtServers: [192.0.2.53]\n"
+	if err := os.WriteFile(p, []byte(good), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.CheckWorkerResolversForTest(app.EnvProduction, p); err != nil {
+		t.Errorf("a pinned resolver was refused: %v", err)
+	}
+}

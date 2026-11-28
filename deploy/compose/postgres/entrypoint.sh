@@ -18,6 +18,9 @@
 # It refuses to start at all when the watchdog's settings are not valid, because a stack that runs with no
 # watchdog (and says one stderr line) is the failure this file exists to prevent. The healthcheck of the
 # Compose file asks `watchdog.sh --healthy`, which needs a recent sweep.
+#
+# Everything after the root phase runs as the postgres user, and the container has no CAP_KILL (p6-ops 9.5), so a `docker compose
+# exec postgres pkill ...` as root fails with EPERM: signal the watchdog as the server user, `exec -u postgres postgres pkill ...`.
 set -eu
 
 # Root for the length of this block, and no longer. The official entrypoint does the same two steps (it creates the data directory,

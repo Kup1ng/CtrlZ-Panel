@@ -3164,9 +3164,9 @@ mutants:
     edits:
       - file: deploy/compose/docker-compose.yml
         old: |-
-          #     but postgres and clickhouse also drop every capability and have a read-only
+          #     namespace starts with it on, whatever the host says). All but postgres and clickhouse have a read-only root, and
         new: |-
-          #     also drop every capability and have a read-only
+          #     namespace starts with it on, whatever the host says). All have a read-only root, and
     must_fail:
       - pkg: ./internal/lint
         tests: [TestComposeHeaderNamesTheServicesThatAreNotHardened]

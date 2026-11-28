@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/moby/moby/api/types/container"
 	"github.com/testcontainers/testcontainers-go"
 	tcexec "github.com/testcontainers/testcontainers-go/exec"
 
@@ -77,6 +78,14 @@ func StartWiring(ctx context.Context, repoRoot string, env map[string]string) (*
 			Cmd:        []string{"postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"},
 			Env:        vars,
 			Files:      files,
+			// The set docker-compose.yml gives postgres (p6-ops 9.5): the entrypoint's root phase needs exactly these five and the
+			// watchdog runs as the server user without CAP_KILL, so a test under Docker's wider default would not notice a sixth need.
+			HostConfigModifier: func(hc *container.HostConfig) {
+				hc.CapDrop = []string{"ALL"}
+				hc.CapAdd = []string{"CHOWN", "SETUID", "SETGID", "FOWNER", "DAC_OVERRIDE"}
+				hc.SecurityOpt = append(hc.SecurityOpt, "no-new-privileges:true")
+				hc.Sysctls = map[string]string{"net.mptcp.enabled": "0"}
+			},
 		},
 		Started: true,
 	})

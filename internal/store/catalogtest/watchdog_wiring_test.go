@@ -81,7 +81,7 @@ func TestTheWatchdogRunsInTheContainerTheComposeFileStarts(t *testing.T) {
 	})
 	started := psql("SELECT pg_postmaster_start_time()")
 
-	// 2. The watchdog's process is killed by a signal, the way the OOM killer or pkill would. The
+	// 2. The watchdog's process is killed by a signal (as the server user: it owns the process and root has no CAP_KILL here), the way the OOM killer or pkill would. The
 	// postmaster is not its parent: no backend is terminated, the server does not run crash recovery, and
 	// the container starts the watchdog again.
 	scan := `{ for p in /proc/[0-9]*; do [ "$p" = "/proc/$$" ] && continue; c=$(tr '\000' ' ' < $p/cmdline 2>/dev/null); case "$c" in *"sh /ctrlz-postgres/watchdog.sh"*) echo ${p#/proc/};; esac; done; } 2>/dev/null`
@@ -93,7 +93,7 @@ func TestTheWatchdogRunsInTheContainerTheComposeFileStarts(t *testing.T) {
 		if _, err := strconv.Atoi(p); err != nil {
 			continue
 		}
-		if out, code, err := w.Exec(ctx, "", "kill", "-9", p); err != nil || code != 0 {
+		if out, code, err := w.Exec(ctx, "postgres", "kill", "-9", p); err != nil || code != 0 {
 			t.Fatalf("kill -9 %s: %q %d %v", p, out, code, err)
 		}
 	}
@@ -150,7 +150,7 @@ func TestTheWatchdogRunsInTheContainerTheComposeFileStarts(t *testing.T) {
 	if out, code, err := w.Exec(ctx, "", "sh", "-c", `P=$(command -v psql) && mv -f "$P.real" "$P"`); err != nil || code != 0 {
 		t.Fatalf("restoring psql: %q %d %v", out, code, err)
 	}
-	_, _, _ = w.Exec(ctx, "", "sh", "-c", "pkill -f 'sleep 1000' || true")
+	_, _, _ = w.Exec(ctx, "postgres", "sh", "-c", "pkill -f 'sleep 1000' || true")
 	waitFor(t, "the healthcheck to pass again once psql answers", 60*time.Second, func() bool { return healthy(ctx, w) })
 
 	// 4. A stop is a clean shutdown of Postgres with its own exit status, not a kill after the grace period.

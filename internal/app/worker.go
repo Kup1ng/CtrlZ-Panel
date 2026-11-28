@@ -12,6 +12,7 @@ import (
 	"github.com/Kup1ng/CtrlZ-Panel/internal/logattr"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/profiles"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/ratelimit"
+	"github.com/Kup1ng/CtrlZ-Panel/internal/resolvguard"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/safego"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/sms"
 	"github.com/Kup1ng/CtrlZ-Panel/internal/sms/classify"
@@ -35,6 +36,10 @@ import (
 // sweep is worse than one that is not running, because Compose would see it as
 // healthy.
 func startWorker(ctx context.Context, cfg Config, rt *Runtime, st, compilerStore *store.Store, log *slog.Logger) (func(wait time.Duration), error) {
+	// First, before a connection or a loop exists: a worker whose names leave through the host namespace must not run at all.
+	if err := checkWorkerResolvers(cfg.Env, resolvConfPath); err != nil {
+		return nil, err
+	}
 	if rt.Keys == nil {
 		return nil, errors.New("worker: no key ring")
 	}
@@ -145,4 +150,17 @@ const (
 // Valid reports membership.
 func (l workerLoop) Valid() bool {
 	return l == loopSMS || l == loopSweep || l == loopAdminJobs || l == loopBatchJobs || l == loopCompiler || l == loopPeriodic || l == loopStop
+}
+
+// resolvConfPath is the file Docker writes the worker's forwarding targets into (see resolvguard).
+const resolvConfPath = "/etc/resolv.conf"
+
+// checkWorkerResolvers refuses a production worker whose DNS would be forwarded from the host namespace or to a loopback
+// address: the one path past the firewall table that Compose cannot see (p6-ops 9.5). Dev and test runs keep the machine's own
+// resolver, which is the point of those runs.
+func checkWorkerResolvers(env Env, path string) error {
+	if env != EnvProduction {
+		return nil
+	}
+	return resolvguard.Check(path)
 }
