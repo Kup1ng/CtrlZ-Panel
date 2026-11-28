@@ -1,0 +1,26 @@
+# Licences of everything pnpm installs, for scripts/ci-web.sh step 8 (spec 16.2, T-471).
+#
+#   type <SPDX id>        a licence type that may appear. An SPDX expression such as "A AND B" or
+#                         "(A OR B)" passes when each of its parts is a listed type.
+#   package <name>        a package that may appear whatever its licence says: the name as pnpm
+#                         prints it, or a prefix ending in "*".
+#
+# A line is one decision and says why after " # ". A new licence type, or a package whose licence
+# changed to one that is not listed, fails the step until someone has read it and added a line here.
+
+type MIT # the bulk of the tree
+type ISC # permissive, MIT-like
+type Apache-2.0 # permissive with a patent grant, includes @heroui/react and @heroui/styles
+type BSD-2-Clause # permissive
+type BSD-3-Clause # permissive
+type 0BSD # tslib
+type CC0-1.0 # public dedication: language-subtag-registry, and one arm of type-fest's choice
+type CC-BY-4.0 # caniuse-lite's data, attribution kept in its package and not shipped to a visitor
+type BlueOak-1.0.0 # permissive: minimatch, tar and friends, build tooling
+type Python-2.0 # argparse, a dev dependency of ESLint
+type MPL-2.0 # axe-core, @axe-core/playwright and lightningcss: file-level copyleft, used unmodified, so nothing of ours becomes MPL
+
+package @heroui-pro/react # HeroUI Pro is UNLICENSED on npm: its LICENSE file allows our use (D44) and forbids redistributing the package. The named exception of spec 16.2
+package heroui-pro # HeroUI's install CLI, UNLICENSED, runs only on a build machine (spec 3.3) and is never in an image
+package @zowe/secrets-for-zowe-sdk # EPL-2.0, the CLI's OS keyring: its build is off (pnpm-workspace.yaml allowBuilds) and it is never in an image
+package @img/sharp-* # LGPL-3.0-or-later libvips binaries, optional for next/image: images are unoptimised (next.config.ts) and sharp's build is off, so it never runs

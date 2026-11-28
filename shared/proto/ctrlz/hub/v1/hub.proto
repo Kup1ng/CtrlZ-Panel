@@ -1,0 +1,396 @@
+// Panel hub service (contract section 12). mTLS; the certificate is checked
+// against nodes.status and serial on every RPC, so a revoked node is cut off
+// without waiting for a stream to end.
+syntax = "proto3";
+
+package ctrlz.hub.v1;
+
+import "ctrlz/common/v1/common.proto";
+import "ctrlz/policy/v1/policy.proto";
+import "ctrlz/sign/v1/sign.proto";
+import "ctrlz/telemetry/v1/telemetry.proto";
+
+option go_package = "github.com/Kup1ng/CtrlZ-Shared/gen/ctrlz/hub/v1;hubv1";
+
+enum Scope {
+  SCOPE_UNSPECIFIED = 0;
+  SCOPE_ENTRY = 1;
+  SCOPE_BLOB = 2;
+  SCOPE_RECORD = 3;
+}
+
+service NodeHub {
+  rpc Control(stream NodeMessage) returns (stream HubMessage);
+  rpc FetchEntries(FetchEntriesRequest) returns (stream StoredEntry);
+  rpc GetHead(GetHeadRequest) returns (ctrlz.sign.v1.Envelope);
+  rpc FetchBlob(FetchBlobRequest) returns (stream BlobChunk);
+  rpc GetSnapshot(GetSnapshotRequest) returns (stream BlobChunk);
+  rpc FetchBundle(FetchBundleRequest) returns (stream BlobChunk);
+  rpc RenewCert(RenewCertRequest) returns (RenewCertResponse);
+  rpc UploadLogs(stream ctrlz.telemetry.v1.LogBatch) returns (stream ctrlz.telemetry.v1.Ack);
+  rpc UploadCounters(stream ctrlz.telemetry.v1.CountersBatch) returns (stream ctrlz.telemetry.v1.Ack);
+  rpc ReportActivity(stream ctrlz.telemetry.v1.ActivityBatch) returns (stream ctrlz.telemetry.v1.Ack);
+}
+
+message FetchEntriesRequest {
+  uint64 after_seq = 1;
+  uint32 limit = 2;
+}
+
+// entry_bytes are the exact stored bytes. The chain hash runs over these, never
+// over a re-marshalled message (contract 9.6).
+message StoredEntry {
+  uint64 seq = 1;
+  bytes entry_hash = 2;
+  bytes entry_bytes = 3;
+}
+
+message GetHeadRequest {}
+
+message FetchBlobRequest {
+  bytes hash = 1;
+  uint64 offset = 2;
+}
+
+message BlobChunk {
+  uint64 offset = 1;
+  bytes data = 2;
+  bool last = 3;
+}
+
+message GetSnapshotRequest {
+  uint64 at_least_seq = 1;
+}
+
+message FetchBundleRequest {
+  ctrlz.sign.v1.Kind kind = 1;
+  uint64 version = 2;
+  string path = 3;
+  uint64 offset = 4;
+}
+
+message RenewCertRequest {
+  bytes csr_der = 1;
+}
+
+message RenewCertResponse {
+  bytes cert_der = 1;
+  repeated bytes ca_chain_der = 2;
+}
+
+message NodeMessage {
+  oneof body {
+    Heartbeat heartbeat = 1;
+    ApplyResult apply_result = 2;
+    QuarantineReport quarantine_report = 3;
+    RevocationAck revocation_ack = 4;
+    AcmeAck acme_ack = 5;
+    LearnedIP learned_ip = 6;
+    ProofObservation proof_observation = 7;
+    BlockUnblockRequest block_unblock_request = 8;
+    BlockKeyRequest block_key_request = 9;
+  }
+}
+
+message Heartbeat {
+  int64 node_time = 1;
+  uint64 applied_seq = 2;
+  uint64 catalog_version = 3;
+  string node_version = 4;
+  string xray_version = 5;
+  string unbound_version = 6;
+  uint32 blob_major_max = 7;
+  bool isolated = 8;
+  uint32 quarantined = 9;
+  repeated UpstreamHealth upstreams = 10;
+  repeated LocationHealth locations = 11;
+  bytes peer_view = 12;
+  // The three fields below are P4 additions (p4-nodes 3.2 item 8 and 4.4 L1). A P0 node
+  // sends none of them, and a zero reads as "not reported".
+  uint64 node_config_version = 13; // the highest NodeConfig.version the node applied
+  uint32 qps = 14;                 // queries a second, node-wide, over the last 60 s
+  uint32 cache_hit_permille = 15;  // cache hits per 1000 queries over the same 60 s, 0 to 1000
+  // P4b additions (p4b-proxy 3.4). A node of an earlier build sends none of them.
+  repeated XrayConfigState xray_configs = 16; // at most 64
+  ProxyState proxy = 17;                      // from the proxy_state message; not listening when 30 s old
+  repeated NodeFault faults = 18;             // no value twice; a value stays while its condition holds
+  XrayUpgradeState xray_upgrade = 19;
+  BindError bind_error = 20;
+}
+
+enum XrayConfigStateKind {
+  XRAY_CONFIG_STATE_KIND_UNSPECIFIED = 0;
+  XRAY_CONFIG_STATE_KIND_PENDING = 1;
+  XRAY_CONFIG_STATE_KIND_APPLIED = 2;
+  XRAY_CONFIG_STATE_KIND_REFUSED = 3;
+  XRAY_CONFIG_STATE_KIND_LAST_GOOD = 4;
+}
+
+// What the node did with one stored config. error holds no value of the fragment
+// (p4b-proxy 7.5 step 1) and is at most 500 characters.
+message XrayConfigState {
+  bytes id = 1;
+  bytes fragment_sha256 = 2;
+  XrayConfigStateKind state = 3;
+  string error = 4;
+  bool healthy = 5;
+  uint32 latency_ms = 6;
+}
+
+message ProxyState {
+  bool listening = 1;
+  uint32 open_connections = 2;
+}
+
+enum NodeFault {
+  NODE_FAULT_UNSPECIFIED = 0;
+  NODE_FAULT_NFT_FAILED = 1;
+  NODE_FAULT_XRAY_DOWN = 2;
+  NODE_FAULT_BLOCK_KEY_MISSING = 3;
+  NODE_FAULT_GRANTS_FULL = 4;
+  // Set while any remote is under the backoff of p4b-proxy 5.5. It takes 5, the next free
+  // number, so the numbers 1 to 4 that nodes already send stay; p6-ops 7.4 starts at 6.
+  NODE_FAULT_XRAY_STUCK = 5;
+}
+
+// fetched is the newest verified Xray bundle on the node, version the last upgrade
+// tried, ok its result and failed_ids the configs the new release refused (at most 64).
+message XrayUpgradeState {
+  string fetched = 1;
+  string version = 2;
+  bool ok = 3;
+  repeated bytes failed_ids = 4;
+}
+
+// BIND_ERROR_UNSPECIFIED is "none": the bind addresses are in use as configured.
+enum BindError {
+  BIND_ERROR_UNSPECIFIED = 0;
+  BIND_ERROR_DNS_NOT_LOCAL = 1;
+  BIND_ERROR_DNS_FAILED = 2;
+  BIND_ERROR_PROXY_NOT_LOCAL = 3;
+  BIND_ERROR_PROXY_FAILED = 4;
+}
+
+// Heartbeat.peer_view holds a serialized PeerView (contract 8a.7). The field stays
+// bytes: turning it into a message type would break WIRE_JSON.
+message PeerView {
+  uint64 pair_table_version = 1; // version of the flags in use, 0 before any push
+  repeated PeerProbe peers = 2;  // one entry for each node this node probes, 8a.4
+  PushRefusal last_refusal = 3;  // the last refused push, 8a.4
+  uint64 refusals = 4;           // refused pushes since the node process started
+}
+
+message PeerProbe {
+  bytes node_id = 1;
+  bool known = 2; // false while this node's probe state of node_id is unknown
+  bool down = 3;  // probe-down by the 3-round rule; false when known is false
+  // P4b: the same two for the peer's PROXY_IP, from the pair probe of p4b-proxy 9.2.
+  bool proxy_known = 4;
+  bool proxy_down = 5; // false when proxy_known is false
+}
+
+enum PushRefusal {
+  PUSH_REFUSAL_UNSPECIFIED = 0;   // none since the process started
+  PUSH_REFUSAL_SIGNATURE = 1;     // empty envelope or payload, or manifest.Verify failed
+  PUSH_REFUSAL_INVALID = 2;       // wire.ValidatePairTablePush failed
+  PUSH_REFUSAL_EXPIRED = 3;       // expires_at <= hub_now
+  PUSH_REFUSAL_LOWER_VERSION = 4; // below the highest version used
+  PUSH_REFUSAL_FLAG_CONFLICT = 5; // equal version, different flags
+  PUSH_REFUSAL_BUILD = 6;         // zone.Build failed or panicked
+}
+
+message UpstreamHealth {
+  bytes id = 1;
+  bool healthy = 2;
+  uint32 latency_ms = 3;
+}
+
+message LocationHealth {
+  uint32 location = 1;
+  bool healthy = 2;
+  uint32 latency_ms = 3;
+}
+
+message ApplyResult {
+  uint64 seq = 1;
+  bool ok = 2;
+  uint32 quarantined = 3;
+  uint32 apply_ms = 4;
+}
+
+message QuarantineReport {
+  uint64 seq = 1;
+  Scope scope = 2;
+  bytes item = 3;
+  string reason = 4;
+  string section = 5;
+  uint64 offset = 6;
+}
+
+message RevocationAck {
+  uint64 rev_seq = 1;
+}
+
+message AcmeAck {
+  bytes token_id = 1;
+}
+
+message LearnedIP {
+  bytes endpoint_id = 1;
+  bytes source_ip = 2;
+  ctrlz.common.v1.Protocol protocol = 3;
+  int64 observed_at = 4;
+}
+
+message ProofObservation {
+  string label = 1;
+  bytes source_ip = 2;
+  ctrlz.common.v1.Protocol protocol = 3;
+  int64 observed_at = 4;
+  // identity.RIDHash of the resolver identity the query arrived on: 16 bytes
+  // for an encrypted transport, empty for udp and tcp. The hub stores it so an
+  // encrypted proof counts only for the Endpoint it was made on (P3 1.1).
+  bytes rid_hash = 5;
+}
+
+message BlockUnblockRequest {
+  bytes endpoint_id = 1;
+  bytes qname_wire = 2;
+  string message = 3;
+  int64 at = 4;
+  // The profile of the block page that showed the form, from BlockPage.profile_id (16 bytes).
+  bytes profile_id = 5;
+}
+
+// Asks the hub for the short-lived block page intermediate of the Endpoint's account
+// (p4b-proxy 10.3). The account is the Endpoint's: the node never names one.
+message BlockKeyRequest {
+  bytes endpoint_id = 1;
+}
+
+message HubMessage {
+  oneof body {
+    HeadNotice head_notice = 1;
+    ctrlz.policy.v1.Revocation revocation = 2;
+    NodeConfig node_config = 3;
+    CertBundle cert_bundle = 4;
+    AcmeChallenge acme_challenge = 5;
+    ServerTime server_time = 6;
+    // The priority push of a signed PairTable, payload type ctrlz/pair-table
+    // (contract 8a.4 Publication, 8a.7). A node takes only the withdrawal flags
+    // and the version from it; membership comes from the log.
+    ctrlz.sign.v1.Envelope pair_table = 7;
+    // Raises the node's free DNS off floor (contract 5.2a, Turning it off fast).
+    // The one HubMessage that may come before a stream's first ServerTime.
+    FreeDnsOff free_dns_off = 8;
+  }
+}
+
+// version is the version of free_dns_settings. The free path stays off until the
+// node applies a free_dns value of that version or a later one. The node refuses
+// a version of 0.
+message FreeDnsOff {
+  uint64 version = 1;
+}
+
+message HeadNotice {
+  uint64 seq = 1;
+  ctrlz.common.v1.EntryClass class = 2;
+  bool release = 3;
+}
+
+message CertBundle {
+  ctrlz.sign.v1.Kind kind = 1;
+  bytes wrapped_key = 2;
+  bytes chain_pem = 3;
+  int64 not_after = 4;
+  // CERT_USE_UNSPECIFIED is the zone certificate every earlier bundle was.
+  CertUse use = 5;
+  // Set exactly with use block_intermediate: the account's 16-byte hash and the 8-byte
+  // epoch of its root, so a node drops a bundle of an old block_root_key.
+  bytes account_hash = 6;
+  bytes block_root_epoch = 7;
+}
+
+enum CertUse {
+  CERT_USE_UNSPECIFIED = 0; // zone
+  CERT_USE_BLOCK_INTERMEDIATE = 1;
+}
+
+message AcmeChallenge {
+  bytes token_id = 1;
+  string fqdn = 2;
+  string value = 3;
+  int64 expires_at = 4;
+}
+
+message ServerTime {
+  int64 now = 1;
+}
+
+message NodeConfig {
+  uint64 version = 1;
+  bytes dns_bind_ip = 2;
+  bytes dns_advertised_ip = 3;
+  bytes proxy_bind_ip = 4;
+  bytes proxy_advertised_ip = 5;
+  repeated string zones = 6;
+  repeated string panel_hostnames = 7;
+  ctrlz.common.v1.ResolveMode mode = 8;
+  repeated Upstream upstreams = 9;
+  repeated UpstreamGroup groups = 10;
+  repeated ResolverRule rules = 11;
+  bytes proof_key = 12;
+  bytes spool_public_key = 13;
+  string xray_schema_version = 14;
+  repeated XrayConfig xray_configs = 15;
+  // P4b additions (p4b-proxy 3.4). Unspecified grant_width reads as exact.
+  GrantWidth grant_width = 16;
+  repeated string probe_urls = 17; // 0 to 2
+  string xray_fetch_version = 18;
+  bytes block_root_epoch = 19; // empty or 8 bytes
+}
+
+enum GrantWidth {
+  GRANT_WIDTH_UNSPECIFIED = 0; // exact
+  GRANT_WIDTH_EXACT = 1;
+  GRANT_WIDTH_PREFIX24 = 2;
+  GRANT_WIDTH_CARRIER = 3;
+}
+
+message Upstream {
+  bytes id = 1;
+  ctrlz.common.v1.UpstreamKind kind = 2;
+  string address = 3;
+  bytes bootstrap_ip = 4;
+  string tls_name = 5;
+  uint32 timeout_ms = 6;
+  uint32 health_interval_s = 7;
+  bool trusted = 8;
+  uint32 via_location = 9;
+}
+
+message UpstreamGroup {
+  string name = 1;
+  repeated bytes upstream_ids = 2;
+}
+
+message ResolverRule {
+  uint32 order = 1;
+  string match_type = 2;
+  string match_value = 3;
+  string group = 4;
+  bool final_default = 5;
+}
+
+message XrayConfig {
+  bytes id = 1;
+  uint32 location = 2;
+  string tag = 3;
+  uint32 priority = 4;
+  bool enabled = 5;
+  bytes fragment_json = 6;
+  // Paths the admin accepted as unknown to the allow-list (p4b-proxy 7.3), each inside
+  // one outbound. enabled is always true on the wire: disabled rows are not sent.
+  repeated string accepted_unknown = 7;
+}

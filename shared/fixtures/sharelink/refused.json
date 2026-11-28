@@ -1,0 +1,27 @@
+{
+  "comment": "Share links the converter must refuse, each for a reason of its own.",
+  "items": [
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=none\u0026frobnicate=1",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=xtls",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=none\u0026type=h2",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=none\u0026type=quic",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=none\u0026sni=a.example",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=reality\u0026sni=a.example",
+    "trojan://pw@203.0.113.7:443?flow=xtls-rprx-vision",
+    "ss://YWVzLTI1Ni1nY206cHc@203.0.113.7:8388?plugin=obfs-local",
+    "hysteria2://auth@203.0.113.7:443?mport=1000-2000,3000",
+    "wireguard://x@203.0.113.7:51820",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=none\u0026type=kcp",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?encryption=none\u0026security=tls\u0026sni=a.example\u0026type=httpupgrade\u0026path=%2Fu\u0026host=a.example#httpupgrade",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?encryption=mlkem768x25519plus.native.0rtt.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\u0026security=none",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=none\u0026type=xhttp\u0026extra=%7B%22downloadSettings%22%3A%7B%7D%7D",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=tls\u0026sni=a.example\u0026ech=udp%3A%2F%2Fattacker.example%3A53",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=tls\u0026sni=a.example\u0026ech=example.com%2Bhttps%3A%2F%2F1.1.1.1%2Fdns-query",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=tls\u0026sni=a.example\u0026ech=1.1.1.1",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=reality\u0026sni=a.example\u0026pbk=ZmFrZQ\u0026spx=%2F%3Fp%3D9000000000000000000",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=none\u0026type=kcp",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?encryption=mlkem768x25519plus.native.0rtt.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\u0026security=none",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?security=none\u0026type=xhttp\u0026extra=%7B%22downloadSettings%22%3A%7B%7D%7D",
+    "vless://5783a3e7-e373-51cd-8642-c83782b807c5@203.0.113.7:443?encryption=none\u0026security=tls\u0026sni=a.example\u0026type=grpc\u0026serviceName=svc\u0026mode=multi#grpc-multi"
+  ]
+}

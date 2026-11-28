@@ -1,0 +1,386 @@
+{
+  "format": 1,
+  "group": "grants",
+  "cases": [
+    {"id": "g-001", "why": "Put: a source that is not validated writes nothing and replaces nothing; it gets ok only for a holder that is live with an equal outcome and at least MaxProxyTTL of life (4.2 step 2)",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "plain": true, "d": {"kind": 1, "loc": 2}, "expect": "validate"},
+       {"op": "state", "expect": "-"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "put", "t": 100, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "plain": true, "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 11000, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "plain": true, "d": {"kind": 1, "loc": 2}, "expect": "validate"},
+       {"op": "put", "t": 11000, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "plain": true, "d": {"kind": 1, "loc": 3}, "expect": "validate"},
+       {"op": "put", "t": 11000, "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "plain": true, "d": {"kind": 1, "loc": 2}, "expect": "validate"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A"}
+     ]},
+    {"id": "g-002", "why": "Join: two tenants that redirect one name to one location both hold it, and the end of A's Grant leaves B's",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A,B"},
+       {"op": "end", "cause": "hard_disabled", "ep": "A", "expect": "closed=-"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=B"}
+     ]},
+    {"id": "g-003", "why": "Refuse: a second tenant that redirects the name to another location is refused, and A's Grant stands",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 3}, "expect": "refused:collision"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A"}
+     ]},
+    {"id": "g-004", "why": "Pick: an Auto or Random decision joins a live location that lies in the set it drew from, and not one outside it; the live outcome does not change",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "pick": "auto", "loc": 1, "eff": [1, 2, 3]}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "C", "acct": "c", "d": {"kind": 1, "pick": "random", "loc": 1, "eff": [1, 3]}, "expect": "refused:collision"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A,B"}
+     ]},
+    {"id": "g-005", "why": "Pick: a fixed decision does not join through a set; it must name the live location itself",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "pick": "auto", "loc": 1, "eff": [1, 2]}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "refused:collision"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 1}, "expect": "ok"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=1 holders=A,B"}
+     ]},
+    {"id": "g-006", "why": "Branded: the same page joins, another page is refused, and so is a Redirect on a blocked name",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 2, "page": "p1"}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 2, "page": "p1"}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "C", "acct": "c", "d": {"kind": 2, "page": "p2"}, "expect": "refused:collision"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "D", "acct": "d", "d": {"kind": 1, "loc": 2}, "expect": "refused:collision"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=2 page=p1 holders=A,B"}
+     ]},
+    {"id": "g-007", "why": "A different dial host (Safe Search) does not join, and the same one does",
+     "steps": [
+       {"op": "put", "t": 0, "name": "www.g.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2, "dial": "safe.g.test"}, "expect": "ok"},
+       {"op": "put", "name": "www.g.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2}, "expect": "refused:collision"},
+       {"op": "put", "name": "www.g.test", "src": "192.0.2.10", "ep": "C", "acct": "c", "d": {"kind": 1, "loc": 2, "dial": "safe.g.test"}, "expect": "ok"},
+       {"op": "state", "expect": "www.g.test 192.0.2.10 kind=1 loc=2 dial=safe.g.test holders=A,C"}
+     ]},
+    {"id": "g-008", "why": "Two clients of one Endpoint behind one address, the parent with a Redirect and the child with Branded: the second never changes the first's outcome, in both orders",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 10, "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "kid", "d": {"kind": 2, "page": "p"}, "expect": "refused:collision"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=E"},
+       {"op": "put", "t": 0, "name": "y.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "kid", "d": {"kind": 2, "page": "p"}, "expect": "ok"},
+       {"op": "put", "t": 10, "name": "y.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "", "d": {"kind": 1, "loc": 2}, "expect": "refused:collision"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=E ; y.test 192.0.2.10 kind=2 page=p holders=E/kid"}
+     ]},
+    {"id": "g-009", "why": "Leave: the device that was silent for MaxProxyTTL leaves with the one that decides, because no cache holds an answer of it, and the new outcome is written",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 3599, "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "kid", "d": {"kind": 2, "page": "p"}, "expect": "refused:collision"},
+       {"op": "put", "t": 3600, "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "kid", "d": {"kind": 2, "page": "p"}, "expect": "ok"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=2 page=p holders=E/kid"}
+     ]},
+    {"id": "g-010", "why": "Replace: after an edit from one location to another, with two Endpoints of one tenant: the first to decide gets Bypass, the second writes the new location, the first's next query joins it, and the open connection stays",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "E1", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 1, "name": "x.test", "src": "192.0.2.10", "ep": "E2", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "open", "id": "c1", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "charged:a/E2"},
+       {"op": "put", "t": 20, "name": "x.test", "src": "192.0.2.10", "ep": "E1", "acct": "a", "d": {"kind": 1, "loc": 3}, "expect": "refused:collision"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=E2 | conns c1:a/E2"},
+       {"op": "put", "t": 21, "name": "x.test", "src": "192.0.2.10", "ep": "E2", "acct": "a", "d": {"kind": 1, "loc": 3}, "expect": "ok"},
+       {"op": "put", "t": 22, "name": "x.test", "src": "192.0.2.10", "ep": "E1", "acct": "a", "d": {"kind": 1, "loc": 3}, "expect": "ok"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=3 holders=E1,E2 | conns c1:a/E2"}
+     ]},
+    {"id": "g-011", "why": "No put removes a holder of another account: A's new decision cannot take B's holder out",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 10000, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 3}, "expect": "refused:collision"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=B"},
+       {"op": "put", "t": 14400, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 3}, "expect": "ok"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=3 holders=A"}
+     ]},
+    {"id": "g-012", "why": "Cross: B decided on node 2 and forwarded; A's holder on node 1 stands, B's forward is refused there, and nothing of A's changes",
+     "steps": [
+       {"op": "put", "t": 0, "node": "n1", "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "node": "n2", "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 3}, "expect": "ok"},
+       {"op": "put", "node": "n1", "origin": "n2", "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 3}, "expect": "refused:collision"},
+       {"op": "put", "node": "n2", "origin": "n1", "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "refused:collision"},
+       {"op": "sent", "node": "n1", "name": "x.test", "src": "192.0.2.10", "ep": "A", "result": "refused"},
+       {"op": "sent", "node": "n2", "name": "x.test", "src": "192.0.2.10", "ep": "B", "result": "refused"},
+       {"op": "state", "node": "n1", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A!alone"},
+       {"op": "state", "node": "n2", "expect": "x.test 192.0.2.10 kind=1 loc=3 holders=B!alone"}
+     ]},
+    {"id": "g-013", "why": "A forwarded holder is written when the receiver would decide the same. Another account's local decision does not take it over, but the same device's own newer decision (same Endpoint and client, another origin) does: after an edit the device must not stay on Bypass here until the copy expires (B1-r1-11)",
+     "steps": [
+       {"op": "put", "t": 0, "node": "n2", "origin": "n1", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "state", "node": "n2", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=E@n1"},
+       {"op": "put", "t": 5, "node": "n2", "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 3}, "expect": "refused:collision"},
+       {"op": "state", "node": "n2", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=E@n1"},
+       {"op": "put", "t": 6, "node": "n2", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 3}, "expect": "ok"},
+       {"op": "state", "node": "n2", "expect": "x.test 192.0.2.10 kind=1 loc=3 holders=E,E@n1"},
+       {"op": "put", "t": 7, "node": "n2", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 3}, "expect": "ok"}
+     ]},
+    {"id": "g-037", "why": "The device's own forwarded copy leaves with its newer decision when another account holds the entry: the holders of this (Endpoint, client) leave whatever their origin, and the other account's holder stays (B1-r1-11)",
+     "steps": [
+       {"op": "put", "t": 0, "node": "n2", "origin": "n1", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 1, "node": "n2", "name": "x.test", "src": "192.0.2.10", "ep": "C", "acct": "c", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 2, "node": "n2", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 3}, "expect": "refused:collision"},
+       {"op": "state", "node": "n2", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=C"}
+     ]},
+    {"id": "g-014", "why": "A forwarded Put is validated by its sender: it needs no cookie here (T-053)",
+     "steps": [
+       {"op": "put", "t": 0, "node": "n2", "origin": "n1", "plain": true, "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "state", "node": "n2", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=E@n1"}
+     ]},
+    {"id": "g-015", "why": "Cap: one (Endpoint, source) uses a quarter of the Endpoint's cap, and another source is served",
+     "limits": {"grant_cap": 16},
+     "steps": [
+       {"op": "put", "t": 0, "name": "a.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "b.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "c.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "d.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "e.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "refused:endpoint_cap"},
+       {"op": "put", "name": "e.test", "src": "192.0.2.11", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"}
+     ]},
+    {"id": "g-016", "why": "Cap: the last quarter of an Endpoint's cap is for a source in a claim or an authorized prefix alone, and a refresh needs no room",
+     "limits": {"grant_cap": 16},
+     "steps": [
+       {"op": "put", "t": 0, "name": "a1.test", "src": "192.0.2.1", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "a2.test", "src": "192.0.2.1", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "a3.test", "src": "192.0.2.1", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "a4.test", "src": "192.0.2.1", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "b1.test", "src": "192.0.2.2", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "b2.test", "src": "192.0.2.2", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "b3.test", "src": "192.0.2.2", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "b4.test", "src": "192.0.2.2", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "c1.test", "src": "192.0.2.3", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "c2.test", "src": "192.0.2.3", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "c3.test", "src": "192.0.2.3", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "c4.test", "src": "192.0.2.3", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "d1.test", "src": "192.0.2.4", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "refused:endpoint_cap"},
+       {"op": "put", "name": "d1.test", "src": "192.0.2.4", "ep": "E", "acct": "a", "claim": true, "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "a1.test", "src": "192.0.2.1", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"}
+     ]},
+    {"id": "g-017", "why": "Cap: forwarded holders use at most half of an Endpoint's cap, and the Endpoint's cap counts both kinds",
+     "limits": {"grant_cap": 16},
+     "steps": [
+       {"op": "put", "t": 0, "origin": "n1", "name": "a1.test", "src": "192.0.2.1", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "origin": "n1", "name": "a2.test", "src": "192.0.2.1", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "origin": "n1", "name": "a3.test", "src": "192.0.2.1", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "origin": "n1", "name": "a4.test", "src": "192.0.2.1", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "origin": "n1", "name": "b1.test", "src": "192.0.2.2", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "origin": "n1", "name": "b2.test", "src": "192.0.2.2", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "origin": "n1", "name": "b3.test", "src": "192.0.2.2", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "origin": "n1", "name": "b4.test", "src": "192.0.2.2", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "origin": "n1", "name": "c1.test", "src": "192.0.2.3", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "refused:endpoint_cap"},
+       {"op": "put", "name": "c1.test", "src": "192.0.2.3", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"}
+     ]},
+    {"id": "g-018", "why": "Cap: the node's cap under the share rule: an account gets one more only while it holds less than an eighth of the free room, so another account is still served",
+     "limits": {"node_cap": 40},
+     "steps": [
+       {"op": "put", "t": 0, "name": "a1.test", "src": "192.0.2.1", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "a2.test", "src": "192.0.2.1", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "a3.test", "src": "192.0.2.1", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "a4.test", "src": "192.0.2.2", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "a5.test", "src": "192.0.2.2", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "a6.test", "src": "192.0.2.2", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "refused:node_cap"},
+       {"op": "put", "name": "b1.test", "src": "192.0.2.3", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2}, "expect": "ok"}
+     ]},
+    {"id": "g-019", "why": "Collision: an entry holds at most 8 holders of one Endpoint; one more is a collision",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "c1", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "c2", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "c3", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "c4", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "c5", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "c6", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "c7", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "c8", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "c9", "d": {"kind": 1, "loc": 2}, "expect": "refused:collision"},
+       {"op": "put", "t": 5, "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "client": "c1", "d": {"kind": 1, "loc": 2}, "expect": "ok"}
+     ]},
+    {"id": "g-020", "why": "R9: a Redirect of a name that is not public to dial is refused as unsafe; a block page for it is not",
+     "steps": [
+       {"op": "put", "t": 0, "name": "intranet", "src": "192.0.2.10", "ep": "A", "acct": "a", "unsafe": true, "d": {"kind": 1, "loc": 2}, "expect": "refused:unsafe"},
+       {"op": "put", "name": "intranet", "src": "192.0.2.10", "ep": "A", "acct": "a", "unsafe": true, "d": {"kind": 2, "page": "p"}, "expect": "ok"},
+       {"op": "state", "expect": "intranet 192.0.2.10 kind=2 page=p holders=A"}
+     ]},
+    {"id": "g-021", "why": "Width: exact never widens; prefix24 widens within the /24 only; the widened source is no key",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2, "widenable": true}, "expect": "ok"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "exact x.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.2.77", "width": "exact", "expect": "none"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.2.77", "width": "prefix24", "expect": "widened x.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.3.77", "width": "prefix24", "expect": "none"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A"}
+     ]},
+    {"id": "g-022", "why": "Width: two Endpoints in the /24 match neither, one Endpoint in two entries still matches (the test is on Endpoints and not on entries)",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2, "widenable": true}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.11", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2, "widenable": true}, "expect": "ok"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.2.77", "width": "prefix24", "expect": "widened x.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.12", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2, "widenable": true}, "expect": "ok"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.2.77", "width": "prefix24", "expect": "none"},
+       {"op": "put", "name": "y.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2, "widenable": true}, "expect": "ok"},
+       {"op": "put", "name": "y.test", "src": "192.0.2.11", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 3, "widenable": true}, "expect": "ok"},
+       {"op": "lookup", "name": "y.test", "src": "192.0.2.77", "width": "prefix24", "expect": "none"}
+     ]},
+    {"id": "g-023", "why": "Width: a wildcard rule match is never widened, and a holder that can be widened beside it does not make it so",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2, "widenable": false}, "expect": "ok"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.2.77", "width": "prefix24", "expect": "none"},
+       {"op": "put", "name": "y.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2, "widenable": false}, "expect": "ok"},
+       {"op": "put", "name": "y.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2, "widenable": true}, "expect": "ok"},
+       {"op": "lookup", "name": "y.test", "src": "192.0.2.77", "width": "prefix24", "expect": "widened y.test 192.0.2.10 kind=1 loc=2 holders=A,B"}
+     ]},
+    {"id": "g-024", "why": "Width: carrier matches on a GeoIP ASN that is equal and not 0, and an ASN of 0 never matches",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "198.51.100.5", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2, "widenable": true}, "expect": "ok"},
+       {"op": "lookup", "name": "x.test", "src": "203.0.113.9", "width": "carrier", "asn": {"198.51.100.5": 64500, "203.0.113.9": 64500}, "expect": "widened x.test 198.51.100.5 kind=1 loc=2 holders=A"},
+       {"op": "lookup", "name": "x.test", "src": "203.0.113.9", "width": "carrier", "asn": {"198.51.100.5": 64500, "203.0.113.9": 64501}, "expect": "none"},
+       {"op": "lookup", "name": "x.test", "src": "203.0.113.9", "width": "carrier", "asn": {}, "expect": "none"},
+       {"op": "lookup", "name": "x.test", "src": "203.0.113.9", "width": "carrier", "asn": {"198.51.100.5": 0, "203.0.113.9": 0}, "expect": "none"}
+     ]},
+    {"id": "g-025", "why": "Width: each lookup that is not an exact hit counts what every width would have said, per client ASN, with no name and no address",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2, "widenable": true}, "expect": "ok"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.2.10", "width": "exact", "asn": {"192.0.2.10": 64500}, "expect": "exact x.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.2.77", "width": "exact", "asn": {"192.0.2.77": 64500, "192.0.2.10": 64500}, "expect": "none"},
+       {"op": "lookup", "name": "x.test", "src": "198.51.100.1", "width": "exact", "asn": {"198.51.100.1": 64501}, "expect": "none"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.11", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2, "widenable": true}, "expect": "ok"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.2.78", "width": "exact", "asn": {"192.0.2.78": 64500, "192.0.2.10": 64500, "192.0.2.11": 64500}, "expect": "none"},
+       {"op": "stats", "id": "0", "expect": "-"},
+       {"op": "stats", "id": "64500", "expect": "exact=1 prefix24_unique=1 prefix24_shared=1 carrier_unique=1 carrier_shared=1"},
+       {"op": "stats", "id": "64501", "expect": "miss=1"}
+     ]},
+    {"id": "g-026", "why": "Charge: a connection of an entry whose holders are of one account is charged to the Endpoint of the newest deciding query; the Endpoint's cap refuses the next",
+     "limits": {"endpoint_conns": 1},
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "open", "id": "c1", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "charged:a/A"},
+       {"op": "open", "id": "c2", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "refused:endpoint_cap"},
+       {"op": "open", "id": "c3", "name": "other.test", "src": "192.0.2.10", "width": "exact", "expect": "none"},
+       {"op": "put", "t": 1, "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "open", "id": "c4", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "shared"},
+       {"op": "open", "id": "c5", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "shared"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A,B | conns c1:a/A,c4:shared,c5:shared"}
+     ]},
+    {"id": "g-027", "why": "Charge: a shared connection counts against its entry and the shared part of the pool, and against no Endpoint's cap, so A alone cannot use up B's Endpoint",
+     "limits": {"endpoint_conns": 1, "entry_conns": 2, "node_conns": 8},
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "open", "id": "c1", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "shared"},
+       {"op": "open", "id": "c2", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "shared"},
+       {"op": "open", "id": "c3", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "shared"},
+       {"op": "open", "id": "c4", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "shared"},
+       {"op": "open", "id": "c5", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "refused:entry_cap"}
+     ]},
+    {"id": "g-028", "why": "End: hard_disabled of A closes none of a shared connection while B holds, and closes it once B ended; a connection charged to A alone closes with A",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "open", "id": "c1", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "charged:a/A"},
+       {"op": "put", "t": 1, "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "open", "id": "c2", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "shared"},
+       {"op": "end", "cause": "hard_disabled", "ep": "A", "expect": "closed=c1"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=B | conns c2:shared"},
+       {"op": "end", "cause": "hard_disabled", "ep": "B", "expect": "closed=c2"},
+       {"op": "state", "expect": "-"}
+     ]},
+    {"id": "g-029", "why": "End: nine Endpoints hold an entry, eight of A and one of B; when A's eight end, a connection that recorded only A's eight stays while B holds (the mark more)",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 1, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "client": "c1", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 2, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "client": "c2", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 3, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "client": "c3", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 4, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "client": "c4", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 5, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "client": "c5", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 6, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "client": "c6", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 7, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "client": "c7", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 8, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "client": "c8", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "open", "id": "c1", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "shared"},
+       {"op": "end", "cause": "hard_disabled", "ep": "A", "expect": "closed=-"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=B | conns c1:shared"},
+       {"op": "end", "cause": "hard_disabled", "ep": "B", "expect": "closed=c1"}
+     ]},
+    {"id": "g-030", "why": "End: the claim that made a holder is gone, an authorized prefix lost by an open holder with no claim, a revocation of kind endpoint and of kind claim: each ends what 4.6 names",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "claim": true, "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "y.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "open": true, "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "z.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "end", "cause": "authorized_lost", "ep": "A", "expect": "closed=-"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A ; z.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "end", "cause": "claim_gone", "ep": "A", "expect": "closed=-"},
+       {"op": "state", "expect": "z.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "put", "name": "w.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "claim": true, "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "end", "cause": "revocation_claim", "ep": "A", "expect": "closed=-"},
+       {"op": "state", "expect": "z.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "end", "cause": "revocation_endpoint", "ep": "A", "expect": "closed=-"},
+       {"op": "state", "expect": "-"}
+     ]},
+    {"id": "g-031", "why": "End: soft_disabled, a policy edit and a lost prefix end nothing, neither a holder nor a connection",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "open", "id": "c1", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "charged:a/A"},
+       {"op": "end", "cause": "soft_disabled", "ep": "A", "expect": "closed=-"},
+       {"op": "end", "cause": "policy_edit", "ep": "A", "expect": "closed=-"},
+       {"op": "end", "cause": "prefix_lost", "ep": "A", "expect": "closed=-"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A | conns c1:a/A"}
+     ]},
+    {"id": "g-032", "why": "End: a holder that a pair node forwarded ends with that node's entry: the node is revoked or leaves the pair (origin_removed)",
+     "steps": [
+       {"op": "put", "t": 0, "node": "n2", "origin": "n1", "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "node": "n2", "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "open", "id": "c1", "node": "n2", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "charged:a/A"},
+       {"op": "end", "node": "n2", "cause": "origin_removed", "origin": "n1", "expect": "closed=-"},
+       {"op": "state", "node": "n2", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A | conns c1:a/A"}
+     ]},
+    {"id": "g-033", "why": "End: a name that became never-proxied ends the kind 1 holders of it, and a Branded block of the same name is untouched",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.ir", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "b.ir", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 2, "page": "p"}, "expect": "ok"},
+       {"op": "open", "id": "c1", "name": "x.ir", "src": "192.0.2.10", "width": "exact", "expect": "charged:a/A"},
+       {"op": "end", "cause": "never_proxied", "name": "x.ir", "expect": "closed=c1"},
+       {"op": "end", "cause": "never_proxied", "name": "b.ir", "expect": "closed=-"},
+       {"op": "state", "expect": "b.ir 192.0.2.10 kind=2 page=p holders=A"}
+     ]},
+    {"id": "g-034", "why": "End: expiry is in the table only. A connection outlives its Grant, and the cause that ends the holder closes it later",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "open", "id": "c1", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "charged:a/A"},
+       {"op": "state", "t": 14399, "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A | conns c1:a/A"},
+       {"op": "state", "t": 14400, "expect": "- | conns c1:a/A"},
+       {"op": "lookup", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "none"},
+       {"op": "end", "cause": "hard_disabled", "ep": "A", "expect": "closed=c1"}
+     ]},
+    {"id": "g-035", "why": "Put: a deciding query renews the holder for another four hours; a forwarded copy renews the life and decides nothing here",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 10000, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "state", "t": 20000, "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "state", "t": 24400, "expect": "-"}
+     ]},
+    {"id": "g-036", "why": "Put: with only this Endpoint and client holding, a newer decision replaces the outcome and closes nothing; with a pick inside the set it is still a replacement",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "pick": "auto", "loc": 1, "eff": [1, 2]}, "expect": "ok"},
+       {"op": "open", "id": "c1", "name": "x.test", "src": "192.0.2.10", "width": "exact", "expect": "charged:a/A"},
+       {"op": "put", "t": 5, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "pick": "auto", "loc": 2, "eff": [1, 2]}, "expect": "ok"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A | conns c1:a/A"},
+       {"op": "put", "t": 6, "name": "x.test", "src": "192.0.2.10", "ep": "B", "acct": "b", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 7, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "d": {"kind": 1, "pick": "auto", "loc": 1, "eff": [1, 2]}, "expect": "ok"},
+       {"op": "state", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=A,B | conns c1:a/A"}
+     ]},
+    {"id": "g-038", "why": "Put: a Put that a cap refuses changes nothing, not even the outcome of the entry: a forwarded copy of this device holds the entry, the local decision for a new outcome is refused by the (Endpoint, source) quarter, and the entry keeps the outcome and the holder it had (B1-r2-10)",
+     "limits": {"grant_cap": 4},
+     "steps": [
+       {"op": "put", "t": 0, "node": "n2", "origin": "n1", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "t": 1, "node": "n2", "name": "x.test", "src": "192.0.2.10", "ep": "E", "acct": "a", "d": {"kind": 1, "loc": 3}, "expect": "refused:endpoint_cap"},
+       {"op": "state", "node": "n2", "expect": "x.test 192.0.2.10 kind=1 loc=2 holders=E@n1"}
+     ]},
+    {"id": "g-039", "why": "End: a revocation of one claim and the loss of one claim end the holders of that claim and keep those of another claim of the same Endpoint (B1-r2-5)",
+     "steps": [
+       {"op": "put", "t": 0, "name": "x.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "claim_id": "c1", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "y.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "claim_id": "c2", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "put", "name": "z.test", "src": "192.0.2.10", "ep": "A", "acct": "a", "claim_id": "c1", "d": {"kind": 1, "loc": 2}, "expect": "ok"},
+       {"op": "end", "cause": "claim_gone", "ep": "A", "claim_id": "c1", "expect": "closed=-"},
+       {"op": "state", "expect": "y.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "end", "cause": "revocation_claim", "ep": "A", "claim_id": "c3", "expect": "closed=-"},
+       {"op": "state", "expect": "y.test 192.0.2.10 kind=1 loc=2 holders=A"},
+       {"op": "end", "cause": "revocation_claim", "ep": "A", "claim_id": "c2", "expect": "closed=-"},
+       {"op": "state", "expect": "-"}
+     ]}
+  ]
+}

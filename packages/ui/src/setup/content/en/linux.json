@@ -1,0 +1,30 @@
+{
+  "versions": [
+    {
+      "id": "resolved",
+      "name": "systemd-resolved",
+      "steps": [
+        {
+          "title": "Create the config file",
+          "text": "Create /etc/systemd/resolved.conf.d/ctrlz.conf with administrator rights."
+        },
+        {
+          "title": "Put this text in it",
+          "text": "Both addresses carry the host name, DNSOverTLS is on, and Domains=~. sends every name to them first instead of to the servers the network hands out, so DNS is encrypted.",
+          "show": [
+            "resolved_conf"
+          ]
+        },
+        {
+          "title": "Restart the service",
+          "text": "Run sudo systemctl restart systemd-resolved."
+        },
+        {
+          "title": "Check the setup",
+          "text": "A few seconds after saving, run this check to see that the device uses this Endpoint.",
+          "verify": true
+        }
+      ]
+    }
+  ]
+}

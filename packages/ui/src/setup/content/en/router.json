@@ -1,0 +1,40 @@
+{
+  "versions": [
+    {
+      "id": "router",
+      "name": "Router",
+      "steps": [
+        {
+          "title": "Allow this network",
+          "text": "Plain DNS only works for a network whose address you have claimed. Turn Plain DNS on for the Endpoint, then claim and prove this network's address on the Addresses page.",
+          "link": "ips"
+        },
+        {
+          "title": "Open the router's admin page",
+          "text": "Open the router's address in a browser and sign in. The address and password are usually printed under the device."
+        },
+        {
+          "title": "Find the DNS section",
+          "text": "In the Internet, WAN or DHCP settings look for DNS and choose manual."
+        },
+        {
+          "title": "Enter the addresses",
+          "text": "Put the first in the first DNS field and the second in the second. Every device behind the router uses them.",
+          "show": [
+            "dns1",
+            "dns2"
+          ]
+        },
+        {
+          "title": "Save and renew the connection",
+          "text": "Press Save. Disconnect and reconnect your devices so they take the new DNS."
+        },
+        {
+          "title": "Check the setup",
+          "text": "A few seconds after saving, run this check on a device connected to this router to see that it uses this Endpoint.",
+          "verify": true
+        }
+      ]
+    }
+  ]
+}

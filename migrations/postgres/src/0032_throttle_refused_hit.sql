@@ -1,0 +1,110 @@
+-- P1 auth review round 7, primitives area (primitives-r7-7).
+--
+-- A refused hit used to raise the count from max to max + 1 (LEAST(count + 1, max + 1)). The
+-- refund of an earlier ALLOWED attempt of the same epoch then took the count from max + 1 back to
+-- max, and the line stayed full: the busy attempt the refund exists for (tenant-r5-1,
+-- primitives-r6-9) stayed spent whenever a stranger's refused hit came between the charge and the
+-- refund. Scenario: admin_login_net stands at max - 1; the owner's login is counted (max) and
+-- waits for the Argon2 gate; a neighbour's login is refused (max + 1); the gate answers busy and
+-- the refund gives back one (max); the owner's retry is 429 for the rest of the window although
+-- his only attempt did no work.
+--
+-- The count never goes past max now, and whether the hit was allowed is decided on the value the
+-- row held BEFORE the statement (RETURNING old.count, PostgreSQL 18), so a refused hit leaves the
+-- line exactly as it found it and a refund always gives back a real attempt. A hit that restarts
+-- the window (old epoch <> new epoch) or creates the line (no old row) is allowed, as before.
+-- Rows written by the earlier body that already hold max + 1 are refused as full and fall back to
+-- max on the next hit; their window is at most a day.
+--
+-- CREATE OR REPLACE keeps the owner and the grants of the two functions. A new file and not an
+-- edit of an applied one (README, Rules).
+
+-- +goose Up
+
+SET LOCAL search_path = pg_catalog;
+SET ROLE ctrlz_auth;
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.auth_throttle_hit(p_scope text, p_key bytea, p_max integer, p_window_seconds integer)
+RETURNS TABLE (allowed boolean, retry_after_s integer, window_epoch bigint)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_count integer;
+  v_start timestamptz;
+  v_epoch bigint;
+  v_old_count integer;
+  v_old_epoch bigint;
+BEGIN
+  IF p_scope IS NULL OR p_scope NOT IN ('login_phone_net', 'login_phone', 'login_net', 'login_net48', 'totp_user', 'reauth_user',
+                                        'otp_verify_net', 'invite_net')
+     OR p_key IS NULL OR pg_catalog.octet_length(p_key) <> 32
+     OR p_max IS NULL OR p_max < 1 OR p_window_seconds IS NULL OR p_window_seconds NOT BETWEEN 1 AND 86400 THEN
+    RETURN QUERY SELECT false, 0, 0::bigint;
+    RETURN;
+  END IF;
+
+  INSERT INTO ctrlz.auth_throttle AS t (scope, key, window_start, count)
+  VALUES (p_scope, p_key, pg_catalog.now(), 1)
+  ON CONFLICT (scope, key) DO UPDATE SET
+    count        = CASE WHEN t.window_start <= pg_catalog.now() - pg_catalog.make_interval(secs => p_window_seconds)
+                        THEN 1 ELSE LEAST(t.count + 1, p_max) END,
+    epoch        = CASE WHEN t.window_start <= pg_catalog.now() - pg_catalog.make_interval(secs => p_window_seconds)
+                        THEN t.epoch + 1 ELSE t.epoch END,
+    window_start = CASE WHEN t.window_start <= pg_catalog.now() - pg_catalog.make_interval(secs => p_window_seconds)
+                        THEN pg_catalog.now() ELSE t.window_start END
+  RETURNING t.count, t.window_start, t.epoch, old.count, old.epoch
+  INTO v_count, v_start, v_epoch, v_old_count, v_old_epoch;
+
+  IF v_old_count IS NULL OR v_old_epoch <> v_epoch OR v_old_count < p_max THEN
+    RETURN QUERY SELECT true, 0, v_epoch;
+  ELSE
+    RETURN QUERY SELECT false, GREATEST(1, pg_catalog.ceil(pg_catalog.date_part('epoch',
+        v_start + pg_catalog.make_interval(secs => p_window_seconds) - pg_catalog.now()))::integer), v_epoch;
+  END IF;
+END
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION ctrlz_fn.admin_throttle_hit(p_scope text, p_key bytea, p_max integer, p_window_seconds integer)
+RETURNS TABLE (allowed boolean, retry_after_s integer, window_epoch bigint)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_count integer;
+  v_start timestamptz;
+  v_epoch bigint;
+  v_old_count integer;
+  v_old_epoch bigint;
+BEGIN
+  IF p_scope IS NULL OR p_scope NOT IN ('admin_login', 'admin_login_user', 'admin_login_net', 'admin_totp')
+     OR p_key IS NULL OR pg_catalog.octet_length(p_key) <> 32
+     OR p_max IS NULL OR p_max < 1 OR p_window_seconds IS NULL OR p_window_seconds NOT BETWEEN 1 AND 86400 THEN
+    RETURN QUERY SELECT false, 0, 0::bigint;
+    RETURN;
+  END IF;
+
+  INSERT INTO ctrlz.auth_throttle AS t (scope, key, window_start, count)
+  VALUES (p_scope, p_key, pg_catalog.now(), 1)
+  ON CONFLICT (scope, key) DO UPDATE SET
+    count        = CASE WHEN t.window_start <= pg_catalog.now() - pg_catalog.make_interval(secs => p_window_seconds)
+                        THEN 1 ELSE LEAST(t.count + 1, p_max) END,
+    epoch        = CASE WHEN t.window_start <= pg_catalog.now() - pg_catalog.make_interval(secs => p_window_seconds)
+                        THEN t.epoch + 1 ELSE t.epoch END,
+    window_start = CASE WHEN t.window_start <= pg_catalog.now() - pg_catalog.make_interval(secs => p_window_seconds)
+                        THEN pg_catalog.now() ELSE t.window_start END
+  RETURNING t.count, t.window_start, t.epoch, old.count, old.epoch
+  INTO v_count, v_start, v_epoch, v_old_count, v_old_epoch;
+
+  IF v_old_count IS NULL OR v_old_epoch <> v_epoch OR v_old_count < p_max THEN
+    RETURN QUERY SELECT true, 0, v_epoch;
+  ELSE
+    RETURN QUERY SELECT false, GREATEST(1, pg_catalog.ceil(pg_catalog.date_part('epoch',
+        v_start + pg_catalog.make_interval(secs => p_window_seconds) - pg_catalog.now()))::integer), v_epoch;
+  END IF;
+END
+$$;
+-- +goose StatementEnd
+
+RESET ROLE;
