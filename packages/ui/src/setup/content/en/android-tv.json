@@ -1,0 +1,31 @@
+{
+  "versions": [
+    {
+      "id": "tv",
+      "name": "Android TV",
+      "steps": [
+        {
+          "title": "Allow this network",
+          "text": "Plain DNS only works for a network whose address you have claimed. Turn Plain DNS on for the Endpoint, then claim and prove this network's address on the Addresses page.",
+          "link": "ips"
+        },
+        {
+          "title": "Open the network settings",
+          "text": "Open Settings, Network & Internet, your network and then IP settings, and choose Static."
+        },
+        {
+          "title": "Enter the addresses",
+          "text": "Put the first in DNS 1 and the second in DNS 2. Keep the current IP address and gateway.",
+          "show": [
+            "dns1",
+            "dns2"
+          ]
+        },
+        {
+          "title": "Try it on the TV",
+          "text": "The check on this page tests the device you are reading it on, not the TV, so it is not offered here. Open an app on the TV to see that it connects."
+        }
+      ]
+    }
+  ]
+}

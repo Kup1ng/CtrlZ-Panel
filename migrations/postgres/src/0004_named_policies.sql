@@ -1,0 +1,54 @@
+-- The complete list of policies besides tenant_isolation. Spec section 3.
+-- Each one names a role, so none applies to PUBLIC. Reach is still limited by
+-- the column grants in 0007. The catalog test (pg_policies against
+-- migrations/catalog/policies.yaml) fails on any policy not listed there.
+
+-- +goose Up
+
+SET LOCAL search_path = ctrlz, pg_catalog;
+
+-- tenants: lookups before a tenant is known, and iteration for sweeps.
+CREATE POLICY auth_lookup    ON tenants FOR SELECT TO ctrlz_auth     USING (true);
+CREATE POLICY auth_create    ON tenants FOR INSERT TO ctrlz_auth     WITH CHECK (true);
+CREATE POLICY backfill_list  ON tenants FOR SELECT TO ctrlz_backfill USING (true);
+CREATE POLICY worker_list    ON tenants FOR SELECT TO ctrlz_worker   USING (true);
+CREATE POLICY compiler_list  ON tenants FOR SELECT TO ctrlz_compiler USING (true);
+CREATE POLICY admin_read     ON tenants FOR SELECT TO ctrlz_admin    USING (true);
+
+CREATE POLICY auth_create ON tenant_entitlements FOR INSERT TO ctrlz_auth WITH CHECK (true);
+
+-- Auth lookups (R3): by phone, session hash, token hash and so on.
+CREATE POLICY auth_lookup ON users                   FOR SELECT TO ctrlz_auth USING (true);
+CREATE POLICY auth_create ON users                   FOR INSERT TO ctrlz_auth WITH CHECK (true);
+CREATE POLICY admin_read  ON users                   FOR SELECT TO ctrlz_admin USING (true);
+CREATE POLICY auth_lookup ON sessions                FOR SELECT TO ctrlz_auth USING (true);
+CREATE POLICY auth_lookup ON api_tokens              FOR SELECT TO ctrlz_auth USING (true);
+CREATE POLICY auth_lookup ON refresh_tokens          FOR SELECT TO ctrlz_auth USING (true);
+CREATE POLICY auth_lookup ON webauthn_credentials    FOR SELECT TO ctrlz_auth USING (true);
+-- /s/<token> and /p/<token> have no session.
+CREATE POLICY auth_lookup ON setup_share_tokens      FOR SELECT TO ctrlz_auth USING (true);
+CREATE POLICY auth_lookup ON profile_download_tokens FOR SELECT TO ctrlz_auth USING (true);
+
+-- endpoints: the hub index (R18, R5), the pair lookup (the function keeps an
+-- explicit tenant filter) and admin counts.
+CREATE POLICY hub_index  ON endpoints FOR SELECT TO ctrlz_hub   USING (true);
+CREATE POLICY auth_pair  ON endpoints FOR SELECT TO ctrlz_auth  USING (true);
+CREATE POLICY admin_read ON endpoints FOR SELECT TO ctrlz_admin USING (true);
+
+CREATE POLICY admin_read ON profiles FOR SELECT TO ctrlz_admin USING (true);
+
+-- A ProofObservation from a node carries only the label.
+CREATE POLICY hub_label ON ip_proof_challenges FOR SELECT TO ctrlz_hub USING (true);
+
+-- Every claim write by a user goes through ctrlz_fn, because overlap and
+-- takeover look across tenants.
+CREATE POLICY auth_claims ON ip_claims FOR ALL    TO ctrlz_auth  USING (true);
+CREATE POLICY admin_read  ON ip_claims FOR SELECT TO ctrlz_admin USING (true);
+
+CREATE POLICY admin_read ON feedback_items FOR SELECT TO ctrlz_admin USING (true);
+
+-- Outboxes are drained across tenants. The tenant path never reaches River.
+CREATE POLICY compiler_drain_select ON policy_outbox FOR SELECT TO ctrlz_compiler USING (true);
+CREATE POLICY compiler_drain_delete ON policy_outbox FOR DELETE TO ctrlz_compiler USING (true);
+CREATE POLICY worker_drain_select   ON job_outbox    FOR SELECT TO ctrlz_worker   USING (true);
+CREATE POLICY worker_drain_delete   ON job_outbox    FOR DELETE TO ctrlz_worker   USING (true);

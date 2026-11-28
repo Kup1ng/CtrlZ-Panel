@@ -1,0 +1,188 @@
+{
+  "title": "API tokens",
+  "subtitle": "Programmatic access to your account",
+  "docs": "API documentation",
+  "kind": {
+    "read": "Read only",
+    "write": "Read and write"
+  },
+  "state": {
+    "live": "Live",
+    "expired": "Expired",
+    "ended": "Ended by a password or phone change"
+  },
+  "docsPage": {
+    "title": "Docs",
+    "subtitle": "How to use Ctrl Z and set up your devices",
+    "sections": {
+      "start": "Start",
+      "reference": "Reference"
+    },
+    "entries": {
+      "profiles": {
+        "title": "Profiles",
+        "text": "The filters and rules that each Endpoint uses."
+      },
+      "endpoints": {
+        "title": "Endpoints",
+        "text": "Make an Endpoint and connect your devices."
+      },
+      "apiDocs": {
+        "title": "API documentation",
+        "text": "The operations a token can reach, with example requests."
+      },
+      "apiTokens": {
+        "title": "API tokens",
+        "text": "Make and manage tokens for scripts."
+      },
+      "status": {
+        "title": "Status",
+        "text": "Is the panel answering?"
+      }
+    }
+  },
+  "apiDocsPage": {
+    "title": "API documentation",
+    "subtitle": "The operations a token can reach",
+    "download": "Download the OpenAPI file (YAML)",
+    "loading": "Loading the documentation",
+    "about": "About the API",
+    "baseUrl": "Base address",
+    "header": "Authentication header",
+    "tokens": "Make a token in <tokens>Preferences, API</tokens>.",
+    "found": "{count} of {total} operations",
+    "total": "{count} operations in {groups} groups",
+    "noMatch": "No operation found",
+    "noMatchText": "Search for part of a path or an operation name.",
+    "groups": "API groups",
+    "operations": "{count} operations",
+    "groupOperations": "Operations of {name}"
+  },
+  "statusPage": {
+    "title": "Status",
+    "subtitle": "Health of the service and the DNS nodes",
+    "summary": {
+      "ok": "The panel is answering",
+      "degraded": "The panel answers, but with errors",
+      "down": "The panel is not answering",
+      "unknown": "Checking"
+    },
+    "checked": "Last checked: {when}",
+    "checking": "Checking…",
+    "checkNow": "Check again",
+    "list": "Status of the parts",
+    "level": {
+      "ok": "Healthy",
+      "degraded": "Troubled",
+      "down": "Unreachable",
+      "unknown": "Not reported"
+    },
+    "rows": {
+      "panel": {
+        "name": "Panel and API",
+        "text": "This page has just talked to the panel.",
+        "ms": "{ms} ms"
+      },
+      "dns": {
+        "name": "DNS nodes",
+        "text": "The health of the nodes is not reported on this page yet."
+      },
+      "analytics": {
+        "name": "Analytics ingest",
+        "text": "The state of the analytics ingest is not reported on this page yet."
+      }
+    },
+    "note": "While this page is open and someone is at it, the check repeats every 30 seconds. It does not keep your session alive."
+  },
+  "tokens": {
+    "empty": "You have not made a token yet.",
+    "emptyTitle": "No tokens yet",
+    "count": "{count, plural, one {# token} other {# tokens}}",
+    "countCap": "{count} of {max} tokens",
+    "list": "Tokens of the account"
+  },
+  "loading": "Loading tokens",
+  "intro": "Send the token in the <bearer>Authorization: Bearer ctz_…</bearer> header. A token lives one year, and its value is shown once, when it is made. The operations it can call are in the <docs>API documentation</docs>.",
+  "row": {
+    "copy": "Copy the ID of token {name}",
+    "edit": "Edit token {name}",
+    "delete": "Delete token {name}",
+    "type": "Type",
+    "allowed": "Allowed IPs",
+    "anyAddress": "Any address",
+    "more": "and {count} more",
+    "created": "Created",
+    "expires": "Expires",
+    "lastUse": "Last used",
+    "never": "Not used yet"
+  },
+  "create": {
+    "open": "Create token",
+    "title": "New token",
+    "text": "Anyone who holds this token has access to your account. Give it only what it needs.",
+    "readHint": "Reads only. It changes nothing.",
+    "writeHint": "Reads, and can create, edit and delete.",
+    "kindFixed": "The type cannot be changed after the token is made.",
+    "lifetime": "A token lives 365 days. To renew it, make a new one.",
+    "submit": "Create token"
+  },
+  "dialog": {
+    "name": "Name",
+    "nameHint": "To tell tokens apart in the list. Up to {max} characters.",
+    "kind": "Type"
+  },
+  "allowed": {
+    "label": "Allowed IPs",
+    "add": "Add",
+    "addAria": "Add an allowed address",
+    "anyAddress": "Leave it empty and the token works from any address.",
+    "count": "{count} of {max} addresses",
+    "listLabel": "Allowed addresses added",
+    "problems": {
+      "invalid": "This is not an IP address or a subnet.",
+      "hostBits": "This subnet has host bits. Write 203.0.113.0/24, for example.",
+      "duplicate": "This address is already added.",
+      "max": "At most {max} addresses.",
+      "serverInvalid": "“{entry}” was not accepted."
+    }
+  },
+  "value": {
+    "title": "Token “{name}” is made",
+    "once": "This value is shown only now. Copy it and keep it somewhere safe.",
+    "label": "Value of token {name}",
+    "use": "Send it in the Authorization header with Bearer.",
+    "done": "Close"
+  },
+  "edit": {
+    "title": "Edit token “{name}”",
+    "saved": "Token saved",
+    "kindFixed": "The type cannot be changed after the token is made."
+  },
+  "delete": {
+    "title": "Delete token “{name}”?",
+    "text": "Anything that works with “{name}” loses access at once. This cannot be undone.",
+    "confirm": "Delete token",
+    "done": "Token “{name}” deleted"
+  },
+  "reference": {
+    "required": "required",
+    "optional": "optional",
+    "showSchema": "Show {name}",
+    "hideSchema": "Hide {name}",
+    "oneOf": "One of",
+    "in": {
+      "path": "path",
+      "query": "query",
+      "header": "header"
+    },
+    "parameters": "Parameters",
+    "request": "Request body",
+    "responses": "Responses",
+    "errorStatus": "Error",
+    "example": "Example request {name}",
+    "token": {
+      "read": "Any token",
+      "write": "Write token only"
+    }
+  }
+}

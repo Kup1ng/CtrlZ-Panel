@@ -1,0 +1,35 @@
+{
+  "dialog": {
+    "title": "Large job",
+    "close": "Close",
+    "background": "Keep going in the background",
+    "resumeTitle": "Your earlier job is not finished",
+    "resumeText": "No other large job can start until it ends."
+  },
+  "state": {
+    "queued": "Queued",
+    "running": "Running",
+    "done": "Done",
+    "failed": "Failed"
+  },
+  "note": "This job runs on the server. You can close the window and it carries on.",
+  "progressLabel": "Job status",
+  "result": {
+    "created": "{count, plural, one {# item created} other {# items created}}",
+    "updated": "{count, plural, one {# item updated} other {# items updated}}",
+    "skipped": "{count, plural, one {# item skipped} other {# items skipped}}",
+    "conflict": "{count, plural, one {# item was a duplicate or in another folder} other {# items were duplicates or in another folder}}",
+    "flagged": "{count, plural, one {# destination is not available now and acts as Bypass} other {# destinations are not available now and act as Bypass}}",
+    "none": "Nothing changed."
+  },
+  "error": {
+    "title": "The job did not finish",
+    "job_attempts_exhausted": "The job started several times and did not finish. Try again."
+  },
+  "kind": {
+    "rules_batch": "Changing rules",
+    "upload": "Uploading rules",
+    "import": "Importing a profile",
+    "duplicate": "Duplicating a profile"
+  }
+}
